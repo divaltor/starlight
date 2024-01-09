@@ -6,6 +6,8 @@ import pathlib
 import uuid
 import tempfile
 import asyncio
+
+from aiogram.utils import chat_action
 from aiogram import exceptions
 from aiogram import Bot, Dispatcher
 from aiogram.types import BufferedInputFile, Message
@@ -24,66 +26,75 @@ async def handle_link_handler(message: Message):
         await message.reply("Please send me a link")
         return
 
-    logger.info("Trying to download %s", message.text)
+    async with chat_action.ChatActionSender.upload_video(
+        chat_id=message.chat.id,
+        bot=message.bot,  # type: ignore
+    ):
+        logger.info("Trying to download %s", message.text)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        filepath = pathlib.Path(tmpdir, str(uuid.uuid4()))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filepath = pathlib.Path(tmpdir, str(uuid.uuid4()))
 
-        logger.debug("Saving as %s", filepath)
+            logger.debug("Saving as %s", filepath)
 
-        process_args = [
-            "yt-dlp",
-            "-q",
-            message.text,
-            "-o",
-            str(filepath),
-        ]
+            process_args = [
+                "yt-dlp",
+                "-q",
+                message.text,
+                "-o",
+                str(filepath),
+            ]
 
-        process = await asyncio.create_subprocess_exec(
-            "yt-dlp",
-            "-q",
-            message.text,
-            "-o",
-            str(filepath),
-            stdout=asyncio.subprocess.PIPE,
-        )
+            process = await asyncio.create_subprocess_exec(
+                "yt-dlp",
+                "-q",
+                message.text,
+                "-o",
+                str(filepath),
+                stdout=asyncio.subprocess.PIPE,
+            )
 
-        logger.debug("Process created with args %s", process_args)
+            logger.debug("Process created with args %s", process_args)
 
-        status_code = await process.wait()
+            status_code = await process.wait()
 
-        logger.debug("Process finished with status code %s", status_code)
+            logger.debug(
+                "Process finished with status code %s, stdout: %s, stderr: %s",
+                status_code,
+                await process.stdout.read() if process.stdout else None,
+                await process.stderr.read() if process.stderr else None,
+            )
 
-        if status_code != 0:
-            await message.reply("Something went wrong")
-            return
-
-        # Youtube videos are saved with extension file even if args are passed without extension
-        if not os.path.exists(filepath):
-            files = glob.glob(filepath.as_posix() + ".*")
-
-            logger.debug("Found files %s", files)
-
-            if not files:
-                await message.reply("File was not downloaded")
+            if status_code != 0:
+                await message.reply("Something went wrong")
                 return
 
-            filepath = files[0]
+            # Youtube videos are saved with extension file even if args are passed without extension
+            if not os.path.exists(filepath):
+                files = glob.glob(filepath.as_posix() + ".*")
 
-        logger.debug("File size is %sMB", os.path.getsize(filepath))
+                logger.debug("Found files %s", files)
 
-        try:
-            await message.reply_video(video=BufferedInputFile.from_file(filepath))
-        except exceptions.TelegramEntityTooLarge:
-            logger.exception("File is too large")
-            await message.reply("File is too large")
-            return
-        except exceptions.TelegramAPIError:
-            logger.exception("Telegram API error")
-            await message.reply("Something went wrong")
-            return
+                if not files:
+                    await message.reply("File was not downloaded")
+                    return
 
-        logger.info("File %s was sent", filepath)
+                filepath = files[0]
+
+            logger.debug("File size is %sMB", os.path.getsize(filepath))
+
+            try:
+                await message.reply_video(video=BufferedInputFile.from_file(filepath))
+            except exceptions.TelegramEntityTooLarge:
+                logger.exception("File is too large")
+                await message.reply("File is too large")
+                return
+            except exceptions.TelegramAPIError:
+                logger.exception("Telegram API error")
+                await message.reply("Something went wrong")
+                return
+
+            logger.info("File %s was sent", filepath)
 
 
 async def main() -> None:
