@@ -1,20 +1,117 @@
-[tool.poetry]
+[project]
 name = "birder"
 version = "0.1.0"
-description = ""
-authors = ["divaltor <vlad@divaltor.dev>"]
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiogram>=3.18.0",
+    "pydantic>=2.10.6",
+    "pydantic-settings>=2.8.1",
+    "yt-dlp[default]>=2025.2.19",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-aiogram = "^3.3.0"
-pydantic = "^2.5.3"
-pydantic-settings = "^2.1.0"
-
-
-[tool.poetry.group.dev.dependencies]
-ruff-lsp = "^0.0.49"
-ruff = "^0.1.11"
+[dependency-groups]
+dev = [
+    "ruff>=0.9.9",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+src = ["app"]
+output-format = "grouped"
+show-fixes = true
+unsafe-fixes = true
+
+[tool.ruff.lint]
+extend-select = ["ALL"]
+extend-ignore = [
+  "D10",     # Missing docstrings everywhere,
+  "D401",    # First line should be in imperative mood
+  "ANN401",  # Dynamically typed expressions are disallowed
+  "A003",    # Class attribute shadowing built-in
+  "E501",    # Line too long
+  "D212",    # Multi-line docstring summary should start at the first line
+  "TRY003",  # Avoid specifying long messages outside the exception class
+  "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+  "RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
+  "RUF001",  # String contains ambiguous {}. Did you mean {}?
+  "RUF002",  # Docstring contains ambiguous {}. Did you mean {}?
+  "RUF003",  # Comment contains ambiguous {}. Did you mean {}?
+  "UP040",   # Type alias {name} uses TypeAlias annotation instead of the type keyword
+  "ISC001",  # Implicit string concatenation
+  "TD002",   # TODO author
+  "TD003",   # TODO link
+  "FIX002",  # FIXME lines
+  "CPY",     # Copyright
+  "ERA",     # Commented out code
+  "FBT",     # Boolean-position argument
+  "PD901",   # `df` variable for pd.DataFrame
+  "PLC0415", # Import should be on top-level
+  "EM",
+  "PLR091",  # Too many arguments
+]
+unfixable = ["F841"] # Unused variable
+preview = true
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = [
+  "pydantic.BaseModel",
+  "pydantic.RootModel",
+]
+runtime-evaluated-decorators = [
+  "dataclasses.dataclass",
+  "pydantic.validate_call",
+]
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "single"
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
+"**/*.pyi" = ["E3"]
+
+[tool.ruff.lint.flake8-annotations]
+allow-star-arg-any = true
+mypy-init-return = true
+suppress-dummy-args = true
+
+[tool.ruff.lint.flake8-pytest-style]
+mark-parentheses = false
+fixture-parentheses = false
+
+[tool.ruff.lint.flake8-unused-arguments]
+ignore-variadic-names = true
+
+[tool.ruff.lint.pep8-naming]
+# Allow Pydantic's `@validator` decorator to trigger class method treatment.
+classmethod-decorators = ["classmethod", "pydantic.field_validator"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+
+[tool.pyright]
+pythonVersion = "3.13"
+reportAny = false
+reportExplicitAny = false
+reportUnusedParameter = false
+reportUnannotatedClassAttribute = false
+reportUnknownMemberType = false
+reportUntypedClassDecorator = false
+reportUnusedExpression = false
+reportUnusedCallResult = false
+reportUnknownVariableType = false
+reportMissingTypeStubs = false

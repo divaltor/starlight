@@ -1,9 +1,9 @@
 import re
+
 from aiogram.filters import Filter
 from aiogram.types import Message
 
-
-TWITTER_REGEX = re.compile(r"^https://(?:twitter.com|x.com)/.*/status/.*")
+TWITTER_REGEX = re.compile(r'^https://(?:twitter.com|x.com)/.*/status/.*')
 
 
 class TwitterLinkFilter(Filter):

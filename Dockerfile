@@ -1,19 +1,21 @@
-FROM python:3.12-bookworm
+FROM python:3.13-bookworm
 
 ENV PYTHONPATH "${PYTHONPATH}:/code"
 ENV PATH "/code:${PATH}"
-ENV POETRY_VERSION 1.7.1
+
+ENV UV_SYSTEM_PYTHON=true
+ENV UV_COMPILE_BYTECODE=true
 
 WORKDIR /code
 
 COPY --from=linuxserver/ffmpeg /usr/local/bin/ffprobe /usr/bin/ffprobe
 COPY --from=linuxserver/ffmpeg /usr/local/bin/ffmpeg /usr/bin/ffmpeg
 
-RUN pip install --no-cache-dir poetry=="$POETRY_VERSION" && pip install --pre yt-dlp
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
 
-COPY poetry.lock pyproject.toml /code/
+COPY pyproject.toml uv.lock /code/
 
-RUN poetry config virtualenvs.create false && poetry install --no-interaction --no-ansi --no-root --without dev
+RUN uv sync
 
 COPY . /code/
 
