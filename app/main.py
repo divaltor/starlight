@@ -76,7 +76,7 @@ async def handle_link_handler(message: Message) -> None:
             logger.debug('Using temporary directory %s', tmpdir)
 
             try:
-                filepath = download_video(message.text, tmpdir)
+                video_information = download_video(message.text, tmpdir)
             except Exception:
                 logger.exception('Error downloading video')
                 await message.reply(get_random_message(ERROR_DOWNLOAD_MESSAGES))
@@ -84,7 +84,10 @@ async def handle_link_handler(message: Message) -> None:
 
             try:
                 await message.reply_video(
-                    video=FSInputFile(filepath),
+                    video=FSInputFile(video_information.file_path),
+                    filename=video_information.file_path.name,
+                    height=video_information.metadata.height,
+                    width=video_information.metadata.width,
                 )
             except exceptions.TelegramAPIError:
                 logger.exception('Telegram API error')
