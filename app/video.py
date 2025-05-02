@@ -1,9 +1,12 @@
+import logging
 import uuid
 from pathlib import Path
 from typing import Self
 
 import yt_dlp
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class VideoMetadata(BaseModel):
@@ -45,5 +48,7 @@ def download_video(url: str, folder: str) -> VideoInformation:
         },
     ) as ydl:
         ydl.download([url])
+
+    logger.debug('Files in folder: %s', list(Path(folder).glob('*')))
 
     return VideoInformation.from_file(Path(folder, f'{random_id}.mp4'))
