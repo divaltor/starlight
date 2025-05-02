@@ -72,29 +72,29 @@ async def handle_link_handler(message: Message) -> None:
             logger.debug('Using temporary directory %s', tmpdir)
 
             try:
-                video_information = download_video(message.text, tmpdir)
+                videos = download_video(message.text, tmpdir)
             except Exception:
                 logger.exception('Error downloading video')
                 await message.reply(get_random_message(ERROR_DOWNLOAD_MESSAGES))
                 return
 
-            logger.debug(video_information)
-
-            try:
-                await message.reply_video(
-                    video=FSInputFile(video_information.file_path),
-                    filename=video_information.file_path.name,
-                    height=video_information.metadata.height,
-                    width=video_information.metadata.width,
-                )
-            except exceptions.TelegramAPIError:
-                logger.exception('Telegram API error')
-                await message.reply(get_random_message(GENERAL_ERROR_MESSAGES))
-                return
-            except FileNotFoundError:
-                logger.exception('File not found')
-                await message.reply(get_random_message(FILE_NOT_FOUND_MESSAGES))
-                return
+            for video in videos:
+                try:
+                    await message.reply_video(
+                        video=FSInputFile(video.file_path),
+                        filename=video.file_path.name,
+                        height=video.metadata.height,
+                        width=video.metadata.width,
+                    )
+                    await asyncio.sleep(random.randint(1, 2))
+                except exceptions.TelegramAPIError:
+                    logger.exception('Telegram API error')
+                    await message.reply(get_random_message(GENERAL_ERROR_MESSAGES))
+                    return
+                except FileNotFoundError:
+                    logger.exception('File not found')
+                    await message.reply(get_random_message(FILE_NOT_FOUND_MESSAGES))
+                    return
 
 
 async def main() -> None:

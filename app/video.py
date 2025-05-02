@@ -1,5 +1,4 @@
 import logging
-import uuid
 from pathlib import Path
 from typing import Self
 
@@ -33,12 +32,12 @@ class VideoInformation(BaseModel):
         )
 
 
-def download_video(url: str, folder: str) -> VideoInformation:
-    random_id = str(uuid.uuid4())
-
+def download_video(url: str, folder: str) -> list[VideoInformation]:
     with yt_dlp.YoutubeDL(
         {
-            'outtmpl': f'{folder}/{random_id}.mp4',
+            'paths': {
+                'home': folder,
+            },
             'quiet': True,
             'no_warnings': True,
             'no_post_overwrites': True,
@@ -51,4 +50,4 @@ def download_video(url: str, folder: str) -> VideoInformation:
 
     logger.debug('Files in folder: %s', list(Path(folder).glob('*')))
 
-    return VideoInformation.from_file(Path(folder, f'{random_id}.mp4'))
+    return [VideoInformation.from_file(video) for video in Path(folder).glob('*.mp4')]
