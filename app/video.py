@@ -40,7 +40,8 @@ def download_video(url: str, folder: str) -> VideoInformation:
             'no_warnings': True,
             'no_post_overwrites': True,
             'no_overwrites': True,
-            'recode-video': 'mp4',
+            'format': 'mp4',
+            'write_info_json': True,
         },
     ) as ydl:
         ydl.download([url])

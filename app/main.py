@@ -2,14 +2,10 @@ import asyncio
 import logging
 import random
 import tempfile
-import uuid
 
 from aiogram import Bot, Dispatcher, exceptions
 from aiogram.types import (
     FSInputFile,
-    InlineQuery,
-    InlineQueryResultArticle,
-    InputTextMessageContent,
     Message,
 )
 from aiogram.utils import chat_action
@@ -82,6 +78,8 @@ async def handle_link_handler(message: Message) -> None:
                 await message.reply(get_random_message(ERROR_DOWNLOAD_MESSAGES))
                 return
 
+            logger.debug(video_information)
+
             try:
                 await message.reply_video(
                     video=FSInputFile(video_information.file_path),
@@ -97,44 +95,6 @@ async def handle_link_handler(message: Message) -> None:
                 logger.exception('File not found')
                 await message.reply(get_random_message(FILE_NOT_FOUND_MESSAGES))
                 return
-
-
-@dp.inline_query()
-async def inline_query_handler(query: InlineQuery) -> None:
-    if not query.query:
-        await query.answer(
-            results=[],
-            switch_pm_text='Enter a video URL',
-            switch_pm_parameter='start',
-        )
-        return
-
-    try:
-        # Create a unique ID for this inline result
-        result_id = str(uuid.uuid4())
-
-        # Create an InlineQueryResultArticle that will trigger the video download when selected
-        result = InlineQueryResultArticle(
-            id=result_id,
-            title='Download this video',
-            description=f'Download video from: {query.query}',
-            input_message_content=InputTextMessageContent(
-                message_text=query.query,
-            ),
-            thumb_url='https://img.icons8.com/color/48/000000/download--v1.png',
-        )
-
-        await query.answer(
-            results=[result],
-            cache_time=300,
-        )
-    except Exception:
-        logger.exception('Error processing inline query')
-        await query.answer(
-            results=[],
-            switch_pm_text=get_random_message(GENERAL_ERROR_MESSAGES),
-            switch_pm_parameter='error',
-        )
 
 
 async def main() -> None:
