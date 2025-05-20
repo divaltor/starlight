@@ -1,24 +1,18 @@
 [project]
-name = "birder"
-version = "0.1.0"
-description = "Add your description here"
+name = "starlight"
+version = "0.2.0"
+description = "Telegram Bot for downloading Twitter (formally X) posts (videos and GIFs) "
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "aiogram>=3.18.0",
-    "pydantic>=2.10.6",
-    "pydantic-settings>=2.8.1",
-    "yt-dlp[default]>=2025.2.19",
+  "aiogram>=3.20.0",
+  "pydantic>=2.11.4",
+  "pydantic-settings>=2.9.1",
+  "yt-dlp[default]>=2025.4.30",
 ]
 
 [dependency-groups]
-dev = [
-    "ruff>=0.9.9",
-]
-
-[build-system]
-requires = ["setuptools>=65", "wheel"]
-build-backend = "setuptools.build_meta"
+dev = ["ruff>=0.11.10"]
 
 [tool.ruff]
 line-length = 100
@@ -64,10 +58,7 @@ preview = true
 quote-style = "single"
 
 [tool.ruff.lint.flake8-type-checking]
-runtime-evaluated-base-classes = [
-  "pydantic.BaseModel",
-  "pydantic.RootModel",
-]
+runtime-evaluated-base-classes = ["pydantic.BaseModel", "pydantic.RootModel"]
 runtime-evaluated-decorators = [
   "dataclasses.dataclass",
   "pydantic.validate_call",
