@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 
     TOKEN: str
+    OLD_USERNAME: str = 'BirderBot'
 
     REDIS_URI: RedisDsn
 

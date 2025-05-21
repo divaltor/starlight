@@ -3,11 +3,12 @@ import logging
 import random
 import tempfile
 
-from aiogram import F, Router, exceptions
+from aiogram import Bot, F, Router, exceptions
 from aiogram.types import FSInputFile, Message
 from aiogram.utils import chat_action
 
 from app.services.video import download_video
+from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +16,15 @@ router = Router(name=__name__)
 
 
 @router.message(F.text.startswith('https://x.com'))
-async def handle_link_handler(message: Message) -> None:
+async def handle_link_handler(message: Message, bot: Bot) -> None:
     assert message.text is not None
+
+    bot_instance = await bot.me()
+
+    if bot_instance.username == settings.OLD_USERNAME:
+        await message.reply(
+            'Please, use @StarlightManagerBot instead. This bot is deprecated, thanks.'
+        )
 
     async with chat_action.ChatActionSender.upload_video(
         chat_id=message.chat.id,
