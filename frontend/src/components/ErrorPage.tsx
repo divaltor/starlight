@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Button } from './ui/button';
 
 export function ErrorPage({
   error,
@@ -20,7 +21,7 @@ export function ErrorPage({
           {error.message}
         </code>
       </blockquote>
-      {reset && <button onClick={() => reset()}>Try again</button>}
+      {reset && <Button onClick={() => reset()}>Try again</Button>}
     </div>
   );
 }
