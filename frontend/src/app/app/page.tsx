@@ -1,6 +1,15 @@
 "use client";
 
-import { Link } from "@/components/Link/Link";
+import { useState, useEffect } from "react";
+import {
+	Search,
+	ImageIcon,
+	User,
+	Settings,
+	LogOut,
+	Plus,
+	Images,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -11,16 +20,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import {
-	ImageIcon,
-	Images,
-	LogOut,
-	Plus,
-	Search,
-	Settings,
-	User,
-} from "lucide-react";
-import { useEffect, useState } from "react";
+import { Link } from "@/components/Link/Link";
 
 // Extend Window interface for Telegram WebApp
 declare global {
@@ -47,7 +47,7 @@ declare global {
 	}
 }
 
-export default function Home() {
+export default function AppPage() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [hasCookies, setHasCookies] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
@@ -209,4 +209,4 @@ export default function Home() {
 			</div>
 		</div>
 	);
-}
+} 
