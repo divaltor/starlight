@@ -2,29 +2,16 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { isTMA } from "@telegram-apps/bridge";
 
 export default function Home() {
 	const router = useRouter();
 
 	useEffect(() => {
 		const checkTelegramEnvironment = () => {
-			// Check if we're in a Telegram environment
-			const hasWebAppData =
-				typeof window !== "undefined" &&
-				// Check for Telegram WebApp
-				(window.Telegram?.WebApp ||
-					// Check for launch parameters in URL
-					window.location.href.includes("tgWebAppPlatform") ||
-					// Check for Telegram WebApp data in URL
-					window.location.href.includes("tgWebApp") ||
-					// Check for any Telegram-specific parameters
-					new URLSearchParams(window.location.search).has("tgWebAppPlatform") ||
-					// Check if we're in development mode (localhost)
-					window.location.hostname === "localhost" ||
-					window.location.hostname === "127.0.0.1");
-
-			if (hasWebAppData) {
-				// Valid Telegram environment or development, redirect to app
+			// Use official Telegram Mini Apps detection
+				console.log("It's Telegram Mini Apps");
+				// Valid Telegram environment, redirect to app
 				router.replace("/app");
 			} else {
 				// Not in Telegram environment, redirect to not-found

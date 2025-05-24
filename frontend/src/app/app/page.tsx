@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { isTMA } from "@telegram-apps/bridge";
 import {
 	Search,
 	ImageIcon,
@@ -67,14 +68,8 @@ export default function AppPage() {
 				setIsLoading(true);
 
 				// Check if we're in a valid Telegram environment
-				if (typeof window !== "undefined") {
-					// Double-check Telegram environment
-					const isTelegramEnv =
-						window.Telegram?.WebApp ||
-						window.location.hostname === "localhost" ||
-						window.location.hostname === "127.0.0.1";
-
-					if (!isTelegramEnv) {
+					// Use official Telegram Mini Apps detection
+					if (!isTMA("complete")) {
 						router.replace("/not-found");
 						return;
 					}
