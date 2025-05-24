@@ -182,7 +182,7 @@ export default function CookiesPage() {
                                             <div>
                                                 <h4 className="font-medium">Cloud Storage</h4>
                                                 <p className="text-sm text-muted-foreground">
-                                                    Synchronized across all your devices. Data is encrypted and stored securely on Telegram's servers.
+                                                    Synchronized across all your devices. Data is encrypted and stored securely on our server.
                                                 </p>
                                             </div>
                                         </div>
