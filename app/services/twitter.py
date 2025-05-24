@@ -2,18 +2,22 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from abc import ABC
+from collections.abc import AsyncGenerator
 from json import JSONDecodeError
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import Annotated, Any, ClassVar, TypeVar
 
 import httpx
 from fake_useragent import UserAgent
 from httpx import codes
 from jsonpath_ng.ext import parse
+from pydantic import AfterValidator, ValidationError, validate_call
 
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
+from app.services.models.base import BaseModel
+from app.services.models.post import TwitterPost
+from app.services.models.user import TwitterUser
+from app.utils import find_key_recursive
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +61,11 @@ DEFAULT_KWARGS = {
     'responsive_web_grok_show_grok_translated_post': True,
 }
 
-ENTRIES_ONLY = parse('$..entries[?(@.entryId =~ "^(?!(cursor-|messageprompt-))")]')
-CURSOR_BOTTOM = parse('$..entries[?(@.entryId =~ "^(cursor-bottom)")]')
 
 type UserID = int | str
+
+ENTRIES_ONLY = parse('$..entries[?(@.entryId =~ "^(?!(cursor-|messageprompt-))")]')
+CURSOR_BOTTOM = parse('$..entries[?(@.entryId =~ "^(cursor-bottom)")]')
 
 
 def encode_params(data: dict[str, Any]) -> dict[str, str]:
@@ -112,62 +117,69 @@ class TwitterAPI:
             },
         )
 
-    async def list_graphql_request(
-        self,
-        url: str,
+    @staticmethod
+    def _prepare_params(
         data: dict[str, Any] | None = None,
         features: dict[str, Any] | None = None,
-        limit: int | None = None,
-    ) -> AsyncGenerator[list[dict[str, Any]]]:
-        variables_payload = data or {}
-
+    ) -> dict[str, Any]:
         features_payload = {**DEFAULT_KWARGS}
 
         if features:
             features_payload.update(features)
 
-        params = {'variables': variables_payload, 'features': features_payload}
+        return {'variables': data or {}, 'features': features_payload}
+
+    async def list_graphql_request(
+        self,
+        url: str,
+        data: dict[str, Any] | None = None,
+        features: dict[str, Any] | None = None,
+    ) -> AsyncGenerator[list[dict[str, Any]]]:
+        params = self._prepare_params(data, features)
 
         cursor = None
-        count = 0
 
-        while True:
-            if cursor is not None:
-                params['variables']['cursor'] = cursor
+        if cursor is not None:
+            params['variables']['cursor'] = cursor
 
-            response = await self.client.get(url, params=encode_params(params))
+        response = await self.client.get(url, params=encode_params(params))
 
-            if not response.is_success:
-                logger.error('Twitter API error: %s', response.text)
-                raise TwitterAPIError.from_response(response)
+        if not response.is_success:
+            logger.error('Twitter API error: %s', response.text)
+            raise TwitterAPIError.from_response(response)
 
-            try:
-                json_response = response.json()
-            except JSONDecodeError as ex:
-                raise TwitterAPIError.from_response(response) from ex
+        try:
+            json_response = response.json()
+        except JSONDecodeError as ex:
+            raise TwitterAPIError.from_response(response) from ex
 
-            entries = cast('list[dict[str, Any]]', ENTRIES_ONLY.find(json_response))
+        logger.debug('JSON response: %s', json.dumps(json_response))
 
-            if entries:
-                yield entries
-            # If no entries - we at the end of query, no need to continue
-            else:
-                return
+        entries = find_key_recursive(json_response, 'entries')
 
-            cursor_entry = cast('list[dict[str, Any]]', CURSOR_BOTTOM.find(json_response))
+        filtered_entries = [
+            entry
+            for entry in entries
+            if entry.get('entryId') is not None
+            and not entry.get('entryId').startswith(('cursor-', 'messageprompt-'))
+        ]
 
-            # If no cursor - we at the end of query
-            if not cursor_entry:
-                return
+        logger.debug('Filtered entries: %s', filtered_entries)
 
-            cursor = cursor_entry[0]['content']['value']
+        if filtered_entries:
+            yield filtered_entries
 
-            # Check limit, if reached - return
-            if limit is not None:
-                count += len(entries)
+        # If no entries - we at the end of query, no need to continue
+        else:
+            return
 
-                if count >= limit:
-                    return
+        cursor_entry = find_key_recursive(json_response, 'entryId', 'cursor-bottom')
+
+        # If no cursor - we at the end of query
+        if not cursor_entry:
+            return
+
+        cursor = cursor_entry['content']['itemContent']['value']
 
     async def get_graphql_request(
         self,
@@ -175,14 +187,7 @@ class TwitterAPI:
         data: dict[str, Any] | None = None,
         features: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
-        variables_payload = data or {}
-
-        features_payload = {**DEFAULT_KWARGS}
-
-        if features:
-            features_payload.update(features)
-
-        params = {'variables': variables_payload, 'features': features_payload}
+        params = self._prepare_params(data, features)
 
         response = await self.client.get(url, params=encode_params(params))
 
@@ -193,9 +198,13 @@ class TwitterAPI:
             raise TwitterAPIError.from_response(response)
 
         try:
-            return response.json()
+            json_response = response.json()
         except JSONDecodeError as ex:
             raise TwitterAPIError.from_response(response) from ex
+
+        logger.debug('JSON response: %s', json.dumps(json_response))
+
+        return json_response
 
     @property
     def users(self) -> Users:
@@ -210,10 +219,25 @@ class TwitterAPI:
         return Posts(self)
 
 
-class BaseEndpoint(ABC):
+def extract_post_id(x: str) -> str:
+    match = re.match(r'^https://x\.com/(.*)/status/(\d+)(\?s=.*)?$', x)
+
+    if match is None:
+        raise ValueError('Invalid post ID')
+
+    return match.group(2)
+
+
+T = TypeVar('T', bound=BaseModel)
+type PostID = Annotated[str, AfterValidator(extract_post_id)]
+
+
+class BaseEndpoint[T: BaseModel](ABC):
     OPERATOR: ClassVar[str]
+    MODEL: type[T]
 
     FEATURES: ClassVar[dict[str, Any]] = {}
+    VARIABLES: ClassVar[dict[str, Any]] = {}
 
     def __init__(self, api: TwitterAPI) -> None:
         self.api = api
@@ -221,13 +245,11 @@ class BaseEndpoint(ABC):
     async def _list_request(
         self,
         data: dict[str, Any] | None = None,
-        limit: int | None = None,
     ) -> AsyncGenerator[list[dict[str, Any]]]:
         async for entries in self.api.list_graphql_request(
             self.OPERATOR,
-            data=data,
+            data={**self.VARIABLES, **(data or {})},
             features=self.FEATURES,
-            limit=limit,
         ):
             yield entries
 
@@ -237,13 +259,18 @@ class BaseEndpoint(ABC):
     ) -> dict[str, Any] | None:
         return await self.api.get_graphql_request(
             self.OPERATOR,
-            data=data,
+            data={**self.VARIABLES, **(data or {})},
             features=self.FEATURES,
         )
 
+    def _serialize(self, data: Any) -> T:
+        return self.MODEL.from_twitter_response(data)
 
-class Users(BaseEndpoint):
+
+class Users(BaseEndpoint[TwitterUser]):
     OPERATOR = '1VOOyvKkiI3FMmkeDNxM9A/UserByScreenName'
+
+    MODEL = TwitterUser
 
     FEATURES = {
         'highlights_tweets_tab_ui_enabled': True,
@@ -257,51 +284,62 @@ class Users(BaseEndpoint):
         'profile_label_improvements_pcf_label_in_post_enabled': False,
     }
 
-    async def get(self, username: str) -> dict[str, Any] | None:
-        return await self._single_request(
-            data={'screen_name': username, 'withSafetyModeUserFields': True},
+    async def get(self, username: str) -> TwitterUser | None:
+        return self._serialize(
+            await self._single_request(
+                data={'screen_name': username, 'withSafetyModeUserFields': True},
+            ),
         )
 
 
-class Posts(BaseEndpoint):
+class Posts(BaseEndpoint[TwitterPost]):
     OPERATOR = '_8aYOgEDz35BrBcBal1-_w/TweetDetail'
 
-    async def get(self, post_id: str) -> dict[str, Any] | None:
-        data = {
-            'focalTweetId': str(post_id),
-            'with_rux_injections': True,
-            'includePromotedContent': True,
-            'withCommunity': True,
-            'withQuickPromoteEligibilityTweetFields': True,
-            'withBirdwatchNotes': True,
-            'withVoice': True,
-            'withV2Timeline': True,
-        }
+    MODEL = TwitterPost
 
-        return await self._single_request(data=data)
+    VARIABLES = {
+        'with_rux_injections': True,
+        'includePromotedContent': True,
+        'withCommunity': True,
+        'withQuickPromoteEligibilityTweetFields': True,
+        'withBirdwatchNotes': True,
+        'withVoice': True,
+        'withV2Timeline': True,
+    }
+
+    @validate_call
+    async def get(self, post_id: PostID) -> TwitterPost | None:
+        data = {'focalTweetId': str(post_id)}
+
+        try:
+            return self._serialize(await self._single_request(data=data))
+        except ValidationError:
+            logger.exception('Twitter API error')
+            return None
 
 
-class Likes(BaseEndpoint):
-    OPERATOR = 'rbRmoDY1Z10wXwd1UyOIFw/Likes'
+class Likes(BaseEndpoint[TwitterPost]):
+    OPERATOR = 'XHTMjDbiTGLQ9cP1em-aqQ/Likes'
 
-    FEATURES = {
+    MODEL = TwitterPost
+
+    VARIABLES = {
         'includePromotedContent': False,
         'withClientEventToken': False,
         'withBirdwatchNotes': False,
         'withVoice': True,
     }
 
+    @validate_call
     async def list(
         self,
         user_id: UserID,
         count: int | None = None,
-        limit: int | None = None,
-    ) -> AsyncGenerator[list[dict[str, Any]]]:
+    ) -> AsyncGenerator[list[TwitterPost]]:
         data = {
             'userId': str(user_id),
             'count': count or 20,
-            **self.FEATURES,
         }
 
-        async for entries in self._list_request(data=data, limit=limit):
-            yield entries
+        async for entries in self._list_request(data=data):
+            yield [self._serialize(entry) for entry in entries]

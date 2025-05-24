@@ -23,7 +23,7 @@ async def handle_link_handler(message: Message, bot: Bot) -> None:
 
     if bot_instance.username == settings.OLD_USERNAME:
         await message.reply(
-            'Please, use @StarlightManagerBot instead. This bot is deprecated, thanks.'
+            'Please, use @StarlightManagerBot instead. This bot is deprecated, thanks.',
         )
 
     async with chat_action.ChatActionSender.upload_video(
@@ -64,8 +64,3 @@ async def handle_link_handler(message: Message, bot: Bot) -> None:
                     logger.exception('File not found')
                     await message.reply('File not found, probably could not be downloaded.')
                     return
-
-
-@router.message()
-async def handle_message(message: Message) -> None:
-    await message.reply('Please, provide a valid link to X post.')

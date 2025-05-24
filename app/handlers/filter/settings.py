@@ -12,7 +12,4 @@ class AdminTwitterFilter(BaseFilter):
         if settings.ALLOWED_USER is None:
             return False
 
-        if settings.X_COOKIES is None:
-            return False
-
         return message.from_user.id == settings.ALLOWED_USER

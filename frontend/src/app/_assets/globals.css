@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 253 252 250;
+    /* #FDFCFA */
+    --foreground: 60 51 40;
+    /* #3C3328 */
+    --card: 255 255 255;
+    /* #FFFFFF */
+    --card-foreground: 60 51 40;
+    /* #3C3328 */
+    --popover: 255 255 255;
+    /* #FFFFFF */
+    --popover-foreground: 60 51 40;
+    /* #3C3328 */
+    --primary: 139 111 71;
+    /* #8B6F47 */
+    --primary-foreground: 255 255 255;
+    /* #FFFFFF */
+    --secondary: 245 239 231;
+    /* #F5EFE7 */
+    --secondary-foreground: 60 51 40;
+    /* #3C3328 */
+    --muted: 245 240 232;
+    /* #F5F0E8 */
+    --muted-foreground: 139 115 85;
+    /* #8B7355 */
+    --accent: 212 165 116;
+    /* #D4A574 */
+    --accent-foreground: 60 51 40;
+    /* #3C3328 */
+    --destructive: 220 110 92;
+    /* #DC6E5C */
+    --destructive-foreground: 255 255 255;
+    /* #FFFFFF */
+    --border: 232 213 196;
+    /* #E8D5C4 */
+    --input: 245 239 231;
+    /* #F5EFE7 */
+    --ring: 139 111 71;
+    /* #8B6F47 */
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+
+    to {
+      height: 0;
+    }
+  }
+
+  .animate-accordion-down {
+    animation: accordion-down 0.2s ease-out;
+  }
+
+  .animate-accordion-up {
+    animation: accordion-up 0.2s ease-out;
+  }
+}
