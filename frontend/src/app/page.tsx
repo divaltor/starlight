@@ -2,28 +2,18 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { isTMA } from "@telegram-apps/bridge";
+import { useTelegramApp } from "@/hooks/useTelegramApp";
 
 export default function Home() {
 	const router = useRouter();
+	const isTelegramApp = useTelegramApp(true);
 
 	useEffect(() => {
-		const checkTelegramEnvironment = () => {
-			// Use official Telegram Mini Apps detection
-				console.log("It's Telegram Mini Apps");
-				// Valid Telegram environment, redirect to app
-				router.replace("/app");
-			} else {
-				// Not in Telegram environment, redirect to not-found
-				router.replace("/not-found");
-			}
-		};
-
-		// Small delay to ensure window object is fully loaded
-		const timeoutId = setTimeout(checkTelegramEnvironment, 100);
-
-		return () => clearTimeout(timeoutId);
-	}, [router]);
+		// If we're in Telegram environment, redirect to app
+		if (isTelegramApp) {
+			router.replace("/app");
+		}
+	}, [isTelegramApp, router]);
 
 	// Show loading state while checking
 	return (

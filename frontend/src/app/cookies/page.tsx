@@ -1,6 +1,7 @@
 "use client";
 
 import { cloudStorage, postEvent } from "@telegram-apps/sdk-react";
+import { useTelegramApp } from "@/hooks/useTelegramApp";
 import {
 	AlertTriangle,
 	Clipboard,
@@ -33,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Page } from "@/components/Page";
 
 export default function CookiesPage() {
+	const isTelegramApp = useTelegramApp(true); // Enable validation with redirect
 	const [cookies, setCookies] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
 	const [message, setMessage] = useState<{

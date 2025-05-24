@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { isTMA } from "@telegram-apps/bridge";
+import { useTelegramApp } from "@/hooks/useTelegramApp";
 import {
 	Search,
 	ImageIcon,
@@ -52,6 +52,7 @@ declare global {
 
 export default function AppPage() {
 	const router = useRouter();
+	const isTelegramApp = useTelegramApp(true); // Enable validation with redirect
 	const [searchQuery, setSearchQuery] = useState("");
 	const [hasCookies, setHasCookies] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
@@ -66,14 +67,6 @@ export default function AppPage() {
 		const checkCookiesAndUser = async () => {
 			try {
 				setIsLoading(true);
-
-				// Check if we're in a valid Telegram environment
-					// Use official Telegram Mini Apps detection
-					if (!isTMA("complete")) {
-						router.replace("/not-found");
-						return;
-					}
-				}
 
 				// Get user info from Telegram
 				if (
@@ -127,22 +120,15 @@ export default function AppPage() {
 				setIsLoading(false);
 			} catch (error) {
 				console.error("Error initializing app:", error);
-				// If any error occurs related to Telegram SDK, redirect to not-found
-				if (
-					error instanceof Error &&
-					(error.message.includes("launch parameters") ||
-						error.message.includes("tgWebAppPlatform") ||
-						error.message.includes("Telegram"))
-				) {
-					router.replace("/not-found");
-				} else {
-					setIsLoading(false);
-				}
+				setIsLoading(false);
 			}
 		};
 
-		checkCookiesAndUser();
-	}, [router]);
+		// Only initialize if we're in Telegram
+		if (isTelegramApp) {
+			checkCookiesAndUser();
+		}
+	}, [isTelegramApp]);
 
 	const handleEraseCookies = async () => {
 		try {
@@ -173,7 +159,7 @@ export default function AppPage() {
 		}
 	};
 
-	if (isLoading) {
+	if (isLoading || !isTelegramApp) {
 		return (
 			<div className="min-h-screen bg-gradient-to-br from-background to-secondary/30 p-4 flex items-center justify-center">
 				<div className="max-w-4xl w-full space-y-6">
