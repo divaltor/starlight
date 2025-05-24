@@ -86,7 +86,7 @@ export default function NotFound() {
 								<p className="text-sm text-muted-foreground">
 									Telegram Mini Apps are web applications that run within the
 									Telegram environment, providing seamless integration with
-									Telegram's features and user authentication.
+									Telegram&apos;s features and user authentication.
 								</p>
 								<Button
 									variant="ghost"
