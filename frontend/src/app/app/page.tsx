@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Link } from "@/components/Link/Link";
+import { Page } from "@/components/Page";
 
 // Extend Window interface for Telegram WebApp
 declare global {
@@ -193,51 +194,56 @@ export default function AppPage() {
 	}
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-background to-secondary/30 p-4 flex items-center justify-center">
-			<div className="max-w-4xl w-full space-y-6">
-				{/* Search Bar */}
-				<Card className="shadow-lg border-primary/20">
-					<CardContent className="p-3">
-						<div className="relative">
-							<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-							<Input
-								placeholder="Search photos... (coming soon)"
-								value={searchQuery}
-								onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-									setSearchQuery(e.target.value)
-								}
-								className="pl-10 h-9"
-								disabled
-							/>
-						</div>
-					</CardContent>
-				</Card>
+		<Page back={false}>
+			<div className="min-h-screen bg-gradient-to-br from-background to-secondary/30 p-4 flex items-center justify-center">
+				<div className="max-w-4xl w-full space-y-6">
+					{/* Search Bar */}
+					<Card className="shadow-lg border-primary/20">
+						<CardContent className="p-3">
+							<div className="relative">
+								<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+								<Input
+									placeholder="Search photos... (coming soon)"
+									value={searchQuery}
+									onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+										setSearchQuery(e.target.value)
+									}
+									className="pl-10 h-9"
+									disabled
+								/>
+							</div>
+						</CardContent>
+					</Card>
 
-				{/* Gallery Section */}
-				<Card className="shadow-lg border-primary/20">
-					<CardContent className="pt-6">
-						{/* Empty State */}
-						<div className="text-center py-12 border-2 border-dashed border-muted rounded-lg">
-							<ImageIcon className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-							<h3 className="text-lg font-medium text-foreground mb-2">
-								No Photos Yet
-							</h3>
-							<p className="text-muted-foreground mb-6">
-								Your photo gallery is empty. Connect your Twitter account to
-								start viewing photos.
-							</p>
-							{!hasCookies && (
-								<Link href="/cookies">
-									<Button size="lg" className="flex items-center gap-2 mx-auto">
-										<Settings className="h-4 w-4" />
-										Setup Integration
-									</Button>
-								</Link>
-							)}
-						</div>
-					</CardContent>
-				</Card>
+					{/* Gallery Section */}
+					<Card className="shadow-lg border-primary/20">
+						<CardContent className="pt-6">
+							{/* Empty State */}
+							<div className="text-center py-12 border-2 border-dashed border-muted rounded-lg">
+								<ImageIcon className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+								<h3 className="text-lg font-medium text-foreground mb-2">
+									No Photos Yet
+								</h3>
+								<p className="text-muted-foreground mb-6">
+									Your photo gallery is empty. Connect your Twitter account to
+									start viewing photos.
+								</p>
+								{!hasCookies && (
+									<Link href="/cookies">
+										<Button
+											size="lg"
+											className="flex items-center gap-2 mx-auto"
+										>
+											<Settings className="h-4 w-4" />
+											Setup Integration
+										</Button>
+									</Link>
+								)}
+							</div>
+						</CardContent>
+					</Card>
+				</div>
 			</div>
-		</div>
+		</Page>
 	);
 } 

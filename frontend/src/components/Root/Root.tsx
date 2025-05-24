@@ -1,5 +1,6 @@
 "use client";
 
+import { type PropsWithChildren, useEffect } from "react";
 import {
 	initData,
 	miniApp,
@@ -7,12 +8,11 @@ import {
 	useSignal,
 } from "@telegram-apps/sdk-react";
 import { AppRoot } from "@telegram-apps/telegram-ui";
-import { type PropsWithChildren, useEffect } from "react";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorPage } from "@/components/ErrorPage";
-import { setLocale } from "@/core/i18n/locale";
 import { useDidMount } from "@/hooks/useDidMount";
+import { setLocale } from "@/core/i18n/locale";
 
 import "./styles.css";
 
