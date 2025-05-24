@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
 	Search,
 	ImageIcon,
@@ -48,6 +49,7 @@ declare global {
 }
 
 export default function AppPage() {
+	const router = useRouter();
 	const [searchQuery, setSearchQuery] = useState("");
 	const [hasCookies, setHasCookies] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
@@ -60,62 +62,91 @@ export default function AppPage() {
 	// Check for cookies and user info on component mount
 	useEffect(() => {
 		const checkCookiesAndUser = async () => {
-			setIsLoading(true);
+			try {
+				setIsLoading(true);
 
-			// Get user info from Telegram
-			if (
-				typeof window !== "undefined" &&
-				window.Telegram?.WebApp?.initDataUnsafe?.user
-			) {
-				const user = window.Telegram.WebApp.initDataUnsafe.user;
-				setUserInfo({
-					id: user.id,
-					name: `${user.first_name}${user.last_name ? ` ${user.last_name}` : ""}`,
-					username: user.username,
-				});
-			}
+				// Check if we're in a valid Telegram environment
+				if (typeof window !== "undefined") {
+					// Double-check Telegram environment
+					const isTelegramEnv =
+						window.Telegram?.WebApp ||
+						window.location.hostname === "localhost" ||
+						window.location.hostname === "127.0.0.1";
 
-			// Check for cookies in storage
-			let cookiesFound = false;
+					if (!isTelegramEnv) {
+						router.replace("/not-found");
+						return;
+					}
+				}
 
-			// Check cloud storage first
-			if (
-				typeof window !== "undefined" &&
-				window.Telegram?.WebApp?.CloudStorage
-			) {
-				try {
-					window.Telegram.WebApp.CloudStorage.getItem(
-						"user_cookies",
-						(error, value) => {
-							if (!error && value) {
-								cookiesFound = true;
-							}
-							setHasCookies(cookiesFound);
-							setIsLoading(false);
-						},
-					);
-					return;
-				} catch (error) {
-					// Fall through to localStorage check
+				// Get user info from Telegram
+				if (
+					typeof window !== "undefined" &&
+					window.Telegram?.WebApp?.initDataUnsafe?.user
+				) {
+					const user = window.Telegram.WebApp.initDataUnsafe.user;
+					setUserInfo({
+						id: user.id,
+						name: `${user.first_name}${user.last_name ? ` ${user.last_name}` : ""}`,
+						username: user.username,
+					});
+				}
+
+				// Check for cookies in storage
+				let cookiesFound = false;
+
+				// Check cloud storage first
+				if (
+					typeof window !== "undefined" &&
+					window.Telegram?.WebApp?.CloudStorage
+				) {
+					try {
+						window.Telegram.WebApp.CloudStorage.getItem(
+							"user_cookies",
+							(error, value) => {
+								if (!error && value) {
+									cookiesFound = true;
+								}
+								setHasCookies(cookiesFound);
+								setIsLoading(false);
+							},
+						);
+						return;
+					} catch (error) {
+						// Fall through to localStorage check
+					}
+				}
+
+				// Check localStorage as fallback
+				if (typeof window !== "undefined" && window.localStorage) {
+					try {
+						const localCookies = window.localStorage.getItem("user_cookies");
+						cookiesFound = !!localCookies;
+					} catch (error) {
+						// localStorage not available
+					}
+				}
+
+				setHasCookies(cookiesFound);
+				setIsLoading(false);
+			} catch (error) {
+				console.error("Error initializing app:", error);
+				// If any error occurs related to Telegram SDK, redirect to not-found
+				if (
+					error instanceof Error &&
+					(error.message.includes("launch parameters") ||
+						error.message.includes("tgWebAppPlatform") ||
+						error.message.includes("Telegram"))
+				) {
+					router.replace("/not-found");
+				} else {
+					setIsLoading(false);
 				}
 			}
-
-			// Check localStorage as fallback
-			if (typeof window !== "undefined" && window.localStorage) {
-				try {
-					const localCookies = window.localStorage.getItem("user_cookies");
-					cookiesFound = !!localCookies;
-				} catch (error) {
-					// localStorage not available
-				}
-			}
-
-			setHasCookies(cookiesFound);
-			setIsLoading(false);
 		};
 
 		checkCookiesAndUser();
-	}, []);
+	}, [router]);
 
 	const handleEraseCookies = async () => {
 		try {
