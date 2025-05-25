@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bookworm
+FROM python:3.13-bookworm
 
 ENV PYTHONPATH "${PYTHONPATH}:/code"
 ENV PATH "/code:${PATH}"
