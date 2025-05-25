@@ -1,27 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useTelegramApp } from "@/hooks/useTelegramApp";
-import {
-	Search,
-	ImageIcon,
-	User,
-	Settings,
-	LogOut,
-	Plus,
-	Images,
-} from "lucide-react";
+import { Search, ImageIcon, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Link } from "@/components/Link/Link";
 import { Page } from "@/components/Page";
 
@@ -51,8 +34,6 @@ declare global {
 }
 
 export default function AppPage() {
-	const router = useRouter();
-	const isTelegramApp = useTelegramApp(true); // Enable validation with redirect
 	const [searchQuery, setSearchQuery] = useState("");
 	const [hasCookies, setHasCookies] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
@@ -124,11 +105,8 @@ export default function AppPage() {
 			}
 		};
 
-		// Only initialize if we're in Telegram
-		if (isTelegramApp) {
-			checkCookiesAndUser();
-		}
-	}, [isTelegramApp]);
+		checkCookiesAndUser();
+	}, []);
 
 	const handleEraseCookies = async () => {
 		try {
@@ -159,7 +137,7 @@ export default function AppPage() {
 		}
 	};
 
-	if (isLoading || !isTelegramApp) {
+	if (isLoading) {
 		return (
 			<div className="min-h-screen bg-gradient-to-br from-background to-secondary/30 p-4 flex items-center justify-center">
 				<div className="max-w-4xl w-full space-y-6">

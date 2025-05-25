@@ -1,12 +1,10 @@
 "use client";
 
 import { cloudStorage, postEvent } from "@telegram-apps/sdk-react";
-import { useTelegramApp } from "@/hooks/useTelegramApp";
 import { decodeCookies } from "@/lib/utils";
 import {
 	AlertTriangle,
 	Clipboard,
-	ClipboardList,
 	Cloud,
 	Cookie,
 	FileText,
@@ -25,18 +23,11 @@ import {
 } from "@/components/ui/accordion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Page } from "@/components/Page";
 
 export default function CookiesPage() {
-	const isTelegramApp = useTelegramApp(true); // Enable validation with redirect
 	const [cookies, setCookies] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
 	const [message, setMessage] = useState<{
@@ -71,7 +62,7 @@ export default function CookiesPage() {
 			const cookieCount = Object.keys(decodedCookies).length;
 			const cookieData = JSON.stringify(decodedCookies);
 
-			if (cloudStorage && typeof cloudStorage.setItem === "function") {
+			if (cloudStorage.isSupported()) {
 				// Try to use cloud storage if available
 				await cloudStorage.setItem("user_cookies", cookieData);
 				setMessage({
