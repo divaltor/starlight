@@ -2,9 +2,9 @@ import path from "node:path";
 import { Glob } from "bun";
 import { create } from "youtube-dl-exec";
 
+import env from "@/config";
 import { logger } from "@/logger";
 import { z } from "zod/v4";
-import env from "@/config";
 
 const filesGlob = new Glob("*.mp4");
 
@@ -64,6 +64,7 @@ export async function downloadVideo(
 		noOverwrites: true,
 		format: "mp4",
 		writeInfoJson: true,
+		noCheckCertificates: true,
 	});
 
 	const mp4Files = filesGlob.scan({ cwd: folder });
