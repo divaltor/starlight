@@ -1,0 +1,22 @@
+{
+  "name": "starlight",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "bun run --filter=./packages/frontend dev",
+    "start:backend": "bun run --filter=./packages/backend start",
+    "build:frontend": "bun run --filter=./packages/frontend build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "workspaces": {
+    "packages": ["packages/*"],
+    "catalog": {
+      "zod": "^3.25.28"
+    }
+  }
+}

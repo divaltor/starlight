@@ -1,22 +1,16 @@
-FROM python:3.13-slim-bookworm
-
-ENV PYTHONPATH "${PYTHONPATH}:/code"
-ENV PATH "/code:${PATH}"
-
-ENV UV_SYSTEM_PYTHON=true
-ENV UV_COMPILE_BYTECODE=true
+FROM oven/bun:1 AS base
 
 WORKDIR /code
+
+ENV NODE_ENV=production
 
 COPY --from=linuxserver/ffmpeg /usr/local/bin/ffprobe /usr/bin/ffprobe
 COPY --from=linuxserver/ffmpeg /usr/local/bin/ffmpeg /usr/bin/ffmpeg
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
-
-COPY pyproject.toml uv.lock /code/
-
-RUN uv sync
+RUN apt-get update && apt-get install -y yt-dlp && rm -rf /var/lib/apt/lists/*
 
 COPY . /code/
 
-CMD ["uv", "run", "python", "-m", "app"]
+RUN bun install
+
+CMD ["bun", "start:backend"]

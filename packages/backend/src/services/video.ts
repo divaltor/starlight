@@ -1,0 +1,80 @@
+import path from "node:path";
+import { Glob } from "bun";
+import { create } from "youtube-dl-exec";
+
+import { logger } from "@/logger";
+import { z } from "zod/v4";
+import env from "@/config";
+
+const filesGlob = new Glob("*.mp4");
+
+const VideoMetadataSchema = z.object({
+	height: z.number().optional(),
+	width: z.number().optional(),
+});
+
+const VideoInformationSchema = z.object({
+	filePath: z.string(),
+	metadata: VideoMetadataSchema.optional(),
+});
+
+type VideoMetadata = z.infer<typeof VideoMetadataSchema>;
+type VideoInformation = z.infer<typeof VideoInformationSchema>;
+
+async function createVideoInformation(
+	filePath: string,
+): Promise<VideoInformation> {
+	const parsedPath = path.parse(filePath);
+
+	const infoJsonPath = path.join(
+		parsedPath.dir,
+		`${parsedPath.name}.info.json`,
+	);
+
+	logger.debug("Creating video information for %s", infoJsonPath);
+
+	const content = await Bun.file(infoJsonPath).json();
+	let metadata: VideoMetadata;
+
+	try {
+		metadata = VideoMetadataSchema.parse(content);
+	} catch {
+		metadata = {};
+	}
+
+	return VideoInformationSchema.parse({
+		filePath,
+		metadata,
+	});
+}
+
+const youtubedl = create(env.YOUTUBE_DL_PATH);
+
+export async function downloadVideo(
+	url: string,
+	folder: string,
+): Promise<VideoInformation[]> {
+	logger.debug("Downloading video from %s to %s", url, folder);
+
+	await youtubedl(url, {
+		paths: folder,
+		quiet: true,
+		noWarnings: true,
+		noPostOverwrites: true,
+		noOverwrites: true,
+		format: "mp4",
+		writeInfoJson: true,
+	});
+
+	const mp4Files = filesGlob.scan({ cwd: folder });
+
+	const videoInformations: VideoInformation[] = [];
+
+	for await (const filePath of mp4Files) {
+		videoInformations.push(
+			await createVideoInformation(path.join(folder, filePath)),
+		);
+	}
+
+	return videoInformations;
+}
