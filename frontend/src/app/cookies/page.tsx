@@ -1,20 +1,19 @@
 "use client";
 
-import { cloudStorage, postEvent } from "@telegram-apps/sdk-react";
 import { decodeCookies } from "@/lib/utils";
 import {
 	AlertTriangle,
+	CheckCircle,
 	Clipboard,
-	Cloud,
 	Cookie,
 	FileText,
 	HardDrive,
 	Lock,
 	Shield,
-	CheckCircle,
 } from "lucide-react";
 import { useState } from "react";
 
+import { Page } from "@/components/Page";
 import {
 	Accordion,
 	AccordionContent,
@@ -23,9 +22,9 @@ import {
 } from "@/components/ui/accordion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Page } from "@/components/Page";
+
 
 export default function CookiesPage() {
 	const [cookies, setCookies] = useState("");
@@ -35,61 +34,6 @@ export default function CookiesPage() {
 		text: string;
 		details?: string;
 	} | null>(null);
-
-	const handleCloudStorage = async () => {
-		if (!cookies.trim()) {
-			setMessage({ type: "error", text: "Please enter cookies data" });
-			return;
-		}
-
-		setIsLoading(true);
-		setMessage(null);
-
-		try {
-			// Validate cookies first
-			const decodedCookies = decodeCookies(cookies);
-			if (!decodedCookies) {
-				setMessage({
-					type: "error",
-					text: "Invalid cookie format",
-					details:
-						"Please check that your cookies are in a valid JSON, base64, or extension export format.",
-				});
-				setIsLoading(false);
-				return;
-			}
-
-			const cookieCount = Object.keys(decodedCookies).length;
-			const cookieData = JSON.stringify(decodedCookies);
-
-			if (cloudStorage.isSupported()) {
-				// Try to use cloud storage if available
-				await cloudStorage.setItem("user_cookies", cookieData);
-				setMessage({
-					type: "success",
-					text: `Successfully validated and saved ${cookieCount} cookies to cloud storage!`,
-				});
-			} else {
-				// Send to backend via Telegram Mini Apps events
-				postEvent("web_app_data_send", { data: cookieData });
-				setMessage({
-					type: "success",
-					text: `Successfully validated and sent ${cookieCount} cookies to bot!`,
-				});
-			}
-
-			setCookies("");
-		} catch (error) {
-			setMessage({
-				type: "error",
-				text: "Failed to save cookies to cloud storage",
-				details:
-					error instanceof Error ? error.message : "Unknown error occurred",
-			});
-		} finally {
-			setIsLoading(false);
-		}
-	};
 
 	const handleLocalStorage = async () => {
 		if (!cookies.trim()) {
@@ -101,7 +45,6 @@ export default function CookiesPage() {
 		setMessage(null);
 
 		try {
-			// Validate cookies first
 			const decodedCookies = decodeCookies(cookies);
 			if (!decodedCookies) {
 				setMessage({
@@ -117,19 +60,7 @@ export default function CookiesPage() {
 			const cookieCount = Object.keys(decodedCookies).length;
 			const cookieData = JSON.stringify(decodedCookies);
 
-			if (
-				typeof window !== "undefined" &&
-				window.Telegram?.WebApp?.CloudStorage
-			) {
-				// Check if we have native Telegram storage
-				// Try to use Telegram's secure storage first
-				window.Telegram.WebApp.CloudStorage.setItem("user_cookies", cookieData);
-				setMessage({
-					type: "success",
-					text: `Successfully validated and saved ${cookieCount} cookies to secure storage!`,
-				});
-			} else if (typeof window !== "undefined" && window.localStorage) {
-				// Fallback to browser localStorage
+			if (typeof window !== "undefined" && window.localStorage) {
 				window.localStorage.setItem("user_cookies", cookieData);
 				setMessage({
 					type: "success",
@@ -138,7 +69,7 @@ export default function CookiesPage() {
 			} else {
 				setMessage({
 					type: "error",
-					text: "Local storage is not available. Please use cloud storage instead.",
+					text: "Local storage is not available.",
 				});
 				return;
 			}
@@ -156,7 +87,6 @@ export default function CookiesPage() {
 		}
 	};
 
-	// Real-time validation feedback
 	const validateCookiesInput = (value: string) => {
 		if (!value.trim()) return null;
 
@@ -165,7 +95,7 @@ export default function CookiesPage() {
 			const count = Object.keys(decoded).length;
 			return {
 				type: "info" as const,
-				text: `✓ Valid format detected - ${count} cookies found`,
+				text: `Valid format detected - ${count} cookies found`,
 			};
 		}
 		return {
@@ -189,19 +119,13 @@ export default function CookiesPage() {
 							</h1>
 						</div>
 						<p className="text-muted-foreground">
-							Securely store your cookies with cloud synchronization or local
-							storage
+							Securely store your cookies locally on this device
 						</p>
 					</div>
 
 					{/* Main Card */}
 					<Card className="shadow-lg border-primary/20">
-						<CardHeader className="text-center">
-							<CardTitle className="flex items-center justify-center gap-2">
-								<Shield className="h-5 w-5 text-primary" />
-								Cookie Input
-							</CardTitle>
-						</CardHeader>
+						<CardHeader />
 						<CardContent className="space-y-4">
 							<Textarea
 								placeholder="Paste your cookies here... (JSON, base64, or exported format)"
@@ -227,22 +151,8 @@ export default function CookiesPage() {
 								</Alert>
 							)}
 
-							{/* Action Buttons */}
-							<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-								<Button
-									onClick={handleCloudStorage}
-									disabled={
-										isLoading ||
-										!inputValidation ||
-										inputValidation.type === "error"
-									}
-									className="flex items-center gap-2 bg-primary hover:bg-primary/90"
-									size="lg"
-								>
-									<Cloud className="h-4 w-4" />
-									{isLoading ? "Saving..." : "Save to Cloud"}
-								</Button>
-
+							{/* Action Button */}
+							<div className="flex justify-center">
 								<Button
 									onClick={handleLocalStorage}
 									disabled={
@@ -250,12 +160,11 @@ export default function CookiesPage() {
 										!inputValidation ||
 										inputValidation.type === "error"
 									}
-									variant="outline"
-									className="flex items-center gap-2"
+									className="flex items-center gap-2 bg-primary hover:bg-primary/90 w-full max-w-sm"
 									size="lg"
 								>
 									<HardDrive className="h-4 w-4" />
-									Save Locally
+									{isLoading ? "Saving..." : "Save Cookies"}
 								</Button>
 							</div>
 						</CardContent>
@@ -289,9 +198,9 @@ export default function CookiesPage() {
 						<Lock className="h-4 w-4" />
 						<AlertTitle>Security Notice</AlertTitle>
 						<AlertDescription>
-							Cloud stored cookies are encrypted and cannot be used to manage
-							your Twitter account. They are stored securely for your
-							convenience only.
+							Cookies are stored locally on your device only. They are encrypted
+							and cannot be used to manage your Twitter account from other
+							devices.
 						</AlertDescription>
 					</Alert>
 
@@ -302,29 +211,20 @@ export default function CookiesPage() {
 								<AccordionItem value="storage-options">
 									<AccordionTrigger className="px-6">
 										<div className="flex items-center gap-2">
-											<Cloud className="h-4 w-4" />
-											Storage Options
+											<HardDrive className="h-4 w-4" />
+											Storage Information
 										</div>
 									</AccordionTrigger>
 									<AccordionContent className="px-6 pb-4">
 										<div className="space-y-4">
 											<div className="flex items-start gap-3">
-												<Cloud className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-												<div>
-													<h4 className="font-medium">Cloud Storage</h4>
-													<p className="text-sm text-muted-foreground">
-														Synchronized across all your devices. Data is
-														encrypted and stored securely on our server.
-													</p>
-												</div>
-											</div>
-											<div className="flex items-start gap-3">
-												<HardDrive className="h-5 w-5 text-accent mt-0.5 flex-shrink-0" />
+												<HardDrive className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
 												<div>
 													<h4 className="font-medium">Local Storage</h4>
 													<p className="text-sm text-muted-foreground">
-														Stored only on this device. Faster access but not
-														synchronized across devices.
+														Stored securely on this device only. Data is
+														encrypted and saved to your browser's local storage
+														or Telegram's secure storage if available.
 													</p>
 												</div>
 											</div>

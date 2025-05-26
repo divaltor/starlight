@@ -1,99 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Search, ImageIcon, Settings } from "lucide-react";
+import { Link } from "@/components/Link/Link";
+import { Page } from "@/components/Page";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Link } from "@/components/Link/Link";
-import { Page } from "@/components/Page";
-
-// Extend Window interface for Telegram WebApp
-declare global {
-	interface Window {
-		Telegram?: {
-			WebApp?: {
-				CloudStorage?: {
-					getItem: (
-						key: string,
-						callback: (error: Error | null, value: string | null) => void,
-					) => void;
-					setItem: (key: string, value: string) => void;
-				};
-				initDataUnsafe?: {
-					user?: {
-						id: number;
-						first_name: string;
-						last_name?: string;
-						username?: string;
-					};
-				};
-			};
-		};
-	}
-}
+import { ImageIcon, Search, Settings } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export default function AppPage() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [hasCookies, setHasCookies] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
-	const [userInfo, setUserInfo] = useState<{
-		id: number;
-		name: string;
-		username?: string;
-	} | null>(null);
 
-	// Check for cookies and user info on component mount
 	useEffect(() => {
 		const checkCookiesAndUser = async () => {
 			try {
 				setIsLoading(true);
 
-				// Get user info from Telegram
-				if (
-					typeof window !== "undefined" &&
-					window.Telegram?.WebApp?.initDataUnsafe?.user
-				) {
-					const user = window.Telegram.WebApp.initDataUnsafe.user;
-					setUserInfo({
-						id: user.id,
-						name: `${user.first_name}${user.last_name ? ` ${user.last_name}` : ""}`,
-						username: user.username,
-					});
-				}
-
-				// Check for cookies in storage
 				let cookiesFound = false;
 
-				// Check cloud storage first
-				if (
-					typeof window !== "undefined" &&
-					window.Telegram?.WebApp?.CloudStorage
-				) {
-					try {
-						window.Telegram.WebApp.CloudStorage.getItem(
-							"user_cookies",
-							(error, value) => {
-								if (!error && value) {
-									cookiesFound = true;
-								}
-								setHasCookies(cookiesFound);
-								setIsLoading(false);
-							},
-						);
-						return;
-					} catch (error) {
-						// Fall through to localStorage check
-					}
-				}
-
-				// Check localStorage as fallback
 				if (typeof window !== "undefined" && window.localStorage) {
 					try {
 						const localCookies = window.localStorage.getItem("user_cookies");
 						cookiesFound = !!localCookies;
 					} catch (error) {
-						// localStorage not available
+						console.error("Error checking cookies:", error);
 					}
 				}
 
@@ -110,23 +42,6 @@ export default function AppPage() {
 
 	const handleEraseCookies = async () => {
 		try {
-			// Clear from cloud storage
-			if (
-				typeof window !== "undefined" &&
-				window.Telegram?.WebApp?.CloudStorage
-			) {
-				window.Telegram.WebApp.CloudStorage.getItem(
-					"user_cookies",
-					(error, value) => {
-						if (!error && value) {
-							// Note: CloudStorage doesn't have removeItem, so we set empty value
-							// This would need to be handled by the backend
-						}
-					},
-				);
-			}
-
-			// Clear from localStorage
 			if (typeof window !== "undefined" && window.localStorage) {
 				window.localStorage.removeItem("user_cookies");
 			}
@@ -205,4 +120,4 @@ export default function AppPage() {
 			</div>
 		</Page>
 	);
-} 
+}

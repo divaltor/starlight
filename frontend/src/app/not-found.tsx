@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, ExternalLink } from "lucide-react";
+import { Page } from "@/components/Page";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -9,8 +10,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Page } from "@/components/Page";
+import { AlertTriangle, ExternalLink } from "lucide-react";
 
 export default function NotFound() {
 	return (
@@ -111,4 +111,4 @@ export default function NotFound() {
 			</div>
 		</Page>
 	);
-} 
+}

@@ -11,8 +11,7 @@
 	},
 	"formatter": {
 		"enabled": true,
-		"indentStyle": "tab",
-		"indentWidth": 2
+		"useEditorconfig": true
 	},
 	"organizeImports": {
 		"enabled": true
@@ -21,13 +20,6 @@
 		"enabled": true,
 		"rules": {
 			"recommended": true
-		}
-	},
-	"javascript": {
-		"formatter": {
-			"quoteStyle": "double",
-			"indentStyle": "tab",
-			"indentWidth": 2
 		}
 	}
 }
