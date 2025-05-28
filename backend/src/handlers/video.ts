@@ -1,5 +1,6 @@
 import type { Context } from "@/bot";
 import { downloadVideo } from "@/services/video";
+import AbortController from "abort-controller";
 import { Composer, GrammyError, InputFile } from "grammy";
 import tmp from "tmp";
 
@@ -13,7 +14,9 @@ feature.on(":text").filter(
 		ctx.msg.text.startsWith("https://www.instagram.com") ||
 		ctx.msg.text.startsWith("https://instagram.com"),
 	async (ctx) => {
-		await ctx.replyWithChatAction("upload_video");
+		const abortController = new AbortController();
+
+		await ctx.replyWithChatAction("upload_video", {}, abortController.signal);
 
 		const tempDir = tmp.dirSync({ unsafeCleanup: true });
 		const videos = await downloadVideo(ctx.msg.text, tempDir.name);
@@ -25,8 +28,14 @@ feature.on(":text").filter(
 					width: video.metadata?.width,
 					height: video.metadata?.height,
 				});
-				ctx.logger.info("Video %s sent successfully to %s", video.filePath, ctx.chatId);
+				ctx.logger.info(
+					"Video %s sent successfully to %s",
+					video.filePath,
+					ctx.chatId,
+				);
 			} catch (error) {
+				abortController.abort();
+
 				if (error instanceof GrammyError) {
 					ctx.logger.error(error, "Error sending video");
 					if (error.error_code === 413) {
