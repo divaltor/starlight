@@ -9,7 +9,7 @@
     "@grammyjs/hydrate": "^1.4.1",
     "@grammyjs/parse-mode": "^2.1.2",
     "@grammyjs/router": "^2.0.0",
-    "@the-convocation/twitter-scraper": "^0.16.5",
+    "@the-convocation/twitter-scraper": "^0.16.6",
     "bullmq": "^5.53.0",
     "dotenv": "^16.5.0",
     "grammy": "^1.36.3",

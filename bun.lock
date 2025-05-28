@@ -18,7 +18,7 @@
         "@grammyjs/hydrate": "^1.4.1",
         "@grammyjs/parse-mode": "^2.1.2",
         "@grammyjs/router": "^2.0.0",
-        "@the-convocation/twitter-scraper": "^0.16.5",
+        "@the-convocation/twitter-scraper": "^0.16.6",
         "bullmq": "^5.53.0",
         "dotenv": "^16.5.0",
         "grammy": "^1.36.3",
@@ -298,7 +298,7 @@
 
     "@telegram-apps/types": ["@telegram-apps/types@2.0.0", "", {}, "sha512-yF499FJK82a2IDNDAQdrmVH3sgFZl/QFNdVZKgWpgtunIVJ1fres5wi9+4aUBRVIdQwZOZZqB/AOvYYuYXsq3Q=="],
 
-    "@the-convocation/twitter-scraper": ["@the-convocation/twitter-scraper@0.16.5", "", { "dependencies": { "@sinclair/typebox": "^0.32.20", "cross-fetch": "^4.0.0-alpha.5", "debug": "^4.4.1", "headers-polyfill": "^3.1.2", "json-stable-stringify": "^1.0.2", "otpauth": "^9.2.2", "set-cookie-parser": "^2.6.0", "tough-cookie": "^4.1.2", "tslib": "^2.5.2" } }, "sha512-p9+yGPkQNkz7mB2f56mBJ06xkpGZaYvhpw4TYQ3s2AzFnwnNfy141xkO8b2RnoN+sTq9UJN9zwDOd/14gcvfaA=="],
+    "@the-convocation/twitter-scraper": ["@the-convocation/twitter-scraper@0.16.6", "", { "dependencies": { "@sinclair/typebox": "^0.32.20", "cross-fetch": "^4.0.0-alpha.5", "debug": "^4.4.1", "headers-polyfill": "^3.1.2", "json-stable-stringify": "^1.0.2", "otpauth": "^9.2.2", "set-cookie-parser": "^2.6.0", "tough-cookie": "^4.1.2", "tslib": "^2.5.2" } }, "sha512-+75F/1MVFDJ9UfDwmhEjUbFqbVyLMnBwWNgKCKsshhU+X9Faom0C78RirPLRB088+Gc4aTLcbBS0vyEqz5bqwA=="],
 
     "@twa-dev/types": ["@twa-dev/types@7.10.0", "", {}, "sha512-BXHyNLXy+cPbOZ2qQq5ArPKcP4kUfuX3YBSFT0XUxtMNWAzvyMuYAiq59UTfQ8OnELXlfChrAoIT3c2pujBtcQ=="],
 
