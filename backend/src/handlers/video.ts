@@ -28,6 +28,7 @@ feature.on(":text").filter(
 				ctx.logger.info("Video %s sent successfully to %s", video.filePath, ctx.chatId);
 			} catch (error) {
 				if (error instanceof GrammyError) {
+					ctx.logger.error(error, "Error sending video");
 					if (error.error_code === 413) {
 						await ctx.reply("Video is too large, can't be sent.");
 					} else {
