@@ -14,9 +14,7 @@ feature.on(":text").filter(
 		ctx.msg.text.startsWith("https://www.instagram.com") ||
 		ctx.msg.text.startsWith("https://instagram.com"),
 	async (ctx) => {
-		const abortController = new AbortController();
-
-		await ctx.replyWithChatAction("upload_video", {}, abortController.signal);
+		await ctx.replyWithChatAction("upload_video");
 
 		const tempDir = tmp.dirSync({ unsafeCleanup: true });
 		const videos = await downloadVideo(ctx.msg.text, tempDir.name);
@@ -29,8 +27,6 @@ feature.on(":text").filter(
 				});
 			} catch (error) {
 				if (error instanceof GrammyError) {
-					abortController.abort();
-
 					if (error.error_code === 413) {
 						await ctx.reply("Video is too large, can't be sent.");
 					} else {
