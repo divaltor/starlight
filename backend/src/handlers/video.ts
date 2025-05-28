@@ -1,6 +1,5 @@
 import type { Context } from "@/bot";
 import { downloadVideo } from "@/services/video";
-import AbortController from "abort-controller";
 import { Composer, GrammyError, InputFile } from "grammy";
 import tmp from "tmp";
 
@@ -21,6 +20,7 @@ feature.on(":text").filter(
 
 		for (const video of videos) {
 			try {
+				ctx.logger.debug("Sending video %s to %s", video.filePath, ctx.chatId);
 				await ctx.replyWithVideo(new InputFile(video.filePath), {
 					width: video.metadata?.width,
 					height: video.metadata?.height,
