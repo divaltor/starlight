@@ -25,6 +25,7 @@ feature.on(":text").filter(
 					width: video.metadata?.width,
 					height: video.metadata?.height,
 				});
+				ctx.logger.info("Video %s sent successfully to %s", video.filePath, ctx.chatId);
 			} catch (error) {
 				if (error instanceof GrammyError) {
 					if (error.error_code === 413) {
