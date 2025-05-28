@@ -4,22 +4,16 @@ import { create } from "youtube-dl-exec";
 
 import env from "@/config";
 import { logger } from "@/logger";
-import { z } from "zod/v4";
 
 const filesGlob = new Glob("*.mp4");
 
-const VideoMetadataSchema = z.object({
-	height: z.number().optional(),
-	width: z.number().optional(),
-});
-
-const VideoInformationSchema = z.object({
-	filePath: z.string(),
-	metadata: VideoMetadataSchema.optional(),
-});
-
-type VideoMetadata = z.infer<typeof VideoMetadataSchema>;
-type VideoInformation = z.infer<typeof VideoInformationSchema>;
+type VideoInformation = {
+	filePath: string;
+	metadata: {
+		height?: number;
+		width?: number;
+	};
+};
 
 async function createVideoInformation(
 	filePath: string,
@@ -33,19 +27,7 @@ async function createVideoInformation(
 
 	logger.debug("Creating video information for %s", infoJsonPath);
 
-	const content = await Bun.file(infoJsonPath).json();
-	let metadata: VideoMetadata;
-
-	try {
-		metadata = VideoMetadataSchema.parse(content);
-	} catch {
-		metadata = {};
-	}
-
-	return VideoInformationSchema.parse({
-		filePath,
-		metadata,
-	});
+	return (await Bun.file(infoJsonPath).json()) as VideoInformation;
 }
 
 const youtubedl = create(env.YOUTUBE_DL_PATH);
