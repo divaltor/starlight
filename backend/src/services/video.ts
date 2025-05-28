@@ -7,12 +7,14 @@ import { logger } from "@/logger";
 
 const filesGlob = new Glob("*.mp4");
 
+type VideoMetadata = {
+	height?: number;
+	width?: number;
+};
+
 type VideoInformation = {
 	filePath: string;
-	metadata: {
-		height?: number;
-		width?: number;
-	};
+	metadata: VideoMetadata;
 };
 
 async function createVideoInformation(
@@ -27,7 +29,18 @@ async function createVideoInformation(
 
 	logger.debug("Creating video information for %s", infoJsonPath);
 
-	return (await Bun.file(infoJsonPath).json()) as VideoInformation;
+	let metadata: VideoMetadata = {};
+
+	try {
+		metadata = (await Bun.file(infoJsonPath).json()) as VideoMetadata;
+	} catch (error) {
+		logger.error(error, "Error creating video information for %s", filePath);
+	}
+
+	return {
+		filePath,
+		metadata,
+	};
 }
 
 const youtubedl = create(env.YOUTUBE_DL_PATH);
