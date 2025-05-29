@@ -47,7 +47,7 @@
         "@radix-ui/react-separator": "^1.1.7",
         "@radix-ui/react-slot": "^1.2.3",
         "@telegram-apps/sdk-react": "^3.2.4",
-        "@telegram-apps/telegram-ui": "^2.1.5",
+        "@telegram-apps/telegram-ui": "^2.1.8",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "eruda": "^3.0.1",
