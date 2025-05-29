@@ -10,6 +10,8 @@ const feature = composer.chatType("private");
 composer.on(":web_app_data", async (ctx) => {
 	const stringData = ctx.msg.web_app_data;
 
+	ctx.logger.debug({ stringData }, "Web app data received");
+
 	ctx.session.user.cookies = Cookies.fromJSON(stringData.data);
 
 	ctx.logger.debug({ cookies: ctx.session.user.cookies }, "Cookies saved");
