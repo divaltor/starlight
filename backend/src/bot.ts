@@ -1,23 +1,12 @@
-import {
-	type Context as BaseContext,
-	Bot,
-	type SessionFlavor,
-	session,
-} from "grammy";
+import { Bot, session } from "grammy";
 
 import env from "@/config";
-import { type Logger, logger } from "@/logger";
-import { type SessionData, redis } from "@/storage";
-import type { HydrateFlavor } from "@grammyjs/hydrate";
+import type { Context } from "@/context";
+import { logger } from "@/logger";
+import logUpdates from "@/middlewares/logging";
+import { redis } from "@/storage";
 import { RedisAdapter } from "@grammyjs/storage-redis";
 
-interface ExtendedContext {
-	logger: Logger;
-}
-
-type Context = HydrateFlavor<
-	BaseContext & ExtendedContext & SessionFlavor<SessionData>
->;
 
 const bot = new Bot<Context>(env.BOT_TOKEN);
 
@@ -36,5 +25,7 @@ bot.use(async (ctx, next) => {
 
 	await next();
 });
+
+bot.use(logUpdates);
 
 export { bot, type Context };

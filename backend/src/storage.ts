@@ -3,7 +3,10 @@ import { Queue } from "bullmq";
 import Redis from "ioredis";
 import { Cookie } from "tough-cookie";
 
-const redis = new Redis(env.REDIS_URI);
+const redis = new Redis(env.REDIS_URI, {
+	connectTimeout: 3,
+	enableReadyCheck: true,
+});
 
 class Cookies {
 	constructor(private cookies: Cookie[]) {}
