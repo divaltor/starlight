@@ -6,7 +6,7 @@ dotenv.config({ path: ".env" });
 const envSchema = z.object({
 	BOT_TOKEN: z.string(),
 	ENVIRONMENT: z.enum(["dev", "prod"]).optional().default("dev"),
-	REDIS_URI: z.url({ protocol: /^rediss?$/ }).optional(),
+	REDIS_URI: z.url({ protocol: /^rediss?$/ }),
 	LOG_LEVEL: z
 		.enum(["debug", "info", "warn", "error"])
 		.optional()

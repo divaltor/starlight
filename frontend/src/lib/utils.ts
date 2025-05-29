@@ -1,29 +1,19 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { z } from "zod";
+import { Cookie } from "tough-cookie";
 
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }
 
-// Zod schemas for different cookie formats
+// Zod schema for Cookie Quick Manager format
 const CookieQuickManagerSchema = z.array(
 	z
 		.object({
 			"Host raw": z.string(),
 			"Name raw": z.string(),
 			"Content raw": z.string(),
-		})
-		.passthrough(), // Allow additional properties
-);
-
-const StandardCookieObjectSchema = z.record(z.string(), z.string());
-
-const CookieArraySchema = z.array(
-	z
-		.object({
-			name: z.string(),
-			value: z.string(),
 		})
 		.passthrough(), // Allow additional properties
 );
@@ -41,17 +31,23 @@ const Base64StringSchema = z.string().refine(
 );
 
 /**
- * Decode and validate cookies from various formats using Zod schemas
- * Supports: base64 encoded JSON, raw JSON, Cookie Quick Manager extension exports
+ * Parse cookies from various formats using tough-cookie library
+ * Supports: Cookie Quick Manager extension exports and RFC 6265 format (semicolon-separated)
  * @param value - Cookie data string
- * @returns Record of cookie name-value pairs or null if invalid
+ * @param cookieNames - Array of cookie names to filter by. If undefined, defaults to ['att', 'auth_token', 'ct0', 'kdt', 'twid']
+ * @returns Array of Cookie objects or null if invalid
  */
 export function decodeCookies(
 	value: string | null,
-): Record<string, string> | null {
+	cookieNames?: string[]
+): Cookie[] | null {
 	if (!value || !value.trim()) {
 		return null;
 	}
+
+	// Default cookie names if not specified
+	const targetCookieNames = cookieNames ?? ['att', 'auth_token', 'ct0', 'kdt', 'twid'];
+	const cookies: Cookie[] = [];
 
 	try {
 		let decoded: unknown;
@@ -63,43 +59,59 @@ export function decodeCookies(
 				const base64Decoded = atob(value);
 				decoded = JSON.parse(base64Decoded);
 			} catch {
-				// If base64 decode fails, fall through to JSON parsing
-				decoded = JSON.parse(value);
+				// If base64 decode fails, fall through to other parsing methods
+				decoded = null;
 			}
 		} else {
 			// Try parsing directly as JSON
-			decoded = JSON.parse(value);
+			try {
+				decoded = JSON.parse(value);
+			} catch {
+				// Not JSON, might be RFC 6265 format
+				decoded = null;
+			}
 		}
 
 		// Try Cookie Quick Manager format first
-		const quickManagerResult = CookieQuickManagerSchema.safeParse(decoded);
-		if (quickManagerResult.success) {
-			const cookies: Record<string, string> = {};
-			for (const item of quickManagerResult.data) {
-				cookies[item["Name raw"]] = item["Content raw"];
+		if (decoded) {
+			const quickManagerResult = CookieQuickManagerSchema.safeParse(decoded);
+			if (quickManagerResult.success) {
+				for (const item of quickManagerResult.data) {
+					const cookieName = item["Name raw"];
+					// Filter by cookie names
+					if (targetCookieNames.includes(cookieName)) {
+						try {
+							const cookie = new Cookie({
+								key: cookieName,
+								value: item["Content raw"],
+								domain: item["Host raw"],
+							});
+							cookies.push(cookie);
+						} catch (error) {
+							console.warn(`Failed to create cookie from Quick Manager format:`, error);
+						}
+					}
+				}
+				return cookies.length > 0 ? cookies : null;
 			}
-			return Object.keys(cookies).length > 0 ? cookies : null;
 		}
 
-		// Try standard cookie object format
-		const standardResult = StandardCookieObjectSchema.safeParse(decoded);
-		if (standardResult.success) {
-			return Object.keys(standardResult.data).length > 0
-				? standardResult.data
-				: null;
-		}
+		// Try RFC 6265 format (semicolon-separated cookie string)
+		// Split by semicolon and parse each cookie
+		const cookieStrings = value.split(';').map(s => s.trim()).filter(s => s.length > 0);
 
-		// Try array format with name/value properties
-		const arrayResult = CookieArraySchema.safeParse(decoded);
-		if (arrayResult.success) {
-			const cookies: Record<string, string> = {};
-			for (const item of arrayResult.data) {
-				cookies[item.name] = item.value;
+		for (const cookieString of cookieStrings) {
+			try {
+				const cookie = Cookie.parse(cookieString);
+				if (cookie && targetCookieNames.includes(cookie.key)) {
+					cookies.push(cookie);
+				}
+			} catch (error) {
+				console.warn(`Failed to parse cookie string "${cookieString}":`, error);
 			}
-			return Object.keys(cookies).length > 0 ? cookies : null;
 		}
 
-		return null;
+		return cookies.length > 0 ? cookies : null;
 	} catch (error) {
 		console.error("Error decoding cookies:", error);
 		return null;
