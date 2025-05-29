@@ -12,6 +12,8 @@ feature.on(":web_app_data", async (ctx) => {
 
 	ctx.session.user.cookies = Cookies.fromJSON(stringData.data);
 
+	ctx.logger.debug({ cookies: ctx.session.user.cookies }, "Cookies saved");
+
 	await ctx.reply(
 		"Cookies saved, you're placed into the queue. Wait until you're notified.",
 	);

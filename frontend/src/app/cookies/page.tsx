@@ -24,6 +24,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { postEvent } from "@telegram-apps/sdk-react";
 
 
 export default function CookiesPage() {
@@ -75,6 +76,7 @@ export default function CookiesPage() {
 			}
 
 			setCookies("");
+			postEvent("web_app_data_send", { data: cookieData });
 		} catch (error) {
 			setMessage({
 				type: "error",
