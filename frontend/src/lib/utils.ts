@@ -1,7 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { z } from "zod";
-import { Cookie } from "tough-cookie";
 
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -29,6 +28,13 @@ const Base64StringSchema = z.string().refine(
 	},
 	{ message: "Invalid base64 string" },
 );
+
+
+type Cookie = {
+	key: string;
+	value: string;
+	domain: string;
+}
 
 /**
  * Parse cookies from various formats using tough-cookie library
@@ -81,11 +87,11 @@ export function decodeCookies(
 					// Filter by cookie names
 					if (targetCookieNames.includes(cookieName)) {
 						try {
-							const cookie = new Cookie({
+							const cookie = {
 								key: cookieName,
 								value: item["Content raw"],
 								domain: item["Host raw"],
-							});
+							};
 							cookies.push(cookie);
 						} catch (error) {
 							console.warn(`Failed to create cookie from Quick Manager format:`, error);
@@ -102,9 +108,19 @@ export function decodeCookies(
 
 		for (const cookieString of cookieStrings) {
 			try {
-				const cookie = Cookie.parse(cookieString);
-				if (cookie && targetCookieNames.includes(cookie.key)) {
-					cookies.push(cookie);
+				const cookie = cookieString.split('=');
+				if (cookie.length !== 2) {
+					continue;
+				}
+
+				const [key, value] = cookie;
+
+				if (key && targetCookieNames.includes(key)) {
+					cookies.push({
+						key,
+						value,
+						domain: "",
+					});
 				}
 			} catch (error) {
 				console.warn(`Failed to parse cookie string "${cookieString}":`, error);
