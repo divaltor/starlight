@@ -7,7 +7,7 @@ const composer = new Composer<Context>();
 
 const feature = composer.chatType("private");
 
-feature.on(":web_app_data", async (ctx) => {
+composer.on(":web_app_data", async (ctx) => {
 	const stringData = ctx.msg.web_app_data;
 
 	ctx.session.user.cookies = Cookies.fromJSON(stringData.data);
