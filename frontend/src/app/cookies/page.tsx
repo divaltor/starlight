@@ -236,7 +236,7 @@ export default function CookiesPage() {
 									<AccordionTrigger className="px-6">
 										<div className="flex items-center gap-2">
 											<FileText className="h-4 w-4" />
-											Supported Formats & Validation
+											Supported Formats &amp; Validation
 										</div>
 									</AccordionTrigger>
 									<AccordionContent className="px-6 pb-4">
