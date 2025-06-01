@@ -133,3 +133,10 @@ export function decodeCookies(
 		return null;
 	}
 }
+
+
+export function cookiesToRfcString(cookies: Cookie[]): string {
+	return cookies
+		.map(cookie => `${cookie.key}=${cookie.value}`)
+		.join('; ');
+}

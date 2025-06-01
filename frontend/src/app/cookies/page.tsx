@@ -1,6 +1,6 @@
 "use client";
 
-import { decodeCookies } from "@/lib/utils";
+import { cookiesToRfcString, decodeCookies } from "@/lib/utils";
 import {
 	mainButton,
 	postEvent,
@@ -94,7 +94,7 @@ export default function CookiesPage() {
 
 			const response = await fetch("/api/cookies", {
 				method: "POST",
-				body: JSON.stringify({ cookies: cookieData }),
+				body: JSON.stringify({ cookies: cookiesToRfcString(decodedCookies) }),
 				headers,
 			});
 
