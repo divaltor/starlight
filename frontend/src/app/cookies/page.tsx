@@ -4,6 +4,7 @@ import { decodeCookies } from "@/lib/utils";
 import {
 	mainButton,
 	postEvent,
+	useRawInitData,
 	useRawLaunchParams,
 	useSignal,
 } from "@telegram-apps/sdk-react";
@@ -42,7 +43,7 @@ export default function CookiesPage() {
 		details?: string;
 	} | null>(null);
 
-	const launchParams = useRawLaunchParams();
+	const initData = useRawInitData();
 
 	const handleLocalStorage = async () => {
 		if (!cookies.trim()) {
@@ -87,8 +88,8 @@ export default function CookiesPage() {
 
 			const headers = new Headers();
 
-			if (launchParams) {
-				headers.set("Authorization", `tma ${launchParams}`);
+			if (initData) {
+				headers.set("Authorization", `tma ${initData}`);
 			}
 
 			const response = await fetch("/api/cookies", {
