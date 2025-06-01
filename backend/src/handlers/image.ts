@@ -7,19 +7,6 @@ const composer = new Composer<Context>();
 
 const feature = composer.chatType("private");
 
-composer.on(":web_app_data", async (ctx) => {
-	const stringData = ctx.msg.web_app_data;
-
-	ctx.logger.debug({ stringData }, "Web app data received");
-
-	ctx.session.user.cookies = Cookies.fromJSON(stringData.data);
-
-	ctx.logger.debug({ cookies: ctx.session.user.cookies }, "Cookies saved");
-
-	await ctx.reply(
-		"Cookies saved, you're placed into the queue. Wait until you're notified.",
-	);
-});
 
 feature.command(["cookies", "cookie"], async (ctx) => {
 	const keyboard = new InlineKeyboard().webApp("Set cookies", {
@@ -33,11 +20,11 @@ feature.command(["cookies", "cookie"], async (ctx) => {
 });
 
 feature.command("images").filter(
-	(ctx) => ctx.session.user.cookies !== null,
+	(ctx) => ctx.session.cookies !== null,
 	async (ctx) => {
 		const scrapper = new Scraper();
 
-		const cookies = ctx.session.user.cookies;
+		const cookies = ctx.session.cookies;
 
 		// biome-ignore lint/style/noNonNullAssertion: cookies is not null from filter
 		scrapper.setCookies(cookies!.getCookies());

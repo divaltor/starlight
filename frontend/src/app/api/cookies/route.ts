@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 		return NextResponse.json({ error: "Invalid cookies" }, { status: 400 });
 	}
 
-	await redis.set(`user-cookies-${parsedData.user.id}`, cookies);
+	await redis.set(`user-cookies-${parsedData.user.id}`, JSON.stringify(cookies));
 
 	await bot.api.sendMessage(
 		parsedData.user.id,

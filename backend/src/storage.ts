@@ -9,7 +9,9 @@ const redis = new Redis(env.REDIS_URI, {
 });
 
 class Cookies {
-	constructor(private cookies: Cookie[]) {}
+	constructor(private cookies: Cookie[]) {
+		this.cookies = cookies;
+	}
 
 	toString() {
 		return this.cookies
