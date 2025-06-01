@@ -130,10 +130,6 @@ export default function CookiesPage() {
 				isLoaderVisible: isLoading,
 			});
 		}
-
-		return () => {
-			mainButton.setParams({ isVisible: false });
-		};
 	}, [isMainButtonMounted, cookies, isLoading]);
 
 
