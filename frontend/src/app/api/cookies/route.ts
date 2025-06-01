@@ -60,6 +60,11 @@ export async function POST(request: NextRequest) {
 	await bot.api.sendMessage(
 		parsedData.user.id,
 		"Beep boop, cookies are saved. You can now enable daily parsing using /queue command",
+		{
+			reply_markup: {
+				remove_keyboard: true,
+			},
+		},
 	);
 
 	return NextResponse.json({ success: true });
