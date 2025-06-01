@@ -14,7 +14,7 @@
     "bullmq": "^5.53.0",
     "dotenv": "^16.5.0",
     "grammy": "^1.36.3",
-    "ioredis": "^5.6.1",
+    "ioredis": "catalog:",
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
     "tmp": "^0.2.3",

@@ -47,9 +47,7 @@ class Cookies {
 }
 
 interface SessionData {
-	user: {
-		cookies: Cookies | null;
-	};
+	cookies: Cookies | null;
 }
 
 const scrapperQueue = new Queue("scrapper", { connection: redis });

@@ -13,8 +13,9 @@ const bot = new Bot<Context>(env.BOT_TOKEN);
 bot.use(
 	session({
 		type: "multi",
-		user: {
-			initial: () => ({ cookies: null }),
+		cookies: {
+			initial: () => null,
+			prefix: "user-cookies-",
 			storage: new RedisAdapter({ instance: redis }),
 		},
 	}),

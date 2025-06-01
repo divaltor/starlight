@@ -1,7 +1,7 @@
 import type { Context } from "@/bot";
 import { Cookies } from "@/storage";
 import { Scraper } from "@the-convocation/twitter-scraper";
-import { Composer } from "grammy";
+import { Composer, InlineKeyboard } from "grammy";
 
 const composer = new Composer<Context>();
 
@@ -18,6 +18,17 @@ composer.on(":web_app_data", async (ctx) => {
 
 	await ctx.reply(
 		"Cookies saved, you're placed into the queue. Wait until you're notified.",
+	);
+});
+
+feature.command(["cookies", "cookie"], async (ctx) => {
+	const keyboard = new InlineKeyboard().webApp("Set cookies", {
+		url: "https://starlight.click/cookies",
+	});
+
+	await ctx.reply(
+		"Beep boop, you need to give me your cookies before I can send you daily images.",
+		{ reply_markup: keyboard },
 	);
 });
 
