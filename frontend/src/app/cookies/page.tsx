@@ -1,6 +1,7 @@
 "use client";
 
 import { decodeCookies } from "@/lib/utils";
+import { mainButton, useSignal } from "@telegram-apps/sdk-react";
 import {
 	AlertTriangle,
 	CheckCircle,
@@ -11,7 +12,7 @@ import {
 	Lock,
 	Shield,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Page } from "@/components/Page";
 import {
@@ -89,6 +90,41 @@ export default function CookiesPage() {
 		}
 	};
 
+	const isMainButtonMounted = useSignal(mainButton.isMounted);
+
+	if (isMainButtonMounted) {
+		mainButton.onClick(handleLocalStorage);
+		mainButton.setParams({
+			text: "Save cookies",
+			isEnabled: false,
+			isVisible: true,
+			isLoaderVisible: false,
+		});
+	}
+
+	useEffect(() => {
+		if (isMainButtonMounted) {
+			const inputValidation = validateCookiesInput(cookies);
+			const isDisabled =
+				isLoading || !inputValidation || inputValidation.type === "error";
+
+			if (isDisabled) {
+				mainButton.setParams({
+					isEnabled: false,
+				});
+			} else {
+				mainButton.setParams({
+					isEnabled: true,
+				});
+			}
+
+			mainButton.setParams({
+				text: isLoading ? "Saving..." : "Save Cookies",
+			});
+		}
+	}, [isMainButtonMounted, cookies, isLoading]);
+
+
 	const validateCookiesInput = (value: string) => {
 		if (!value.trim()) return null;
 
@@ -153,22 +189,23 @@ export default function CookiesPage() {
 								</Alert>
 							)}
 
-							{/* Action Button */}
-							<div className="flex justify-center">
-								<Button
-									onClick={handleLocalStorage}
-									disabled={
-										isLoading ||
-										!inputValidation ||
-										inputValidation.type === "error"
-									}
-									className="flex items-center gap-2 bg-primary hover:bg-primary/90 w-full max-w-sm"
-									size="lg"
-								>
-									<HardDrive className="h-4 w-4" />
-									{isLoading ? "Saving..." : "Save Cookies"}
-								</Button>
-							</div>
+							{!isMainButtonMounted && (
+								<div className="flex justify-center">
+									<Button
+										onClick={handleLocalStorage}
+										disabled={
+											isLoading ||
+											!inputValidation ||
+											inputValidation.type === "error"
+										}
+										className="flex items-center gap-2 bg-primary hover:bg-primary/90 w-full max-w-sm"
+										size="lg"
+									>
+										<HardDrive className="h-4 w-4" />
+										{isLoading ? "Saving..." : "Save Cookies"}
+									</Button>
+								</div>
+							)}
 						</CardContent>
 					</Card>
 
