@@ -26,9 +26,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { postEvent } from "@telegram-apps/sdk-react";
-
+import { useSearchParams } from "next/navigation";
 
 export default function CookiesPage() {
+	const searchParams = useSearchParams();
 	const [cookies, setCookies] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
 	const [message, setMessage] = useState<{
@@ -77,6 +78,7 @@ export default function CookiesPage() {
 			}
 
 			setCookies("");
+
 			postEvent("web_app_data_send", { data: cookieData });
 		} catch (error) {
 			setMessage({
@@ -132,7 +134,6 @@ export default function CookiesPage() {
 		}
 	}, [isMainButtonMounted, cookies, isLoading]);
 
-
 	const validateCookiesInput = (value: string) => {
 		if (!value.trim()) return null;
 
@@ -153,7 +154,7 @@ export default function CookiesPage() {
 	const inputValidation = validateCookiesInput(cookies);
 
 	return (
-		<Page back={true}>
+		<Page back={!searchParams.get("back")}>
 			<div className="min-h-screen bg-gradient-to-br from-background to-secondary/30 p-4 flex items-center justify-center">
 				<div className="max-w-2xl w-full space-y-6">
 					{/* Header */}

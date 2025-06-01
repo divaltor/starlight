@@ -7,6 +7,7 @@ import {
 	mainButton,
 	mockTelegramEnv,
 	mountBackButton,
+	mountMainButton,
 	mountMiniAppSync,
 	mountViewport,
 	restoreInitData,
@@ -68,6 +69,8 @@ export async function init(options: {
 
 	// Mount all components used in the project.
 	mountBackButton.ifAvailable();
+	mountMainButton.ifAvailable();
+
 	restoreInitData();
 
 	if (mountMiniAppSync.isAvailable()) {
@@ -79,9 +82,5 @@ export async function init(options: {
 		mountViewport().then(() => {
 			bindViewportCssVars();
 		});
-	}
-
-	if (mainButton.mount.isAvailable()) {
-		mainButton.mount();
 	}
 }
