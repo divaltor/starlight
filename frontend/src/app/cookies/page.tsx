@@ -1,7 +1,7 @@
 "use client";
 
 import { decodeCookies } from "@/lib/utils";
-import { mainButton, useSignal } from "@telegram-apps/sdk-react";
+import { mainButton, sendData, useSignal } from "@telegram-apps/sdk-react";
 import {
 	AlertTriangle,
 	CheckCircle,
@@ -79,7 +79,7 @@ export default function CookiesPage() {
 
 			setCookies("");
 
-			postEvent("web_app_data_send", { data: cookieData });
+			sendData(cookieData);
 		} catch (error) {
 			setMessage({
 				type: "error",
