@@ -99,10 +99,13 @@ export default function CookiesPage() {
 			isEnabled: false,
 			isVisible: true,
 			isLoaderVisible: false,
+			backgroundColor: "#8B6F47",
 		});
 	}
 
 	useEffect(() => {
+		console.log("Button params", mainButton.state());
+
 		if (isMainButtonMounted) {
 			const inputValidation = validateCookiesInput(cookies);
 			const isDisabled =
@@ -119,7 +122,8 @@ export default function CookiesPage() {
 			}
 
 			mainButton.setParams({
-				text: isLoading ? "Saving..." : "Save Cookies",
+				text: "Save Cookies",
+				isLoaderVisible: isLoading,
 			});
 		}
 	}, [isMainButtonMounted, cookies, isLoading]);
