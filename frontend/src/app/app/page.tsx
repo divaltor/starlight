@@ -103,7 +103,7 @@ export default function AppPage() {
 									start viewing photos.
 								</p>
 								{!hasCookies && (
-									<Link href={{ href: "/cookies", query: { back: false } }}>
+									<Link href={{ href: "/cookies", query: { back: true } }}>
 										<Button
 											size="lg"
 											className="flex items-center gap-2 mx-auto"

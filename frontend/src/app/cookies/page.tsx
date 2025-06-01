@@ -154,7 +154,7 @@ export default function CookiesPage() {
 	const inputValidation = validateCookiesInput(cookies);
 
 	return (
-		<Page back={!searchParams.get("back")}>
+		<Page back={searchParams.get("back") === "true"}>
 			<div className="min-h-screen bg-gradient-to-br from-background to-secondary/30 p-4 flex items-center justify-center">
 				<div className="max-w-2xl w-full space-y-6">
 					{/* Header */}
