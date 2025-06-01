@@ -1,5 +1,6 @@
 import { decodeCookies } from "@/lib/utils";
 import { parse, validate } from "@telegram-apps/init-data-node";
+import { Bot } from "grammy";
 import Redis from "ioredis";
 import { type NextRequest, NextResponse } from "next/server";
 interface CookiesRequest {
@@ -7,24 +8,36 @@ interface CookiesRequest {
 	cookies: string;
 }
 
-// biome-ignore lint/style/noNonNullAssertion: <explanation>
-const redis = new Redis(process.env.REDIS_URI!);
+interface Config {
+	BOT_TOKEN: string;
+	REDIS_URI: string;
+}
+
+declare global {
+	namespace NodeJS {
+		interface ProcessEnv extends Config {}
+	}
+}
+
+const redis = new Redis(process.env.REDIS_URI);
+const bot = new Bot(process.env.BOT_TOKEN);
 
 export async function POST(request: NextRequest) {
 	const auth = request.headers.get("Authorization");
 
-	if (!auth) {
+	if (!auth || !auth.startsWith("tma ")) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
+	const initData = auth.slice(4);
+
 	try {
-		// biome-ignore lint/style/noNonNullAssertion: <explanation>
-		const initData = validate(auth, process.env.BOT_TOKEN!);
+		validate(initData, process.env.BOT_TOKEN);
 	} catch (error) {
 		return NextResponse.json({ error: "Invalid init data" }, { status: 400 });
 	}
 
-	const parsedData = parse(auth);
+	const parsedData = parse(initData);
 
 	if (!parsedData.user) {
 		return NextResponse.json({ error: "Invalid init data" }, { status: 400 });
@@ -43,6 +56,11 @@ export async function POST(request: NextRequest) {
 	}
 
 	await redis.set(`user-cookies-${parsedData.user.id}`, cookies);
+
+	bot.api.sendMessage(
+		parsedData.user.id,
+		"Beep boop, cookies are saved. You can now enable daily parsing using /queue command",
+	);
 
 	return NextResponse.json({ success: true });
 }

@@ -1,7 +1,12 @@
 "use client";
 
 import { decodeCookies } from "@/lib/utils";
-import { mainButton, sendData, useSignal } from "@telegram-apps/sdk-react";
+import {
+	mainButton,
+	postEvent,
+	useRawLaunchParams,
+	useSignal,
+} from "@telegram-apps/sdk-react";
 import {
 	AlertTriangle,
 	CheckCircle,
@@ -25,7 +30,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { postEvent } from "@telegram-apps/sdk-react";
 import { useSearchParams } from "next/navigation";
 
 export default function CookiesPage() {
@@ -37,6 +41,8 @@ export default function CookiesPage() {
 		text: string;
 		details?: string;
 	} | null>(null);
+
+	const launchParams = useRawLaunchParams();
 
 	const handleLocalStorage = async () => {
 		if (!cookies.trim()) {
@@ -79,7 +85,27 @@ export default function CookiesPage() {
 
 			setCookies("");
 
-			sendData.ifAvailable(cookieData);
+			const headers = new Headers();
+
+			if (launchParams) {
+				headers.set("Authorization", `tma ${launchParams}`);
+			}
+
+			const response = await fetch("/api/cookies", {
+				method: "POST",
+				body: JSON.stringify({ cookies: cookieData }),
+				headers,
+			});
+
+			if (!response.ok) {
+				setMessage({
+					type: "error",
+					text: "Failed to save cookies to the server",
+				});
+				return;
+			}
+
+			postEvent("web_app_close");
 		} catch (error) {
 			setMessage({
 				type: "error",
