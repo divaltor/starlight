@@ -93,6 +93,8 @@ export default function CookiesPage() {
 	const isMainButtonMounted = useSignal(mainButton.isMounted);
 
 	if (isMainButtonMounted) {
+		console.log("Button params before enabling", mainButton.state());
+
 		mainButton.onClick(handleLocalStorage);
 		mainButton.setParams({
 			text: "Save cookies",
@@ -101,6 +103,8 @@ export default function CookiesPage() {
 			isLoaderVisible: false,
 			backgroundColor: "#8B6F47",
 		});
+
+		console.log("Button params after enabling", mainButton.state());
 	}
 
 	useEffect(() => {
@@ -122,7 +126,7 @@ export default function CookiesPage() {
 			}
 
 			mainButton.setParams({
-				text: "Save Cookies",
+				text: "Save cookies",
 				isLoaderVisible: isLoading,
 			});
 		}
