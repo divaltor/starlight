@@ -79,7 +79,7 @@ export default function CookiesPage() {
 
 			setCookies("");
 
-			sendData(cookieData);
+			sendData.ifAvailable(cookieData);
 		} catch (error) {
 			setMessage({
 				type: "error",
