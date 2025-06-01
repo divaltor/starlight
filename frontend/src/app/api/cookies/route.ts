@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
 	await redis.set(`user-cookies-${parsedData.user.id}`, cookies);
 
-	bot.api.sendMessage(
+	await bot.api.sendMessage(
 		parsedData.user.id,
 		"Beep boop, cookies are saved. You can now enable daily parsing using /queue command",
 	);
