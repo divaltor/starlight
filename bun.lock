@@ -23,7 +23,7 @@
         "bullmq": "^5.53.0",
         "dotenv": "^16.5.0",
         "grammy": "^1.36.3",
-        "ioredis": "^5.6.1",
+        "ioredis": "catalog:",
         "pino": "^9.7.0",
         "pino-pretty": "^13.0.0",
         "tmp": "^0.2.3",
@@ -51,6 +51,7 @@
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "eruda": "^3.0.1",
+        "ioredis": "catalog:",
         "lucide-react": "^0.511.0",
         "next": "15.3.1",
         "next-intl": "^4.1.0",
@@ -77,6 +78,7 @@
     "youtube-dl-exec",
   ],
   "catalog": {
+    "ioredis": "^5.6.1",
     "zod": "^3.25.28",
   },
   "packages": {
