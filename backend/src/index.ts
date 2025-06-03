@@ -2,6 +2,8 @@ import { bot } from "@/bot";
 import imageHandler from "@/handlers/image";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
+import { imagesWorker } from "@/queue/image-collector";
+import { run } from "@grammyjs/runner";
 
 const boundary = bot.errorBoundary((error) => {
 	const { ctx } = error;
@@ -17,4 +19,16 @@ boundary.use(imageHandler);
 
 logger.info("Bot is starting...");
 
-bot.start();
+const runner = run(bot);
+
+process.on("SIGINT", async () => {
+	await imagesWorker.close();
+	if (runner.isRunning()) await runner.stop();
+});
+
+process.on("SIGTERM", async () => {
+	await imagesWorker.close();
+	if (runner.isRunning()) await runner.stop();
+});
+
+imagesWorker.run();

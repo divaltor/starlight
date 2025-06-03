@@ -9,9 +9,9 @@
   },
   "private": true,
   "scripts": {
-    "dev:frontend": "bun run --filter=./frontend dev",
-    "start:backend": "bun run --filter=./backend start",
-    "build:frontend": "bun run --filter=./frontend build"
+    "dev:frontend": "bun run --elide-lines=0 --filter=./frontend dev",
+    "start:backend": "bun run --elide-lines=0 --filter=./backend start",
+    "build:frontend": "bun run --elide-lines=0 --filter=./frontend build"
   },
   "workspaces": {
     "packages": ["backend", "frontend"],

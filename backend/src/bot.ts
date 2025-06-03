@@ -15,7 +15,7 @@ bot.use(
 		type: "multi",
 		cookies: {
 			initial: () => null,
-			prefix: "user-cookies-",
+			prefix: "user:cookies:",
 			storage: new RedisAdapter({ instance: redis }),
 		},
 	}),

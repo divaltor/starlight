@@ -18,8 +18,9 @@
         "@grammyjs/hydrate": "^1.4.1",
         "@grammyjs/parse-mode": "^2.1.2",
         "@grammyjs/router": "^2.0.0",
+        "@grammyjs/runner": "^2.0.3",
         "@grammyjs/storage-redis": "^2.5.1",
-        "@the-convocation/twitter-scraper": "^0.16.6",
+        "@the-convocation/twitter-scraper": "^0.17.0",
         "bullmq": "^5.53.0",
         "dotenv": "^16.5.0",
         "grammy": "catalog:",
@@ -130,6 +131,8 @@
     "@grammyjs/parse-mode": ["@grammyjs/parse-mode@2.1.2", "", { "peerDependencies": { "grammy": "^1.20.1" } }, "sha512-WyIUqoW4rKj4ktyX8lzbpDaF87w3troekdYjaeigwWItQsxEgBa1gVRc+gAH5369Pm7tOh1MTYD1+TF13WqmeA=="],
 
     "@grammyjs/router": ["@grammyjs/router@2.0.0", "", { "peerDependencies": { "grammy": "^1.0.0" } }, "sha512-xJ3HRNj3mVojLtkFmV+GvKpOWOnS0CGdAIdvpaq+j+8dic1wM1OhOukaotkKzAWZ6bb9QyzUUgVFN6xfZDO5VA=="],
+
+    "@grammyjs/runner": ["@grammyjs/runner@2.0.3", "", { "dependencies": { "abort-controller": "^3.0.0" }, "peerDependencies": { "grammy": "^1.13.1" } }, "sha512-nckmTs1dPWfVQteK9cxqxzE+0m1VRvluLWB8UgFzsjg62w3qthPJt0TYtJBEdG7OedvfQq4vnFAyE6iaMkR42A=="],
 
     "@grammyjs/storage-redis": ["@grammyjs/storage-redis@2.5.1", "", {}, "sha512-Rz7bnrtDz8NOjgSRR4n/rBciHKSvmkrgIUc+8Yb96tSsecBlA91MGOmcgmQXKxb7gTmwliF37VgmMT85bsCZtA=="],
 
@@ -309,7 +312,7 @@
 
     "@telegram-apps/types": ["@telegram-apps/types@2.0.0", "", {}, "sha512-yF499FJK82a2IDNDAQdrmVH3sgFZl/QFNdVZKgWpgtunIVJ1fres5wi9+4aUBRVIdQwZOZZqB/AOvYYuYXsq3Q=="],
 
-    "@the-convocation/twitter-scraper": ["@the-convocation/twitter-scraper@0.16.6", "", { "dependencies": { "@sinclair/typebox": "^0.32.20", "cross-fetch": "^4.0.0-alpha.5", "debug": "^4.4.1", "headers-polyfill": "^3.1.2", "json-stable-stringify": "^1.0.2", "otpauth": "^9.2.2", "set-cookie-parser": "^2.6.0", "tough-cookie": "^4.1.2", "tslib": "^2.5.2" } }, "sha512-+75F/1MVFDJ9UfDwmhEjUbFqbVyLMnBwWNgKCKsshhU+X9Faom0C78RirPLRB088+Gc4aTLcbBS0vyEqz5bqwA=="],
+    "@the-convocation/twitter-scraper": ["@the-convocation/twitter-scraper@0.17.0", "", { "dependencies": { "@sinclair/typebox": "^0.32.20", "cross-fetch": "^4.0.0-alpha.5", "debug": "^4.4.1", "headers-polyfill": "^3.1.2", "json-stable-stringify": "^1.0.2", "otpauth": "^9.2.2", "set-cookie-parser": "^2.6.0", "tough-cookie": "^4.1.2", "tslib": "^2.5.2" } }, "sha512-61RAT5zw37WqI/WO0O8L+F3AgDFWiRQzb+f2quE795kfP5/mY/qyIWr1fbX9vD+3PCZu9WIiT0wYl4/Ke2pK1w=="],
 
     "@twa-dev/types": ["@twa-dev/types@7.10.0", "", {}, "sha512-BXHyNLXy+cPbOZ2qQq5ArPKcP4kUfuX3YBSFT0XUxtMNWAzvyMuYAiq59UTfQ8OnELXlfChrAoIT3c2pujBtcQ=="],
 
