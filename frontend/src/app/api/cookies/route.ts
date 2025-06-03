@@ -19,7 +19,7 @@ declare global {
 	}
 }
 
-const redis = new Redis(process.env.REDIS_URI);
+const redis = new Redis(process.env.REDIS_URL);
 const bot = new Bot(process.env.BOT_TOKEN);
 
 export async function POST(request: NextRequest) {
