@@ -10,7 +10,7 @@ interface CookiesRequest {
 
 interface Config {
 	BOT_TOKEN: string;
-	REDIS_URI: string;
+	REDIS_URL: string;
 }
 
 declare global {
