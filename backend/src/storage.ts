@@ -1,7 +1,8 @@
 import env from "@/config";
-import { S3Client } from "bun";
+import { S3Client, hash } from "bun";
 import Redis from "ioredis";
 import { Cookie } from "tough-cookie";
+import type { TypeId } from "typeid-js";
 
 const redis = new Redis(env.REDIS_URL, {
 	connectTimeout: 3,
@@ -13,14 +14,10 @@ const tweetKey = (
 	telegramUserId: string | number,
 	tweetId: string | undefined,
 ) => `tweet:${telegramUserId}:${tweetId}`;
-
 const timelineKey = (userId: string | number) => `timeline:${userId}`;
+const perceptualHashKey = (userId: string) => `perceptual-hash:${userId}`;
 
-const imageUrl = (
-	telegramUserId: string | number,
-	tweetId: string,
-	photoUrl: string,
-) => `${env.BASE_CDN_URL}/${telegramUserId}/${tweetId}/${photoUrl}`;
+const imageUrl = (photoId: string) => `${env.BASE_CDN_URL}/${photoId}`;
 
 	class Cookies {
 		constructor(private cookies: Cookie[]) {
@@ -80,4 +77,5 @@ export {
 	tweetKey,
 	timelineKey,
 	imageUrl,
+	perceptualHashKey,
 };

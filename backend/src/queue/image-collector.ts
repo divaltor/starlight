@@ -1,7 +1,9 @@
 import { logger } from "@/logger";
-import { imageUrl, redis, s3, timelineKey, tweetKey } from "@/storage";
+import { calculatePerceptualHash, hashToInt } from "@/services/image";
+import { imageUrl, perceptualHashKey, redis, s3, tweetKey } from "@/storage";
 import type { Tweet } from "@the-convocation/twitter-scraper";
-import { Queue, Worker } from "bullmq";
+import { Queue, QueueEvents, Worker } from "bullmq";
+import { typeidUnboxed } from "typeid-js";
 import UserAgent from "user-agents";
 
 const imagesQueue = new Queue("images-collector", {
@@ -23,12 +25,21 @@ interface ImageCollectorJobData {
 	};
 }
 
+interface S3Photo {
+	id: string;
+	s3Url: string;
+	originalUrl: string;
+	status: "ready" | "deleted";
+	perceptualHash: string;
+}
+
 interface RedisTweet {
 	tweet: Tweet;
-	photos: string[];
+	photos: S3Photo[];
 	metadata: {
 		createdAt: Date;
 	};
+	telegramUserId: string;
 }
 
 const imagesWorker = new Worker(
@@ -81,32 +92,48 @@ const imagesWorker = new Worker(
 
 			const extension = photo.url.split(".").pop() ?? "jpg";
 
-			const photoName = `${crypto.randomUUID()}.${extension}`;
+			const photoId = typeidUnboxed();
+			const photoName = `${photoId}.${extension}`;
 
-			await s3.write(`${telegram.userId}/${tweet.id}/${photoName}`, response);
+			const imageBuffer = await response.arrayBuffer();
+
+			const [, hash] = await Promise.all([
+				s3.write(`${telegram.userId}/${tweet.id}/${photoName}`, imageBuffer),
+				calculatePerceptualHash(imageBuffer),
+			]);
+
+			const intHash = hashToInt(hash);
+
+			logger.debug({ hash, intHash }, "Calculated perceptual hash");
 
 			pipeline.call(
 				"JSON.ARRAPPEND",
 				tweetKey(telegram.userId, tweet.id),
 				"$.photos",
-				JSON.stringify(photoName),
+				JSON.stringify({
+					id: photoId,
+					s3Url: imageUrl(photoId),
+					originalUrl: photo.url,
+					status: "ready",
+					perceptualHash: intHash,
+				}),
+			);
+
+			pipeline.zadd(
+				perceptualHashKey(telegram.userId),
+				intHash,
+				`${intHash}:${tweet.id}:${photoId}`,
 			);
 
 			logger.info(
 				{
 					tweetId: tweet.id,
 					photoUrl: photo.url,
-					s3Url: imageUrl(telegram.userId, tweet.id, photoName),
+					s3Url: photoName,
 				},
 				"Photo saved from Twitter",
 			);
 		}
-
-		pipeline.zadd(
-			timelineKey(telegram.userId),
-			now.getTime() + Math.random() * 1000,
-			`${tweet.id}`,
-		);
 
 		await pipeline.exec();
 	},
@@ -126,4 +153,20 @@ imagesWorker.on("failed", (job) => {
 	);
 });
 
-export { imagesQueue, imagesWorker, type RedisTweet };
+const imageCollectorEvents = new QueueEvents("images-collector", {
+	connection: redis,
+});
+
+imageCollectorEvents.on("completed", ({ jobId }) => {
+	logger.info({ jobId }, "Image collector job completed");
+});
+
+imageCollectorEvents.on("failed", ({ jobId, failedReason }) => {
+	logger.error({ jobId, failedReason }, "Image collector job failed");
+});
+
+imageCollectorEvents.on("added", ({ jobId }) => {
+	logger.info({ jobId }, "Image collector job added");
+});
+
+export { imagesQueue, imagesWorker, type RedisTweet, type S3Photo };

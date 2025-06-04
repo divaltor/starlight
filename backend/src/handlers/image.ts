@@ -1,5 +1,9 @@
 import type { Context } from "@/bot";
-import { type RedisTweet, imagesQueue } from "@/queue/image-collector";
+import {
+	type RedisTweet,
+	type S3Photo,
+	imagesQueue,
+} from "@/queue/image-collector";
 import { Cookies, imageUrl, redis, timelineKey, tweetKey } from "@/storage";
 import { Scraper, type Tweet } from "@the-convocation/twitter-scraper";
 import { sleep } from "bun";
@@ -91,14 +95,12 @@ feature.command("images", async (ctx) => {
 			continue;
 		}
 
-		const photos = JSON.parse(redisTweet) as string[];
+		const photos = JSON.parse(redisTweet) as S3Photo[];
 
 		ctx.logger.debug({ photos }, "Photos");
 
 		for (const photo of photos) {
-			buffer.push(
-				InputMediaBuilder.photo(imageUrl(ctx.from.id, tweetId, photo)),
-			);
+			buffer.push(InputMediaBuilder.photo(photo.s3Url));
 
 			if (buffer.length === 10) {
 				await ctx.replyWithMediaGroup(buffer);
