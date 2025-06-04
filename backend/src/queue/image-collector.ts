@@ -98,7 +98,7 @@ const imagesWorker = new Worker(
 			const imageBuffer = await response.arrayBuffer();
 
 			const [, hash] = await Promise.all([
-				s3.write(`${telegram.userId}/${tweet.id}/${photoName}`, imageBuffer),
+				s3.write(`media/${photoName}`, imageBuffer),
 				calculatePerceptualHash(imageBuffer),
 			]);
 
@@ -112,7 +112,7 @@ const imagesWorker = new Worker(
 				"$.photos",
 				JSON.stringify({
 					id: photoId,
-					s3Url: imageUrl(photoId),
+					s3Url: imageUrl(photoName),
 					originalUrl: photo.url,
 					status: "ready",
 					perceptualHash: intHash,
@@ -129,7 +129,7 @@ const imagesWorker = new Worker(
 				{
 					tweetId: tweet.id,
 					photoUrl: photo.url,
-					s3Url: photoName,
+					s3Url: imageUrl(photoName),
 				},
 				"Photo saved from Twitter",
 			);

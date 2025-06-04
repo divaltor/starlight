@@ -1,10 +1,6 @@
 import type { Context } from "@/bot";
-import {
-	type RedisTweet,
-	type S3Photo,
-	imagesQueue,
-} from "@/queue/image-collector";
-import { Cookies, imageUrl, redis, timelineKey, tweetKey } from "@/storage";
+import { type S3Photo, imagesQueue } from "@/queue/image-collector";
+import { Cookies, redis, timelineKey, tweetKey } from "@/storage";
 import { Scraper, type Tweet } from "@the-convocation/twitter-scraper";
 import { sleep } from "bun";
 import { Composer, InlineKeyboard, InputMediaBuilder } from "grammy";
@@ -96,8 +92,6 @@ feature.command("images", async (ctx) => {
 		}
 
 		const photos = JSON.parse(redisTweet) as S3Photo[];
-
-		ctx.logger.debug({ photos }, "Photos");
 
 		for (const photo of photos) {
 			buffer.push(InputMediaBuilder.photo(photo.s3Url));

@@ -17,7 +17,7 @@ const tweetKey = (
 const timelineKey = (userId: string | number) => `timeline:${userId}`;
 const perceptualHashKey = (userId: string) => `perceptual-hash:${userId}`;
 
-const imageUrl = (photoId: string) => `${env.BASE_CDN_URL}/${photoId}`;
+const imageUrl = (photoId: string) => `${env.BASE_CDN_URL}/media/${photoId}`;
 
 	class Cookies {
 		constructor(private cookies: Cookie[]) {
