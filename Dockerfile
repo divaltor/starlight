@@ -8,6 +8,8 @@ ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=true
 ENV HOME=/root
 ENV PATH="$HOME/.local/bin:$PATH"
 
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+
 COPY --from=linuxserver/ffmpeg /usr/local/bin/ffprobe /usr/bin/ffprobe
 COPY --from=linuxserver/ffmpeg /usr/local/bin/ffmpeg /usr/bin/ffmpeg
 
