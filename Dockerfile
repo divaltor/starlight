@@ -21,6 +21,6 @@ COPY . /code/
 
 RUN bun install
 
-RUN bun run db:generate
+RUN bun run prisma:generate
 
 CMD ["bun", "start:backend"]
