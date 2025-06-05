@@ -11,11 +11,15 @@
   "scripts": {
     "dev:frontend": "bun run --elide-lines=0 --filter=./frontend dev",
     "dev:backend": "bun run --elide-lines=0 --filter=./backend start",
+    "db:generate": "bun run --filter=./backend db:generate",
     "start:backend": "bun run --filter=./backend start",
     "build:frontend": "bun run --elide-lines=0 --filter=./frontend build"
   },
   "workspaces": {
-    "packages": ["backend", "frontend"],
+    "packages": [
+      "backend",
+      "frontend"
+    ],
     "catalog": {
       "zod": "^3.25.28",
       "ioredis": "^5.6.1",

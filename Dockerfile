@@ -19,4 +19,6 @@ COPY . /code/
 
 RUN bun install
 
+RUN bun run db:generate
+
 CMD ["bun", "start:backend"]
