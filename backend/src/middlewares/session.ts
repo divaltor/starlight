@@ -8,28 +8,24 @@ export default async function attachUser(ctx: Context, next: NextFunction) {
 		return await next();
 	}
 
-	let user = await prisma.user.findUnique({
+	// PERF: Optimize with SELECT and INSERT or cache via Redis
+	const user = await prisma.user.upsert({
 		where: {
 			telegramId: ctx.from.id,
 		},
+		create: {
+			telegramId: ctx.from.id,
+			username: ctx.from.username,
+			firstName: ctx.from.first_name,
+			lastName: ctx.from.last_name,
+			isBot: ctx.from.is_bot,
+		},
+		update: {
+			username: ctx.from.username,
+			firstName: ctx.from.first_name,
+			lastName: ctx.from.last_name,
+		},
 	});
-
-	if (!user) {
-		ctx.logger.warn(
-			{ telegramId: ctx.from.id },
-			"User not found, creating new user.",
-		);
-
-		user = await prisma.user.create({
-			data: {
-				telegramId: ctx.from.id,
-				username: ctx.from.username,
-				firstName: ctx.from.first_name,
-				lastName: ctx.from.last_name,
-				isBot: ctx.from.is_bot,
-			},
-		});
-	}
 
 	ctx.user = user;
 
