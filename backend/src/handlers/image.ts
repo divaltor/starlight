@@ -1,27 +1,24 @@
-import type { Context } from "@/bot";
-import { type S3Photo, imagesQueue } from "@/queue/image-collector";
-import { Cookies, redis, timelineKey, tweetKey } from "@/storage";
+import env from "@/config";
+import { imagesQueue } from "@/queue/image-collector";
+import { scrapperQueue } from "@/queue/scrapper";
+import { Cookies, prisma, redis } from "@/storage";
+import type { UserContext } from "@/types";
 import { Scraper, type Tweet } from "@the-convocation/twitter-scraper";
 import { sleep } from "bun";
 import { Composer, InlineKeyboard, InputMediaBuilder } from "grammy";
 import type { InputMediaPhoto } from "grammy/types";
 
-const composer = new Composer<Context>();
+const composer = new Composer<UserContext>();
 
 const feature = composer.chatType("private");
 
-
-feature.command(["cookies", "cookie"], async (ctx) => {
-	const keyboard = new InlineKeyboard().webApp("Set cookies", {
-		url: "https://starlight.click/cookies",
-	});
-
-	await ctx.reply(
-		"Beep boop, you need to give me your cookies before I can send you daily images.",
-		{ reply_markup: keyboard },
+feature.command("queue").filter(async (ctx) => {
+	const scheduledJob = await scrapperQueue.getJobScheduler(
+		`scrapper-${ctx.user.id}`,
 	);
-});
 
+	return scheduledJob === null && ctx.session.cookies !== null;
+});
 
 feature.command("queue").filter(
 	(ctx) => ctx.session.cookies !== null,
@@ -55,7 +52,7 @@ feature.command("queue").filter(
 		for (const tweet of likedTweets.tweets) {
 			imagesQueue.add(
 				"post",
-				{ tweet, telegram: { userId: telegramUserId, chatId: ctx.chatId } },
+				{ tweet, userId: ctx.user.id },
 				{
 					deduplication: {
 						id: tweet.id
@@ -70,37 +67,35 @@ feature.command("queue").filter(
 	},
 );
 
+feature.command("queue", async (ctx) => {
+	const keyboard = new InlineKeyboard().webApp("Set cookies", {
+		url: `${env.BASE_FRONTEND_URL}/cookies`,
+	});
+
+	await ctx.reply(
+		"Beep boop, you need to give me your cookies before I can send you daily images.",
+		{ reply_markup: keyboard },
+	);
+});
 
 feature.command("images", async (ctx) => {
-	const images = await redis.zrange(timelineKey(ctx.from.id), 0, -1);
-
 	const buffer: InputMediaPhoto[] = [];
 
-	ctx.logger.debug({ images }, "Images to send");
+	const photos = await prisma.photo.findMany({
+		where: {
+			userId: ctx.user.id,
+			s3Path: { not: null },
+		},
+	});
 
-	for (const tweetId of images) {
-		const redisTweet = (await redis.call(
-			"JSON.GET",
-			tweetKey(ctx.from.id, tweetId),
-			"$.photos[*]",
-		)) as string | null;
+	for (const photo of photos) {
+		// It won't trigger `originalUrl`, just for linter
+		buffer.push(InputMediaBuilder.photo(photo.s3Url ?? photo.originalUrl));
 
-		// We store each tweet in sorted set and separately, should not happen
-		// Only for linter
-		if (!redisTweet) {
-			continue;
-		}
-
-		const photos = JSON.parse(redisTweet) as S3Photo[];
-
-		for (const photo of photos) {
-			buffer.push(InputMediaBuilder.photo(photo.s3Url));
-
-			if (buffer.length === 10) {
-				await ctx.replyWithMediaGroup(buffer);
-				buffer.length = 0;
-				await sleep(1000);
-			}
+		if (buffer.length === 10) {
+			await ctx.replyWithMediaGroup(buffer);
+			buffer.length = 0;
+			await sleep(1000);
 		}
 	}
 

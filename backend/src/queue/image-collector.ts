@@ -1,53 +1,35 @@
 import { logger } from "@/logger";
-import { calculatePerceptualHash, hashToInt } from "@/services/image";
-import { imageUrl, perceptualHashKey, redis, s3, tweetKey } from "@/storage";
+import { calculatePerceptualHash } from "@/services/image";
+import { prisma, redis, s3 } from "@/storage";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
-import { typeidUnboxed } from "typeid-js";
 import UserAgent from "user-agents";
 
-const imagesQueue = new Queue("images-collector", {
-	connection: redis,
-	defaultJobOptions: {
-		attempts: 3,
-		backoff: {
-			type: "exponential",
-			delay: 10000, // 10 seconds
+export const imagesQueue = new Queue<ImageCollectorJobData>(
+	"images-collector",
+	{
+		connection: redis,
+		defaultJobOptions: {
+			attempts: 3,
+			backoff: {
+				type: "exponential",
+				delay: 10000, // 10 seconds
+			},
 		},
 	},
-});
+);
 
 interface ImageCollectorJobData {
 	tweet: Tweet;
-	telegram: {
-		userId: string;
-		chatId: string;
-	};
+	// From database
+	userId: string;
 }
 
-interface S3Photo {
-	id: string;
-	s3Url: string;
-	originalUrl: string;
-	status: "ready" | "deleted";
-	perceptualHash: string;
-}
-
-interface RedisTweet {
-	tweet: Tweet;
-	photos: S3Photo[];
-	metadata: {
-		createdAt: Date;
-	};
-	telegramUserId: string;
-}
-
-const imagesWorker = new Worker(
+export const imagesWorker = new Worker<ImageCollectorJobData>(
 	"images-collector",
 	async (job) => {
-		const { tweet, telegram } = job.data as ImageCollectorJobData;
+		const { tweet, userId } = job.data;
 
-		// Can't happend, used only to fix linter errors
 		if (!tweet.id) {
 			logger.error({ tweet }, "Tweet ID is required, skipping job");
 			return;
@@ -55,23 +37,35 @@ const imagesWorker = new Worker(
 
 		const userAgent = new UserAgent();
 
-		const pipeline = redis.multi();
+		// We can safely update Tweet record here,
+		// because it's not possible to have multiple tweets with the same ID
+		const tweetRecord = await prisma.tweet.upsert({
+			where: { tweetId: { userId, id: tweet.id } },
+			create: {
+				id: tweet.id,
+				userId,
+				tweetData: tweet,
+				photos: {
+					createMany: {
+						data: tweet.photos.map((photo) => ({
+							id: photo.id,
+							originalUrl: photo.url,
+						})),
+						// Guaranteed that if we'll restart a job then we won't have additional photos in Tweet relation
+						skipDuplicates: true,
+					},
+				},
+			},
+			update: {
+				tweetData: tweet,
+			},
+			include: {
+				photos: true,
+			},
+		});
 
-		const now = new Date();
-
-		pipeline.call(
-			"JSON.SET",
-			tweetKey(telegram.userId, tweet.id),
-			"$",
-			JSON.stringify({
-				tweet: tweet,
-				photos: [],
-				metadata: { createdAt: now },
-			}),
-		);
-
-		for (const photo of tweet.photos) {
-			const response = await fetch(photo.url, {
+		for (const photo of tweetRecord.photos) {
+			const response = await fetch(photo.originalUrl, {
 				headers: {
 					"User-Agent": userAgent.toString(),
 				},
@@ -79,7 +73,7 @@ const imagesWorker = new Worker(
 
 			logger.debug(
 				{
-					photoUrl: photo.url,
+					photoUrl: photo.originalUrl,
 					status: response.status,
 					statusText: response.statusText,
 				},
@@ -87,13 +81,12 @@ const imagesWorker = new Worker(
 			);
 
 			if (!response.ok) {
-				throw new Error(`Failed to fetch photo ${photo.url}`);
+				throw new Error(`Failed to fetch photo ${photo.originalUrl}`);
 			}
 
-			const extension = photo.url.split(".").pop() ?? "jpg";
+			const extension = photo.originalUrl.split(".").pop() ?? "jpg";
 
-			const photoId = typeidUnboxed();
-			const photoName = `${photoId}.${extension}`;
+			const photoName = `${photo.externalId}.${extension}`;
 
 			const imageBuffer = await response.arrayBuffer();
 
@@ -102,40 +95,25 @@ const imagesWorker = new Worker(
 				calculatePerceptualHash(imageBuffer),
 			]);
 
-			const intHash = hashToInt(hash);
+			logger.debug({ hash }, "Calculated perceptual hash");
 
-			logger.debug({ hash, intHash }, "Calculated perceptual hash");
-
-			pipeline.call(
-				"JSON.ARRAPPEND",
-				tweetKey(telegram.userId, tweet.id),
-				"$.photos",
-				JSON.stringify({
-					id: photoId,
-					s3Url: imageUrl(photoName),
-					originalUrl: photo.url,
-					status: "ready",
-					perceptualHash: intHash,
-				}),
-			);
-
-			pipeline.zadd(
-				perceptualHashKey(telegram.userId),
-				intHash,
-				`${intHash}:${tweet.id}:${photoId}`,
-			);
+			await prisma.photo.update({
+				where: { photoId: { id: photo.id, userId } },
+				data: {
+					perceptualHash: hash,
+					s3Path: `media/${photoName}`,
+				},
+			});
 
 			logger.info(
 				{
 					tweetId: tweet.id,
-					photoUrl: photo.url,
-					s3Url: imageUrl(photoName),
+					photoUrl: photo.originalUrl,
+					s3Url: photo.s3Url,
 				},
 				"Photo saved from Twitter",
 			);
 		}
-
-		await pipeline.exec();
 	},
 	{
 		connection: redis,
@@ -168,5 +146,3 @@ imageCollectorEvents.on("failed", ({ jobId, failedReason }) => {
 imageCollectorEvents.on("added", ({ jobId }) => {
 	logger.info({ jobId }, "Image collector job added");
 });
-
-export { imagesQueue, imagesWorker, type RedisTweet, type S3Photo };

@@ -7,6 +7,7 @@ const envSchema = z.object({
 	BOT_TOKEN: z.string(),
 	ENVIRONMENT: z.enum(["dev", "prod"]).optional().default("dev"),
 	REDIS_URL: z.url({ protocol: /^rediss?$/ }),
+	DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
 	LOG_LEVEL: z
 		.enum(["debug", "info", "warn", "error"])
 		.optional()
@@ -16,6 +17,7 @@ const envSchema = z.object({
 	AWS_SECRET_ACCESS_KEY: z.string(),
 	AWS_ENDPOINT: z.string().optional(),
 	BASE_CDN_URL: z.string(),
+	BASE_FRONTEND_URL: z.string(),
 });
 
 const env = envSchema.parse(process.env);

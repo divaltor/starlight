@@ -1,7 +1,7 @@
-import { redis } from "@/storage";
-import { Queue } from "bullmq";
+import { prisma, redis } from "@/storage";
+import { Queue, Worker } from "bullmq";
 
-const scrapperQueue = new Queue("feed-scrapper", {
+export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
 	connection: redis,
 	defaultJobOptions: {
 		attempts: 3,
@@ -13,4 +13,24 @@ const scrapperQueue = new Queue("feed-scrapper", {
 	},
 });
 
-export { scrapperQueue };
+interface ScrapperJobData {
+	userId: string;
+}
+
+export const scrapperWorker = new Worker<ScrapperJobData>(
+	"feed-scrapper",
+	async (job) => {
+		const { userId } = job.data;
+
+		const user = await prisma.user.findUnique({
+			where: { id: userId },
+		});
+	},
+	{
+		connection: redis,
+		concurrency: 1,
+		autorun: false,
+		removeOnComplete: { age: 60 * 60 * 24, count: 100 },
+		removeOnFail: { age: 60 * 60 * 24 * 7, count: 50 },
+	},
+);

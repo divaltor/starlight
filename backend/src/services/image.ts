@@ -47,11 +47,6 @@ function applyDCT(f: number[][], size: number): number[][] {
 	return F;
 }
 
-
-export function hashToInt(hash: string): number {
-	return Number.parseInt(hash, 2);
-}
-
 export async function calculatePerceptualHash(
 	image: Parameters<typeof sharp>[0],
 	options?: SharpOptions,
