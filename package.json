@@ -10,7 +10,7 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:prod": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "backend:dev": "bun run src/server/index.ts"
+    "backend:start": "bun run src/server/index.ts"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.11",

@@ -23,4 +23,4 @@ RUN bun install
 
 RUN bun run prisma:generate
 
-CMD ["bun", "start:backend"]
+CMD ["bun", "backend:start"]
