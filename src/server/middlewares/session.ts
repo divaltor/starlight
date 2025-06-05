@@ -1,5 +1,5 @@
-import { prisma } from "@/storage";
-import type { Context } from "@/types";
+import { prisma } from "@/server/storage";
+import type { Context } from "@/server/types";
 import type { NextFunction } from "grammy";
 
 export default async function attachUser(ctx: Context, next: NextFunction) {

@@ -1,39 +1,39 @@
-import env from "@/config";
-import { imagesQueue } from "@/queue/image-collector";
-import { scrapperQueue } from "@/queue/scrapper";
-import { redis } from "@/storage";
-import type { UserContext } from "@/types";
+import env from "@/server/config";
+import { imagesQueue } from "@/server/queue/image-collector";
+import { scrapperQueue } from "@/server/queue/scrapper";
+import { redis } from "@/server/storage";
+import type { Context } from "@/server/types";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import { Composer, InlineKeyboard } from "grammy";
 
-const composer = new Composer<UserContext>();
+const composer = new Composer<Context>();
 
 const feature = composer.chatType("private");
 
 feature.command("queue").filter(
 	async (ctx) => {
 		const scheduledJob = await scrapperQueue.getJobScheduler(
-			`scrapper-${ctx.user.id}`,
+			`scrapper-${ctx.user?.id}`,
 		);
 
 		return scheduledJob === null && ctx.session.cookies !== null;
 	},
 	async (ctx) => {
-		ctx.logger.info("Upserting job scheduler for user %s", ctx.user.id);
+		ctx.logger.info("Upserting job scheduler for user %s", ctx.user?.id);
 
 		await scrapperQueue.upsertJobScheduler(
-			`scrapper-${ctx.user.id}`,
+			`scrapper-${ctx.user?.id}`,
 			{
 				every: 1000 * 60 * 60 * 6, // 6 hours
 			},
 			{
 				data: {
-					userId: ctx.user.id,
+					userId: ctx.user?.id as string,
 				},
 			},
 		);
 
-		ctx.logger.info("Job scheduler upserted for user %s", ctx.user.id);
+		ctx.logger.info("Job scheduler upserted for user %s", ctx.user?.id);
 	},
 );
 
@@ -63,7 +63,7 @@ feature.command("test", async (ctx) => {
 
 	imagesQueue.add("post", {
 		tweet: photos,
-		userId: ctx.user.id,
+		userId: ctx.user?.id as string,
 	});
 });
 

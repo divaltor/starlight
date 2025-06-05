@@ -1,8 +1,8 @@
-import { bot } from "@/bot";
-import imageHandler from "@/handlers/image";
-import videoHandler from "@/handlers/video";
-import { logger } from "@/logger";
-import { imagesWorker } from "@/queue/image-collector";
+import { bot } from "@/server/bot";
+import imageHandler from "@/server/handlers/image";
+import videoHandler from "@/server/handlers/video";
+import { logger } from "@/server/logger";
+import { imagesWorker } from "@/server/queue/image-collector";
 import { run } from "@grammyjs/runner";
 
 const boundary = bot.errorBoundary((error) => {

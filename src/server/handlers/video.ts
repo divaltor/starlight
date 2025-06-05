@@ -1,5 +1,5 @@
-import type { Context } from "@/bot";
-import { downloadVideo } from "@/services/video";
+import { downloadVideo } from "@/server/services/video";
+import type { Context } from "@/server/types";
 import AbortController from "abort-controller";
 import { Composer, GrammyError, InputFile } from "grammy";
 import tmp from "tmp";

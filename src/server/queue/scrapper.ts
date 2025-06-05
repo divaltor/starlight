@@ -1,4 +1,4 @@
-import { prisma, redis } from "@/storage";
+import { prisma, redis } from "@/server/storage";
 import { Queue, Worker } from "bullmq";
 
 export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {

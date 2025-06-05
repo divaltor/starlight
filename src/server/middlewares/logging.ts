@@ -1,4 +1,4 @@
-import type { Context } from "@/bot";
+import type { Context } from "@/server/bot";
 import type { NextFunction } from "grammy";
 
 async function logUpdates(ctx: Context, next: NextFunction) {

@@ -2,7 +2,7 @@
 // services that require one-time initialization on the client.
 
 import { retrieveLaunchParams } from "@telegram-apps/sdk-react";
-import { init } from "./core/init";
+import { init } from "./src/core/init";
 import { mockEnv } from "./mockEnv";
 
 mockEnv().then(() => {

@@ -1,11 +1,11 @@
 import { Bot, session } from "grammy";
 
-import env from "@/config";
-import { logger } from "@/logger";
-import logUpdates from "@/middlewares/logging";
-import attachUser from "@/middlewares/session";
-import { redis } from "@/storage";
-import type { Context } from "@/types";
+import env from "@/server/config";
+import { logger } from "@/server/logger";
+import logUpdates from "@/server/middlewares/logging";
+import attachUser from "@/server/middlewares/session";
+import { redis } from "@/server/storage";
+import type { Context } from "@/server/types";
 import { RedisAdapter } from "@grammyjs/storage-redis";
 
 const bot = new Bot<Context>(env.BOT_TOKEN);

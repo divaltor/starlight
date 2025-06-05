@@ -29,12 +29,11 @@ const Base64StringSchema = z.string().refine(
 	{ message: "Invalid base64 string" },
 );
 
-
 type Cookie = {
 	key: string;
 	value: string;
 	domain: string;
-}
+};
 
 /**
  * Parse cookies from various formats using tough-cookie library
@@ -45,14 +44,20 @@ type Cookie = {
  */
 export function decodeCookies(
 	value: string | null,
-	cookieNames?: string[]
+	cookieNames?: string[],
 ): Cookie[] | null {
 	if (!value || !value.trim()) {
 		return null;
 	}
 
 	// Default cookie names if not specified
-	const targetCookieNames = cookieNames ?? ['att', 'auth_token', 'ct0', 'kdt', 'twid'];
+	const targetCookieNames = cookieNames ?? [
+		"att",
+		"auth_token",
+		"ct0",
+		"kdt",
+		"twid",
+	];
 	const cookies: Cookie[] = [];
 
 	try {
@@ -94,7 +99,10 @@ export function decodeCookies(
 							};
 							cookies.push(cookie);
 						} catch (error) {
-							console.warn(`Failed to create cookie from Quick Manager format:`, error);
+							console.warn(
+								`Failed to create cookie from Quick Manager format:`,
+								error,
+							);
 						}
 					}
 				}
@@ -104,11 +112,14 @@ export function decodeCookies(
 
 		// Try RFC 6265 format (semicolon-separated cookie string)
 		// Split by semicolon and parse each cookie
-		const cookieStrings = value.split(';').map(s => s.trim()).filter(s => s.length > 0);
+		const cookieStrings = value
+			.split(";")
+			.map((s) => s.trim())
+			.filter((s) => s.length > 0);
 
 		for (const cookieString of cookieStrings) {
 			try {
-				const cookie = cookieString.split('=');
+				const cookie = cookieString.split("=");
 				if (cookie.length !== 2) {
 					continue;
 				}
@@ -118,7 +129,7 @@ export function decodeCookies(
 				if (key && targetCookieNames.includes(key)) {
 					cookies.push({
 						key,
-						value,
+						value: value as string,
 						domain: "",
 					});
 				}
@@ -134,9 +145,6 @@ export function decodeCookies(
 	}
 }
 
-
 export function cookiesToRfcString(cookies: Cookie[]): string {
-	return cookies
-		.map(cookie => `${cookie.key}=${cookie.value}`)
-		.join('; ');
+	return cookies.map((cookie) => `${cookie.key}=${cookie.value}`).join("; ");
 }

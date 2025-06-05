@@ -1,4 +1,4 @@
-import env from "@/config";
+import env from "@/server/config";
 import { PrismaClient } from "@prisma/client";
 import { S3Client } from "bun";
 import Redis from "ioredis";
