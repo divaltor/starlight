@@ -31,12 +31,18 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 		const { tweet, userId } = job.data;
 
 		if (!tweet.id) {
-			logger.error({ tweet }, "Tweet ID is required, skipping job");
+			logger.error(
+				{ tweetId: tweet.id, userId },
+				"Tweet ID is required, skipping job",
+			);
 			return;
 		}
 
 		if (tweet.photos.length === 0) {
-			logger.info({ tweet }, "Tweet has no photos, skipping job");
+			logger.info(
+				{ tweetId: tweet.id, userId },
+				"Tweet has no photos, skipping job",
+			);
 			return;
 		}
 
