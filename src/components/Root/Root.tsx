@@ -15,7 +15,6 @@ import { setLocale } from "@/core/i18n/locale";
 import { useDidMount } from "@/hooks/useDidMount";
 
 import "./styles.css";
-import { redirect } from "next/navigation";
 
 function RootInner({ children }: PropsWithChildren) {
 	const lp = useLaunchParams();
@@ -45,7 +44,9 @@ export function Root(props: PropsWithChildren) {
 	const didMount = useDidMount();
 
 	return didMount ? (
-		redirect("https://youtu.be/dQw4w9WgXcQ")
+		<ErrorBoundary fallback={ErrorPage}>
+			<RootInner {...props} />
+		</ErrorBoundary>
 	) : (
 		<div className="root__loading">Loading</div>
 	);
