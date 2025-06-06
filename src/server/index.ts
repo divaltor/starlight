@@ -3,6 +3,7 @@ import imageHandler from "@/server/handlers/image";
 import videoHandler from "@/server/handlers/video";
 import { logger } from "@/server/logger";
 import { imagesWorker } from "@/server/queue/image-collector";
+import { scrapperWorker } from "@/server/queue/scrapper";
 import { run } from "@grammyjs/runner";
 
 const boundary = bot.errorBoundary((error) => {
@@ -23,12 +24,15 @@ const runner = run(bot);
 
 process.on("SIGINT", async () => {
 	await imagesWorker.close();
+	await scrapperWorker.close();
 	if (runner.isRunning()) await runner.stop();
 });
 
 process.on("SIGTERM", async () => {
 	await imagesWorker.close();
+	await scrapperWorker.close();
 	if (runner.isRunning()) await runner.stop();
 });
 
 imagesWorker.run();
+scrapperWorker.run();

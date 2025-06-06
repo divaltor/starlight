@@ -8,6 +8,7 @@ ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=true
 ENV HOME=/root
 ENV PATH="$HOME/.local/bin:$PATH"
 
+# To disable Prisma warnings
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 
 COPY --from=linuxserver/ffmpeg /usr/local/bin/ffprobe /usr/bin/ffprobe
@@ -21,6 +22,7 @@ COPY . /code/
 
 RUN bun install
 
+# We depends on runtime generated code and types
 RUN bun run prisma:generate
 
 CMD ["bun", "backend:start"]

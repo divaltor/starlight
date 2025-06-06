@@ -35,6 +35,11 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 			return;
 		}
 
+		if (tweet.photos.length === 0) {
+			logger.info({ tweet }, "Tweet has no photos, skipping job");
+			return;
+		}
+
 		const userAgent = new UserAgent();
 
 		// We can safely update Tweet record here,

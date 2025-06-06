@@ -1,9 +1,9 @@
 {
   "name": "starlight",
   "scripts": {
-    "frontend:dev": "next dev",
+    "frontend:dev": "next dev --turbopack",
     "frontend:dev:https": "next dev --experimental-https",
-    "frontend:build": "next build",
+    "frontend:build": "next build --turbopack",
     "frontend:start": "next start",
     "frontend:lint": "next lint",
     "prisma:generate": "prisma generate",

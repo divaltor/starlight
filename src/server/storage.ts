@@ -59,17 +59,6 @@ export const prisma = new PrismaClient({
 	},
 });
 
-export const tweetKey = (
-	telegramUserId: string | number,
-	tweetId: string | undefined,
-) => `tweet:${telegramUserId}:${tweetId}`;
-export const timelineKey = (userId: string | number) => `timeline:${userId}`;
-export const perceptualHashKey = (userId: string) =>
-	`perceptual-hash:${userId}`;
-
-export const imageUrl = (photoId: string) =>
-	`${env.BASE_CDN_URL}/media/${photoId}`;
-
 export class Cookies {
 	constructor(private cookies: Cookie[]) {
 		this.cookies = cookies;

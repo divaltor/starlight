@@ -1,9 +1,7 @@
 import env from "@/server/config";
 import { imagesQueue } from "@/server/queue/image-collector";
 import { scrapperQueue } from "@/server/queue/scrapper";
-import { redis } from "@/server/storage";
 import type { Context } from "@/server/types";
-import type { Tweet } from "@the-convocation/twitter-scraper";
 import { Composer, InlineKeyboard } from "grammy";
 
 const composer = new Composer<Context>();
@@ -16,7 +14,7 @@ feature.command("queue").filter(
 			`scrapper-${ctx.user?.id}`,
 		);
 
-		return scheduledJob === null && ctx.session.cookies !== null;
+		return !scheduledJob && ctx.session.cookies !== null;
 	},
 	async (ctx) => {
 		ctx.logger.info("Upserting job scheduler for user %s", ctx.user?.id);
@@ -29,11 +27,31 @@ feature.command("queue").filter(
 			{
 				data: {
 					userId: ctx.user?.id as string,
+					count: 0,
+					limit: 1000,
 				},
+				name: `scrapper-${ctx.user?.id}`,
 			},
 		);
 
+		await ctx.reply("Starting to collect images, check back in a few minutes.");
+
 		ctx.logger.info("Job scheduler upserted for user %s", ctx.user?.id);
+	},
+);
+
+feature.command("queue").filter(
+	async (ctx) => {
+		const scheduledJob = await imagesQueue.getJobScheduler(
+			`scrapper-${ctx.user?.id}`,
+		);
+
+		return !scheduledJob;
+	},
+	async (ctx) => {
+		await ctx.reply(
+			"Your images are being collected, check back in a few minutes.",
+		);
 	},
 );
 
@@ -50,21 +68,5 @@ feature.command("queue").filter(
 		);
 	},
 );
-
-feature.command("test", async (ctx) => {
-	const tweet = await redis.get("tweet:test");
-
-	if (!tweet) {
-		await ctx.reply("No tweet found");
-		return;
-	}
-
-	const photos = JSON.parse(tweet) as Tweet;
-
-	imagesQueue.add("post", {
-		tweet: photos,
-		userId: ctx.user?.id as string,
-	});
-});
 
 export default composer;
