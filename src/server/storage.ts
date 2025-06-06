@@ -18,7 +18,7 @@ const sqids = new Sqids({
 
 export const prisma = new PrismaClient({
 	log:
-		env.LOG_LEVEL === "debug"
+		env.ENVIRONMENT === "dev"
 			? ["query", "info", "warn", "error"]
 			: ["info", "warn", "error"],
 }).$extends({

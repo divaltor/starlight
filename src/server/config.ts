@@ -10,11 +10,6 @@ const envSchema = z.object({
 	REDIS_URL: z.url({ protocol: /^rediss?$/ }),
 	DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
 
-	LOG_LEVEL: z
-		.enum(["debug", "info", "warn", "error"])
-		.optional()
-		.default("debug"),
-
 	YOUTUBE_DL_PATH: z.string().optional().default("yt-dlp"),
 
 	AWS_ACCESS_KEY_ID: z.string(),

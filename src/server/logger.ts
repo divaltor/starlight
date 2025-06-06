@@ -2,7 +2,7 @@ import env from "@/server/config";
 import pino from "pino";
 
 export const logger = pino({
-	level: env.LOG_LEVEL,
+	level: env.ENVIRONMENT === "dev" ? "debug" : "info",
 	transport: {
 		targets:
 			env.AXIOM_DATASET && env.AXIOM_TOKEN && env.ENVIRONMENT === "prod"
