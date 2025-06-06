@@ -13,7 +13,7 @@ export const redis = new Redis(env.REDIS_URL, {
 });
 
 const sqids = new Sqids({
-	minLength: 16,
+	minLength: 12,
 });
 
 export const prisma = new PrismaClient({
