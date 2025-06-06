@@ -17,7 +17,7 @@ feature.command("queue").filter(
 		return !scheduledJob && ctx.session.cookies !== null;
 	},
 	async (ctx) => {
-		ctx.logger.info("Upserting job scheduler for user %s", ctx.user?.id);
+		ctx.logger.debug("Upserting job scheduler for user %s", ctx.user?.id);
 
 		await scrapperQueue.upsertJobScheduler(
 			`scrapper-${ctx.user?.id}`,
@@ -36,7 +36,7 @@ feature.command("queue").filter(
 
 		await ctx.reply("Starting to collect images, check back in a few minutes.");
 
-		ctx.logger.info("Job scheduler upserted for user %s", ctx.user?.id);
+		ctx.logger.debug("Job scheduler upserted for user %s", ctx.user?.id);
 	},
 );
 

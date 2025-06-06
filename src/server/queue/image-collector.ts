@@ -30,6 +30,13 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 	async (job) => {
 		const { tweet, userId } = job.data;
 
+		logger.info(
+			{ tweetId: tweet.id, userId },
+			"Processing tweet %s for user %s",
+			tweet.id,
+			userId,
+		);
+
 		if (!tweet.id) {
 			logger.error(
 				{ tweetId: tweet.id, userId },
@@ -39,7 +46,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 		}
 
 		if (tweet.photos.length === 0) {
-			logger.info(
+			logger.debug(
 				{ tweetId: tweet.id, userId },
 				"Tweet has no photos, skipping job",
 			);
@@ -82,16 +89,16 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 				},
 			});
 
-			logger.debug(
-				{
-					photoUrl: photo.originalUrl,
-					status: response.status,
-					statusText: response.statusText,
-				},
-				"Response for photo",
-			);
-
 			if (!response.ok) {
+				logger.error(
+					{
+						tweetId: tweet.id,
+						photoUrl: photo.originalUrl,
+						status: response.status,
+						userId,
+					},
+					"Failed to fetch photo %s for tweet %s",
+				);
 				throw new Error(`Failed to fetch photo ${photo.originalUrl}`);
 			}
 
@@ -106,8 +113,6 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 				calculatePerceptualHash(imageBuffer),
 			]);
 
-			logger.debug({ hash }, "Calculated perceptual hash");
-
 			await prisma.photo.update({
 				where: { photoId: { id: photo.id, userId } },
 				data: {
@@ -119,10 +124,12 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 			logger.info(
 				{
 					tweetId: tweet.id,
-					photoUrl: photo.originalUrl,
-					s3Url: photo.s3Url,
+					photoId: photo.id,
+					userId,
 				},
-				"Photo saved from Twitter",
+				"Tweet %s photos are saved to S3 for user %s",
+				tweet.id,
+				userId,
 			);
 		}
 	},
@@ -147,7 +154,7 @@ const imageCollectorEvents = new QueueEvents("images-collector", {
 });
 
 imageCollectorEvents.on("completed", ({ jobId }) => {
-	logger.info({ jobId }, "Image collector job completed");
+	logger.debug({ jobId }, "Image collector job completed");
 });
 
 imageCollectorEvents.on("failed", ({ jobId, failedReason }) => {
@@ -155,5 +162,5 @@ imageCollectorEvents.on("failed", ({ jobId, failedReason }) => {
 });
 
 imageCollectorEvents.on("added", ({ jobId }) => {
-	logger.info({ jobId }, "Image collector job added");
+	logger.debug({ jobId }, "Image collector job added");
 });
