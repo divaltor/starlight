@@ -69,23 +69,22 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		try {
 			timeline = await scrapper.fetchLikedTweets(twid, 200, job.data.cursor);
 		} catch (error) {
-			if (error instanceof AuthenticationError) {
-				logger.error(
-					{ userId, error: error.message },
-					"Unable to fetch timeline for user %s",
+			logger.error(
+				{
 					userId,
-				);
-			} else if (error instanceof ApiError) {
-				logger.error(
-					{
-						userId,
-						status: error.response.status,
-						error: error.response.statusText,
-					},
-					"Unable to fetch timeline for user %s",
-					userId,
-				);
-			}
+					error:
+						error instanceof ApiError
+							? {
+									status: error.response.status,
+									message: error.response.statusText,
+								}
+							: error instanceof AuthenticationError
+								? error.message
+								: error,
+				},
+				"Unable to fetch timeline for user %s",
+				userId,
+			);
 
 			throw error;
 		}

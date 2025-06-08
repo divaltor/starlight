@@ -37,11 +37,11 @@ function applyDCT(f: number[][], size: number): number[][] {
 			let sum = 0;
 			for (let i = 0; i < N; i++) {
 				for (let j = 0; j < N; j++) {
-					// biome-ignore lint/style/noNonNullAssertion: <explanation>
+					// biome-ignore lint/style/noNonNullAssertion: We predefine the array
 					sum += COS[i]![u]! * COS[j]![v]! * f[i]![j]!;
 				}
 			}
-			// biome-ignore lint/style/noNonNullAssertion: <explanation>
+			// biome-ignore lint/style/noNonNullAssertion: We predefine the array
 			sum *= (SQRT[u]! * SQRT[v]!) / 4;
 			F[u][v] = sum;
 		}
@@ -73,7 +73,7 @@ export async function calculatePerceptualHash(
 	let totalSum = 0;
 	for (let x = 0; x < LOW_SIZE; x++) {
 		for (let y = 0; y < LOW_SIZE; y++) {
-			// biome-ignore lint/style/noNonNullAssertion: <explanation>
+			// biome-ignore lint/style/noNonNullAssertion: We predefine the array
 			totalSum += dct[x + 1]![y + 1]!;
 		}
 	}
@@ -83,7 +83,7 @@ export async function calculatePerceptualHash(
 	let fingerprint = "";
 	for (let x = 0; x < LOW_SIZE; x++) {
 		for (let y = 0; y < LOW_SIZE; y++) {
-			// biome-ignore lint/style/noNonNullAssertion: <explanation>
+			// biome-ignore lint/style/noNonNullAssertion: We predefine the array
 			fingerprint += dct[x + 1]![y + 1]! > avg ? "1" : "0";
 		}
 	}
