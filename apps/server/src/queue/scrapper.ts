@@ -92,7 +92,6 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		logger.info(
 			{
 				userId,
-				timeline,
 				cursor: job.data.cursor,
 				tweets: timeline.tweets.length,
 			},
