@@ -18,9 +18,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
 
 RUN uv tool install yt-dlp
 
-COPY . /code/
+COPY package.json bun.lock ./
+COPY apps/server/package.json ./apps/server/package.json
 
 RUN bun install
+
+COPY . .
 
 # We depends on runtime generated code and types
 RUN bun run db:generate
