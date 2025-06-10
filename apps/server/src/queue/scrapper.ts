@@ -1,7 +1,6 @@
 import { logger } from "@/logger";
-import prisma from "@/prisma";
 import { imagesQueue } from "@/queue/image-collector";
-import { Cookies, redis } from "@/storage";
+import { Cookies, prisma, redis } from "@/storage";
 import {
 	ApiError,
 	AuthenticationError,

@@ -1,4 +1,4 @@
-import prisma from "@/prisma";
+import { prisma } from "@/storage";
 import type { Context } from "@/types";
 import type { NextFunction } from "grammy";
 
@@ -8,7 +8,7 @@ export default async function attachUser(ctx: Context, next: NextFunction) {
 		return await next();
 	}
 
-	// PERF: Optimize with SELECT and INSERT or cache via Redis
+	// PERF: Cache via Redis
 	const user = await prisma.user.upsert({
 		where: {
 			telegramId: ctx.from.id,

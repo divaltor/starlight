@@ -6,33 +6,29 @@
 		"verbatimModuleSyntax": true,
 		"skipLibCheck": true,
 		"jsx": "react-jsx",
-    "incremental": true,
+		"incremental": true,
 
-    /* Strictness */
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true,
-    "checkJs": true,
+		/* Strictness */
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"noFallthroughCasesInSwitch": true,
+		"checkJs": true,
 
-    /* Some stricter flags (disabled by default) */
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false,
+		/* Some stricter flags (disabled by default) */
+		"noUnusedLocals": false,
+		"noUnusedParameters": false,
+		"noPropertyAccessFromIndexSignature": false,
 
-		"baseUrl": "./",
+		"baseUrl": ".",
 		"paths": {
-		  "@/*": ["./src/*"],
-      "@/prisma/*": ["./prisma/*"],
-      "@/prisma": ["./prisma/index"]
+			"@/*": ["./src/*"],
+			"@/utils": ["../../packages/utils/src/index"],
+			"@/config": ["../../packages/utils/src/config"]
 		},
-		"outDir": "./dist",
-		"types": [
-        "bun"
-    ],
-	  "composite": true,
+		"types": ["bun"],
+		"composite": true
 	},
-	"tsc-alias": {
-		"resolveFullPaths": true
-	}
+	"include": ["src/**/*"],
+	"references": [{ "path": "../../packages/utils" }]
 }

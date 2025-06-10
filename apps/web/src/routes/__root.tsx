@@ -1,19 +1,13 @@
-import { Toaster } from "@/components/ui/sonner";
-
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-
-import Loader from "@/components/loader";
+import appCss from "@/index.css?url";
 import type { QueryClient } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import {
 	HeadContent,
 	Outlet,
 	Scripts,
 	createRootRouteWithContext,
-	useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import Header from "../components/header";
-import appCss from "../index.css?url";
 
 export interface RouterAppContext {
 	queryClient: QueryClient;
@@ -30,10 +24,23 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "My App",
+				title: "Starlight Manager",
 			},
 		],
 		links: [
+			{
+				rel: "preconnect",
+				href: "https://fonts.googleapis.com",
+			},
+			{
+				rel: "preconnect",
+				href: "https://fonts.gstatic.com",
+				crossOrigin: "anonymous",
+			},
+			{
+				rel: "stylesheet",
+				href: "https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap",
+			},
 			{
 				rel: "stylesheet",
 				href: appCss,
@@ -45,21 +52,15 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 });
 
 function RootDocument() {
-	const isFetching = useRouterState({ select: (s) => s.isLoading });
-
 	return (
-		<html lang="en" className="dark">
+		<html lang="en" className="light">
 			<head>
 				<HeadContent />
 			</head>
 			<body>
-				<div className="grid h-svh grid-rows-[auto_1fr]">
-					<Header />
-					{isFetching ? <Loader /> : <Outlet />}
-				</div>
-				<Toaster richColors />
+				<Outlet />
 				<TanStackRouterDevtools position="bottom-left" />
-				<ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
+				<ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />{" "}
 				<Scripts />
 			</body>
 		</html>

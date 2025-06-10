@@ -1,4 +1,5 @@
 import env from "@/config";
+import { getPrismaClient } from "@/utils";
 import { S3Client } from "bun";
 import Redis from "ioredis";
 import { Cookie } from "tough-cookie";
@@ -8,6 +9,8 @@ export const redis = new Redis(env.REDIS_URL, {
 	enableReadyCheck: true,
 	maxRetriesPerRequest: null,
 });
+
+export const prisma = getPrismaClient();
 
 export class Cookies {
 	constructor(private cookies: Cookie[]) {

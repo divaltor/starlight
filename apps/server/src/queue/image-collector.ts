@@ -1,7 +1,7 @@
 import { logger } from "@/logger";
-import prisma from "@/prisma";
 import { calculatePerceptualHash } from "@/services/image";
 import { redis, s3 } from "@/storage";
+import { prisma } from "@/storage";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import UserAgent from "user-agents";

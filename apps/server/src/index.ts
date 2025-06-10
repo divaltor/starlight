@@ -5,6 +5,9 @@ import { logger } from "@/logger";
 import { imagesWorker } from "@/queue/image-collector";
 import { scrapperWorker } from "@/queue/scrapper";
 import { run } from "@grammyjs/runner";
+import dotenv from "dotenv";
+
+dotenv.config({ path: ".env" });
 
 const boundary = bot.errorBoundary((error) => {
 	const { ctx } = error;
