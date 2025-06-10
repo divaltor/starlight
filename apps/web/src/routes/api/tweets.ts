@@ -16,6 +16,10 @@ interface TweetData {
 	artist: string;
 	date: string;
 	photos: PhotoData[];
+	// Pre-computed values for performance optimization
+	photoCount: number;
+	firstPhotoId?: string;
+	isMultiImage: boolean;
 }
 
 interface UserTweetsResponse {
@@ -35,12 +39,12 @@ const getUserTweets = createServerFn({ method: "GET" })
 		z.object({
 			telegramId: z.number(),
 			cursor: z.string().optional(),
-			limit: z.number().min(1).max(50).default(20),
+			limit: z.number().min(1).max(100).default(30),
 		}),
 	)
 	.handler(async ({ data }): Promise<UserTweetsResponse> => {
 		const { telegramId, cursor, limit } = data;
-		const userId = BigInt(telegramId);
+		const userId = telegramId; // Use number directly
 
 		try {
 			// Parse cursor if provided
@@ -65,7 +69,7 @@ const getUserTweets = createServerFn({ method: "GET" })
 			// First, find the user by telegram ID
 			const user = await getPrismaClient().user.findUnique({
 				where: {
-					telegramId: userId,
+					telegramId: BigInt(telegramId),
 				},
 			});
 
@@ -95,15 +99,11 @@ const getUserTweets = createServerFn({ method: "GET" })
 			};
 
 			if (cursorData) {
-				if (cursorData.direction === "forward") {
-					whereClause.createdAt = {
-						lt: new Date(cursorData.lastCreatedAt),
-					};
-				} else {
-					whereClause.createdAt = {
-						gt: new Date(cursorData.lastCreatedAt),
-					};
-				}
+				// For infinite scroll, we always want to go forward (older tweets)
+				// So we use 'lt' (less than) to get tweets older than the cursor
+				whereClause.createdAt = {
+					lt: new Date(cursorData.lastCreatedAt),
+				};
 			}
 
 			// Fetch tweets with pagination
@@ -122,8 +122,9 @@ const getUserTweets = createServerFn({ method: "GET" })
 						},
 					},
 				},
+				// Always order by newest first for consistent display
 				orderBy: {
-					createdAt: cursorData?.direction === "backward" ? "asc" : "desc",
+					createdAt: "desc",
 				},
 				take: limit + 1, // Fetch one extra to check if there are more
 			});
@@ -132,32 +133,49 @@ const getUserTweets = createServerFn({ method: "GET" })
 			const hasMore = tweets.length > limit;
 			const tweetsToReturn = hasMore ? tweets.slice(0, limit) : tweets;
 
-			// Transform the data to match the expected format
-			const transformedTweets: TweetData[] = tweetsToReturn.map((tweet) => ({
-				id: tweet.id,
-				tweetUrl: `https://twitter.com/i/status/${tweet.id}`,
-				artist: user.username ? `@${user.username}` : user.firstName,
-				date: tweet.createdAt.toISOString(),
-				photos: tweet.photos.map((photo) => ({
+			// Transform the data with performance optimizations
+			const transformedTweets: TweetData[] = tweetsToReturn.map((tweet) => {
+				const photos = tweet.photos.map((photo) => ({
 					id: photo.id,
 					// biome-ignore lint/style/noNonNullAssertion: We filter out photos with null s3Path
 					url: photo.s3Url!,
 					alt: `Photo from tweet ${tweet.id}`,
-				})),
-			}));
+				}));
 
-			// Create pagination info
-			const pagination = CursorPagination.createPaginationInfo(
-				tweetsToReturn,
-				userId,
-				hasMore,
-				cursorData?.direction || "forward",
-			);
+				return {
+					id: tweet.id,
+					tweetUrl: `https://twitter.com/i/status/${tweet.id}`,
+					artist: user.username ? `@${user.username}` : user.firstName,
+					date: tweet.createdAt.toISOString(),
+					photos,
+					// Pre-compute values for performance optimization
+					photoCount: photos.length,
+					firstPhotoId: photos[0]?.id,
+					isMultiImage: photos.length > 1,
+				};
+			});
+
+			// Create next cursor for infinite query
+			let nextCursor = null;
+			if (hasMore && tweetsToReturn.length > 0) {
+				const lastTweet = tweetsToReturn[tweetsToReturn.length - 1];
+				nextCursor = CursorPagination.createCursor({
+					userId,
+					lastTweetId: lastTweet.id,
+					lastCreatedAt: lastTweet.createdAt.toISOString(),
+					direction: "forward",
+				});
+			}
 
 			return {
 				success: true,
 				tweets: transformedTweets,
-				pagination,
+				pagination: {
+					hasNextPage: hasMore,
+					hasPreviousPage: false, // For infinite scroll, we typically only go forward
+					nextCursor,
+					previousCursor: null,
+				},
 			};
 		} catch (error) {
 			console.error("Failed to fetch user tweets:", error);
