@@ -8,6 +8,8 @@ const env = createEnv({
 		REDIS_URL: z.url({ protocol: /^rediss?$/ }),
 		DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
 
+		SECRET_KEY: z.string().min(32),
+
 		YOUTUBE_DL_PATH: z.string().optional().default("yt-dlp"),
 
 		AWS_ACCESS_KEY_ID: z.string(),

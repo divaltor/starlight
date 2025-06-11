@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import env from "@/config";
 
 interface CursorData {
 	userId: number;
@@ -13,13 +14,7 @@ interface EncryptedCursor {
 	encrypted: string;
 }
 
-// Use your app's secret key - should be in environment variables
-const SECRET_KEY = process.env.CURSOR_SECRET || "your-secret-key-here";
-
 export const CursorPagination = {
-	/**
-	 * Create an encrypted cursor for pagination
-	 */
 	createCursor(data: CursorData): string {
 		const payload = JSON.stringify(data);
 
@@ -27,7 +22,7 @@ export const CursorPagination = {
 		const iv = randomBytes(12); // 96-bit IV for GCM
 		const cipher = createCipheriv(
 			"aes-256-gcm",
-			Buffer.from(SECRET_KEY.padEnd(32, "0").slice(0, 32)),
+			Buffer.from(env.SECRET_KEY.padEnd(32, "0").slice(0, 32)),
 			iv,
 		);
 
@@ -45,9 +40,6 @@ export const CursorPagination = {
 		return Buffer.from(JSON.stringify(cursor)).toString("base64url");
 	},
 
-	/**
-	 * Decrypt and parse a cursor, ensuring it belongs to the requesting user
-	 */
 	parseCursor(cursor: string, requestingUserId: number): CursorData | null {
 		try {
 			// Decode the cursor
@@ -59,7 +51,7 @@ export const CursorPagination = {
 			const authTag = Buffer.from(parsed.authTag, "hex");
 			const decipher = createDecipheriv(
 				"aes-256-gcm",
-				Buffer.from(SECRET_KEY.padEnd(32, "0").slice(0, 32)),
+				Buffer.from(env.SECRET_KEY.padEnd(32, "0").slice(0, 32)),
 				iv,
 			);
 
