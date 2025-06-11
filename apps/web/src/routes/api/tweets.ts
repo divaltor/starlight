@@ -40,10 +40,11 @@ const getUserTweets = createServerFn({ method: "GET" })
 			telegramId: z.number(),
 			cursor: z.string().optional(),
 			limit: z.number().min(1).max(100).default(30),
+			dateFilter: z.enum(["all", "today", "week", "month", "3months", "6months", "year"]).optional(),
 		}),
 	)
 	.handler(async ({ data }): Promise<UserTweetsResponse> => {
-		const { telegramId, cursor, limit } = data;
+		const { telegramId, cursor, limit, dateFilter } = data;
 		const userId = telegramId; // Use number directly
 
 		try {
@@ -87,23 +88,62 @@ const getUserTweets = createServerFn({ method: "GET" })
 				};
 			}
 
-			// Build where clause for cursor pagination
+			// Build where clause for cursor pagination and filters
 			const whereClause: {
 				userId: string;
 				createdAt?: {
 					lt?: Date;
 					gt?: Date;
+					gte?: Date;
 				};
 			} = {
+				// Filter by requesting user only
 				userId: user.id,
 			};
+
+			// Apply date filter
+			if (dateFilter && dateFilter !== "all") {
+				const now = new Date();
+				const cutoffDate = new Date();
+
+				switch (dateFilter) {
+					case "today":
+						cutoffDate.setHours(0, 0, 0, 0);
+						break;
+					case "week":
+						cutoffDate.setDate(now.getDate() - 7);
+						break;
+					case "month":
+						cutoffDate.setMonth(now.getMonth() - 1);
+						break;
+					case "3months":
+						cutoffDate.setMonth(now.getMonth() - 3);
+						break;
+					case "6months":
+						cutoffDate.setMonth(now.getMonth() - 6);
+						break;
+					case "year":
+						cutoffDate.setFullYear(now.getFullYear() - 1);
+						break;
+				}
+
+				if (whereClause.createdAt) {
+					whereClause.createdAt.gte = cutoffDate;
+				} else {
+					whereClause.createdAt = { gte: cutoffDate };
+				}
+			}
 
 			if (cursorData) {
 				// For infinite scroll, we always want to go forward (older tweets)
 				// So we use 'lt' (less than) to get tweets older than the cursor
-				whereClause.createdAt = {
-					lt: new Date(cursorData.lastCreatedAt),
-				};
+				if (whereClause.createdAt) {
+					whereClause.createdAt.lt = new Date(cursorData.lastCreatedAt);
+				} else {
+					whereClause.createdAt = {
+						lt: new Date(cursorData.lastCreatedAt),
+					};
+				}
 			}
 
 			// Fetch tweets with pagination

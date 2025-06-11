@@ -21,7 +21,6 @@ import {
 	Filter,
 	Loader2,
 	RefreshCw,
-	User,
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -36,6 +35,14 @@ type DateFilter =
 	| "year";
 
 function TwitterArtViewer() {
+	const [selectedImage, setSelectedImage] = useState<number | null>(null);
+	const [isImageLoading, setIsImageLoading] = useState<{
+		[key: string]: boolean;
+	}>({});
+	const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+	const [isFilterActive, setIsFilterActive] = useState(false);
+
+
 	const {
 		tweets,
 		tweetMap,
@@ -45,65 +52,13 @@ function TwitterArtViewer() {
 		isFetchingNextPage,
 		hasNextPage,
 		error,
-	} = useTweets();
+	} = useTweets({
+		dateFilter,
+	});
 
-	const [selectedImage, setSelectedImage] = useState<number | null>(null);
-	const [isImageLoading, setIsImageLoading] = useState<{
-		[key: string]: boolean;
-	}>({});
-	const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
-	const [dateFilter, setDateFilter] = useState<DateFilter>("all");
-	const [isFilterActive, setIsFilterActive] = useState(false);
-
-	// Get unique artists from the real data (optimized with Set)
-	const uniqueArtists = useMemo(() => {
-		const artists = new Set<string>();
-		for (const tweet of tweets) {
-			artists.add(tweet.artist);
-		}
-		return Array.from(artists).sort();
-	}, [tweets]);
-
-	// Apply filters to get filtered data (optimized)
-	const filteredTweets = useMemo(() => {
-		let filtered = tweets;
-
-		// Filter by artist
-		if (selectedArtist) {
-			filtered = filtered.filter((tweet) => tweet.artist === selectedArtist);
-		}
-
-		// Filter by date
-		if (dateFilter !== "all") {
-			const now = new Date();
-			const cutoffDate = new Date();
-
-			switch (dateFilter) {
-				case "today":
-					cutoffDate.setHours(0, 0, 0, 0);
-					break;
-				case "week":
-					cutoffDate.setDate(now.getDate() - 7);
-					break;
-				case "month":
-					cutoffDate.setMonth(now.getMonth() - 1);
-					break;
-				case "3months":
-					cutoffDate.setMonth(now.getMonth() - 3);
-					break;
-				case "6months":
-					cutoffDate.setMonth(now.getMonth() - 6);
-					break;
-				case "year":
-					cutoffDate.setFullYear(now.getFullYear() - 1);
-					break;
-			}
-
-			filtered = filtered.filter((tweet) => new Date(tweet.date) >= cutoffDate);
-		}
-
-		return filtered;
-	}, [tweets, selectedArtist, dateFilter]);
+	// Server-side filtering eliminates the need for client-side processing
+	// tweets are already filtered by the server based on dateFilter
+	const filteredTweets = tweets;
 
 	// Calculate total photos count - O(1) space, O(n) time but only when needed
 	const totalPhotosCount = useMemo(() => {
@@ -112,12 +67,11 @@ function TwitterArtViewer() {
 
 	// Update filter active state
 	useEffect(() => {
-		setIsFilterActive(selectedArtist !== null || dateFilter !== "all");
-	}, [selectedArtist, dateFilter]);
+		setIsFilterActive(dateFilter !== "all");
+	}, [dateFilter]);
 
 	// Reset filters
 	const resetFilters = useCallback(() => {
-		setSelectedArtist(null);
 		setDateFilter("all");
 	}, []);
 
@@ -587,45 +541,6 @@ function TwitterArtViewer() {
 					</div>
 
 					<div className="flex gap-2">
-						{/* Artist Filter */}
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" className="gap-2">
-									<User className="h-4 w-4" />
-									{selectedArtist || "All Artists"}
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent className="w-56">
-								<DropdownMenuLabel>Filter by Artist</DropdownMenuLabel>
-								<DropdownMenuSeparator />
-								<DropdownMenuGroup>
-									<DropdownMenuItem onClick={() => setSelectedArtist(null)}>
-										<Check
-											className={`mr-2 h-4 w-4 ${
-												selectedArtist === null ? "opacity-100" : "opacity-0"
-											}`}
-										/>
-										All Artists
-									</DropdownMenuItem>
-									{uniqueArtists.map((artist) => (
-										<DropdownMenuItem
-											key={artist}
-											onClick={() => setSelectedArtist(artist)}
-										>
-											<Check
-												className={`mr-2 h-4 w-4 ${
-													selectedArtist === artist
-														? "opacity-100"
-														: "opacity-0"
-												}`}
-											/>
-											{artist}
-										</DropdownMenuItem>
-									))}
-								</DropdownMenuGroup>
-							</DropdownMenuContent>
-						</DropdownMenu>
-
 						{/* Date Filter */}
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
@@ -728,8 +643,15 @@ function TwitterArtViewer() {
 			{filteredTweets.length > 0 && (
 				<div className="mx-auto max-w-7xl">
 					<div className="columns-1 gap-4 space-y-4 sm:columns-2 md:columns-3 lg:columns-4 xl:columns-5 2xl:columns-6">
-						{filteredTweets.map((tweet) => (
-							<div key={tweet.id}>{renderImageGrid(tweet)}</div>
+						{filteredTweets.map((tweet, index) => (
+							<div
+								key={tweet.id}
+								data-tweet-index={index}
+								data-tweet-id={tweet.id}
+								className="will-change-auto"
+							>
+								{renderImageGrid(tweet)}
+							</div>
 						))}
 					</div>
 

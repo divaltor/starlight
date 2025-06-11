@@ -20,10 +20,26 @@ type TweetData = {
 	isMultiImage: boolean;
 };
 
-export function useTweets() {
+type UseTweetsOptions = {
+	dateFilter?: "all" | "today" | "week" | "month" | "3months" | "6months" | "year";
+};
+
+export function useTweets(options: UseTweetsOptions = {}) {
+	const { dateFilter } = options;
 	const user = useSignal(initData.user);
 	const stableTweetsRef = useRef<TweetData[]>([]);
 	const lastDataLengthRef = useRef(0);
+	const lastFiltersRef = useRef({ dateFilter });
+
+	// Reset stable refs when filters change
+	useEffect(() => {
+		const currentFilters = { dateFilter };
+		if (JSON.stringify(currentFilters) !== JSON.stringify(lastFiltersRef.current)) {
+			stableTweetsRef.current = [];
+			lastDataLengthRef.current = 0;
+			lastFiltersRef.current = currentFilters;
+		}
+	}, [dateFilter]);
 
 	// Intersection observer for infinite scrolling
 	const { ref: loadMoreRef, inView } = useInView({
@@ -41,7 +57,7 @@ export function useTweets() {
 		isFetchingNextPage,
 		status,
 	} = useInfiniteQuery({
-		queryKey: ["tweets", user?.id],
+		queryKey: ["tweets", user?.id, dateFilter],
 		queryFn: async ({ pageParam }) => {
 			if (!user?.id) {
 				throw new Error("No Telegram user ID available");
@@ -52,6 +68,7 @@ export function useTweets() {
 					telegramId: user.id,
 					cursor: pageParam,
 					limit: 30,
+					dateFilter,
 				},
 			});
 
@@ -94,11 +111,13 @@ export function useTweets() {
 			const existingTweetIds = new Set(
 				stableTweetsRef.current.map((t) => t.id),
 			);
-			const newTweets = allTweets.filter(
-				(tweet) => !existingTweetIds.has(tweet.id),
-			);
+
+			// Filter new tweets (server already returns them in chronological order)
+			const newTweets = allTweets
+				.filter((tweet) => !existingTweetIds.has(tweet.id));
 
 			if (newTweets.length > 0) {
+				// Append new tweets to the end to maintain stable positioning
 				stableTweetsRef.current = [...stableTweetsRef.current, ...newTweets];
 				lastDataLengthRef.current = allTweets.length;
 			}
