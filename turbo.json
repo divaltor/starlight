@@ -3,8 +3,8 @@
   "ui": "tui",
   "globalDependencies": [
     ".env"
-  ]
-	"tasks": {
+  ],
+  "tasks": {
     "build": {
       "dependsOn": [
         "^build"
