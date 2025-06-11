@@ -1,0 +1,29 @@
+{
+	"name": "utils",
+	"main": "src/index.ts",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"db:push": "prisma db push --schema ./prisma/schema",
+		"db:studio": "prisma studio",
+		"db:generate": "prisma generate --schema ./prisma/schema",
+		"db:migrate": "prisma migrate dev"
+	},
+	"dependencies": {
+		"@prisma/client": "^6.9.0",
+		"@t3-oss/env-core": "^0.13.6",
+		"sqids": "^0.3.0",
+		"uuid": "^11.1.0",
+		"zod": "^3.25.56"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"prisma": "^6.9.0",
+		"prisma-json-types-generator": "^3.4.2"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	}
+}

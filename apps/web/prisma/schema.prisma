@@ -1,0 +1,71 @@
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+generator client {
+    provider     = "prisma-client"
+    output       = "../generated"
+    moduleFormat = "esm"
+}
+
+generator json {
+    provider = "prisma-json-types-generator"
+}
+
+model User {
+    id         String   @id @default(uuid(7)) @db.Uuid
+    telegramId BigInt   @unique @map("telegram_id")
+    username   String?  @unique
+    firstName  String   @map("first_name")
+    lastName   String?  @map("last_name")
+    isActive   Boolean  @default(true) @map("is_active")
+    isBot      Boolean  @default(false) @map("is_bot")
+    createdAt  DateTime @default(now()) @map("created_at")
+    updatedAt  DateTime @updatedAt @map("updated_at")
+
+    // Relations
+    tweets Tweet[]
+    photos Photo[]
+
+    @@map("users")
+}
+
+model Tweet {
+    id     String
+    userId String @map("user_id") @db.Uuid
+
+    /// [TweetType]
+    tweetData Json     @map("tweet_data")
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    // Relations
+    photos Photo[]
+    user   User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+    @@id(name: "tweetId", [id, userId])
+    @@map("tweets")
+}
+
+model Photo {
+    // Twitter ID
+    id             String
+    tweetId        String    @map("tweet_id")
+    userId         String    @map("user_id") @db.Uuid
+    s3Path         String?   @map("s3_path")
+    originalUrl    String    @map("original_url")
+    perceptualHash String?   @map("perceptual_hash")
+    createdAt      DateTime  @default(now()) @map("created_at")
+    updatedAt      DateTime  @updatedAt @map("updated_at")
+    deletedAt      DateTime? @map("deleted_at")
+
+    // Relations
+    tweet Tweet @relation(fields: [tweetId, userId], references: [id, userId], onDelete: Restrict)
+    user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+    @@id(name: "photoId", [id, userId])
+    @@index([tweetId])
+    @@index([perceptualHash])
+    @@map("photos")
+}

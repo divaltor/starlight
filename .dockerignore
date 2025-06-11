@@ -449,3 +449,7 @@ dist
 
 # SvelteKit build / generate output
 .svelte-kit
+
+# Turborepo
+.turbo
+*.dylib.node

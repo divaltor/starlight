@@ -1,0 +1,113 @@
+import {
+	type ThemeParams,
+	backButton,
+	bindThemeParamsCssVars,
+	bindViewportCssVars,
+	emitEvent,
+	init as initSDK,
+	mockTelegramEnv,
+	mountBackButton,
+	mountClosingBehavior,
+	mountMainButton,
+	mountMiniAppSync,
+	mountSettingsButton,
+	mountSwipeBehavior,
+	mountViewport,
+	restoreInitData,
+	retrieveLaunchParams,
+	setDebug,
+	themeParamsState,
+} from "@telegram-apps/sdk-react";
+
+export interface InitOptions {
+	debug?: boolean;
+	mockForMacOS?: boolean;
+}
+
+/**
+ * Initializes the Telegram Mini App and configures its dependencies.
+ */
+export async function initTMA(): Promise<void> {
+	const launchParams = retrieveLaunchParams();
+	const { tgWebAppPlatform: platform } = launchParams;
+
+	const debug =
+		(launchParams.tgWebAppStartParam || "").includes("debug") ||
+		process.env.NODE_ENV === "development";
+	const mockForMacOS = platform === "macos";
+
+	// Set @telegram-apps/sdk-react debug mode and initialize it
+	setDebug(debug);
+	initSDK();
+
+	// Handle macOS-specific Telegram client bugs
+	if (mockForMacOS) {
+		let firstThemeSent = false;
+		mockTelegramEnv({
+			onEvent(event, next) {
+				if (event[0] === "web_app_request_theme") {
+					let tp: ThemeParams = {};
+					if (firstThemeSent) {
+						tp = themeParamsState();
+					} else {
+						firstThemeSent = true;
+						tp ||= retrieveLaunchParams().tgWebAppThemeParams;
+					}
+					return emitEvent("theme_changed", { theme_params: tp });
+				}
+
+				if (event[0] === "web_app_request_safe_area") {
+					return emitEvent("safe_area_changed", {
+						left: 0,
+						top: 0,
+						right: 0,
+						bottom: 0,
+					});
+				}
+
+				next();
+			},
+		});
+	}
+
+	await mountComponents();
+
+	restoreInitData();
+
+	if (mountMiniAppSync.isAvailable()) {
+		mountMiniAppSync();
+		bindThemeParamsCssVars();
+	}
+
+	if (mountViewport.isAvailable()) {
+		mountViewport().then(() => {
+			bindViewportCssVars();
+		});
+	}
+}
+
+/**
+ * Mount all available Telegram components
+ */
+async function mountComponents(): Promise<void> {
+	mountBackButton.ifAvailable();
+	mountMainButton.ifAvailable();
+	mountSettingsButton.ifAvailable();
+	mountSwipeBehavior.ifAvailable();
+	mountClosingBehavior.ifAvailable();
+}
+
+export function toggleBackButton(show: boolean): void {
+	if (!mountBackButton.isAvailable()) {
+		console.warn("Back button is not available");
+		return;
+	}
+
+	const backBtn = backButton;
+
+	if (show) {
+		backBtn.show();
+	} else {
+		backBtn.hide();
+	}
+}
