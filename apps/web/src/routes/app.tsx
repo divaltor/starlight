@@ -243,7 +243,7 @@ function TwitterArtViewer() {
 
 				return (
 					<div
-						className="group relative cursor-pointer break-inside-avoid overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-300 hover:shadow-md"
+						className="group relative cursor-pointer overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-300 hover:shadow-md"
 						onClick={() => openImage(imageIndex)}
 						onKeyDown={(e) => {
 							if (e.key === "Enter" || e.key === " ") {
@@ -285,7 +285,7 @@ function TwitterArtViewer() {
 
 			// Multiple images layout with responsive grid
 			return (
-				<div className="break-inside-avoid rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow duration-300 hover:shadow-md">
+				<div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow duration-300 hover:shadow-md">
 					{/* Post header */}
 					<div className="mb-3 flex items-center justify-between">
 						<div>
@@ -610,11 +610,11 @@ function TwitterArtViewer() {
 			{/* Loading Skeleton */}
 			{isLoading && (
 				<div className="mx-auto max-w-7xl">
-					<div className="columns-1 gap-4 space-y-4 sm:columns-2 md:columns-3 lg:columns-4 xl:columns-5 2xl:columns-6">
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
 						{Array.from({ length: 12 }).map((_, i) => (
 							<Skeleton
 								key={i}
-								className={`break-inside-avoid rounded-lg ${
+								className={`rounded-lg ${
 									i % 3 === 0 ? "h-80" : i % 3 === 1 ? "h-60" : "h-96"
 								}`}
 							/>
@@ -639,10 +639,10 @@ function TwitterArtViewer() {
 				</div>
 			)}
 
-			{/* Responsive Masonry Grid */}
+			{/* Responsive Grid */}
 			{filteredTweets.length > 0 && (
 				<div className="mx-auto max-w-7xl">
-					<div className="columns-1 gap-4 space-y-4 sm:columns-2 md:columns-3 lg:columns-4 xl:columns-5 2xl:columns-6">
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
 						{filteredTweets.map((tweet, index) => (
 							<div
 								key={tweet.id}
