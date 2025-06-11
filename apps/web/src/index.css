@@ -182,3 +182,76 @@ body {
 		@apply bg-background text-foreground;
 	}
 }
+
+@layer utilities {
+	.masonry-grid {
+		display: grid;
+		grid-template-rows: masonry;
+		align-items: start;
+	}
+
+	/* Fallback for browsers that don't support masonry */
+	@supports not (grid-template-rows: masonry) {
+		.masonry-grid {
+			display: flex;
+			flex-direction: column;
+			flex-wrap: wrap;
+			align-content: flex-start;
+			max-height: 200vh;
+		}
+
+		@media (min-width: 640px) {
+			.masonry-grid {
+				max-height: 100vh;
+			}
+		}
+
+		@media (min-width: 768px) {
+			.masonry-grid {
+				max-height: 80vh;
+			}
+		}
+
+		@media (min-width: 1024px) {
+			.masonry-grid {
+				max-height: 70vh;
+			}
+		}
+
+		.masonry-grid > * {
+			width: 100%;
+			flex: none;
+			margin-bottom: 1rem;
+		}
+
+		@media (min-width: 640px) {
+			.masonry-grid > * {
+				width: calc(50% - 0.5rem);
+			}
+		}
+
+		@media (min-width: 768px) {
+			.masonry-grid > * {
+				width: calc(33.333% - 0.667rem);
+			}
+		}
+
+		@media (min-width: 1024px) {
+			.masonry-grid > * {
+				width: calc(25% - 0.75rem);
+			}
+		}
+
+		@media (min-width: 1280px) {
+			.masonry-grid > * {
+				width: calc(20% - 0.8rem);
+			}
+		}
+
+		@media (min-width: 1536px) {
+			.masonry-grid > * {
+				width: calc(16.667% - 0.833rem);
+			}
+		}
+	}
+}

@@ -42,7 +42,6 @@ function TwitterArtViewer() {
 	const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 	const [isFilterActive, setIsFilterActive] = useState(false);
 
-
 	const {
 		tweets,
 		tweetMap,
@@ -610,7 +609,7 @@ function TwitterArtViewer() {
 			{/* Loading Skeleton */}
 			{isLoading && (
 				<div className="mx-auto max-w-7xl">
-					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+					<div className="masonry-grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
 						{Array.from({ length: 12 }).map((_, i) => (
 							<Skeleton
 								key={i}
@@ -642,7 +641,7 @@ function TwitterArtViewer() {
 			{/* Responsive Grid */}
 			{filteredTweets.length > 0 && (
 				<div className="mx-auto max-w-7xl">
-					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+					<div className="masonry-grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
 						{filteredTweets.map((tweet, index) => (
 							<div
 								key={tweet.id}

@@ -21,7 +21,14 @@ type TweetData = {
 };
 
 type UseTweetsOptions = {
-	dateFilter?: "all" | "today" | "week" | "month" | "3months" | "6months" | "year";
+	dateFilter?:
+		| "all"
+		| "today"
+		| "week"
+		| "month"
+		| "3months"
+		| "6months"
+		| "year";
 };
 
 export function useTweets(options: UseTweetsOptions = {}) {
@@ -34,7 +41,9 @@ export function useTweets(options: UseTweetsOptions = {}) {
 	// Reset stable refs when filters change
 	useEffect(() => {
 		const currentFilters = { dateFilter };
-		if (JSON.stringify(currentFilters) !== JSON.stringify(lastFiltersRef.current)) {
+		if (
+			JSON.stringify(currentFilters) !== JSON.stringify(lastFiltersRef.current)
+		) {
 			stableTweetsRef.current = [];
 			lastDataLengthRef.current = 0;
 			lastFiltersRef.current = currentFilters;
@@ -113,8 +122,9 @@ export function useTweets(options: UseTweetsOptions = {}) {
 			);
 
 			// Filter new tweets (server already returns them in chronological order)
-			const newTweets = allTweets
-				.filter((tweet) => !existingTweetIds.has(tweet.id));
+			const newTweets = allTweets.filter(
+				(tweet) => !existingTweetIds.has(tweet.id),
+			);
 
 			if (newTweets.length > 0) {
 				// Append new tweets to the end to maintain stable positioning

@@ -40,7 +40,9 @@ const getUserTweets = createServerFn({ method: "GET" })
 			telegramId: z.number(),
 			cursor: z.string().optional(),
 			limit: z.number().min(1).max(100).default(30),
-			dateFilter: z.enum(["all", "today", "week", "month", "3months", "6months", "year"]).optional(),
+			dateFilter: z
+				.enum(["all", "today", "week", "month", "3months", "6months", "year"])
+				.optional(),
 		}),
 	)
 	.handler(async ({ data }): Promise<UserTweetsResponse> => {
