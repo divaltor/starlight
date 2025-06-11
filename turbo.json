@@ -14,7 +14,7 @@
         ".env*"
       ],
       "outputs": [
-        "dist/**",
+        "apps/web/.vinxi/build/**",
         "apps/web/.vercel/output/**"
       ]
     },
