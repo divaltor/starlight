@@ -51,7 +51,6 @@ function TwitterArtViewer() {
 
 	const {
 		tweets,
-		tweetMap,
 		loadMoreRef,
 		isLoading,
 		isFetching,

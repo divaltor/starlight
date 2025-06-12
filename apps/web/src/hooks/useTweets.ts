@@ -136,14 +136,6 @@ export function useTweets(options: UseTweetsOptions = {}) {
 		return stableTweetsRef.current;
 	}, [data?.pages]);
 
-	const tweetMap = useMemo(() => {
-		const map = new Map();
-		tweets.forEach((tweet, index) => {
-			map.set(tweet.id, { ...tweet, index });
-		});
-		return map;
-	}, [tweets]);
-
 	// Helper function to manually trigger next page load
 	const loadMore = useCallback(() => {
 		if (hasNextPage && !isFetchingNextPage && !isFetching) {
@@ -153,7 +145,6 @@ export function useTweets(options: UseTweetsOptions = {}) {
 
 	return {
 		tweets,
-		tweetMap,
 		loadMoreRef,
 		loadMore,
 		isLoading: status === "pending",
