@@ -27,4 +27,9 @@
 			"@repo/*": ["../../packages/*/src"]
 		}
 	},
+	"references": [
+		{
+			"path": "../../packages/utils"
+		}
+	]
 }
