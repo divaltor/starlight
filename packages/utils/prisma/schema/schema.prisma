@@ -4,9 +4,8 @@ datasource db {
 }
 
 generator client {
-    provider        = "prisma-client-js"
-    moduleFormat    = "esm"
-    previewFeatures = ["queryCompiler", "driverAdapters"]
+    provider     = "prisma-client-js"
+    moduleFormat = "esm"
 }
 
 generator json {
