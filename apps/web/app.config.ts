@@ -14,7 +14,7 @@ export default defineConfig({
 			tailwindcss(),
 		],
 	},
-	// server: {
-	// 	preset: "node-server",
-	// },
+	server: {
+		preset: "vercel",
+	},
 });

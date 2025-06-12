@@ -14,15 +14,6 @@
         ".env*"
       ],
       "outputs": [
-        "dist/**"
-      ]
-    },
-    "web#build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        ".vinxi/build/**",
         ".vercel/output/**"
       ]
     },
