@@ -18,6 +18,7 @@ import {
 	retrieveLaunchParams,
 	setDebug,
 	themeParamsState,
+	viewport,
 	viewportHeight,
 	viewportStableHeight,
 	viewportWidth,
@@ -83,15 +84,9 @@ export async function initTMA(): Promise<void> {
 		bindThemeParamsCssVars();
 	}
 
-	if (mountViewport.isAvailable()) {
-		mountViewport().then(() => {
-			bindViewportCssVars();
-			expandViewport();
-			console.log(viewportWidth());
-			console.log(viewportHeight());
-			console.log(viewportStableHeight());
-		});
-	}
+	viewport.mount.ifAvailable();
+	viewport.bindCssVars.ifAvailable();
+	viewport.expand.ifAvailable();
 }
 
 /**

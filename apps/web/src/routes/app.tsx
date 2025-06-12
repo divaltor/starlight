@@ -24,6 +24,7 @@ import {
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSignal, viewport } from "@telegram-apps/sdk-react";
 
 type DateFilter =
 	| "all"
@@ -41,6 +42,9 @@ function TwitterArtViewer() {
 	}>({});
 	const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 	const [isFilterActive, setIsFilterActive] = useState(false);
+
+	const viewportHeight = useSignal(viewport.height);
+	const viewportWidth = useSignal(viewport.width);
 
 	const {
 		tweets,
@@ -529,7 +533,14 @@ function TwitterArtViewer() {
 	}
 
 	return (
-		<div className="min-h-screen bg-gray-50 p-4">
+		<div 
+			className="bg-gray-50 p-4"
+			style={{ 
+				minHeight: viewportHeight ? `${viewportHeight}px` : '100vh',
+				height: viewportHeight ? `${viewportHeight}px` : '100vh',
+				overflow: 'auto'
+			}}
+		>
 			{/* Header with Filters */}
 			<div className="mx-auto mb-8 max-w-7xl">
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
