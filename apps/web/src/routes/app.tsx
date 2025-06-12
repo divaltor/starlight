@@ -538,7 +538,8 @@ function TwitterArtViewer() {
 			style={{ 
 				minHeight: viewportHeight ? `${viewportHeight}px` : '100vh',
 				height: viewportHeight ? `${viewportHeight}px` : '100vh',
-				overflow: 'auto'
+				overflow: 'auto',
+				maxWidth: viewportWidth ? `${viewportWidth}px` : undefined
 			}}
 		>
 			{/* Header with Filters */}

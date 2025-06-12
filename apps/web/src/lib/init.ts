@@ -83,10 +83,6 @@ export async function initTMA(): Promise<void> {
 		mountMiniAppSync();
 		bindThemeParamsCssVars();
 	}
-
-	viewport.mount.ifAvailable();
-	viewport.bindCssVars.ifAvailable();
-	viewport.expand.ifAvailable();
 }
 
 /**
@@ -98,6 +94,10 @@ async function mountComponents(): Promise<void> {
 	mountSettingsButton.ifAvailable();
 	mountSwipeBehavior.ifAvailable();
 	mountClosingBehavior.ifAvailable();
+
+	viewport.mount.ifAvailable();
+	viewport.bindCssVars.ifAvailable();
+	viewport.expand.ifAvailable();
 }
 
 export function toggleBackButton(show: boolean): void {
