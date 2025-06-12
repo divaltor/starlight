@@ -24,12 +24,10 @@
 		"noUnusedParameters": false,
 		"noPropertyAccessFromIndexSignature": false,
 
-		"baseUrl": "./",
+		"baseUrl": ".",
 		"paths": {
 			"@/*": ["./src/*"],
 			"@/prisma/*": ["./prisma/*"]
 		},
-		"types": ["bun"],
-		"composite": true
 	}
 }

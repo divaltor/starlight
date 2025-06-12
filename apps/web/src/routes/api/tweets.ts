@@ -1,5 +1,5 @@
 import { CursorPagination } from "@/lib/cursor-pagination";
-import { getPrismaClient } from "@monorepo/utils";
+import { getPrismaClient } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod/v4";
 

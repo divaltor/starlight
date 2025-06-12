@@ -13,6 +13,11 @@ export default defineConfig({
 			}),
 			tailwindcss(),
 		],
+		build: {
+			rollupOptions: {
+				external: ["@repo/utils"],
+			},
+		},
 	},
 	server: {
 		preset: "vercel",
