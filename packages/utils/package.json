@@ -7,7 +7,6 @@
   },
   "scripts": {
     "db:push": "prisma db push --schema ./prisma/schema",
-    "db:studio": "prisma studio",
     "db:generate": "prisma generate --schema ./prisma/schema",
     "db:migrate": "prisma migrate dev"
   },

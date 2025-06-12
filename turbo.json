@@ -35,14 +35,10 @@
       "dependsOn": [
         "^db:generate"
       ],
-      "cache": true,
-      "persistent": true
-    },
-    "db:push": {
       "cache": false,
       "persistent": true
     },
-    "db:studio": {
+    "db:push": {
       "cache": false,
       "persistent": true
     },
@@ -51,8 +47,7 @@
       "persistent": true
     },
     "db:generate": {
-      "cache": false,
-      "persistent": true
+      "cache": false
     }
   }
 }
