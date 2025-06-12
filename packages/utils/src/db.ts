@@ -1,5 +1,5 @@
-import env from "@/config";
-import { PrismaClient } from "@/prisma/generated/client";
+import env from "./config";
+import { PrismaClient } from "../prisma/generated/client";
 import Sqids from "sqids";
 import { parse as uuidParse } from "uuid";
 
