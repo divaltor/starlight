@@ -1,23 +1,27 @@
 {
-	"name": "starlight",
-	"private": true,
-	"workspaces": ["apps/*", "packages/*"],
-	"scripts": {
-		"check": "biome check --write .",
-		"dev": "turbo dev",
-		"build": "turbo build",
-		"check-types": "turbo check-types",
-		"dev:web": "turbo -F web dev",
-		"dev:server": "turbo -F server dev",
-		"db:push": "turbo -F utils db:push",
-		"db:studio": "turbo -F utils db:studio",
-		"db:generate": "turbo -F utils db:generate",
-		"db:migrate": "turbo -F utils db:migrate"
-	},
-	"dependencies": {},
-	"devDependencies": {
-		"turbo": "^2.4.2",
-		"@biomejs/biome": "1.9.4"
-	},
-	"packageManager": "bun@1.2.14"
+  "name": "starlight",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "turbo -F web start",
+    "check": "biome check --write .",
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "dev:web": "turbo -F web dev",
+    "dev:server": "turbo -F server dev",
+    "db:push": "turbo -F utils db:push",
+    "db:studio": "turbo -F utils db:studio",
+    "db:generate": "turbo -F utils db:generate",
+    "db:migrate": "turbo -F utils db:migrate"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "turbo": "^2.4.2",
+    "@biomejs/biome": "1.9.4"
+  },
+  "packageManager": "bun@1.2.14"
 }
