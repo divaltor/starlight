@@ -12,6 +12,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTweets } from "@/hooks/useTweets";
 import { createFileRoute } from "@tanstack/react-router";
+import { useSignal, viewport } from "@telegram-apps/sdk-react";
 import { format } from "date-fns";
 import {
 	Calendar,
@@ -24,7 +25,6 @@ import {
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSignal, viewport } from "@telegram-apps/sdk-react";
 
 type DateFilter =
 	| "all"
@@ -45,6 +45,9 @@ function TwitterArtViewer() {
 
 	const viewportHeight = useSignal(viewport.height);
 	const viewportWidth = useSignal(viewport.width);
+
+	console.log(viewportWidth);
+	console.log(viewportHeight);
 
 	const {
 		tweets,
@@ -533,13 +536,13 @@ function TwitterArtViewer() {
 	}
 
 	return (
-		<div 
+		<div
 			className="bg-gray-50 p-4"
-			style={{ 
-				minHeight: viewportHeight ? `${viewportHeight}px` : '100vh',
-				height: viewportHeight ? `${viewportHeight}px` : '100vh',
-				overflow: 'auto',
-				maxWidth: viewportWidth ? `${viewportWidth}px` : undefined
+			style={{
+				minHeight: viewportHeight ? `${viewportHeight}px` : "100vh",
+				height: viewportHeight ? `${viewportHeight}px` : "100vh",
+				overflow: "auto",
+				maxWidth: viewportWidth ? `${viewportWidth}px` : undefined,
 			}}
 		>
 			{/* Header with Filters */}
