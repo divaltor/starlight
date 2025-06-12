@@ -4,6 +4,7 @@ import {
 	bindThemeParamsCssVars,
 	bindViewportCssVars,
 	emitEvent,
+	expandViewport,
 	init as initSDK,
 	mockTelegramEnv,
 	mountBackButton,
@@ -17,6 +18,9 @@ import {
 	retrieveLaunchParams,
 	setDebug,
 	themeParamsState,
+	viewportHeight,
+	viewportStableHeight,
+	viewportWidth,
 } from "@telegram-apps/sdk-react";
 
 export interface InitOptions {
@@ -82,6 +86,10 @@ export async function initTMA(): Promise<void> {
 	if (mountViewport.isAvailable()) {
 		mountViewport().then(() => {
 			bindViewportCssVars();
+			expandViewport();
+			console.log(viewportWidth());
+			console.log(viewportHeight());
+			console.log(viewportStableHeight());
 		});
 	}
 }
