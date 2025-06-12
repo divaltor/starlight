@@ -13,10 +13,9 @@
     "check-types": "turbo check-types",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
-    "db:push": "turbo -F utils db:push",
-    "db:studio": "turbo -F utils db:studio",
-    "db:generate": "turbo -F utils db:generate",
-    "db:migrate": "turbo -F utils db:migrate"
+    "db:push": "turbo -F @repo/utils db:push",
+    "db:generate": "turbo -F @repo/utils db:generate",
+    "db:migrate": "turbo -F @repo/utils db:migrate"
   },
   "dependencies": {},
   "devDependencies": {

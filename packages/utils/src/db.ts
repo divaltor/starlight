@@ -1,7 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@prisma/client";
 import Sqids from "sqids";
 import { parse as uuidParse } from "uuid";
-import { PrismaClient } from "../prisma/generated/client";
 import env from "./config";
 
 const sqids = new Sqids({
