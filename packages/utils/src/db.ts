@@ -1,14 +1,20 @@
-import env from "./config";
-import { PrismaClient } from "../prisma/generated/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import Sqids from "sqids";
 import { parse as uuidParse } from "uuid";
+import { PrismaClient } from "../prisma/generated/client";
+import env from "./config";
 
 const sqids = new Sqids({
 	minLength: 12,
 });
 
+const adapter = new PrismaPg({
+	connectionString: env.DATABASE_URL,
+});
+
 export function createPrismaClient() {
 	return new PrismaClient({
+		adapter: adapter as never,
 		log:
 			env.ENVIRONMENT === "prod"
 				? ["info", "warn", "error"]

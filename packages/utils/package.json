@@ -11,6 +11,7 @@
     "db:migrate": "prisma migrate dev"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^6.9.0",
     "@prisma/client": "^6.9.0",
     "@t3-oss/env-core": "^0.13.6",
     "sqids": "^0.3.0",
