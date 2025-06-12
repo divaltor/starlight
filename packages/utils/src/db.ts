@@ -14,7 +14,6 @@ const adapter = new PrismaPg({
 
 export function createPrismaClient() {
 	return new PrismaClient({
-		adapter: adapter as never,
 		log:
 			env.ENVIRONMENT === "prod"
 				? ["info", "warn", "error"]
