@@ -41,6 +41,8 @@
     "@repo/utils": "workspace:*"
   },
   "devDependencies": {
+    "@rollup/plugin-alias": "^5.1.1",
+    "@tanstack/react-query-devtools": "^5.80.5",
     "@tanstack/react-router-devtools": "^1.120.15",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.2.0",
@@ -50,7 +52,6 @@
     "jsdom": "^26.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.3.5",
-    "web-vitals": "^4.2.4",
-    "@tanstack/react-query-devtools": "^5.80.5"
+    "web-vitals": "^4.2.4"
   }
 }
