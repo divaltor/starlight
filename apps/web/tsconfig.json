@@ -24,13 +24,6 @@
 		"baseUrl": ".",
 		"paths": {
 			"@/*": ["./src/*"],
-			"@/utils": ["../../packages/utils/src/index"],
-			"@/config": ["../../packages/utils/src/config"]
 		}
 	},
-	"references": [
-		{
-			"path": "../../packages/utils"
-		}
-	]
 }

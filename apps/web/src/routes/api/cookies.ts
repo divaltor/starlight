@@ -1,5 +1,5 @@
-import env from "@/config";
 import { decodeCookies } from "@/lib/utils";
+import { env } from "@monorepo/utils";
 import { createServerFn } from "@tanstack/react-start";
 import {
 	getCookie,

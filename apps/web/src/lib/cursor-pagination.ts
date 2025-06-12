@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import env from "@/config";
+import { env } from "@monorepo/utils";
 
 interface CursorData {
 	userId: number;
