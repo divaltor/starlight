@@ -21,7 +21,7 @@ export default defineConfig({
 						entries: [
 							{
 								find: "@repo/utils",
-								replacement: "../../packages/utils/src",
+								replacement: "../../packages/utils/src/index",
 							},
 						],
 					}),
