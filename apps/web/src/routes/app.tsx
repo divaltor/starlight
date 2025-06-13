@@ -24,7 +24,7 @@ import {
 	RefreshCw,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type DateFilter =
 	| "all"
@@ -42,6 +42,8 @@ function TwitterArtViewer() {
 	}>({});
 	const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 	const [isFilterActive, setIsFilterActive] = useState(false);
+	const [isMasonryReady, setIsMasonryReady] = useState(false);
+	const masonryGridRef = useRef<HTMLDivElement>(null);
 
 	const viewportHeight = useSignal(viewport.height);
 	const viewportWidth = useSignal(viewport.width);
@@ -241,6 +243,89 @@ function TwitterArtViewer() {
 		return format(date, "MMM d, yyyy");
 	}, []);
 
+	// JavaScript masonry layout for browsers without masonry support
+	const layoutMasonry = useCallback(() => {
+		const grid = masonryGridRef.current;
+		if (!grid) return;
+
+		// Check if masonry is supported
+		const supportsGridMasonry = CSS.supports("grid-template-rows", "masonry");
+		if (supportsGridMasonry) {
+			setIsMasonryReady(true);
+			return;
+		}
+
+		const items = Array.from(grid.children) as HTMLElement[];
+		if (items.length === 0) return;
+
+		// Get grid gap
+		const gap = 16; // 1rem = 16px
+
+		// Calculate number of columns based on viewport width
+		let columns = 1;
+		const width = window.innerWidth;
+		if (width >= 1536) columns = 6;
+		else if (width >= 1280) columns = 5;
+		else if (width >= 1024) columns = 4;
+		else if (width >= 768) columns = 3;
+		else if (width >= 640) columns = 2;
+
+		// Calculate column width
+		const gridWidth = grid.offsetWidth;
+		const columnWidth = (gridWidth - gap * (columns - 1)) / columns;
+
+		// Initialize column heights array
+		const columnHeights = new Array(columns).fill(0);
+
+		// Position each item
+		items.forEach((item) => {
+			// Find the shortest column
+			const shortestColumnIndex = columnHeights.indexOf(Math.min(...columnHeights));
+			
+			// Calculate position
+			const x = shortestColumnIndex * (columnWidth + gap);
+			const y = columnHeights[shortestColumnIndex];
+
+			// Position the item
+			item.style.left = `${x}px`;
+			item.style.top = `${y}px`;
+			item.style.width = `${columnWidth}px`;
+
+			// Update column height
+			columnHeights[shortestColumnIndex] += item.offsetHeight + gap;
+		});
+
+		// Set container height
+		const maxHeight = Math.max(...columnHeights);
+		grid.style.height = `${maxHeight}px`;
+		
+		// Show the grid after layout is complete
+		setIsMasonryReady(true);
+	}, []);
+
+	// Trigger layout on data changes and window resize
+	useEffect(() => {
+		setIsMasonryReady(false);
+		const timeoutId = setTimeout(layoutMasonry, 100);
+		return () => clearTimeout(timeoutId);
+	}, [filteredTweets, layoutMasonry]);
+
+	useEffect(() => {
+		const handleResize = () => {
+			setIsMasonryReady(false);
+			layoutMasonry();
+		};
+
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
+	}, [layoutMasonry]);
+
+	// Re-layout when images load
+	const handleImageLoadWithLayout = useCallback((imageId: string) => {
+		handleImageLoad(imageId);
+		setTimeout(layoutMasonry, 50);
+	}, [handleImageLoad, layoutMasonry]);
+
 	// Optimized image grid rendering with memoization
 	const renderImageGrid = useCallback(
 		(tweet: (typeof tweets)[0]) => {
@@ -276,7 +361,7 @@ function TwitterArtViewer() {
 							height={400}
 							className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 							onLoadStart={() => handleImageLoadStart(photo.id)}
-							onLoad={() => handleImageLoad(photo.id)}
+							onLoad={() => handleImageLoadWithLayout(photo.id)}
 						/>
 						<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
 							<div className="p-3 text-white">
@@ -341,7 +426,7 @@ function TwitterArtViewer() {
 											height={400}
 											className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoad(photo.id)}
+											onLoad={() => handleImageLoadWithLayout(photo.id)}
 										/>
 										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
 									</div>
@@ -386,7 +471,7 @@ function TwitterArtViewer() {
 												index === 0 ? "h-auto" : "h-auto"
 											}`}
 											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoad(photo.id)}
+											onLoad={() => handleImageLoadWithLayout(photo.id)}
 										/>
 										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
 									</div>
@@ -427,7 +512,7 @@ function TwitterArtViewer() {
 											height={400}
 											className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoad(photo.id)}
+											onLoad={() => handleImageLoadWithLayout(photo.id)}
 										/>
 										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
 									</div>
@@ -469,7 +554,7 @@ function TwitterArtViewer() {
 											height={400}
 											className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoad(photo.id)}
+											onLoad={() => handleImageLoadWithLayout(photo.id)}
 										/>
 										{isLastVisible && (
 											<div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
@@ -659,7 +744,24 @@ function TwitterArtViewer() {
 			{/* Responsive Grid */}
 			{filteredTweets.length > 0 && (
 				<div className="mx-auto max-w-7xl">
-					<div className="masonry-grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+					{!isMasonryReady && (
+						<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+							{Array.from({ length: 8 }).map((_, i) => (
+								<Skeleton
+									key={i}
+									className={`rounded-lg ${
+										i % 3 === 0 ? "h-80" : i % 3 === 1 ? "h-60" : "h-96"
+									}`}
+								/>
+							))}
+						</div>
+					)}
+					<div 
+						ref={masonryGridRef}
+						className={`masonry-grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 transition-opacity duration-200 ${
+							isMasonryReady ? "opacity-100" : "opacity-0"
+						}`}
+					>
 						{filteredTweets.map((tweet, index) => (
 							<div
 								key={tweet.id}

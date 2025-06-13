@@ -193,35 +193,14 @@ body {
 	/* Fallback for browsers that don't support masonry */
 	@supports not (grid-template-rows: masonry) {
 		.masonry-grid {
-			display: flex;
-			flex-direction: column;
-			flex-wrap: wrap;
-			align-content: flex-start;
-			max-height: 200vh;
-		}
-
-		@media (min-width: 640px) {
-			.masonry-grid {
-				max-height: 100vh;
-			}
-		}
-
-		@media (min-width: 768px) {
-			.masonry-grid {
-				max-height: 80vh;
-			}
-		}
-
-		@media (min-width: 1024px) {
-			.masonry-grid {
-				max-height: 70vh;
-			}
+			position: relative;
+			min-height: 200px;
 		}
 
 		.masonry-grid > * {
+			position: absolute;
 			width: 100%;
-			flex: none;
-			margin-bottom: 1rem;
+			transition: all 0.3s ease;
 		}
 
 		@media (min-width: 640px) {
