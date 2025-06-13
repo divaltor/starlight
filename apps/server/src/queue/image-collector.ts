@@ -84,6 +84,19 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 		});
 
 		for (const photo of tweetRecord.photos) {
+			if (photo.s3Path && photo.perceptualHash) {
+				logger.debug(
+					{
+						tweetId: tweet.id,
+						photoId: photo.id,
+						userId,
+					},
+					"Photo %s already downloaded, skipping",
+					photo.id,
+				);
+				continue;
+			}
+
 			const response = await fetch(photo.originalUrl, {
 				headers: {
 					"User-Agent": userAgent.toString(),
