@@ -48,6 +48,10 @@ function TwitterArtViewer() {
 
 	console.log(viewportWidth);
 	console.log(viewportHeight);
+	console.log(viewport.height);
+	console.log(viewport.width);
+	console.log(viewport.height());
+	console.log(viewport.width());
 
 	const {
 		tweets,
