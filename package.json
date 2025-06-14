@@ -13,6 +13,7 @@
     "check-types": "turbo check-types",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
+    "server": "turbo server",
     "db:push": "turbo -F @repo/utils db:push",
     "db:generate": "turbo -F @repo/utils db:generate",
     "db:migrate": "turbo -F @repo/utils db:migrate"

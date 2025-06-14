@@ -29,4 +29,4 @@ COPY . .
 # We depends on runtime generated code and types
 RUN bun run db:generate
 
-CMD ["bun", "dev:server"]
+CMD ["bun", "server"]
