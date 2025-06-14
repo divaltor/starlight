@@ -70,21 +70,4 @@ feature.command("queue").filter(
 	},
 );
 
-feature.command("test_cookies").filter(
-	async (ctx) => ctx.session.cookies !== null,
-	async (ctx) => {
-		const data = await redis.get(`user:cookies:${ctx.from?.id}`);
-
-		ctx.logger.info("Data: %s", data);
-		ctx.logger.info("Type of data: %s", typeof data);
-		ctx.logger.info("parsed: %s", JSON.parse(data as string));
-
-		const cookies = Cookies.fromJSON(data as string);
-
-		ctx.logger.info("Cookies: %s", cookies.toString());
-
-		await ctx.reply(cookies.toString());
-	},
-);
-
 export default composer;
