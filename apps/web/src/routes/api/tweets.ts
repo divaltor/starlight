@@ -148,9 +148,19 @@ const getUserTweets = createServerFn({ method: "GET" })
 				}
 			}
 
-			// Fetch tweets with pagination
+			// Fetch tweets with pagination - only tweets that have photos
 			const tweets = await getPrismaClient().tweet.findMany({
-				where: whereClause,
+				where: {
+					...whereClause,
+					photos: {
+						some: {
+							deletedAt: null, // Only get non-deleted photos
+							s3Path: {
+								not: null,
+							},
+						},
+					},
+				},
 				include: {
 					photos: {
 						where: {

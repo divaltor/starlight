@@ -99,49 +99,99 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			job.data.cursor,
 		);
 
-		const existingTweets = await prisma.tweet.findMany({
-			where: {
-				userId,
-				id: {
-					in: timeline.tweets
-						.map((tweet) => tweet.id)
-						.filter((id) => id !== undefined),
+		const CONSECUTIVE_THRESHOLD = 15;
+		let consecutiveKnownTweets = 0;
+		let newTweetsInBatch = 0;
+		const tweetsToQueue: Array<{ name: string; data: { tweet: any; userId: string }; opts: any }> = [];
+
+		for (const tweet of timeline.tweets) {
+			if (!tweet.id) continue;
+
+			// Always store tweet data (even without photos) for reliable tracking
+			const tweetRecord = await prisma.tweet.upsert({
+				where: { tweetId: { userId, id: tweet.id } },
+				create: {
+					id: tweet.id,
+					userId,
+					tweetData: tweet,
 				},
-				// If any of photos is not saved, we still need to scrap it again
-				photos: {
-					every: {
-						s3Path: {
-							not: null,
+				update: {
+					tweetData: tweet,
+				},
+				select: {
+					createdAt: true,
+				},
+			});
+
+			// Check if this tweet was created in this scrape session (within last minute)
+			const isNewTweet = tweetRecord.createdAt > new Date(Date.now() - 60000);
+
+			if (isNewTweet) {
+				consecutiveKnownTweets = 0;
+				newTweetsInBatch++;
+			} else {
+				consecutiveKnownTweets++;
+			}
+
+			// Only queue tweets with photos for image processing
+			if (tweet.photos && tweet.photos.length > 0) {
+				tweetsToQueue.push({
+					name: `post-${tweet.id}`,
+					data: {
+						tweet,
+						userId,
+					},
+					opts: {
+						deduplication: {
+							id: `scrapper-${userId}-${tweet.id}`,
 						},
 					},
-				},
-			},
-			select: {
-				id: true,
-			},
-		});
+				});
+			}
 
-		await imagesQueue.addBulk(
-			timeline.tweets.map((tweet) => ({
-				name: `post-${tweet.id}`,
-				data: {
-					tweet,
-					userId,
-				},
-				opts: {
-					deduplication: {
-						id: `scrapper-${userId}-${tweet.id}`,
+			// Stop if we've seen too many consecutive known tweets
+			if (consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) {
+				logger.info(
+					{
+						userId,
+						consecutiveKnownTweets,
+						newTweetsInBatch,
+						totalProcessed: timeline.tweets.indexOf(tweet) + 1,
 					},
-				},
-			})),
-		);
+					"Stopping scrape: found %d consecutive known tweets",
+					consecutiveKnownTweets,
+				);
+				break;
+			}
+		}
+
+		// Queue image processing jobs for tweets with photos
+		if (tweetsToQueue.length > 0) {
+			await imagesQueue.addBulk(tweetsToQueue);
+		}
 
 		job.data.count += timeline.tweets.length;
 
-		if (job.data.count >= job.data.limit || !timeline.next) {
+		// Stop if we hit consecutive threshold or other limits
+		if (
+			consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD ||
+			job.data.count >= job.data.limit ||
+			!timeline.next
+		) {
 			logger.info(
-				{ userId, count: job.data.count, limit: job.data.limit },
-				"Reached limit, stopping job",
+				{
+					userId,
+					count: job.data.count,
+					limit: job.data.limit,
+					consecutiveKnownTweets,
+					newTweetsInBatch,
+					reason: consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD 
+						? "consecutive_threshold" 
+						: job.data.count >= job.data.limit 
+						? "count_limit" 
+						: "no_next_cursor",
+				},
+				"Stopping scrape job",
 			);
 			return;
 		}
