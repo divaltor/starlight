@@ -73,7 +73,7 @@ feature.command("queue").filter(
 feature.command("test_cookies").filter(
 	async (ctx) => ctx.session.cookies !== null,
 	async (ctx) => {
-		const data = await redis.get(`user:cookies:${ctx.user?.id}`);
+		const data = await redis.get(`user:cookies:${ctx.from?.id}`);
 
 		ctx.logger.info("Type of data: %s", typeof data);
 
