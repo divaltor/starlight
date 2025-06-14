@@ -1,7 +1,7 @@
 import env from "@/config";
 import { imagesQueue } from "@/queue/image-collector";
 import { scrapperQueue } from "@/queue/scrapper";
-import { Cookies } from "@/storage";
+import { Cookies, redis } from "@/storage";
 import type { Context } from "@/types";
 import { Composer, InlineKeyboard } from "grammy";
 
@@ -73,7 +73,12 @@ feature.command("queue").filter(
 feature.command("test_cookies").filter(
 	async (ctx) => ctx.session.cookies !== null,
 	async (ctx) => {
-		const cookies = Cookies.fromJSON(ctx.session.cookies as string);
+		const data = await redis.get(`user:cookies:${ctx.user?.id}`);
+
+		ctx.logger.info("Type of data: %s", typeof data);
+
+		const cookies = Cookies.fromJSON(data);
+
 		await ctx.reply(cookies.toString());
 	},
 );
