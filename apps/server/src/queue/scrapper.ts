@@ -7,7 +7,7 @@ import {
 	type QueryTweetsResponse,
 	Scraper,
 } from "@the-convocation/twitter-scraper";
-import { Queue, Worker } from "bullmq";
+import { Queue, QueueEvents, Worker } from "bullmq";
 
 export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
 	connection: redis,
@@ -40,15 +40,23 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			job.data.cursor,
 		);
 
-		const user = await prisma.user.findUniqueOrThrow({
-			where: {
-				id: userId,
-			},
-		});
+		let user: any;
+
+		try {
+			user = await prisma.user.findUniqueOrThrow({
+				where: {
+					id: userId,
+				},
+			});
+		} catch (error) {
+			logger.error({ userId, error }, "User not found");
+			throw error;
+		}
 
 		const user_cookies = await redis.get(`user:cookies:${user.telegramId}`);
 
 		if (!user_cookies) {
+			logger.error({ userId }, "User cookies not found");
 			throw new Error("User cookies not found");
 		}
 
@@ -57,6 +65,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		const twid = cookies.userId();
 
 		if (!twid) {
+			logger.error({ userId }, "User cookies not found");
 			throw new Error("User cookies not found");
 		}
 
@@ -264,3 +273,19 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		removeOnFail: { age: 60 * 60 * 24 * 7, count: 50 },
 	},
 );
+
+const scrapperEvents = new QueueEvents("feed-scrapper", {
+	connection: redis,
+});
+
+scrapperEvents.on("completed", ({ jobId }) => {
+	logger.debug({ jobId }, "Scrapper job completed");
+});
+
+scrapperEvents.on("failed", ({ jobId, failedReason }) => {
+	logger.error({ jobId, failedReason }, "Scrapper job failed");
+});
+
+scrapperEvents.on("added", ({ jobId }) => {
+	logger.debug({ jobId }, "Scrapper job added");
+});
