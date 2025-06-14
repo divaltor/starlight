@@ -24,11 +24,14 @@ export class Cookies {
 	}
 
 	static fromJSON(data: string): Cookies {
-		const cookies = data
-			.split(";")
-			.map((cookie) => Cookie.parse(cookie))
-			.filter((cookie): cookie is Cookie => cookie !== undefined);
-		return new Cookies(cookies);
+		const parsed = JSON.parse(data);
+
+		return new Cookies(
+			parsed.map(
+				(cookie: { key: string; value: string; domain: string }) =>
+					new Cookie(cookie),
+			),
+		);
 	}
 
 	userId() {
