@@ -23,15 +23,10 @@ export class Cookies {
 			.join("; ");
 	}
 
-	static fromJSON(data: string): Cookies {
-		const parsed = JSON.parse(data);
-
-		return new Cookies(
-			parsed.map(
-				(cookie: { key: string; value: string; domain: string }) =>
-					new Cookie(cookie),
-			),
-		);
+	static fromJSON(
+		data: { key: string; value: string; domain: string }[],
+	): Cookies {
+		return new Cookies(data.map((cookie) => new Cookie(cookie)));
 	}
 
 	userId() {
