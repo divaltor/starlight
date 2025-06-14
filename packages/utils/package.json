@@ -6,7 +6,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "db:push": "prisma db push",
+    "db:push": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev"
   },
