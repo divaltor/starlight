@@ -1,6 +1,7 @@
 import env from "@/config";
 import { imagesQueue } from "@/queue/image-collector";
 import { scrapperQueue } from "@/queue/scrapper";
+import { Cookies } from "@/storage";
 import type { Context } from "@/types";
 import { Composer, InlineKeyboard } from "grammy";
 
@@ -66,6 +67,14 @@ feature.command("queue").filter(
 			"Beep boop, you need to give me your cookies before I can send you daily images.",
 			{ reply_markup: keyboard },
 		);
+	},
+);
+
+feature.command("test_cookies").filter(
+	async (ctx) => ctx.session.cookies !== null,
+	async (ctx) => {
+		const cookies = Cookies.fromJSON(ctx.session.cookies as string);
+		await ctx.reply(cookies.toString());
 	},
 );
 

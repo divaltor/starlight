@@ -1,6 +1,7 @@
 import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";
 import { Cookies, prisma, redis } from "@/storage";
+import type { User } from "@/utils";
 import {
 	ApiError,
 	AuthenticationError,
@@ -40,7 +41,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			job.data.cursor,
 		);
 
-		let user: any;
+		let user: User;
 
 		try {
 			user = await prisma.user.findUniqueOrThrow({

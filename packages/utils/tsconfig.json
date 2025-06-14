@@ -29,5 +29,8 @@
 			"@/*": ["src/*"],
 			"@/prisma/*": ["prisma/*"]
 		},
+		"composite": true,
+		"types": ["bun"],
+		"include": ["src/**/*", "prisma/**/*"]
 	}
 }
