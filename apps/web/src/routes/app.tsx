@@ -48,13 +48,6 @@ function TwitterArtViewer() {
 	const viewportHeight = useSignal(viewport.height);
 	const viewportWidth = useSignal(viewport.width);
 
-	console.log(viewportWidth);
-	console.log(viewportHeight);
-	console.log(viewport.height);
-	console.log(viewport.width);
-	console.log(viewport.height());
-	console.log(viewport.width());
-
 	const {
 		tweets,
 		loadMoreRef,
@@ -280,8 +273,10 @@ function TwitterArtViewer() {
 		// Position each item
 		items.forEach((item) => {
 			// Find the shortest column
-			const shortestColumnIndex = columnHeights.indexOf(Math.min(...columnHeights));
-			
+			const shortestColumnIndex = columnHeights.indexOf(
+				Math.min(...columnHeights),
+			);
+
 			// Calculate position
 			const x = shortestColumnIndex * (columnWidth + gap);
 			const y = columnHeights[shortestColumnIndex];
@@ -298,7 +293,7 @@ function TwitterArtViewer() {
 		// Set container height
 		const maxHeight = Math.max(...columnHeights);
 		grid.style.height = `${maxHeight}px`;
-		
+
 		// Show the grid after layout is complete
 		setIsMasonryReady(true);
 	}, []);
@@ -321,10 +316,13 @@ function TwitterArtViewer() {
 	}, [layoutMasonry]);
 
 	// Re-layout when images load
-	const handleImageLoadWithLayout = useCallback((imageId: string) => {
-		handleImageLoad(imageId);
-		setTimeout(layoutMasonry, 50);
-	}, [handleImageLoad, layoutMasonry]);
+	const handleImageLoadWithLayout = useCallback(
+		(imageId: string) => {
+			handleImageLoad(imageId);
+			setTimeout(layoutMasonry, 50);
+		},
+		[handleImageLoad, layoutMasonry],
+	);
 
 	// Optimized image grid rendering with memoization
 	const renderImageGrid = useCallback(
@@ -756,9 +754,9 @@ function TwitterArtViewer() {
 							))}
 						</div>
 					)}
-					<div 
+					<div
 						ref={masonryGridRef}
-						className={`masonry-grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 transition-opacity duration-200 ${
+						className={`masonry-grid grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
 							isMasonryReady ? "opacity-100" : "opacity-0"
 						}`}
 					>
