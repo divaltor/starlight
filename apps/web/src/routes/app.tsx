@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTweets } from "@/hooks/useTweets";
-import { createFileRoute } from "@tanstack/react-router";
-import { useSignal, viewport } from "@telegram-apps/sdk-react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { settingsButton, useSignal, viewport } from "@telegram-apps/sdk-react";
 import { format } from "date-fns";
 import {
 	Calendar,
@@ -44,6 +44,7 @@ function TwitterArtViewer() {
 	const [isFilterActive, setIsFilterActive] = useState(false);
 	const [isMasonryReady, setIsMasonryReady] = useState(false);
 	const masonryGridRef = useRef<HTMLDivElement>(null);
+	const router = useRouter();
 
 	const viewportHeight = useSignal(viewport.height);
 	const viewportWidth = useSignal(viewport.width);
@@ -73,6 +74,30 @@ function TwitterArtViewer() {
 	useEffect(() => {
 		setIsFilterActive(dateFilter !== "all");
 	}, [dateFilter]);
+
+	// Handle settings button
+	useEffect(() => {
+		// TODO: Simplify
+		if (!settingsButton.isSupported()) return;
+
+		settingsButton.show();
+
+		const handleSettingsClick = () => {
+			router.navigate({ to: "/settings" });
+		};
+
+		if (settingsButton.onClick.isAvailable()) {
+			const unsubscribe = settingsButton.onClick(handleSettingsClick);
+			return () => {
+				if (unsubscribe) unsubscribe();
+				settingsButton.hide.ifAvailable();
+			};
+		}
+
+		return () => {
+			settingsButton.hide.ifAvailable();
+		};
+	}, [router]);
 
 	// Reset filters
 	const resetFilters = useCallback(() => {

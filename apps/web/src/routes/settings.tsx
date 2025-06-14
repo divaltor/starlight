@@ -15,8 +15,8 @@ import {
 	saveCookies,
 	verifyCookies,
 } from "@/routes/api/cookies";
-import { Link, createFileRoute } from "@tanstack/react-router";
-import { useRawInitData } from "@telegram-apps/sdk-react";
+import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
+import { backButton, useRawInitData } from "@telegram-apps/sdk-react";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -32,6 +32,7 @@ function RouteComponent() {
 	const [showCookieInput, setShowCookieInput] = useState(false);
 	const [twitterId, setTwitterId] = useState<string | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
+	const router = useRouter();
 
 	let initDataRaw: string | undefined;
 	try {
@@ -65,6 +66,30 @@ function RouteComponent() {
 
 		checkCookieStatus();
 	}, []);
+
+	// Handle back button
+	useEffect(() => {
+		// TODO: Simplify
+		if (!backButton.isSupported()) return;
+
+		backButton.show();
+
+		const handleBackClick = () => {
+			router.navigate({ to: "/app" });
+		};
+
+		if (backButton.onClick.isAvailable()) {
+			const unsubscribe = backButton.onClick(handleBackClick);
+			return () => {
+				if (unsubscribe) unsubscribe();
+				backButton.hide.ifAvailable();
+			};
+		}
+
+		return () => {
+			backButton.hide.ifAvailable();
+		};
+	}, [router]);
 
 	const handleSaveCookies = async (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();

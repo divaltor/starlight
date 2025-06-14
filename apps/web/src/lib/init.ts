@@ -1,10 +1,7 @@
 import {
 	type ThemeParams,
-	backButton,
 	bindThemeParamsCssVars,
-	bindViewportCssVars,
 	emitEvent,
-	expandViewport,
 	init as initSDK,
 	mockTelegramEnv,
 	mountBackButton,
@@ -13,15 +10,11 @@ import {
 	mountMiniAppSync,
 	mountSettingsButton,
 	mountSwipeBehavior,
-	mountViewport,
 	restoreInitData,
 	retrieveLaunchParams,
 	setDebug,
 	themeParamsState,
 	viewport,
-	viewportHeight,
-	viewportStableHeight,
-	viewportWidth,
 } from "@telegram-apps/sdk-react";
 
 export interface InitOptions {
@@ -98,19 +91,4 @@ async function mountComponents(): Promise<void> {
 	viewport.mount.ifAvailable();
 	viewport.bindCssVars.ifAvailable();
 	viewport.expand.ifAvailable();
-}
-
-export function toggleBackButton(show: boolean): void {
-	if (!mountBackButton.isAvailable()) {
-		console.warn("Back button is not available");
-		return;
-	}
-
-	const backBtn = backButton;
-
-	if (show) {
-		backBtn.show();
-	} else {
-		backBtn.hide();
-	}
 }
