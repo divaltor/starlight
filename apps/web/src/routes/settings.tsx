@@ -108,7 +108,7 @@ function RouteComponent() {
 			}
 
 			// Check if we have the required cookies
-			const requiredCookies = ["auth_token", "ct0", "att", "kdt", "twid"];
+			const requiredCookies = ["auth_token", "ct0", "kdt", "twid"];
 			const cookieNames = decodedCookies.map((cookie) => cookie.key);
 			const missingCookies = requiredCookies.filter(
 				(name) => !cookieNames.includes(name),

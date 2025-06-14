@@ -37,7 +37,7 @@ type Cookie = {
  * Parse cookies from various formats using tough-cookie library
  * Supports: Cookie Quick Manager extension exports and RFC 6265 format (semicolon-separated)
  * @param value - Cookie data string
- * @param cookieNames - Array of cookie names to filter by. If undefined, defaults to ['att', 'auth_token', 'ct0', 'kdt', 'twid']
+ * @param cookieNames - Array of cookie names to filter by. If undefined, defaults to ['auth_token', 'ct0', 'kdt', 'twid']
  * @returns Array of Cookie objects or null if invalid
  */
 export function decodeCookies(
@@ -49,13 +49,7 @@ export function decodeCookies(
 	}
 
 	// Default cookie names if not specified
-	const targetCookieNames = cookieNames ?? [
-		"att",
-		"auth_token",
-		"ct0",
-		"kdt",
-		"twid",
-	];
+	const targetCookieNames = cookieNames ?? ["auth_token", "ct0", "kdt", "twid"];
 	const cookies: Cookie[] = [];
 
 	try {
