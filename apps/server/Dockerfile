@@ -8,9 +8,6 @@ ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=true
 ENV HOME=/root
 ENV PATH="$HOME/.local/bin:$PATH"
 
-# Required for Prisma
-ENV DATABASE_URL=${DATABASE_URL}
-
 # To disable Prisma warnings
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 
