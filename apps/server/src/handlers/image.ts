@@ -75,9 +75,9 @@ feature.command("test_cookies").filter(
 	async (ctx) => {
 		const data = await redis.get(`user:cookies:${ctx.from?.id}`);
 
-		ctx.logger.info("Type of data: %s", typeof data);
+		const cookies = Cookies.fromJSON(data as string);
 
-		const cookies = Cookies.fromJSON(data);
+		ctx.logger.info("Cookies: %s", cookies.toString());
 
 		await ctx.reply(cookies.toString());
 	},

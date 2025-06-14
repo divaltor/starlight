@@ -12,6 +12,12 @@ export const redis = new Redis(env.REDIS_URL, {
 
 export const prisma = getPrismaClient();
 
+export interface RFC6265Cookie {
+	key: string;
+	value: string;
+	domain: string;
+}
+
 export class Cookies {
 	constructor(private cookies: Cookie[]) {
 		this.cookies = cookies;
@@ -23,10 +29,12 @@ export class Cookies {
 			.join("; ");
 	}
 
-	static fromJSON(
-		data: { key: string; value: string; domain: string }[],
-	): Cookies {
-		return new Cookies(data.map((cookie) => new Cookie(cookie)));
+	static fromJSON(data: string): Cookies {
+		const parsed = JSON.parse(data);
+
+		return new Cookies(
+			parsed.map((cookie: RFC6265Cookie) => new Cookie(cookie)),
+		);
 	}
 
 	userId() {
@@ -43,7 +51,7 @@ export class Cookies {
 }
 
 interface SessionData {
-	cookies: string | null;
+	cookies: RFC6265Cookie[] | null;
 }
 
 export const s3 = new S3Client({
