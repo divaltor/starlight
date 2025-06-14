@@ -100,37 +100,52 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		);
 
 		const CONSECUTIVE_THRESHOLD = 15;
+
+		// Step 1: Batch check existing tweets
+		const tweetIds = timeline.tweets
+			.map((tweet) => tweet.id)
+			.filter((id) => id !== undefined);
+
+		const existingTweetMap = new Map(
+			(
+				await prisma.tweet.findMany({
+					where: { userId, id: { in: tweetIds } },
+					select: { id: true, createdAt: true },
+				})
+			).map((tweet) => [tweet.id, tweet.createdAt]),
+		);
+
+		// Step 2: Process tweets and build batch operations
+		const newTweets: Array<{ id: string; userId: string; tweetData: any }> = [];
+		const updatedTweets: Array<{ id: string; tweetData: any }> = [];
+		const tweetsToQueue: Array<{
+			name: string;
+			data: { tweet: any; userId: string };
+			opts: any;
+		}> = [];
+
 		let consecutiveKnownTweets = 0;
 		let newTweetsInBatch = 0;
-		const tweetsToQueue: Array<{ name: string; data: { tweet: any; userId: string }; opts: any }> = [];
 
 		for (const tweet of timeline.tweets) {
 			if (!tweet.id) continue;
 
-			// Always store tweet data (even without photos) for reliable tracking
-			const tweetRecord = await prisma.tweet.upsert({
-				where: { tweetId: { userId, id: tweet.id } },
-				create: {
-					id: tweet.id,
-					userId,
-					tweetData: tweet,
-				},
-				update: {
-					tweetData: tweet,
-				},
-				select: {
-					createdAt: true,
-				},
-			});
-
-			// Check if this tweet was created in this scrape session (within last minute)
-			const isNewTweet = tweetRecord.createdAt > new Date(Date.now() - 60000);
+			const isNewTweet = !existingTweetMap.has(tweet.id);
 
 			if (isNewTweet) {
 				consecutiveKnownTweets = 0;
 				newTweetsInBatch++;
+				newTweets.push({
+					id: tweet.id,
+					userId,
+					tweetData: tweet,
+				});
 			} else {
 				consecutiveKnownTweets++;
+				updatedTweets.push({
+					id: tweet.id,
+					tweetData: tweet,
+				});
 			}
 
 			// Only queue tweets with photos for image processing
@@ -165,6 +180,29 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			}
 		}
 
+		// Step 3: Execute batch operations in transaction
+		await prisma.$transaction(async (tx) => {
+			// Batch create new tweets
+			if (newTweets.length > 0) {
+				await tx.tweet.createMany({
+					data: newTweets,
+					skipDuplicates: true,
+				});
+			}
+
+			// Batch update existing tweets
+			if (updatedTweets.length > 0) {
+				await Promise.all(
+					updatedTweets.map((tweet) =>
+						tx.tweet.update({
+							where: { tweetId: { userId, id: tweet.id } },
+							data: { tweetData: tweet.tweetData },
+						}),
+					),
+				);
+			}
+		});
+
 		// Queue image processing jobs for tweets with photos
 		if (tweetsToQueue.length > 0) {
 			await imagesQueue.addBulk(tweetsToQueue);
@@ -185,11 +223,12 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 					limit: job.data.limit,
 					consecutiveKnownTweets,
 					newTweetsInBatch,
-					reason: consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD 
-						? "consecutive_threshold" 
-						: job.data.count >= job.data.limit 
-						? "count_limit" 
-						: "no_next_cursor",
+					reason:
+						consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD
+							? "consecutive_threshold"
+							: job.data.count >= job.data.limit
+								? "count_limit"
+								: "no_next_cursor",
 				},
 				"Stopping scrape job",
 			);
