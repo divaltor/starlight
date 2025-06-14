@@ -14,10 +14,10 @@ export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
 	connection: redis,
 	defaultJobOptions: {
 		attempts: 3,
-		// It will be retried in 5 minutes, 15 minutes, 70 minutes
+		// It will be retried in 2.5 minutes, 7.5 minutes, 22.5 minutes
 		backoff: {
 			type: "exponential",
-			delay: 300000, // 5 minutes
+			delay: 150000, // 2.5 minutes
 		},
 	},
 });
