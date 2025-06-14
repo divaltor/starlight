@@ -6,8 +6,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "db:push": "prisma db push --schema ./prisma/schema",
-    "db:generate": "prisma generate --schema ./prisma/schema",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev"
   },
   "dependencies": {

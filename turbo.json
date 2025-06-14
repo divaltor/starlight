@@ -33,14 +33,16 @@
     },
     "dev": {
       "dependsOn": [
-        "^db:generate"
+        "^db:push"
       ],
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "env": [
+        "DATABASE_URL"
+      ]
     },
     "db:push": {
-      "cache": false,
-      "persistent": true
+      "cache": false
     },
     "db:migrate": {
       "cache": false,
