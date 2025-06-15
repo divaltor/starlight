@@ -104,7 +104,9 @@ groupChat.command("source").filter(
 		ctx.message.reply_to_message === undefined ||
 		ctx.message.reply_to_message?.photo?.length === 0,
 	async (ctx) => {
-		await ctx.reply("Please, reply to a message with a photo.");
+		await ctx.reply("Please, reply to a message with a photo.", {
+			message_thread_id: ctx.message?.message_thread_id,
+		});
 	},
 );
 
@@ -126,11 +128,15 @@ groupChat.command("source").filter(
 
 		if (!tweet) {
 			// Impossible to happen, but just in case
-			await ctx.reply("No source found, sorry.");
+			await ctx.reply("No source found, sorry.", {
+				message_thread_id: ctx.message?.message_thread_id,
+			});
 			return;
 		}
 
-		await ctx.reply(`https://x.com/i/status/${tweet.photo.tweetId}`);
+		await ctx.reply(`https://x.com/i/status/${tweet.photo.tweetId}`, {
+			message_thread_id: ctx.message?.message_thread_id,
+		});
 	},
 );
 
