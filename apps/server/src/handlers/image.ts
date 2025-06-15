@@ -94,6 +94,12 @@ privateChat.command("scrapper").filter(
 	},
 );
 
+privateChat.command("publish", async (ctx) => {
+	await ctx.reply(
+		"Please, add me to a group and publish images there.\n\nI should have permissions to delete message to be able to delete your command for cleaner UX.",
+	);
+});
+
 groupChat.command("publish", async (ctx) => {
 	const numberOfTweets = ctx.match ? Number(ctx.match) || 100 : 100;
 
