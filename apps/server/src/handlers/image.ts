@@ -9,7 +9,7 @@ import type { InputMediaPhoto } from "grammy/types";
 const composer = new Composer<Context>();
 
 const privateChat = composer.chatType("private");
-const groupChat = composer.chatType("group");
+const groupChat = composer.chatType(["group", "supergroup"]);
 
 privateChat.command("queue").filter(
 	async (ctx) => {
