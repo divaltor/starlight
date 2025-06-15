@@ -100,6 +100,11 @@ model PublishedPhoto {
     userId  String @map("user_id") @db.Uuid
     chatId  BigInt @map("chat_id")
 
+    mediaGroupId         String? @map("media_group_id")
+    messageId            BigInt  @map("message_id")
+    telegramFileId       String  @map("telegram_file_id")
+    telegramFileUniqueId String  @map("telegram_file_unique_id")
+
     publishedAt DateTime @default(now()) @map("published_at")
 
     // Relations
@@ -108,5 +113,6 @@ model PublishedPhoto {
     chat  Chat  @relation(fields: [chatId], references: [id], onDelete: Restrict)
 
     @@id([photoId, userId, chatId])
+    @@index([messageId])
     @@map("published_photos")
 }

@@ -1,11 +1,10 @@
 import env from "@/config";
 import { imagesQueue } from "@/queue/image-collector";
+import { publishingQueue } from "@/queue/publishing";
 import { scrapperQueue } from "@/queue/scrapper";
 import { prisma } from "@/storage";
 import type { Context } from "@/types";
-import { sleep } from "bun";
-import { Composer, InlineKeyboard, InputMediaBuilder } from "grammy";
-import type { InputMediaPhoto } from "grammy/types";
+import { Composer, InlineKeyboard } from "grammy";
 
 const composer = new Composer<Context>();
 
@@ -141,15 +140,17 @@ groupChat.command("publish", async (ctx) => {
 	const tweetItems = tweetsWithUnpublishedPhotos.map((tweet, index) => ({
 		index,
 		photoCount: tweet.photos.length,
-		photos: tweet.photos.map((photo) =>
-			InputMediaBuilder.photo(photo.s3Url as string),
-		),
+		photos: tweet.photos.map((photo) => ({
+			id: photo.id,
+			s3Path: photo.s3Path as string,
+		})),
 	}));
 
 	const usedTweets = new Set<number>();
+	let jobIndex = 0;
 
 	while (usedTweets.size < tweetItems.length) {
-		const imagesBuffer: InputMediaPhoto[] = [];
+		const photosBuffer: { id: string; s3Path: string }[] = [];
 		let remainingCapacity = 10;
 
 		// First-fit decreasing: try to fit tweets starting with larger ones
@@ -166,7 +167,7 @@ groupChat.command("publish", async (ctx) => {
 				if (usedTweets.has(tweet.index)) continue;
 
 				if (tweet.photoCount <= remainingCapacity) {
-					imagesBuffer.push(...tweet.photos);
+					photosBuffer.push(...tweet.photos);
 					remainingCapacity -= tweet.photoCount;
 					usedTweets.add(tweet.index);
 					addedAny = true;
@@ -176,35 +177,48 @@ groupChat.command("publish", async (ctx) => {
 		}
 
 		// If no tweets could fit (edge case), force add the smallest available tweet
-		if (imagesBuffer.length === 0) {
+		if (photosBuffer.length === 0) {
 			const smallestTweet = availableTweets
 				.filter((item) => !usedTweets.has(item.index))
 				.sort((a, b) => a.photoCount - b.photoCount)[0];
 
 			if (smallestTweet) {
-				imagesBuffer.push(...smallestTweet.photos.slice(0, 10));
+				photosBuffer.push(...smallestTweet.photos.slice(0, 10));
 				usedTweets.add(smallestTweet.index);
 			}
 		}
 
-		// Send the buffer
-		if (imagesBuffer.length > 0) {
-			await ctx.replyWithMediaGroup(imagesBuffer);
+		// Add to publishing queue instead of sending directly
+		if (photosBuffer.length > 0) {
+			await publishingQueue.add("publish-photos", {
+				chatId: ctx.chat?.id as number,
+				userId: ctx.user?.id as string,
+				photoIds: photosBuffer.map((p) => p.id),
+				topicId: ctx.message?.message_thread_id,
+			});
+
 			ctx.logger.debug(
 				{
 					chatId: ctx.chat?.id,
 					userId: ctx.user?.id,
 					chatType: ctx.chat?.type,
-					imagesBufferLength: imagesBuffer.length,
+					photosBufferLength: photosBuffer.length,
+					jobIndex,
 				},
-				"Sent media group %s to chat %s from %s user",
-				imagesBuffer.length,
+				"Queued media group %s to chat %s from %s user (job %s)",
+				photosBuffer.length,
 				ctx.chat?.id,
 				ctx.user?.id,
+				jobIndex,
 			);
-			await sleep(1000);
+
+			jobIndex++;
 		}
 	}
+
+	await ctx.reply(
+		`Queued ${jobIndex} photo groups for publishing. They will be sent at a rate of 10 photos per minute to respect Telegram limits.`,
+	);
 });
 
 export default composer;
