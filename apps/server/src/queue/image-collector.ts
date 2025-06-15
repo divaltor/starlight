@@ -56,13 +56,10 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 
 		const userAgent = new UserAgent();
 
-		// We can safely update Tweet record here,
-		// because it's not possible to have multiple tweets with the same ID
-		const tweetRecord = await prisma.tweet.upsert({
+		// We can safely update Tweet record here, because we created Tweet object in scrapper queue
+		const tweetRecord = await prisma.tweet.update({
 			where: { tweetId: { userId, id: tweet.id } },
-			create: {
-				id: tweet.id,
-				userId,
+			data: {
 				tweetData: tweet,
 				photos: {
 					createMany: {
@@ -75,9 +72,6 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 					},
 				},
 			},
-			update: {
-				tweetData: tweet,
-			},
 			include: {
 				photos: true,
 			},
@@ -88,6 +82,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 			"Tweet %s for user %s upserted with %s photos",
 			tweet.id,
 			userId,
+			tweetRecord.photos.length,
 		);
 
 		for (const photo of tweetRecord.photos) {
