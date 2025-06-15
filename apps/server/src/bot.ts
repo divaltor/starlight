@@ -29,7 +29,7 @@ bot.use(async (ctx, next) => {
 	await next();
 });
 
-// bot.use(autoQuote());
+bot.use(autoQuote());
 bot.api.config.use(
 	autoRetry({
 		maxRetryAttempts: 3,
