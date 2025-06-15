@@ -196,7 +196,7 @@ const getUserTweets = createServerFn({ method: "GET" })
 
 				return {
 					id: tweet.id,
-					tweetUrl: `https://twitter.com/i/status/${tweet.id}`,
+					tweetUrl: `https://x.com/i/status/${tweet.id}`,
 					artist: user.username ? `@${user.username}` : user.firstName,
 					date: tweet.createdAt.toISOString(),
 					photos,

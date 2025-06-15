@@ -136,7 +136,7 @@ export const publishingWorker = new Worker<PublishingJobData>(
 	},
 	{
 		connection: redis,
-		concurrency: 5,
+		concurrency: 1,
 		lockDuration: 1000 * 60 * 5, // 5 minutes
 	},
 );

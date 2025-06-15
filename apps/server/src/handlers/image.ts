@@ -99,6 +99,39 @@ privateChat.command("publish", async (ctx) => {
 	);
 });
 
+groupChat.command("source").filter(
+	async (ctx) => ctx.message.reply_to_message === undefined,
+	async (ctx) => {
+		await ctx.reply("Please, reply to a message with the source.");
+	},
+);
+
+groupChat.command("source").filter(
+	async (ctx) => ctx.message.reply_to_message !== undefined,
+	async (ctx) => {
+		const tweet = await prisma.publishedPhoto.findFirst({
+			where: {
+				messageId: ctx.message.reply_to_message?.message_id as number,
+			},
+			include: {
+				photo: {
+					select: {
+						tweetId: true,
+					},
+				},
+			},
+		});
+
+		if (!tweet) {
+			// Impossible to happen, but just in case
+			await ctx.reply("No source found, sorry.");
+			return;
+		}
+
+		await ctx.reply(`https://x.com/i/status/${tweet.photo.tweetId}`);
+	},
+);
+
 groupChat.command("publish", async (ctx) => {
 	const numberOfTweets = ctx.match
 		? Math.min(Number(ctx.match) || 100, 100)
