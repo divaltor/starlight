@@ -9,6 +9,7 @@
     "dev": "vinxi dev --port=3001"
   },
   "dependencies": {
+    "@grammyjs/auto-retry": "^2.0.2",
     "@radix-ui/react-checkbox": "^1.1.4",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dropdown-menu": "^2.1.6",

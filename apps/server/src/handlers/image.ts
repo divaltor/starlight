@@ -3,6 +3,7 @@ import { imagesQueue } from "@/queue/image-collector";
 import { scrapperQueue } from "@/queue/scrapper";
 import { prisma } from "@/storage";
 import type { Context } from "@/types";
+import { sleep } from "bun";
 import { Composer, InlineKeyboard, InputMediaBuilder } from "grammy";
 import type { InputMediaPhoto } from "grammy/types";
 
@@ -189,6 +190,19 @@ groupChat.command("publish", async (ctx) => {
 		// Send the buffer
 		if (imagesBuffer.length > 0) {
 			await ctx.replyWithMediaGroup(imagesBuffer);
+			ctx.logger.debug(
+				{
+					chatId: ctx.chat?.id,
+					userId: ctx.user?.id,
+					chatType: ctx.chat?.type,
+					imagesBufferLength: imagesBuffer.length,
+				},
+				"Sent media group %s to chat %s from %s user",
+				imagesBuffer.length,
+				ctx.chat?.id,
+				ctx.user?.id,
+			);
+			await sleep(1000);
 		}
 	}
 });

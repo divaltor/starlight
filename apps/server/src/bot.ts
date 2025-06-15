@@ -6,6 +6,7 @@ import logUpdates from "@/middlewares/logging";
 import { attachChat, attachUser } from "@/middlewares/session";
 import { redis } from "@/storage";
 import type { Context } from "@/types";
+import { autoRetry } from "@grammyjs/auto-retry";
 import { RedisAdapter } from "@grammyjs/storage-redis";
 
 const bot = new Bot<Context>(env.BOT_TOKEN);
@@ -27,6 +28,12 @@ bot.use(async (ctx, next) => {
 	await next();
 });
 
+bot.api.config.use(
+	autoRetry({
+		maxRetryAttempts: 3,
+		maxDelaySeconds: 5,
+	}),
+);
 bot.use(attachUser);
 bot.use(attachChat);
 bot.use(logUpdates);
