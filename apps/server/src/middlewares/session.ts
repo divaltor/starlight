@@ -33,7 +33,7 @@ export async function attachUser(ctx: Context, next: NextFunction) {
 }
 
 export async function attachChat(ctx: Context, next: NextFunction) {
-	if (!ctx.chat) {
+	if (!ctx.chat || ctx.chat.type === "private") {
 		ctx.logger.warn("Chat not found, skipping chat attachment.");
 		return await next();
 	}

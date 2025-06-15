@@ -1,9 +1,8 @@
 import env from "@/config";
 import { imagesQueue } from "@/queue/image-collector";
 import { scrapperQueue } from "@/queue/scrapper";
-import { Cookies, prisma, redis } from "@/storage";
+import { prisma } from "@/storage";
 import type { Context } from "@/types";
-import type { Photo, Tweet } from "@/utils";
 import { Composer, InlineKeyboard, InputMediaBuilder } from "grammy";
 import type { InputMediaPhoto } from "grammy/types";
 
