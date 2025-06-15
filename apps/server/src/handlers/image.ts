@@ -100,9 +100,11 @@ privateChat.command("publish", async (ctx) => {
 });
 
 groupChat.command("source").filter(
-	async (ctx) => ctx.message.reply_to_message === undefined,
+	async (ctx) =>
+		ctx.message.reply_to_message === undefined ||
+		ctx.message.reply_to_message?.photo?.length === 0,
 	async (ctx) => {
-		await ctx.reply("Please, reply to a message with the source.");
+		await ctx.reply("Please, reply to a message with a photo.");
 	},
 );
 
@@ -253,6 +255,9 @@ groupChat.command("publish", async (ctx) => {
 
 	await ctx.reply(
 		`Queued ${jobIndex} photo groups for publishing. They will be sent at a rate of 10 photos per minute to respect Telegram limits.`,
+		{
+			message_thread_id: ctx.message?.message_thread_id,
+		},
 	);
 });
 
