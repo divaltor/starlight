@@ -3,7 +3,7 @@ import { Bot, session } from "grammy";
 import env from "@/config";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
-import attachUser from "@/middlewares/session";
+import { attachChat, attachUser } from "@/middlewares/session";
 import { redis } from "@/storage";
 import type { Context } from "@/types";
 import { RedisAdapter } from "@grammyjs/storage-redis";
@@ -28,6 +28,7 @@ bot.use(async (ctx, next) => {
 });
 
 bot.use(attachUser);
+bot.use(attachChat);
 bot.use(logUpdates);
 
 export { bot, type Context };

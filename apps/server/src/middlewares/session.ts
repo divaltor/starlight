@@ -2,7 +2,7 @@ import { prisma } from "@/storage";
 import type { Context } from "@/types";
 import type { NextFunction } from "grammy";
 
-export default async function attachUser(ctx: Context, next: NextFunction) {
+export async function attachUser(ctx: Context, next: NextFunction) {
 	if (!ctx.from) {
 		ctx.logger.warn("User not found, skipping session attachment.");
 		return await next();
@@ -28,6 +28,32 @@ export default async function attachUser(ctx: Context, next: NextFunction) {
 	});
 
 	ctx.user = user;
+
+	await next();
+}
+
+export async function attachChat(ctx: Context, next: NextFunction) {
+	if (!ctx.chat) {
+		ctx.logger.warn("Chat not found, skipping chat attachment.");
+		return await next();
+	}
+
+	const chat = await prisma.chat.upsert({
+		where: {
+			id: ctx.chat.id,
+		},
+		create: {
+			id: ctx.chat.id,
+			title: ctx.chat.title,
+			username: ctx.chat.username,
+		},
+		update: {
+			title: ctx.chat.title,
+			username: ctx.chat.username,
+		},
+	});
+
+	ctx.userChat = chat;
 
 	await next();
 }

@@ -14,21 +14,38 @@ generator json {
 }
 
 model User {
-    id         String   @id @default(uuid(7)) @db.Uuid
-    telegramId BigInt   @unique @map("telegram_id")
-    username   String?  @unique
-    firstName  String   @map("first_name")
-    lastName   String?  @map("last_name")
-    isActive   Boolean  @default(true) @map("is_active")
-    isBot      Boolean  @default(false) @map("is_bot")
-    createdAt  DateTime @default(now()) @map("created_at")
-    updatedAt  DateTime @updatedAt @map("updated_at")
+    id         String  @id @default(uuid(7)) @db.Uuid
+    telegramId BigInt  @unique @map("telegram_id")
+    username   String? @unique
+    firstName  String  @map("first_name")
+    lastName   String? @map("last_name")
+    isActive   Boolean @default(true) @map("is_active")
+    isBot      Boolean @default(false) @map("is_bot")
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
 
     // Relations
-    tweets Tweet[]
-    photos Photo[]
+    tweets          Tweet[]
+    photos          Photo[]
+    publishedPhotos PublishedPhoto[]
 
     @@map("users")
+}
+
+model Chat {
+    // Telegram ID
+    id       BigInt  @id
+    title    String?
+    username String?
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    // Relations
+    publishedPhotos PublishedPhoto[]
+
+    @@map("chats")
 }
 
 model Tweet {
@@ -36,7 +53,8 @@ model Tweet {
     userId String @map("user_id") @db.Uuid
 
     /// [TweetType]
-    tweetData Json     @map("tweet_data")
+    tweetData Json @map("tweet_data")
+
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -52,18 +70,20 @@ model Tweet {
 model Photo {
     // Twitter ID
     id             String
-    tweetId        String    @map("tweet_id")
-    userId         String    @map("user_id") @db.Uuid
-    s3Path         String?   @map("s3_path")
-    originalUrl    String    @map("original_url")
-    perceptualHash String?   @map("perceptual_hash")
-    createdAt      DateTime  @default(now()) @map("created_at")
-    updatedAt      DateTime  @updatedAt @map("updated_at")
-    deletedAt      DateTime? @map("deleted_at")
+    tweetId        String  @map("tweet_id")
+    userId         String  @map("user_id") @db.Uuid
+    s3Path         String? @map("s3_path")
+    originalUrl    String  @map("original_url")
+    perceptualHash String? @map("perceptual_hash")
+
+    createdAt DateTime  @default(now()) @map("created_at")
+    updatedAt DateTime  @updatedAt @map("updated_at")
+    deletedAt DateTime? @map("deleted_at")
 
     // Relations
-    tweet Tweet @relation(fields: [tweetId, userId], references: [id, userId], onDelete: Restrict)
-    user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+    tweet           Tweet            @relation(fields: [tweetId, userId], references: [id, userId], onDelete: Restrict)
+    user            User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+    publishedPhotos PublishedPhoto[]
 
     @@id(name: "photoId", [id, userId])
     @@index([tweetId])
@@ -72,4 +92,20 @@ model Photo {
     @@index([deletedAt])
     @@index([createdAt(sort: Desc)])
     @@map("photos")
+}
+
+model PublishedPhoto {
+    photoId String @map("photo_id")
+    userId  String @map("user_id") @db.Uuid
+    chatId  BigInt @map("chat_id")
+
+    publishedAt DateTime @default(now()) @map("published_at")
+
+    // Relations
+    photo Photo @relation(fields: [photoId, userId], references: [id, userId], onDelete: Restrict)
+    user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+    chat  Chat  @relation(fields: [chatId], references: [id], onDelete: Restrict)
+
+    @@id([photoId, userId, chatId])
+    @@map("published_photos")
 }
