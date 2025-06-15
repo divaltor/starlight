@@ -50,7 +50,7 @@ export const publishingWorker = new Worker<PublishingJobData>(
 				(rateLimiterRes as RateLimiterRes).msBeforeNext || 60000; // 60 seconds
 			const delay = Math.max(msBeforeNext, 1000); // At least 1s delay
 
-			logger.info(
+			logger.debug(
 				{
 					chatId,
 					userId,
