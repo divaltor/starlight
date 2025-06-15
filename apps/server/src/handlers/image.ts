@@ -173,6 +173,11 @@ groupChat.command("publish", async (ctx) => {
 		take: numberOfTweets,
 	});
 
+	if (tweetsWithUnpublishedPhotos.length === 0) {
+		await ctx.reply("No photos to publish, check back later.");
+		return;
+	}
+
 	// Convert tweets to items with photo counts for bin-packing
 	const tweetItems = tweetsWithUnpublishedPhotos.map((tweet, index) => ({
 		index,
