@@ -62,7 +62,7 @@ export const publishingWorker = new Worker<PublishingJobData>(
 				delay,
 			);
 
-			return await job.moveToDelayed(delay);
+			return await job.moveToDelayed(Date.now() + delay);
 		}
 
 		const photos = await prisma.photo.findMany({
