@@ -100,7 +100,9 @@ privateChat.command("publish", async (ctx) => {
 });
 
 groupChat.command("publish", async (ctx) => {
-	const numberOfTweets = ctx.match ? Number(ctx.match) || 100 : 100;
+	const numberOfTweets = ctx.match
+		? Math.min(Number(ctx.match) || 100, 100)
+		: 100;
 
 	const tweetsWithUnpublishedPhotos = await prisma.tweet.findMany({
 		where: {
