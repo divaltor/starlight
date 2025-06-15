@@ -70,4 +70,25 @@ feature.command("queue").filter(
 	},
 );
 
+feature.command("scrapper").filter(
+	async (ctx) => ctx.session.cookies !== null,
+	async (ctx) => {
+		await scrapperQueue.add(
+			"scrapper",
+			{
+				userId: ctx.user?.id as string,
+				count: 0,
+				limit: 100,
+			},
+			{
+				deduplication: {
+					id: `scrapper-${ctx.user?.id}`,
+				},
+			},
+		);
+
+		await ctx.reply("Starting to collect images, check back in a few minutes.");
+	},
+);
+
 export default composer;

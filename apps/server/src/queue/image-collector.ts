@@ -83,6 +83,13 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 			},
 		});
 
+		logger.info(
+			{ tweetId: tweet.id, userId, photos: tweetRecord.photos.length },
+			"Tweet %s for user %s upserted with %s photos",
+			tweet.id,
+			userId,
+		);
+
 		for (const photo of tweetRecord.photos) {
 			if (photo.s3Path && photo.perceptualHash) {
 				logger.debug(
