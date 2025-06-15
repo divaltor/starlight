@@ -18,7 +18,8 @@
         ".vercel/output/**"
       ],
       "env": [
-        "DATABASE_URL"
+        "DATABASE_URL",
+        "DIRECT_DATABASE_URL"
       ]
     },
     "lint": {
@@ -38,7 +39,8 @@
       "cache": false,
       "persistent": true,
       "env": [
-        "DATABASE_URL"
+        "DATABASE_URL",
+        "DIRECT_DATABASE_URL"
       ]
     },
     "dev": {
@@ -48,20 +50,23 @@
       "cache": false,
       "persistent": true,
       "env": [
-        "DATABASE_URL"
+        "DATABASE_URL",
+        "DIRECT_DATABASE_URL"
       ]
     },
     "db:push": {
       "cache": false,
       "env": [
-        "DATABASE_URL"
+        "DATABASE_URL",
+        "DIRECT_DATABASE_URL"
       ]
     },
     "db:migrate": {
       "cache": false,
       "persistent": true,
       "env": [
-        "DATABASE_URL"
+        "DATABASE_URL",
+        "DIRECT_DATABASE_URL"
       ]
     },
     "db:generate": {
