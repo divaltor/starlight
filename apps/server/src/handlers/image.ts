@@ -141,7 +141,7 @@ groupChat.command("publish", async (ctx) => {
 		index,
 		photoCount: tweet.photos.length,
 		photos: tweet.photos.map((photo) =>
-			InputMediaBuilder.photo(photo.s3Path as string),
+			InputMediaBuilder.photo(photo.s3Url as string),
 		),
 	}));
 
