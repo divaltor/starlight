@@ -104,9 +104,7 @@ groupChat.command("source").filter(
 		ctx.message.reply_to_message === undefined ||
 		ctx.message.reply_to_message?.photo?.length === 0,
 	async (ctx) => {
-		await ctx.reply("Please, reply to a message with a photo.", {
-			message_thread_id: ctx.message?.message_thread_id,
-		});
+		await ctx.reply("Please, reply to a message with a photo.");
 	},
 );
 
@@ -128,15 +126,11 @@ groupChat.command("source").filter(
 
 		if (!tweet) {
 			// Impossible to happen, but just in case
-			await ctx.reply("No source found, sorry.", {
-				message_thread_id: ctx.message?.message_thread_id,
-			});
+			await ctx.reply("No source found, sorry.");
 			return;
 		}
 
-		await ctx.reply(`https://x.com/i/status/${tweet.photo.tweetId}`, {
-			message_thread_id: ctx.message?.message_thread_id,
-		});
+		await ctx.reply(`https://x.com/i/status/${tweet.photo.tweetId}`);
 	},
 );
 
@@ -261,9 +255,6 @@ groupChat.command("publish", async (ctx) => {
 
 	await ctx.reply(
 		`Queued ${jobIndex} photo groups for publishing. They will be sent at a rate of 10 photos per minute to respect Telegram limits.`,
-		{
-			message_thread_id: ctx.message?.message_thread_id,
-		},
 	);
 });
 

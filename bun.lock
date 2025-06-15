@@ -18,6 +18,7 @@
         "@grammyjs/router": "^2.0.0",
         "@grammyjs/runner": "^2.0.3",
         "@grammyjs/storage-redis": "^2.5.1",
+        "@roziscoding/grammy-autoquote": "^2.0.9",
         "@the-convocation/twitter-scraper": "^0.17.0",
         "bullmq": "^5.53.0",
         "dotenv": "^16.5.0",
@@ -582,6 +583,8 @@
     "@rollup/rollup-win32-ia32-msvc": ["@rollup/rollup-win32-ia32-msvc@4.42.0", "", { "os": "win32", "cpu": "ia32" }, "sha512-F+5J9pelstXKwRSDq92J0TEBXn2nfUrQGg+HK1+Tk7VOL09e0gBqUHugZv7SW4MGrYj41oNCUe3IKCDGVlis2g=="],
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.42.0", "", { "os": "win32", "cpu": "x64" }, "sha512-LpHiJRwkaVz/LqjHjK8LCi8osq7elmpwujwbXKNW88bM8eeGxavJIKKjkjpMHAh/2xfnrt1ZSnhTv41WYUHYmA=="],
+
+    "@roziscoding/grammy-autoquote": ["@roziscoding/grammy-autoquote@2.0.9", "", { "peerDependencies": { "grammy": "^1" } }, "sha512-qTlavcVdFBjzFJ1spaXA+3RPdnC8uEu5jLbtlnAuesDFV7qjWaF6/UmsXGtVTseJPJwz1s6axDlQkEti8sgKKA=="],
 
     "@sinclair/typebox": ["@sinclair/typebox@0.32.35", "", {}, "sha512-Ul3YyOTU++to8cgNkttakC0dWvpERr6RYoHO2W47DLbFvrwBDJUY31B1sImH6JZSYc4Kt4PyHtoPNu+vL2r2dA=="],
 
