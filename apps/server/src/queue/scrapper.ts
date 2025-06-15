@@ -7,8 +7,9 @@ import {
 	AuthenticationError,
 	type QueryTweetsResponse,
 	Scraper,
+	type Tweet,
 } from "@the-convocation/twitter-scraper";
-import { Queue, QueueEvents, Worker } from "bullmq";
+import { type JobsOptions, Queue, QueueEvents, Worker } from "bullmq";
 
 export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
 	connection: redis,
@@ -119,19 +120,26 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		const existingTweetMap = new Map(
 			(
 				await prisma.tweet.findMany({
-					where: { userId, id: { in: tweetIds } },
+					where: {
+						userId,
+						id: { in: tweetIds },
+						photos: { every: { s3Path: { not: null } } },
+					},
 					select: { id: true, createdAt: true },
 				})
 			).map((tweet) => [tweet.id, tweet.createdAt]),
 		);
 
 		// Step 2: Process tweets and build batch operations
-		const newTweets: Array<{ id: string; userId: string; tweetData: any }> = [];
-		const updatedTweets: Array<{ id: string; tweetData: any }> = [];
+		const newTweets: Array<{
+			id: string;
+			userId: string;
+			tweetData: Tweet;
+		}> = [];
+		const updatedTweets: Array<{ id: string; tweetData: Tweet }> = [];
 		const tweetsToQueue: Array<{
 			name: string;
-			data: { tweet: any; userId: string };
-			opts: any;
+			data: { tweet: Tweet; userId: string };
 		}> = [];
 
 		let consecutiveKnownTweets = 0;
@@ -159,17 +167,12 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			}
 
 			// Only queue tweets with photos for image processing
-			if (tweet.photos && tweet.photos.length > 0) {
+			if (tweet.photos.length > 0) {
 				tweetsToQueue.push({
 					name: `post-${tweet.id}`,
 					data: {
 						tweet,
 						userId,
-					},
-					opts: {
-						deduplication: {
-							id: `scrapper-${userId}-${tweet.id}`,
-						},
 					},
 				});
 			}
