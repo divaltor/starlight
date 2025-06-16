@@ -34,6 +34,7 @@ composer.on("inline_query", async (ctx) => {
 			},
 		},
 		take: 50,
+		skip: ctx.inlineQuery.offset ? Number(ctx.inlineQuery.offset) : 0,
 	});
 
 	const results = photos.map((photo) =>
