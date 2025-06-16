@@ -16,6 +16,7 @@ composer.on("inline_query", async (ctx) => {
 		where: {
 			deletedAt: null,
 			s3Path: { not: null },
+			userId: ctx.user?.id as string,
 		},
 		orderBy: [
 			{
