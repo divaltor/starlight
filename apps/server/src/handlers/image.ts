@@ -20,10 +20,14 @@ composer.on("inline_query", async (ctx) => {
 			s3Path: { not: null },
 			userId: ctx.user?.id as string,
 		},
-		orderBy: {
-			createdAt: "desc",
-		},
-
+		orderBy: [
+			{
+				createdAt: "desc",
+			},
+			{
+				tweetId: "desc",
+			},
+		],
 		include: {
 			publishedPhotos: {
 				select: {
