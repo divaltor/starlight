@@ -25,7 +25,7 @@ composer.on("inline_query", async (ctx) => {
 				createdAt: "desc",
 			},
 			{
-				tweetId: "desc",
+				id: "asc",
 			},
 		],
 		include: {
