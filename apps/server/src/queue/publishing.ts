@@ -73,10 +73,14 @@ export const publishingWorker = new Worker<PublishingJobData>(
 					not: null,
 				},
 			},
-			orderBy: {
-				tweetId: "desc",
-				id: "asc",
-			},
+			orderBy: [
+				{
+					tweetId: "desc",
+				},
+				{
+					id: "asc",
+				},
+			],
 		});
 
 		logger.info(
