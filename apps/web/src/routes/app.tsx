@@ -328,7 +328,7 @@ function TwitterArtViewer() {
 		setIsMasonryReady(false);
 		const timeoutId = setTimeout(layoutMasonry, 100);
 		return () => clearTimeout(timeoutId);
-	}, [filteredTweets, layoutMasonry]);
+	}, [layoutMasonry]);
 
 	useEffect(() => {
 		const handleResize = () => {

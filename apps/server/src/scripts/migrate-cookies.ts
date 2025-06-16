@@ -1,11 +1,12 @@
-#!/usr/bin/env bun
-
-import env from "@/config";
 import { logger } from "@/logger";
 import { redis } from "@/storage";
 import { CookieEncryption } from "@repo/crypto";
+import { env } from "@repo/utils";
 
-const cookieEncryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY);
+const cookieEncryption = new CookieEncryption(
+	env.COOKIE_ENCRYPTION_KEY,
+	env.COOKIE_ENCRYPTION_SALT,
+);
 
 async function migrateCookies() {
 	logger.info("Starting cookie encryption migration...");

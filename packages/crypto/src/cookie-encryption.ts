@@ -17,17 +17,14 @@ export class CookieEncryption {
 	private masterKey: Uint8Array;
 	private salt: Uint8Array;
 
-	constructor(
-		masterKey: string | Uint8Array,
-		options: { salt: string | Uint8Array },
-	) {
+	constructor(masterKey: string | Uint8Array, salt?: string | Uint8Array) {
 		this.masterKey =
 			typeof masterKey === "string" ? hexToBytes(masterKey) : masterKey;
 
 		this.salt =
-			typeof options.salt === "string"
-				? utf8ToBytes(options.salt)
-				: options.salt;
+			typeof salt === "string"
+				? utf8ToBytes(salt)
+				: (salt ?? utf8ToBytes("starlight-cookie-salt-v1"));
 	}
 
 	/**

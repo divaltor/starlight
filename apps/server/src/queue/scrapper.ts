@@ -1,9 +1,9 @@
-import env from "@/config";
 import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";
 import { Cookies, prisma, redis } from "@/storage";
-import type { User } from "@/utils";
 import { CookieEncryption } from "@repo/crypto";
+import type { User } from "@repo/utils";
+import { env } from "@repo/utils";
 import {
 	ApiError,
 	AuthenticationError,
@@ -11,7 +11,7 @@ import {
 	Scraper,
 	type Tweet,
 } from "@the-convocation/twitter-scraper";
-import { type JobsOptions, Queue, QueueEvents, Worker } from "bullmq";
+import { Queue, QueueEvents, Worker } from "bullmq";
 
 const cookieEncryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY);
 

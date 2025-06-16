@@ -28,20 +28,18 @@ describe("CookieEncryption", () => {
 
 		test("should create instance with custom string salt", () => {
 			expect(
-				() => new CookieEncryption(masterKey, { salt: "custom-salt" }),
+				() => new CookieEncryption(masterKey, "custom-salt"),
 			).not.toThrow();
 		});
 
 		test("should create instance with custom Uint8Array salt", () => {
 			const customSalt = new Uint8Array(16).fill(0x42);
-			expect(
-				() => new CookieEncryption(masterKey, { salt: customSalt }),
-			).not.toThrow();
+			expect(() => new CookieEncryption(masterKey, customSalt)).not.toThrow();
 		});
 
 		test("should use default salt when none provided", () => {
 			const encryption1 = new CookieEncryption(masterKey);
-			const encryption2 = new CookieEncryption(masterKey, {});
+			const encryption2 = new CookieEncryption(masterKey);
 
 			const encrypted1 = encryption1.encrypt(testCookieData, testUserId);
 			const decrypted2 = encryption2.decrypt(encrypted1, testUserId);
@@ -230,8 +228,8 @@ describe("CookieEncryption", () => {
 		});
 
 		test("should produce different keys with different salts", () => {
-			const encryption1 = new CookieEncryption(masterKey, { salt: "salt1" });
-			const encryption2 = new CookieEncryption(masterKey, { salt: "salt2" });
+			const encryption1 = new CookieEncryption(masterKey, "salt1");
+			const encryption2 = new CookieEncryption(masterKey, "salt2");
 
 			const encrypted1 = encryption1.encrypt(testCookieData, testUserId);
 			const encrypted2 = encryption2.encrypt(testCookieData, testUserId);

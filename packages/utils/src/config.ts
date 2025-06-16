@@ -15,6 +15,7 @@ const env = createEnv({
 				64,
 				"Cookie encryption key must be at least 64 characters (32 bytes hex)",
 			),
+		COOKIE_ENCRYPTION_SALT: z.string().min(16),
 
 		YOUTUBE_DL_PATH: z.string().optional().default("yt-dlp"),
 

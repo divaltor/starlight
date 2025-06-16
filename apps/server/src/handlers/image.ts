@@ -1,9 +1,9 @@
-import env from "@/config";
 import { imagesQueue } from "@/queue/image-collector";
 import { publishingQueue } from "@/queue/publishing";
 import { scrapperQueue } from "@/queue/scrapper";
 import { prisma } from "@/storage";
 import type { Context } from "@/types";
+import { env } from "@repo/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 
 const composer = new Composer<Context>();

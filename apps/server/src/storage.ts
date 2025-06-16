@@ -1,5 +1,4 @@
-import env from "@/config";
-import { getPrismaClient } from "@/utils";
+import { env, getPrismaClient } from "@repo/utils";
 import { S3Client } from "bun";
 import Redis from "ioredis";
 import { Cookie } from "tough-cookie";

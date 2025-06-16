@@ -1,27 +1,27 @@
 {
-	"name": "starlight",
-	"private": true,
-	"workspaces": ["apps/*", "packages/*"],
-	"scripts": {
-		"start": "turbo -F web start",
-		"check": "biome check --write .",
-		"dev": "turbo dev",
-		"build": "turbo build",
-		"check-types": "turbo check-types",
-		"dev:web": "turbo -F web dev",
-		"dev:server": "turbo -F server dev",
-		"server": "turbo server",
-		"db:push": "turbo -F @repo/utils db:push",
-		"db:generate": "turbo -F @repo/utils db:generate",
-		"db:migrate": "turbo -F @repo/utils db:migrate"
-	},
-	"dependencies": {
-		"@noble/ciphers": "^1.3.0",
-		"@noble/hashes": "^1.6.1"
-	},
-	"devDependencies": {
-		"turbo": "^2.4.2",
-		"@biomejs/biome": "1.9.4"
-	},
-	"packageManager": "bun@1.2.14"
+  "name": "starlight",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "turbo -F web start",
+    "check": "biome check --write .",
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "dev:web": "turbo -F web dev",
+    "dev:server": "turbo -F server dev",
+    "server": "turbo server",
+    "db:push": "turbo -F @repo/utils db:push",
+    "db:generate": "turbo -F @repo/utils db:generate",
+    "db:migrate": "turbo -F @repo/utils db:migrate"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "turbo": "^2.4.2",
+    "@biomejs/biome": "1.9.4"
+  },
+  "packageManager": "bun@1.2.14"
 }

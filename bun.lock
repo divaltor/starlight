@@ -3,10 +3,6 @@
   "workspaces": {
     "": {
       "name": "starlight",
-      "dependencies": {
-        "@noble/ciphers": "^1.3.0",
-        "@noble/hashes": "^1.6.1",
-      },
       "devDependencies": {
         "@biomejs/biome": "1.9.4",
         "turbo": "^2.4.2",
@@ -23,6 +19,7 @@
         "@grammyjs/runner": "^2.0.3",
         "@grammyjs/storage-redis": "^2.5.1",
         "@repo/crypto": "workspace:*",
+        "@repo/utils": "workspace:*",
         "@roziscoding/grammy-autoquote": "^2.0.9",
         "@the-convocation/twitter-scraper": "^0.17.0",
         "bullmq": "^5.53.0",
@@ -104,12 +101,12 @@
     "packages/crypto": {
       "name": "@repo/crypto",
       "version": "0.0.0",
-      "devDependencies": {
-        "typescript": "^5.0.0",
-      },
-      "peerDependencies": {
+      "dependencies": {
         "@noble/ciphers": "^1.3.0",
         "@noble/hashes": "^1.6.1",
+      },
+      "devDependencies": {
+        "typescript": "^5.0.0",
       },
     },
     "packages/utils": {

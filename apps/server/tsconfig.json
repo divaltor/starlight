@@ -23,12 +23,15 @@
 		"baseUrl": ".",
 		"paths": {
 			"@/*": ["./src/*"],
-			"@/utils": ["../../packages/utils/src/index"],
-			"@/config": ["../../packages/utils/src/config"]
+			"@repo/utils": ["../../packages/utils/src/index"],
+			"@repo/crypto": ["../../packages/crypto/src/index"]
 		},
 		"types": ["bun"],
 		"composite": true
 	},
 	"include": ["src/**/*"],
-	"references": [{ "path": "../../packages/utils" }]
+	"references": [
+		{ "path": "../../packages/utils" },
+		{ "path": "../../packages/crypto" }
+	]
 }
