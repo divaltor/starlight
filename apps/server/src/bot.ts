@@ -3,10 +3,9 @@ import { Bot, session } from "grammy";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
 import { attachChat, attachUser } from "@/middlewares/session";
-import { redis } from "@/storage";
+import { RedisAdapter, redis } from "@/storage";
 import type { Context } from "@/types";
 import { autoRetry } from "@grammyjs/auto-retry";
-import { RedisAdapter } from "@grammyjs/storage-redis";
 import { env } from "@repo/utils";
 import { autoQuote } from "@roziscoding/grammy-autoquote";
 
@@ -18,7 +17,7 @@ bot.use(
 		cookies: {
 			initial: () => null,
 			prefix: "user:cookies:",
-			storage: new RedisAdapter({ instance: redis }),
+			storage: new RedisAdapter({ instance: redis, parseJSON: false }),
 		},
 	}),
 );
