@@ -258,8 +258,14 @@ groupChat.command("publish", async (ctx) => {
 		}
 	}
 
-	await ctx.reply(
-		`Queued ${jobIndex} photo groups for publishing. They will be sent at a rate of 10 photos per minute to respect Telegram limits.`,
+	ctx.logger.debug(
+		{
+			chatId: ctx.chat?.id,
+			userId: ctx.user?.id,
+			queuedGroups: jobIndex,
+		},
+		"Queued %s photo groups for publishing. They will be sent at a rate of 10 photos per minute to respect Telegram limits.",
+		jobIndex,
 	);
 });
 
