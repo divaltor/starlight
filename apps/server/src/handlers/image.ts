@@ -4,12 +4,54 @@ import { publishingQueue } from "@/queue/publishing";
 import { scrapperQueue } from "@/queue/scrapper";
 import { prisma } from "@/storage";
 import type { Context } from "@/types";
-import { Composer, InlineKeyboard } from "grammy";
+import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 
 const composer = new Composer<Context>();
 
 const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
+
+composer.on("inline_query", async (ctx) => {
+	const photos = await prisma.photo.findMany({
+		where: {
+			deletedAt: null,
+			s3Path: { not: null },
+		},
+		orderBy: [
+			{
+				tweetId: "desc",
+			},
+			{
+				id: "asc",
+			},
+		],
+		include: {
+			publishedPhotos: {
+				select: {
+					telegramFileId: true,
+				},
+			},
+		},
+		take: 50,
+	});
+
+	const results = photos.map((photo) =>
+		photo.publishedPhotos.length > 0
+			? InlineQueryResultBuilder.photoCached(
+					photo.id,
+					photo.publishedPhotos[0]?.telegramFileId as string,
+					{
+						caption: `https://x.com/i/status/${photo.tweetId}`,
+					},
+				)
+			: InlineQueryResultBuilder.photo(photo.id, photo.s3Url as string, {
+					caption: `https://x.com/i/status/${photo.tweetId}`,
+					thumbnail_url: photo.s3Url as string,
+				}),
+	);
+
+	await ctx.answerInlineQuery(results);
+});
 
 privateChat.command("queue").filter(
 	async (ctx) => {
