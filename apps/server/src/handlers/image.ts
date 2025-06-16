@@ -52,7 +52,9 @@ composer.on("inline_query", async (ctx) => {
 				}),
 	);
 
-	await ctx.answerInlineQuery(results);
+	await ctx.answerInlineQuery(results, {
+		next_offset: results.length.toString(),
+	});
 });
 
 privateChat.command("queue").filter(
