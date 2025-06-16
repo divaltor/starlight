@@ -42,8 +42,6 @@ export class RedisAdapter<T> implements StorageAdapter<T> {
 	async read(key: string) {
 		const session = await this.redis.get(key);
 
-		logger.debug("Session %s for key %s", session, key);
-
 		if (session === null || session === undefined) {
 			return undefined;
 		}
