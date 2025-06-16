@@ -26,7 +26,10 @@ interface CookiesVerifyResponse {
 
 const redis = new Redis(env.REDIS_URL);
 const bot = new Bot(env.BOT_TOKEN);
-const cookieEncryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY);
+const cookieEncryption = new CookieEncryption(
+	env.COOKIE_ENCRYPTION_KEY,
+	env.COOKIE_ENCRYPTION_SALT,
+);
 
 export const saveCookies = createServerFn({ method: "POST" })
 	.validator((data: CookiesRequest) => data)

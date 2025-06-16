@@ -13,7 +13,10 @@ import {
 } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
 
-const cookieEncryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY);
+const cookieEncryption = new CookieEncryption(
+	env.COOKIE_ENCRYPTION_KEY,
+	env.COOKIE_ENCRYPTION_SALT,
+);
 
 export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
 	connection: redis,
