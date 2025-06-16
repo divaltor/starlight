@@ -22,10 +22,10 @@ composer.on("inline_query", async (ctx) => {
 		},
 		orderBy: [
 			{
-				tweetId: "desc",
+				createdAt: "desc",
 			},
 			{
-				id: "asc",
+				tweetId: "desc",
 			},
 		],
 		include: {
