@@ -54,7 +54,12 @@ export class RedisAdapter<T> implements StorageAdapter<T> {
 	}
 
 	async write(key: string, value: T) {
-		await this.redis.set(key, JSON.stringify(value));
+		if (this.parseJSON) {
+			await this.redis.set(key, JSON.stringify(value));
+		} else {
+			await this.redis.set(key, value as string);
+		}
+
 		if (this.ttl) {
 			this.redis.expire(key, this.ttl);
 		}
