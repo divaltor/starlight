@@ -21,6 +21,7 @@ RUN uv tool install yt-dlp
 COPY package.json bun.lock ./
 COPY apps/server/package.json ./apps/server/package.json
 COPY packages/utils/package.json ./packages/utils/package.json
+COPY packages/crypto/package.json ./packages/crypto/package.json
 
 RUN bun install
 
