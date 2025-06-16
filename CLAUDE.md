@@ -19,6 +19,11 @@ Database operations (uses Prisma):
 - `bun db:generate` - Generate Prisma client
 - `bun db:migrate` - Run database migrations
 
+Security operations (server app):
+- `cd apps/server && bun run migrate-cookies` - Encrypt existing unencrypted cookies in Redis
+- `cd apps/server && bun test` - Run cookie encryption tests
+- `cd apps/server && bun test --watch` - Run tests in watch mode
+
 ## Architecture
 
 **Starlight** is a Telegram bot system for collecting and managing Twitter content, consisting of:

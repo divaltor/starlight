@@ -9,6 +9,12 @@ const env = createEnv({
 		DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
 
 		SECRET_KEY: z.string().min(32),
+		COOKIE_ENCRYPTION_KEY: z
+			.string()
+			.min(
+				64,
+				"Cookie encryption key must be at least 64 characters (32 bytes hex)",
+			),
 
 		YOUTUBE_DL_PATH: z.string().optional().default("yt-dlp"),
 

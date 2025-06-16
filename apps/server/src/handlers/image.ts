@@ -57,6 +57,7 @@ composer.on("inline_query", async (ctx) => {
 	await ctx.answerInlineQuery(results, {
 		next_offset: (skip + results.length).toString(),
 		is_personal: true,
+		cache_time: 30,
 	});
 });
 

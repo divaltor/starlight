@@ -15,7 +15,10 @@
 		"db:generate": "turbo -F @repo/utils db:generate",
 		"db:migrate": "turbo -F @repo/utils db:migrate"
 	},
-	"dependencies": {},
+	"dependencies": {
+		"@noble/ciphers": "^1.3.0",
+		"@noble/hashes": "^1.6.1"
+	},
 	"devDependencies": {
 		"turbo": "^2.4.2",
 		"@biomejs/biome": "1.9.4"

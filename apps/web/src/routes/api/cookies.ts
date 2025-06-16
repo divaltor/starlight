@@ -1,4 +1,5 @@
 import { decodeCookies } from "@/lib/utils";
+import { CookieEncryption } from "@repo/crypto";
 import { env } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
 import {
@@ -25,6 +26,7 @@ interface CookiesVerifyResponse {
 
 const redis = new Redis(env.REDIS_URL);
 const bot = new Bot(env.BOT_TOKEN);
+const cookieEncryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY);
 
 export const saveCookies = createServerFn({ method: "POST" })
 	.validator((data: CookiesRequest) => data)
@@ -60,11 +62,12 @@ export const saveCookies = createServerFn({ method: "POST" })
 			return { error: "Invalid cookies" };
 		}
 
-		// Store cookies in Redis
-		await redis.set(
-			`user:cookies:${parsedData.user.id}`,
+		// Encrypt and store cookies in Redis
+		const encryptedCookies = cookieEncryption.encrypt(
 			JSON.stringify(decodedCookies),
+			parsedData.user.id.toString(),
 		);
+		await redis.set(`user:cookies:${parsedData.user.id}`, encryptedCookies);
 
 		// Set HTTP cookie for client-side verification
 		const cookieData = {
@@ -105,13 +108,27 @@ export const verifyCookies = createServerFn({ method: "GET" })
 				return { hasValidCookies: false };
 			}
 
-			// Verify cookies still exist in Redis
+			// Verify cookies still exist in Redis and can be decrypted
 			const storedCookies = await redis.get(
 				`user:cookies:${cookieData.userId}`,
 			);
 
 			if (!storedCookies) {
 				// Cookies don't exist in Redis, clear the HTTP cookie
+				setCookie("twitter_auth", "", {
+					maxAge: 0,
+				});
+				return { hasValidCookies: false };
+			}
+
+			// Test decryption to ensure cookies are valid
+			try {
+				cookieEncryption.safeDecrypt(
+					storedCookies,
+					cookieData.userId.toString(),
+				);
+			} catch (error) {
+				// Failed to decrypt, clear the HTTP cookie
 				setCookie("twitter_auth", "", {
 					maxAge: 0,
 				});

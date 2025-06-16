@@ -1,7 +1,9 @@
+import env from "@/config";
 import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";
 import { Cookies, prisma, redis } from "@/storage";
 import type { User } from "@/utils";
+import { CookieEncryption } from "@repo/crypto";
 import {
 	ApiError,
 	AuthenticationError,
@@ -10,6 +12,8 @@ import {
 	type Tweet,
 } from "@the-convocation/twitter-scraper";
 import { type JobsOptions, Queue, QueueEvents, Worker } from "bullmq";
+
+const cookieEncryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY);
 
 export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
 	connection: redis,
@@ -62,7 +66,19 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			throw new Error("User cookies not found");
 		}
 
-		const cookies = Cookies.fromJSON(user_cookies);
+		// Decrypt cookies with migration support
+		let cookiesJson: string;
+		try {
+			cookiesJson = cookieEncryption.safeDecrypt(
+				user_cookies,
+				user.telegramId.toString(),
+			);
+		} catch (error) {
+			logger.error({ userId, error }, "Failed to decrypt user cookies");
+			throw new Error("Failed to decrypt user cookies");
+		}
+
+		const cookies = Cookies.fromJSON(cookiesJson);
 
 		const twid = cookies.userId();
 
