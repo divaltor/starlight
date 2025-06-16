@@ -12,6 +12,8 @@ const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
 composer.on("inline_query", async (ctx) => {
+	const skip = ctx.inlineQuery.offset ? Number(ctx.inlineQuery.offset) : 0;
+
 	const photos = await prisma.photo.findMany({
 		where: {
 			deletedAt: null,
@@ -34,7 +36,7 @@ composer.on("inline_query", async (ctx) => {
 			},
 		},
 		take: 50,
-		skip: ctx.inlineQuery.offset ? Number(ctx.inlineQuery.offset) : 0,
+		skip,
 	});
 
 	const results = photos.map((photo) =>
@@ -53,7 +55,7 @@ composer.on("inline_query", async (ctx) => {
 	);
 
 	await ctx.answerInlineQuery(results, {
-		next_offset: results.length.toString(),
+		next_offset: (skip + results.length).toString(),
 		is_personal: true,
 	});
 });
