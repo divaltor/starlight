@@ -26,9 +26,6 @@ composer.on("inline_query", async (ctx) => {
 					createdAt: "desc",
 				},
 			},
-			{
-				id: "asc",
-			},
 		],
 		include: {
 			publishedPhotos: {

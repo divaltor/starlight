@@ -22,7 +22,7 @@ export class RedisAdapter<T> implements StorageAdapter<T> {
 	 * @param {opts} Constructor options
 	 * @param {opts.ttl} ttl - Session time to life in SECONDS.
 	 * @param {opts.instance} instance - Instance of redis.
-	 * @param {opts.autoParseDates} autoParseDates - set to true to convert string in the json date format to date object
+	 * @param {opts.parseJSON} parseJSON - Set to true to parse JSON.
 	 */
 	constructor({
 		instance,
