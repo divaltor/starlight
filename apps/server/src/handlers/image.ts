@@ -21,7 +21,6 @@ composer.on("inline_query", async (ctx) => {
 		id: string;
 		s3Url: string | null;
 		tweetId: string;
-		publishedPhotos: { telegramFileId: string }[];
 	}> = [];
 
 	let tweetSkip = 0;
@@ -48,14 +47,6 @@ composer.on("inline_query", async (ctx) => {
 					orderBy: {
 						createdAt: "desc",
 					},
-					include: {
-						publishedPhotos: {
-							select: {
-								telegramFileId: true,
-							},
-							take: 1,
-						},
-					},
 				},
 			},
 			orderBy: {
@@ -76,7 +67,6 @@ composer.on("inline_query", async (ctx) => {
 					id: photo.id,
 					s3Url: photo.s3Url as string,
 					tweetId: tweet.id,
-					publishedPhotos: photo.publishedPhotos,
 				});
 				totalPhotosFound++;
 			}
@@ -114,18 +104,10 @@ composer.on("inline_query", async (ctx) => {
 	}
 
 	const results = photosForThisPage.map((photo) =>
-		photo.publishedPhotos.length > 0
-			? InlineQueryResultBuilder.photoCached(
-					photo.id,
-					photo.publishedPhotos[0]?.telegramFileId as string,
-					{
-						caption: `https://x.com/i/status/${photo.tweetId}`,
-					},
-				)
-			: InlineQueryResultBuilder.photo(photo.id, photo.s3Url as string, {
-					caption: `https://x.com/i/status/${photo.tweetId}`,
-					thumbnail_url: photo.s3Url as string,
-				}),
+		InlineQueryResultBuilder.photo(photo.id, photo.s3Url as string, {
+			caption: `https://x.com/i/status/${photo.tweetId}`,
+			thumbnail_url: photo.s3Url as string,
+		}),
 	);
 
 	// Calculate next offset for pagination
