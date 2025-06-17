@@ -87,10 +87,11 @@ composer.on("inline_query", async (ctx) => {
 		photoIndex: number;
 	}> = [];
 
-	for (let tweetIndex = 0; tweetIndex < tweets.length; tweetIndex++) {
+	let photoCount = 0;
+	for (let tweetIndex = 0; tweetIndex < tweets.length && photoCount < 50; tweetIndex++) {
 		// biome-ignore lint/style/noNonNullAssertion: We query from DB
 		const tweet = tweets[tweetIndex]!;
-		for (let photoIndex = 0; photoIndex < tweet.photos.length; photoIndex++) {
+		for (let photoIndex = 0; photoIndex < tweet.photos.length && photoCount < 50; photoIndex++) {
 			// biome-ignore lint/style/noNonNullAssertion: We query from DB
 			const photo = tweet.photos[photoIndex]!;
 			allPhotos.push({
@@ -101,6 +102,7 @@ composer.on("inline_query", async (ctx) => {
 				tweetIndex: tweetSkip + tweetIndex,
 				photoIndex,
 			});
+			photoCount++;
 		}
 	}
 
