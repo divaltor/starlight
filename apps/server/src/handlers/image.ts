@@ -42,21 +42,18 @@ composer.on("inline_query", async (ctx) => {
 	});
 
 	if (photos.length === 0) {
-		// User didn't setup the bot yet
 		if (ctx.session.cookies === null) {
+			// User didn't setup the bot yet
 			await ctx.answerInlineQuery([
-				InlineQueryResultBuilder.article("id:no-photos", "Oops, no photos...", {
-					reply_markup:
-						ctx.session.cookies === null
-							? new InlineKeyboard().webApp("Set cookies", {
-									url: `${env.BASE_FRONTEND_URL}/settings`,
-								})
-							: undefined,
-				}).text(
-					ctx.session.cookies === null
-						? "No photos found, did you setup the bot?"
-						: "No photos found, come back later or verify your cookies.",
-				),
+				InlineQueryResultBuilder.article(
+					`id:no-photos:${ctx.from?.id}`,
+					"Oops, no photos...",
+					{
+						reply_markup: new InlineKeyboard().webApp("Set cookies", {
+							url: `${env.BASE_FRONTEND_URL}/settings`,
+						}),
+					},
+				).text("No photos found, did you setup the bot?"),
 			]);
 
 			return;
