@@ -15,6 +15,7 @@ bot.use(
 	session({
 		type: "multi",
 		cookies: {
+			getSessionKey: (ctx) => ctx.from?.id.toString(),
 			initial: () => null,
 			prefix: "user:cookies:",
 			storage: new RedisAdapter({ instance: redis, parseJSON: false }),

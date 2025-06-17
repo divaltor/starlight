@@ -42,19 +42,8 @@ composer.on("inline_query", async (ctx) => {
 	});
 
 	if (photos.length === 0) {
-		const allPhotos = await prisma.photo.findFirst({
-			where: {
-				deletedAt: null,
-				s3Path: { not: null },
-				userId: ctx.user?.id as string,
-			},
-			select: {
-				id: true,
-			},
-		});
-
 		// User didn't setup the bot yet
-		if (allPhotos === null && ctx.session.cookies === null) {
+		if (ctx.session.cookies === null) {
 			await ctx.answerInlineQuery([
 				InlineQueryResultBuilder.article("id:no-photos", "Oops, no photos...", {
 					reply_markup:
