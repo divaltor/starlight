@@ -49,9 +49,7 @@ composer.on("inline_query", async (ctx) => {
 					`id:no-photos:${ctx.from?.id}`,
 					"Oops, no photos...",
 					{
-						reply_markup: new InlineKeyboard().webApp("Set cookies", {
-							url: `${env.BASE_FRONTEND_URL}/settings`,
-						}),
+						reply_markup: new InlineKeyboard().url("Set cookies", `${env.BASE_FRONTEND_URL}/settings`),
 					},
 				).text("No photos found, did you setup the bot?"),
 			]);
