@@ -66,6 +66,7 @@ model Tweet {
 
     @@id(name: "tweetId", [id, userId])
     @@index([createdAt(sort: Desc)])
+    @@index([userId])
     @@map("tweets")
 }
 
