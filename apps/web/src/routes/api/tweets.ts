@@ -1,5 +1,5 @@
-import { CursorPagination } from "@/lib/cursor-pagination";
-import { getPrismaClient } from "@repo/utils";
+import { CursorPagination } from "@repo/crypto";
+import { getPrismaClient, env } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod/v4";
 
@@ -53,7 +53,7 @@ const getUserTweets = createServerFn({ method: "GET" })
 			// Parse cursor if provided
 			let cursorData = null;
 			if (cursor) {
-				cursorData = CursorPagination.parseCursor(cursor, userId);
+				cursorData = CursorPagination.parseCursor(cursor, userId, env.SECRET_KEY);
 				if (!cursorData) {
 					return {
 						success: false,
@@ -216,7 +216,7 @@ const getUserTweets = createServerFn({ method: "GET" })
 					lastTweetId: lastTweet.id,
 					lastCreatedAt: lastTweet.createdAt.toISOString(),
 					direction: "forward",
-				});
+				}, env.SECRET_KEY);
 			}
 
 			return {
