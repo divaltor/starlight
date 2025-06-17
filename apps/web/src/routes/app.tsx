@@ -600,8 +600,8 @@ function TwitterArtViewer() {
 			formatDate,
 			openImage,
 			handleImageLoadStart,
-			handleImageLoad,
 			isImageLoading,
+			handleImageLoadWithLayout,
 		],
 	);
 
