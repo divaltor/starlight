@@ -41,6 +41,39 @@ composer.on("inline_query", async (ctx) => {
 		skip,
 	});
 
+	if (photos.length === 0) {
+		const allPhotos = await prisma.photo.findFirst({
+			where: {
+				deletedAt: null,
+				s3Path: { not: null },
+				userId: ctx.user?.id as string,
+			},
+			select: {
+				id: true,
+			},
+		});
+
+		// User didn't setup the bot yet
+		if (allPhotos === null && ctx.session.cookies === null) {
+			await ctx.answerInlineQuery([
+				InlineQueryResultBuilder.article("id:no-photos", "Oops, no photos...", {
+					reply_markup:
+						ctx.session.cookies === null
+							? new InlineKeyboard().webApp("Set cookies", {
+									url: `${env.BASE_FRONTEND_URL}/settings`,
+								})
+							: undefined,
+				}).text(
+					ctx.session.cookies === null
+						? "No photos found, did you setup the bot?"
+						: "No photos found, come back later or verify your cookies.",
+				),
+			]);
+
+			return;
+		}
+	}
+
 	const results = photos.map((photo) =>
 		photo.publishedPhotos.length > 0
 			? InlineQueryResultBuilder.photoCached(
