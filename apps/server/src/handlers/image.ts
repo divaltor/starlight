@@ -13,109 +13,81 @@ const groupChat = composer.chatType(["group", "supergroup"]);
 
 composer.on("inline_query", async (ctx) => {
 	const offset = ctx.inlineQuery.offset || "0";
-	const offsetData = offset.split(":"); // Format: "tweetIndex:photoIndex"
-	const tweetSkip = Number(offsetData[0]) || 0;
-	const photoSkip = Number(offsetData[1]) || 0;
+	const photoOffset = Number(offset) || 0;
 
-	const tweets = await prisma.tweet.findMany({
-		where: {
-			userId: ctx.user?.id as string,
-			photos: {
-				some: {
-					deletedAt: null,
-					s3Path: { not: null },
-				},
-			},
-		},
-		include: {
-			photos: {
-				where: {
-					deletedAt: null,
-					s3Path: { not: null },
-				},
-				orderBy: {
-					createdAt: "desc",
-				},
-				include: {
-					publishedPhotos: {
-						select: {
-							telegramFileId: true,
-						},
-					},
-				},
-			},
-		},
-		orderBy: {
-			createdAt: "desc",
-		},
-		take: 50,
-		skip: tweetSkip,
-	});
-
-	if (tweets.length === 0) {
-		if (ctx.session.cookies === null) {
-			// User didn't setup the bot yet
-			await ctx.answerInlineQuery(
-				[
-					InlineQueryResultBuilder.article(
-						`id:no-photos:${ctx.from?.id}`,
-						"Oops, no photos...",
-						{
-							reply_markup: new InlineKeyboard().url(
-								"Set cookies",
-								`${env.BASE_FRONTEND_URL}/settings`,
-							),
-						},
-					).text("No photos found, did you setup the bot?"),
-				],
-				{
-					is_personal: true,
-				},
-			);
-
-			return;
-		}
-	}
-
-	// Flatten all photos from tweets while respecting 50 photo limit and pagination
+	// Fetch more tweets than we need to ensure we can find 50 photos
+	// We'll fetch in batches and keep going until we have enough photos
 	const allPhotos: Array<{
 		id: string;
 		s3Url: string | null;
 		tweetId: string;
 		publishedPhotos: { telegramFileId: string }[];
-		tweetIndex: number;
-		photoIndex: number;
 	}> = [];
 
-	let totalPhotosProcessed = 0;
-	let photosToReturn = 0;
+	let tweetSkip = 0;
+	let totalPhotosFound = 0;
 
-	for (let tweetIndex = 0; tweetIndex < tweets.length && photosToReturn < 50; tweetIndex++) {
-		// biome-ignore lint/style/noNonNullAssertion: We query from DB
-		const tweet = tweets[tweetIndex]!;
-		for (let photoIndex = 0; photoIndex < tweet.photos.length && photosToReturn < 50; photoIndex++) {
-			// Skip photos until we reach the photoSkip offset
-			if (totalPhotosProcessed < photoSkip) {
-				totalPhotosProcessed++;
-				continue;
-			}
+	// Keep fetching tweets until we have enough photos to satisfy the offset + 50 results
+	while (totalPhotosFound <= photoOffset + 50) {
+		const tweets = await prisma.tweet.findMany({
+			where: {
+				userId: ctx.user?.id as string,
+				photos: {
+					some: {
+						deletedAt: null,
+						s3Path: { not: null },
+					},
+				},
+			},
+			include: {
+				photos: {
+					where: {
+						deletedAt: null,
+						s3Path: { not: null },
+					},
+					orderBy: {
+						createdAt: "desc",
+					},
+					include: {
+						publishedPhotos: {
+							select: {
+								telegramFileId: true,
+							},
+						},
+					},
+				},
+			},
+			orderBy: {
+				createdAt: "desc",
+			},
+			take: 50,
+			skip: tweetSkip,
+		});
 
-			// biome-ignore lint/style/noNonNullAssertion: We query from DB
-			const photo = tweet.photos[photoIndex]!;
-			allPhotos.push({
-				id: photo.id,
-				s3Url: photo.s3Url as string,
-				tweetId: tweet.id,
-				publishedPhotos: photo.publishedPhotos,
-				tweetIndex: tweetSkip + tweetIndex,
-				photoIndex,
-			});
-			totalPhotosProcessed++;
-			photosToReturn++;
+		if (tweets.length === 0) {
+			break; // No more tweets
 		}
+
+		// Flatten photos from this batch
+		for (const tweet of tweets) {
+			for (const photo of tweet.photos) {
+				allPhotos.push({
+					id: photo.id,
+					s3Url: photo.s3Url as string,
+					tweetId: tweet.id,
+					publishedPhotos: photo.publishedPhotos,
+				});
+				totalPhotosFound++;
+			}
+		}
+
+		tweetSkip += 50;
 	}
 
-	if (allPhotos.length === 0) {
+	// Get the slice of photos for this page
+	const photosForThisPage = allPhotos.slice(photoOffset, photoOffset + 50);
+
+	if (photosForThisPage.length === 0) {
 		if (ctx.session.cookies === null) {
 			// User didn't setup the bot yet
 			await ctx.answerInlineQuery(
@@ -140,7 +112,7 @@ composer.on("inline_query", async (ctx) => {
 		}
 	}
 
-	const results = allPhotos.map((photo) =>
+	const results = photosForThisPage.map((photo) =>
 		photo.publishedPhotos.length > 0
 			? InlineQueryResultBuilder.photoCached(
 					photo.id,
@@ -155,11 +127,10 @@ composer.on("inline_query", async (ctx) => {
 				}),
 	);
 
-	// Calculate next offset for pagination consistency
+	// Calculate next offset for pagination
 	let nextOffset = "";
-	if (results.length === 50) {
-		const nextPhotoIndex = photoSkip + 50;
-		nextOffset = `${tweetSkip}:${nextPhotoIndex}`;
+	if (results.length === 50 && photoOffset + 50 < allPhotos.length) {
+		nextOffset = String(photoOffset + 50);
 	}
 
 	await ctx.answerInlineQuery(results, {
