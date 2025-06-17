@@ -53,6 +53,7 @@ composer.on("inline_query", async (ctx) => {
 							select: {
 								telegramFileId: true,
 							},
+							take: 1,
 						},
 					},
 				},
@@ -160,7 +161,7 @@ privateChat.command("queue").filter(
 				data: {
 					userId: ctx.user?.id as string,
 					count: 0,
-					limit: 1000,
+					limit: 300, // 1000 is too much for free users
 				},
 				name: `scrapper-${ctx.user?.id}`,
 			},
