@@ -66,7 +66,7 @@ model Tweet {
 
     @@id(name: "tweetId", [id, userId])
     @@index([createdAt(sort: Desc)])
-    @@index([userId])
+    @@index([userId, createdAt(sort: Desc)])
     @@map("tweets")
 }
 
@@ -90,6 +90,7 @@ model Photo {
 
     @@id(name: "photoId", [id, userId])
     @@index([tweetId])
+    @@index([userId])
     @@index([perceptualHash])
     @@index([s3Path])
     @@index([deletedAt])
