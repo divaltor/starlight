@@ -44,15 +44,23 @@ composer.on("inline_query", async (ctx) => {
 	if (photos.length === 0) {
 		if (ctx.session.cookies === null) {
 			// User didn't setup the bot yet
-			await ctx.answerInlineQuery([
-				InlineQueryResultBuilder.article(
-					`id:no-photos:${ctx.from?.id}`,
-					"Oops, no photos...",
-					{
-						reply_markup: new InlineKeyboard().url("Set cookies", `${env.BASE_FRONTEND_URL}/settings`),
-					},
-				).text("No photos found, did you setup the bot?"),
-			]);
+			await ctx.answerInlineQuery(
+				[
+					InlineQueryResultBuilder.article(
+						`id:no-photos:${ctx.from?.id}`,
+						"Oops, no photos...",
+						{
+							reply_markup: new InlineKeyboard().url(
+								"Set cookies",
+								`${env.BASE_FRONTEND_URL}/settings`,
+							),
+						},
+					).text("No photos found, did you setup the bot?"),
+				],
+				{
+					is_personal: true,
+				},
+			);
 
 			return;
 		}
