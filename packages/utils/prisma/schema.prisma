@@ -65,8 +65,7 @@ model Tweet {
     user   User    @relation(fields: [userId], references: [id], onDelete: Restrict)
 
     @@id(name: "tweetId", [id, userId])
-    @@index([createdAt(sort: Desc)])
-    @@index([userId, createdAt(sort: Desc)])
+    @@index([createdAt(sort: Desc), userId])
     @@map("tweets")
 }
 
@@ -90,7 +89,6 @@ model Photo {
 
     @@id(name: "photoId", [id, userId])
     @@index([tweetId])
-    @@index([userId])
     @@index([perceptualHash])
     @@index([s3Path])
     @@index([deletedAt])
