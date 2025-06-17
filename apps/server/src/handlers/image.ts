@@ -77,7 +77,7 @@ composer.on("inline_query", async (ctx) => {
 		}
 	}
 
-	// Flatten all photos from tweets while respecting 50 photo limit
+	// Flatten all photos from tweets while respecting 50 photo limit and pagination
 	const allPhotos: Array<{
 		id: string;
 		s3Url: string | null;
@@ -87,11 +87,19 @@ composer.on("inline_query", async (ctx) => {
 		photoIndex: number;
 	}> = [];
 
-	let photoCount = 0;
-	for (let tweetIndex = 0; tweetIndex < tweets.length && photoCount < 50; tweetIndex++) {
+	let totalPhotosProcessed = 0;
+	let photosToReturn = 0;
+
+	for (let tweetIndex = 0; tweetIndex < tweets.length && photosToReturn < 50; tweetIndex++) {
 		// biome-ignore lint/style/noNonNullAssertion: We query from DB
 		const tweet = tweets[tweetIndex]!;
-		for (let photoIndex = 0; photoIndex < tweet.photos.length && photoCount < 50; photoIndex++) {
+		for (let photoIndex = 0; photoIndex < tweet.photos.length && photosToReturn < 50; photoIndex++) {
+			// Skip photos until we reach the photoSkip offset
+			if (totalPhotosProcessed < photoSkip) {
+				totalPhotosProcessed++;
+				continue;
+			}
+
 			// biome-ignore lint/style/noNonNullAssertion: We query from DB
 			const photo = tweet.photos[photoIndex]!;
 			allPhotos.push({
@@ -102,7 +110,8 @@ composer.on("inline_query", async (ctx) => {
 				tweetIndex: tweetSkip + tweetIndex,
 				photoIndex,
 			});
-			photoCount++;
+			totalPhotosProcessed++;
+			photosToReturn++;
 		}
 	}
 
@@ -150,15 +159,7 @@ composer.on("inline_query", async (ctx) => {
 	let nextOffset = "";
 	if (results.length === 50) {
 		const nextPhotoIndex = photoSkip + 50;
-
-		// Check if we need to move to next batch of tweets
-		if (nextPhotoIndex >= allPhotos.length) {
-			// We've exhausted current tweets, fetch next batch
-			nextOffset = `${tweetSkip + 50}:0`;
-		} else {
-			// Still have photos in current batch
-			nextOffset = `${tweetSkip}:${nextPhotoIndex}`;
-		}
+		nextOffset = `${tweetSkip}:${nextPhotoIndex}`;
 	}
 
 	await ctx.answerInlineQuery(results, {
