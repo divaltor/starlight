@@ -1,9 +1,5 @@
 import { imagesQueue } from "@/queue/image-collector";
-import {
-	cancelPublishingFlow,
-	createPublishingFlow,
-	getActiveFlowsForChat,
-} from "@/queue/publishing";
+import { publishingQueue } from "@/queue/publishing";
 import { scrapperQueue } from "@/queue/scrapper";
 import { prisma } from "@/storage";
 import type { Context } from "@/types";
@@ -251,7 +247,9 @@ groupChat.command("source").filter(
 );
 
 groupChat.command("publish", async (ctx) => {
-	const numberOfTweets = ctx.match ? Math.min(Number(ctx.match) || 10, 50) : 10;
+	const numberOfTweets = ctx.match
+		? Math.min(Number(ctx.match) || 100, 100)
+		: 100;
 
 	const tweetsWithUnpublishedPhotos = await prisma.tweet.findMany({
 		where: {
@@ -304,7 +302,6 @@ groupChat.command("publish", async (ctx) => {
 
 	const usedTweets = new Set<number>();
 	let jobIndex = 0;
-	const photoGroups: Array<{ photoIds: string[] }> = [];
 
 	while (usedTweets.size < tweetItems.length) {
 		const photosBuffer: { id: string; s3Path: string }[] = [];
@@ -345,10 +342,13 @@ groupChat.command("publish", async (ctx) => {
 			}
 		}
 
-		// Collect photo groups for flow creation
+		// Add to publishing queue instead of sending directly
 		if (photosBuffer.length > 0) {
-			photoGroups.push({
+			await publishingQueue.add("publish-photos", {
+				chatId: ctx.chat?.id as number,
+				userId: ctx.user?.id as string,
 				photoIds: photosBuffer.map((p) => p.id),
+				topicId: ctx.message?.message_thread_id,
 			});
 
 			ctx.logger.debug(
@@ -359,7 +359,7 @@ groupChat.command("publish", async (ctx) => {
 					photosBufferLength: photosBuffer.length,
 					jobIndex,
 				},
-				"Prepared media group %s for chat %s from %s user (group %s)",
+				"Queued media group %s to chat %s from %s user (job %s)",
 				photosBuffer.length,
 				ctx.chat?.id,
 				ctx.user?.id,
@@ -370,75 +370,14 @@ groupChat.command("publish", async (ctx) => {
 		}
 	}
 
-	// Create publishing flow with sequential job execution
-	if (photoGroups.length > 0) {
-		const flowJobId = await createPublishingFlow(
-			ctx.chat?.id as number,
-			ctx.user?.id as string,
-			photoGroups,
-			ctx.message?.message_thread_id,
-		);
-
-		await ctx.reply(
-			`Started publishing ${photoGroups.length} photo groups sequentially. Photos will be sent at a rate of 10 photos per minute.\n\nUse /cancel to stop the publication.`,
-		);
-
-		ctx.logger.debug(
-			{
-				chatId: ctx.chat?.id,
-				userId: ctx.user?.id,
-				flowJobId,
-				photoGroups: photoGroups.length,
-			},
-			"Created flow with root job %s for chat %s",
-			flowJobId.id,
-			ctx.chat?.id,
-		);
-	} else {
-		await ctx.reply("No photos to publish, check back later.");
-	}
-});
-
-groupChat.command("cancel", async (ctx) => {
-	const activeFlows = await getActiveFlowsForChat(ctx.chat?.id as number);
-
-	if (activeFlows.length === 0) {
-		await ctx.reply("No active publications to cancel.");
-		return;
-	}
-
-	let totalGroupsCancelled = 0;
-	let flowsCancelled = 0;
-	
-	for (const flowJobId of activeFlows) {
-		const result = await cancelPublishingFlow(flowJobId);
-		if (result.success) {
-			totalGroupsCancelled += result.groupsCancelled;
-			flowsCancelled++;
-		}
-	}
-
-	if (totalGroupsCancelled > 0) {
-		await ctx.reply(
-			`Cancelled ${totalGroupsCancelled} photo group${totalGroupsCancelled > 1 ? "s" : ""}.`,
-		);
-	} else {
-		await ctx.reply("Failed to cancel publications. They may have already completed.");
-	}
-
-	ctx.logger.info(
+	ctx.logger.debug(
 		{
 			chatId: ctx.chat?.id,
 			userId: ctx.user?.id,
-			cancelledFlows: flowsCancelled,
-			totalFlows: activeFlows.length,
-			totalGroupsCancelled,
+			queuedGroups: jobIndex,
 		},
-		"User %s cancelled %s flows (%s groups) in chat %s",
-		ctx.user?.id,
-		flowsCancelled,
-		totalGroupsCancelled,
-		ctx.chat?.id,
+		"Queued %s photo groups for publishing. They will be sent at a rate of 10 photos per minute to respect Telegram limits.",
+		jobIndex,
 	);
 });
 
