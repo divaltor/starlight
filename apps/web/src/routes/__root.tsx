@@ -8,7 +8,6 @@ import {
 	createRootRouteWithContext,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { SpeedInsights } from "@vercel/speed-insights/react";
 
 export interface RouterAppContext {
 	queryClient: QueryClient;
@@ -63,7 +62,6 @@ function RootDocument() {
 				<TanStackRouterDevtools position="bottom-left" />
 				<ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />{" "}
 				<Scripts />
-				<SpeedInsights />
 			</body>
 		</html>
 	);

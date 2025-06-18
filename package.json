@@ -1,7 +1,12 @@
 {
 	"name": "starlight",
 	"private": true,
-	"workspaces": ["apps/*", "packages/*"],
+	"workspaces": {
+		"packages": ["apps/*", "packages/*"],
+		"catalog": {
+			"grammy": "^1.36.3"
+		}
+	},
 	"scripts": {
 		"start": "turbo -F web start",
 		"check": "biome check --write .",

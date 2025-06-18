@@ -12,6 +12,9 @@
 		"lint": {
 			"dependsOn": ["^lint"]
 		},
+		"start": {
+			"dependsOn": ["^build"]
+		},
 		"check-types": {
 			"dependsOn": ["^check-types"]
 		},
