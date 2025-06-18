@@ -19,7 +19,7 @@
 		"@grammyjs/router": "^2.0.0",
 		"@grammyjs/runner": "^2.0.3",
 		"@roziscoding/grammy-autoquote": "^2.0.9",
-		"@the-convocation/twitter-scraper": "^0.17.0",
+		"@the-convocation/twitter-scraper": "catalog:",
 		"bullmq": "^5.53.0",
 		"dotenv": "^16.5.0",
 		"grammy": "catalog:",

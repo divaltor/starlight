@@ -4,7 +4,8 @@
 	"workspaces": {
 		"packages": ["apps/*", "packages/*"],
 		"catalog": {
-			"grammy": "^1.36.3"
+			"grammy": "^1.36.3",
+			"@the-convocation/twitter-scraper": "^0.17.1"
 		}
 	},
 	"scripts": {

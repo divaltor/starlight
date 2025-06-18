@@ -53,6 +53,7 @@
 		"jsdom": "^26.0.0",
 		"typescript": "^5.7.2",
 		"vite": "^6.3.5",
-		"web-vitals": "^4.2.4"
+		"web-vitals": "^4.2.4",
+		"@the-convocation/twitter-scraper": "catalog:"
 	}
 }

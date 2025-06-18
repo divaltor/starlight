@@ -1,6 +1,7 @@
 import { CursorPagination } from "@repo/crypto";
 import { env, getPrismaClient } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
+import type { Tweet } from "@the-convocation/twitter-scraper";
 import { z } from "zod/v4";
 
 // Type definitions based on your schema
@@ -198,10 +199,14 @@ const getUserTweets = createServerFn({ method: "GET" })
 					alt: `Photo from tweet ${tweet.id}`,
 				}));
 
+				// Extract username from tweetData JSON if available
+				const tweetData = tweet.tweetData as Tweet;
+				const tweetUsername = tweetData?.username;
+
 				return {
 					id: tweet.id,
 					tweetUrl: `https://x.com/i/status/${tweet.id}`,
-					artist: user.username ? `@${user.username}` : user.firstName,
+					artist: tweetUsername ? `@${tweetUsername}` : "@good_artist",
 					date: tweet.createdAt.toISOString(),
 					photos,
 					// Pre-compute values for performance optimization
