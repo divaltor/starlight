@@ -43,7 +43,17 @@ function RouteComponent() {
 	useEffect(() => {
 		const checkCookieStatus = async () => {
 			try {
-				const result = await verifyCookies();
+				if (!initDataRaw) {
+					setCookiesStored(false);
+					setTwitterId(null);
+					setShowCookieInput(true);
+					setIsLoading(false);
+					return;
+				}
+
+				const result = await verifyCookies({
+					data: { initData: initDataRaw }
+				});
 
 				if (result.hasValidCookies && result.twitterId) {
 					setCookiesStored(true);
@@ -65,7 +75,7 @@ function RouteComponent() {
 		};
 
 		checkCookieStatus();
-	}, []);
+	}, [initDataRaw]);
 
 	// Handle back button
 	useEffect(() => {
@@ -146,7 +156,9 @@ function RouteComponent() {
 			}
 
 			// Success - verify cookies were saved by checking server status
-			const verifyResult = await verifyCookies();
+			const verifyResult = await verifyCookies({
+				data: { initData: initDataRaw }
+			});
 			if (verifyResult.hasValidCookies && verifyResult.twitterId) {
 				setCookiesStored(true);
 				setShowCookieInput(false);
@@ -166,7 +178,15 @@ function RouteComponent() {
 	const handleDeleteCookies = async () => {
 		try {
 			setIsSubmitting(true);
-			const result = await deleteCookies();
+			
+			if (!initDataRaw) {
+				setError("Unable to authenticate with Telegram. Please make sure you're using this app within Telegram.");
+				return;
+			}
+
+			const result = await deleteCookies({
+				data: { initData: initDataRaw }
+			});
 
 			if (result.success) {
 				setCookiesStored(false);

@@ -85,7 +85,6 @@ function TwitterArtViewer() {
 		const handleSettingsClick = () => {
 			router.navigate({ to: "/settings" });
 		};
-
 		if (settingsButton.onClick.isAvailable()) {
 			const unsubscribe = settingsButton.onClick(handleSettingsClick);
 			return () => {

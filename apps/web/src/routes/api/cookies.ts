@@ -3,8 +3,6 @@ import { CookieEncryption } from "@repo/crypto";
 import { env } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
 import {
-	getCookie,
-	setCookie,
 	setResponseHeaders,
 	setResponseStatus,
 } from "@tanstack/react-start/server";
@@ -72,19 +70,6 @@ export const saveCookies = createServerFn({ method: "POST" })
 		);
 		await redis.set(`user:cookies:${parsedData.user.id}`, encryptedCookies);
 
-		// Set HTTP cookie for client-side verification
-		const cookieData = {
-			userId: parsedData.user.id,
-			hasValidCookies: true,
-			timestamp: Date.now(),
-		};
-
-		setCookie("twitter_auth", JSON.stringify(cookieData), {
-			httpOnly: true,
-			secure: env.ENVIRONMENT === "prod",
-			sameSite: "strict",
-			maxAge: 365 * 24 * 60 * 60, // 1 year
-		});
 
 		await bot.api.sendMessage(
 			parsedData.user.id,
@@ -94,33 +79,35 @@ export const saveCookies = createServerFn({ method: "POST" })
 		return { success: true };
 	});
 
-export const verifyCookies = createServerFn({ method: "GET" })
-	.validator(() => ({}))
-	.handler(async (): Promise<CookiesVerifyResponse> => {
+export const verifyCookies = createServerFn({ method: "POST" })
+	.validator((data: { initData: string }) => data)
+	.handler(async ({ data }): Promise<CookiesVerifyResponse> => {
 		try {
-			// Get the HTTP cookie
-			const twitterAuthCookie = getCookie("twitter_auth");
-
-			if (!twitterAuthCookie) {
-				return { hasValidCookies: false };
+			if (!data.initData) {
+				return { hasValidCookies: false, error: "No init data provided" };
 			}
 
-			const cookieData = JSON.parse(twitterAuthCookie);
-
-			if (!cookieData.hasValidCookies || !cookieData.userId) {
-				return { hasValidCookies: false };
+			// On dev, we don't need to validate the init data
+			if (env.ENVIRONMENT === "prod") {
+				try {
+					validate(data.initData, env.BOT_TOKEN);
+				} catch (error) {
+					return { hasValidCookies: false, error: "Invalid init data" };
+				}
 			}
 
-			// Verify cookies still exist in Redis and can be decrypted
+			const parsedData = parse(data.initData);
+
+			if (!parsedData.user) {
+				return { hasValidCookies: false, error: "Invalid init data" };
+			}
+
+			// Check if cookies exist in Redis
 			const storedCookies = await redis.get(
-				`user:cookies:${cookieData.userId}`,
+				`user:cookies:${parsedData.user.id}`,
 			);
 
 			if (!storedCookies) {
-				// Cookies don't exist in Redis, clear the HTTP cookie
-				setCookie("twitter_auth", "", {
-					maxAge: 0,
-				});
 				return { hasValidCookies: false };
 			}
 
@@ -128,20 +115,18 @@ export const verifyCookies = createServerFn({ method: "GET" })
 			try {
 				cookieEncryption.safeDecrypt(
 					storedCookies,
-					cookieData.userId.toString(),
+					parsedData.user.id.toString(),
 				);
 			} catch (error) {
-				// Failed to decrypt, clear the HTTP cookie
-				setCookie("twitter_auth", "", {
-					maxAge: 0,
-				});
+				// Failed to decrypt, remove invalid cookies
+				await redis.del(`user:cookies:${parsedData.user.id}`);
 				return { hasValidCookies: false };
 			}
 
 			// Cookies are valid
 			return {
 				hasValidCookies: true,
-				twitterId: cookieData.userId.toString(),
+				twitterId: parsedData.user.id.toString(),
 			};
 		} catch (error) {
 			console.error("Error verifying cookies:", error);
@@ -150,25 +135,33 @@ export const verifyCookies = createServerFn({ method: "GET" })
 	});
 
 export const deleteCookies = createServerFn({ method: "POST" })
-	.validator(() => ({}))
-	.handler(async () => {
+	.validator((data: { initData: string }) => data)
+	.handler(async ({ data }) => {
 		try {
-			// Get the HTTP cookie to identify the user
-			const twitterAuthCookie = getCookie("twitter_auth");
+			if (!data.initData) {
+				setResponseStatus(401);
+				return { error: "Unauthorized" };
+			}
 
-			if (twitterAuthCookie) {
-				const cookieData = JSON.parse(twitterAuthCookie);
-
-				if (cookieData.userId) {
-					// Delete cookies from Redis
-					await redis.del(`user:cookies:${cookieData.userId}`);
+			// On dev, we don't need to validate the init data
+			if (env.ENVIRONMENT === "prod") {
+				try {
+					validate(data.initData, env.BOT_TOKEN);
+				} catch (error) {
+					setResponseStatus(400);
+					return { error: "Invalid init data" };
 				}
 			}
 
-			// Clear the HTTP cookie
-			setCookie("twitter_auth", "", {
-				maxAge: 0,
-			});
+			const parsedData = parse(data.initData);
+
+			if (!parsedData.user) {
+				setResponseStatus(400);
+				return { error: "Invalid init data" };
+			}
+
+			// Delete cookies from Redis
+			await redis.del(`user:cookies:${parsedData.user.id}`);
 
 			return { success: true };
 		} catch (error) {
