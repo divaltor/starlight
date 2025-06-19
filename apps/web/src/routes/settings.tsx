@@ -52,7 +52,7 @@ function RouteComponent() {
 				}
 
 				const result = await verifyCookies({
-					data: { initData: initDataRaw }
+					data: { initData: initDataRaw },
 				});
 
 				if (result.hasValidCookies && result.twitterId) {
@@ -157,7 +157,7 @@ function RouteComponent() {
 
 			// Success - verify cookies were saved by checking server status
 			const verifyResult = await verifyCookies({
-				data: { initData: initDataRaw }
+				data: { initData: initDataRaw },
 			});
 			if (verifyResult.hasValidCookies && verifyResult.twitterId) {
 				setCookiesStored(true);
@@ -178,14 +178,16 @@ function RouteComponent() {
 	const handleDeleteCookies = async () => {
 		try {
 			setIsSubmitting(true);
-			
+
 			if (!initDataRaw) {
-				setError("Unable to authenticate with Telegram. Please make sure you're using this app within Telegram.");
+				setError(
+					"Unable to authenticate with Telegram. Please make sure you're using this app within Telegram.",
+				);
 				return;
 			}
 
 			const result = await deleteCookies({
-				data: { initData: initDataRaw }
+				data: { initData: initDataRaw },
 			});
 
 			if (result.success) {
@@ -208,11 +210,6 @@ function RouteComponent() {
 			<main className="container mx-auto max-w-2xl px-4 py-10">
 				<div className="mb-8 flex items-center justify-between">
 					<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
-					<Link to="/">
-						<Button variant="ghost" size="sm">
-							Back to Home
-						</Button>
-					</Link>
 				</div>
 				<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
 					<CardHeader className="pb-1">
@@ -244,11 +241,6 @@ function RouteComponent() {
 		<main className="container mx-auto max-w-2xl px-4 py-10">
 			<div className="mb-8 flex items-center justify-between">
 				<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
-				<Link to="/">
-					<Button variant="ghost" size="sm">
-						Back to Home
-					</Button>
-				</Link>
 			</div>
 
 			<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
