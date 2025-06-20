@@ -19,6 +19,11 @@ Database operations (uses Prisma):
 - `bun db:generate` - Generate Prisma client
 - `bun db:migrate` - Run database migrations
 
+**Database Configuration**:
+- Requires `DATABASE_URL` for connection pooling
+- Requires `DIRECT_DATABASE_URL` for direct database access (needed when using connection poolers like pgcat)
+- Both URLs should be set in environment variables
+
 Security operations (server app):
 - `cd apps/server && bun run migrate-cookies` - Encrypt existing unencrypted cookies in Redis
 - `cd apps/server && bun test` - Run cookie encryption tests
