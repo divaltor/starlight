@@ -18,8 +18,17 @@ feature.on(":text").filter(
 
 		await ctx.replyWithChatAction("upload_video", {}, abortController.signal);
 
+		let videos = [];
+
 		const tempDir = tmp.dirSync({ unsafeCleanup: true });
-		const videos = await downloadVideo(ctx.msg.text, tempDir.name);
+		try {
+			videos = await downloadVideo(ctx.msg.text, tempDir.name);
+		} catch (error) {
+			abortController.abort();
+
+			await ctx.reply(`${ctx.from?.username} fuck off.`);
+			return;
+		}
 
 		for (const video of videos) {
 			try {
