@@ -1,6 +1,6 @@
 import type { ScheduledSlotStatus } from "@repo/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import {
 	AlertTriangle,
@@ -69,7 +69,8 @@ function PublicationsPage() {
 	>(undefined); // Default posting channel ID
 	const queryClient = useQueryClient();
 
-	const { rawInitData } = useTelegramContext();
+	const { rawInitData, setMainButton } = useTelegramContext();
+	const router = useRouter();
 
 	const {
 		data: publicationsData,
@@ -98,6 +99,12 @@ function PublicationsPage() {
 		},
 		enabled: !!rawInitData,
 	});
+
+	useEffect(() => {
+		setMainButton("Gallery", true, () => {
+			router.navigate({ to: "/app" });
+		});
+	}, [setMainButton, router]);
 
 	// Set default posting channel when data loads
 	useEffect(() => {
