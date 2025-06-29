@@ -33,7 +33,13 @@ function RouteComponent() {
 	const [twitterId, setTwitterId] = useState<string | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 
-	const { rawInitData } = useTelegramContext();
+	const { rawInitData, updateButtons } = useTelegramContext();
+
+	updateButtons({
+		mainButton: {
+			state: "hidden",
+		},
+	});
 
 	// Verify cookies on page load
 	useEffect(() => {

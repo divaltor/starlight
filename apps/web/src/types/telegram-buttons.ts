@@ -12,7 +12,7 @@ export interface BaseButtonConfig {
 }
 
 export interface MainButtonConfig extends BaseButtonConfig {
-	text: string;
+	text?: string;
 	color?: string;
 	textColor?: string;
 	isLoading?: boolean;
