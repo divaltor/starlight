@@ -13,7 +13,14 @@ import {
 import { useEffect, useState } from "react";
 import { SlotCard } from "@/components/slot-card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
 import { getPostingChannels } from "@/routes/api/posting-channels";
 import {
@@ -392,31 +399,31 @@ function PublicationsPage() {
 					<div className="mb-6 space-y-4 sm:mb-8">
 						<div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
 							<div className="flex flex-col gap-2">
-								<label
-									htmlFor="chatSelect"
-									className="font-medium text-gray-700 text-sm"
-								>
+								<label className="font-medium text-gray-700 text-sm">
 									Target Channel:
 								</label>
-								<select
-									id="chatSelect"
-									value={selectedPostingChannelId}
-									onChange={(e) => {
-										setSelectedPostingChannelId(Number(e.target.value));
+								<Select
+									value={selectedPostingChannelId?.toString()}
+									onValueChange={(value) => {
+										setSelectedPostingChannelId(Number(value));
 									}}
-									className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 								>
-									{availablePostingChannels.data?.postingChannels.map(
-										(channel) => (
-											<option
-												key={channel.chat.id}
-												value={channel.chat.id.toString()}
-											>
-												{channel.chat.title}
-											</option>
-										),
-									)}
-								</select>{" "}
+									<SelectTrigger className="w-[280px]">
+										<SelectValue placeholder="Select a channel" />
+									</SelectTrigger>
+									<SelectContent>
+										{availablePostingChannels.data?.postingChannels.map(
+											(channel) => (
+												<SelectItem
+													key={channel.chat.id}
+													value={channel.chat.id.toString()}
+												>
+													{channel.chat.title}
+												</SelectItem>
+											),
+										)}
+									</SelectContent>
+								</Select>
 							</div>
 							<Button
 								onClick={handleCreateNewSlot}
