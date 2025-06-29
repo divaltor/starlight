@@ -2,6 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { initData, useSignal } from "@telegram-apps/sdk-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useInView } from "react-intersection-observer";
+import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
 import { getUserTweets } from "@/routes/api/tweets";
 import type { DateFilter } from "@/types/dates";
 
@@ -30,6 +31,7 @@ export function useTweets(options: UseTweetsOptions = {}) {
 	const stableTweetsRef = useRef<TweetData[]>([]);
 	const lastDataLengthRef = useRef(0);
 	const lastFiltersRef = useRef({ dateFilter });
+	const { rawInitData } = useTelegramContext();
 
 	// Reset stable refs when filters change
 	useEffect(() => {
@@ -66,6 +68,7 @@ export function useTweets(options: UseTweetsOptions = {}) {
 			}
 
 			const result = await getUserTweets({
+				headers: { Authorization: rawInitData ?? "" },
 				data: {
 					telegramId: user.id,
 					cursor: pageParam,

@@ -1,7 +1,7 @@
 import { env, getPrismaClient } from "@repo/utils";
 import { createMiddleware } from "@tanstack/react-start";
+import { getHeader } from "@tanstack/react-start/server";
 import { parse, validate } from "@telegram-apps/init-data-node";
-import { z } from "zod";
 
 export interface AuthContext {
 	user?: {
@@ -14,64 +14,61 @@ export interface AuthContext {
 	};
 }
 
-const authDataSchema = z.object({
-	initData: z.string().optional(),
-});
+export const authMiddleware = createMiddleware().server(async ({ next }) => {
+	const auth = getHeader("Authorization");
 
-export const authMiddleware = createMiddleware()
-	.validator(authDataSchema)
-	.server(async ({ next, data }) => {
-		if (!data.initData) {
-			throw new Error("Unauthorized: No init data provided");
+	if (!auth) {
+		throw new Error("Unauthorized: No init data provided");
+	}
+
+	// On dev, we don't need to validate the init data
+	if (env.ENVIRONMENT === "prod") {
+		try {
+			validate(auth, env.BOT_TOKEN);
+		} catch (error) {
+			throw new Error("Invalid init data");
 		}
+	}
 
-		// On dev, we don't need to validate the init data
-		if (env.ENVIRONMENT === "prod") {
-			try {
-				validate(data.initData, env.BOT_TOKEN);
-			} catch (error) {
-				throw new Error("Invalid init data");
-			}
-		}
+	const parsedData = parse(auth);
 
-		const parsedData = parse(data.initData);
+	if (!parsedData.user) {
+		throw new Error("Invalid init data: No user found");
+	}
 
-		if (!parsedData.user) {
-			throw new Error("Invalid init data: No user found");
-		}
+	const prisma = getPrismaClient();
 
-		const prisma = getPrismaClient();
-
-		const databaseUser = await prisma.user.findUnique({
-			where: { telegramId: parsedData.user.id },
-			select: {
-				id: true,
-			},
-		});
-
-		// Like impossible to happen because if user is not in the database, they won't be able to use the bot
-		if (!databaseUser) {
-			throw new Error("User not found");
-		}
-
-		return next({
-			context: { user: parsedData.user, databaseUserId: databaseUser.id },
-		});
+	const databaseUser = await prisma.user.findUnique({
+		where: { telegramId: parsedData.user.id },
+		select: {
+			id: true,
+		},
 	});
 
-export const optionalAuthMiddleware = createMiddleware()
-	.validator(authDataSchema)
-	.server(async ({ next, data }) => {
+	// Like impossible to happen because if user is not in the database, they won't be able to use the bot
+	if (!databaseUser) {
+		throw new Error("User not found");
+	}
+
+	return next({
+		context: { user: parsedData.user, databaseUserId: databaseUser.id },
+	});
+});
+
+export const optionalAuthMiddleware = createMiddleware().server(
+	async ({ next }) => {
 		let authContext: AuthContext | null = null;
 
-		if (data.initData) {
+		const auth = getHeader("Authorization");
+
+		if (auth) {
 			try {
 				// On dev, we don't need to validate the init data
 				if (env.ENVIRONMENT === "prod") {
-					validate(data.initData, env.BOT_TOKEN);
+					validate(auth, env.BOT_TOKEN);
 				}
 
-				const parsedData = parse(data.initData);
+				const parsedData = parse(auth);
 
 				if (parsedData.user) {
 					authContext = {
@@ -84,7 +81,8 @@ export const optionalAuthMiddleware = createMiddleware()
 		}
 
 		return next({ context: { user: authContext?.user } });
-	});
+	},
+);
 
 export function createAuthError(message: string) {
 	return { error: message };

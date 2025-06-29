@@ -81,8 +81,8 @@ function PublicationsPage() {
 		queryKey: ["scheduled-slots", selectedPostingChannelId],
 		queryFn: async () => {
 			return await getScheduledSlots({
+				headers: { Authorization: rawInitData ?? "" },
 				data: {
-					initData: rawInitData,
 					postingChannelId: selectedPostingChannelId,
 				},
 			});
@@ -94,7 +94,7 @@ function PublicationsPage() {
 		queryKey: ["available-posting-channels"],
 		queryFn: async () => {
 			return await getPostingChannels({
-				data: { initData: rawInitData },
+				headers: { Authorization: rawInitData ?? "" },
 			});
 		},
 		enabled: !!rawInitData,
@@ -113,16 +113,8 @@ function PublicationsPage() {
 			availablePostingChannels.data?.postingChannels &&
 			availablePostingChannels.data.postingChannels.length > 0
 		) {
-			console.log(
-				"availablePostingChannels.data.postingChannels",
-				availablePostingChannels.data.postingChannels,
-			);
 			setSelectedPostingChannelId(
 				Number(availablePostingChannels.data.postingChannels[0].chat.id),
-			);
-			console.log(
-				"availablePostingChannels.data.postingChannels[0].chat.id",
-				availablePostingChannels.data.postingChannels[0].chat.id,
 			);
 		}
 	}, [availablePostingChannels.data, selectedPostingChannelId]);
@@ -143,8 +135,9 @@ function PublicationsPage() {
 			const nextSlotTime = getNextAvailableSlotTime();
 
 			return await createScheduledSlot({
+				type: "dynamic",
+				headers: { Authorization: rawInitData ?? "" },
 				data: {
-					initData: rawInitData,
 					postingChannelId: selectedPostingChannelId!,
 					scheduledFor: nextSlotTime.toISOString(),
 				},
@@ -164,8 +157,8 @@ function PublicationsPage() {
 	const deleteSlotMutation = useMutation({
 		mutationFn: async (slotId: string) => {
 			return await deleteScheduledSlot({
+				headers: { Authorization: rawInitData ?? "" },
 				data: {
-					initData: rawInitData,
 					postingChannelId: selectedPostingChannelId,
 					slotId,
 				},
@@ -196,8 +189,8 @@ function PublicationsPage() {
 			photoId: string;
 		}) => {
 			return await deletePhoto({
+				headers: { Authorization: rawInitData ?? "" },
 				data: {
-					initData: rawInitData,
 					slotId,
 					photoId,
 				},

@@ -40,7 +40,7 @@ function RouteComponent() {
 		const checkCookieStatus = async () => {
 			try {
 				const result = await verifyCookies({
-					data: { initData: rawInitData },
+					headers: { Authorization: rawInitData ?? "" },
 				});
 
 				if (result.hasValidCookies && result.twitterId) {
@@ -103,9 +103,9 @@ function RouteComponent() {
 
 			// Call the save cookies API with proper authorization
 			const result = await saveCookies({
+				headers: { Authorization: rawInitData ?? "" },
 				data: {
 					cookies: cookiesBase64,
-					initData: rawInitData,
 				},
 			});
 
@@ -116,7 +116,7 @@ function RouteComponent() {
 
 			// Success - verify cookies were saved by checking server status
 			const verifyResult = await verifyCookies({
-				data: { initData: rawInitData },
+				headers: { Authorization: rawInitData ?? "" },
 			});
 			if (verifyResult.hasValidCookies && verifyResult.twitterId) {
 				setCookiesStored(true);
@@ -139,7 +139,7 @@ function RouteComponent() {
 			setIsSubmitting(true);
 
 			const result = await deleteCookies({
-				data: { initData: rawInitData },
+				headers: { Authorization: rawInitData ?? "" },
 			});
 
 			if (result.success) {
