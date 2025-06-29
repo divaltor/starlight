@@ -16,12 +16,7 @@ export const getPostingChannels = createServerFn({ method: "GET" })
 			include: {
 				chat: true,
 			},
-			orderBy: {
-				createdAt: "desc",
-				chat: {
-					title: "asc",
-				},
-			},
+			orderBy: [{ createdAt: "desc" }, { chat: { title: "asc" } }],
 		});
 
 		return { postingChannels };
