@@ -55,8 +55,9 @@ interface PublicationSections {
 }
 
 function PublicationsPage() {
-	const [selectedPostingChannelId, setSelectedPostingChannelId] =
-		useState<number>(0); // Default posting channel ID
+	const [selectedPostingChannelId, setSelectedPostingChannelId] = useState<
+		number | undefined
+	>(undefined); // Default posting channel ID
 	const queryClient = useQueryClient();
 
 	const { rawInitData } = useTelegramContext();
@@ -97,7 +98,7 @@ function PublicationsPage() {
 			return await createScheduledSlot({
 				data: {
 					initData: rawInitData,
-					postingChannelId: selectedPostingChannelId,
+					postingChannelId: selectedPostingChannelId!,
 					scheduledFor: nextSlotTime.toISOString(),
 					tweetCount: 3,
 				},

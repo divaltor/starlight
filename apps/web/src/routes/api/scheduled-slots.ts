@@ -1,7 +1,7 @@
-import { getPrismaClient } from "@repo/utils";
+import { getPrismaClient, type Prisma } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { authMiddleware } from "@/middleware/auth";
+import { authMiddleware, userMiddleware } from "@/middleware/auth";
 
 const getScheduledSlotsSchema = z.object({
 	postingChannelId: z.number().optional(),
@@ -25,15 +25,14 @@ const deleteSlotSchema = z.object({
 });
 
 export const getScheduledSlots = createServerFn({ method: "GET" })
-	.middleware([authMiddleware])
+	.middleware([authMiddleware, userMiddleware])
 	.validator(getScheduledSlotsSchema)
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
-		const userId = context.user.id.toString();
+		const userId = context.databaseUserId;
 		const { postingChannelId } = data;
 
-		// biome-ignore lint/suspicious/noExplicitAny: Need to export types from Prisma, don't want to do that
-		const whereClause: any = { userId };
+		const whereClause: Prisma.ScheduledSlotWhereInput = { userId };
 		if (postingChannelId) {
 			whereClause.chatId = postingChannelId;
 		}
@@ -59,12 +58,12 @@ export const getScheduledSlots = createServerFn({ method: "GET" })
 	});
 
 export const createScheduledSlot = createServerFn({ method: "POST" })
-	.middleware([authMiddleware])
+	.middleware([authMiddleware, userMiddleware])
 	.validator(createSlotSchema)
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
 		const { scheduledFor, tweetCount, postingChannelId } = data;
-		const userId = context.user.id.toString();
+		const userId = context.databaseUserId;
 
 		// Check if user exists and get posting channel
 		const postingChannel = await prisma.postingChannel.findUnique({
@@ -177,18 +176,17 @@ export const createScheduledSlot = createServerFn({ method: "POST" })
 	});
 
 export const updateScheduledSlot = createServerFn({ method: "POST" })
-	.middleware([authMiddleware])
+	.middleware([authMiddleware, userMiddleware])
 	.validator(updateSlotSchema)
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
 		const { slotId, status, postingChannelId } = data;
-		const userId = context.user.id.toString();
+		const userId = context.databaseUserId;
 
 		// Verify slot belongs to user and optionally postingChannelId
-		// biome-ignore lint/suspicious/noExplicitAny: Need to export types from Prisma, don't want to do that
-		const whereClause: any = { id: slotId, userId };
+		const whereClause: Prisma.ScheduledSlotWhereInput = { id: slotId, userId };
 		if (postingChannelId) {
-			whereClause.postingChannelId = postingChannelId;
+			whereClause.postingChannel = { chatId: postingChannelId };
 		}
 
 		const existingSlot = await prisma.scheduledSlot.findFirst({
@@ -222,18 +220,18 @@ export const updateScheduledSlot = createServerFn({ method: "POST" })
 	});
 
 export const deleteScheduledSlot = createServerFn({ method: "POST" })
-	.middleware([authMiddleware])
+	.middleware([authMiddleware, userMiddleware])
 	.validator(deleteSlotSchema)
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
 		const { slotId, postingChannelId } = data;
-		const userId = context.user.id.toString();
+		const userId = context.databaseUserId;
 
 		// Verify slot belongs to user and optionally postingChannelId
 		// biome-ignore lint/suspicious/noExplicitAny: Need to export types from Prisma, don't want to do that
 		const whereClause: any = { id: slotId, userId };
 		if (postingChannelId) {
-			whereClause.postingChannelId = postingChannelId;
+			whereClause.postingChannel = { chatId: postingChannelId };
 		}
 
 		const existingSlot = await prisma.scheduledSlot.findFirst({
@@ -361,9 +359,9 @@ export async function reshuffleSlotPhotos(
 ) {
 	const prisma = getPrismaClient();
 
-	const whereClause: any = { id: slotId, userId };
+	const whereClause: Prisma.ScheduledSlotWhereInput = { id: slotId, userId };
 	if (postingChannelId) {
-		whereClause.postingChannelId = postingChannelId;
+		whereClause.postingChannel = { chatId: postingChannelId };
 	}
 
 	const slot = await prisma.scheduledSlot.findFirst({

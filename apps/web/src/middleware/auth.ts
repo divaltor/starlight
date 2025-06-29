@@ -1,4 +1,4 @@
-import { env } from "@repo/utils";
+import { env, getPrismaClient } from "@repo/utils";
 import { createMiddleware } from "@tanstack/react-start";
 import { parse, validate } from "@telegram-apps/init-data-node";
 import { z } from "zod";
@@ -41,6 +41,24 @@ export const authMiddleware = createMiddleware()
 		}
 
 		return next({ context: { user: parsedData.user } });
+	});
+
+export const userMiddleware = createMiddleware()
+	.validator(z.object({ userId: z.number() }))
+	.server(async ({ next, data }) => {
+		const prisma = getPrismaClient();
+		const user = await prisma.user.findUnique({
+			where: { telegramId: data.userId },
+			select: {
+				id: true,
+			},
+		});
+
+		if (!user) {
+			throw new Error("User not found");
+		}
+
+		return next({ context: { databaseUserId: user.id } });
 	});
 
 export const optionalAuthMiddleware = createMiddleware()
