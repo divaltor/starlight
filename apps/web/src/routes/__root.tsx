@@ -1,13 +1,14 @@
-import appCss from "@/index.css?url";
 import type { QueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import {
+	createRootRouteWithContext,
 	HeadContent,
 	Outlet,
 	Scripts,
-	createRootRouteWithContext,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import appCss from "@/index.css?url";
+import { TelegramButtonsProvider } from "@/providers/TelegramButtonsProvider";
 
 export interface RouterAppContext {
 	queryClient: QueryClient;
@@ -58,7 +59,9 @@ function RootDocument() {
 				<HeadContent />
 			</head>
 			<body>
-				<Outlet />
+				<TelegramButtonsProvider>
+					<Outlet />
+				</TelegramButtonsProvider>
 				<TanStackRouterDevtools position="bottom-left" />
 				<ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />{" "}
 				<Scripts />

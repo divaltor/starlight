@@ -79,8 +79,6 @@ export function decodeCookies(
 			}
 		}
 
-		console.log("Decoded", decoded);
-
 		// Try Cookie Quick Manager format first
 		if (decoded) {
 			const quickManagerResult = CookieQuickManagerSchema.safeParse(decoded);
@@ -117,8 +115,6 @@ export function decodeCookies(
 			.map((s) => s.trim())
 			.filter((s) => s.length > 0);
 
-		console.log("Cookie strings", cookieStrings);
-
 		for (const cookieString of cookieStrings) {
 			try {
 				const cookie = cookieString.split("=");
@@ -139,8 +135,6 @@ export function decodeCookies(
 				console.warn(`Failed to parse cookie string "${cookieString}":`, error);
 			}
 		}
-
-		console.log(cookies);
 
 		return cookies.length > 0 ? cookies : null;
 	} catch (error) {

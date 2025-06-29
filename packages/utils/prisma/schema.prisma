@@ -31,6 +31,8 @@ model User {
     tweets          Tweet[]
     photos          Photo[]
     publishedPhotos PublishedPhoto[]
+    scheduledSlots  ScheduledSlot[]
+    postingChannels PostingChannel[]
 
     @@map("users")
 }
@@ -46,8 +48,30 @@ model Chat {
 
     // Relations
     publishedPhotos PublishedPhoto[]
+    postingChannels PostingChannel[]
 
     @@map("chats")
+}
+
+model PostingChannel {
+    userId String @map("user_id") @db.Uuid
+    chatId BigInt @map("chat_id")
+
+    isActive Boolean @default(true) @map("is_active")
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    // Relations
+    user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+    chat           Chat            @relation(fields: [chatId], references: [id], onDelete: Cascade)
+    scheduledSlots ScheduledSlot[]
+
+    @@unique([userId, chatId])
+    @@index([userId])
+    @@index([chatId])
+    @@index([isActive])
+    @@map("posting_channels")
 }
 
 model Tweet {
@@ -61,8 +85,9 @@ model Tweet {
     updatedAt DateTime @updatedAt @map("updated_at")
 
     // Relations
-    photos Photo[]
-    user   User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+    photos              Photo[]
+    user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+    scheduledSlotTweets ScheduledSlotTweet[]
 
     @@id(name: "tweetId", [id, userId])
     @@index([createdAt(sort: Desc), userId])
@@ -83,9 +108,10 @@ model Photo {
     deletedAt DateTime? @map("deleted_at")
 
     // Relations
-    tweet           Tweet            @relation(fields: [tweetId, userId], references: [id, userId], onDelete: Restrict)
-    user            User             @relation(fields: [userId], references: [id], onDelete: Restrict)
-    publishedPhotos PublishedPhoto[]
+    tweet               Tweet                @relation(fields: [tweetId, userId], references: [id, userId], onDelete: Restrict)
+    user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+    publishedPhotos     PublishedPhoto[]
+    scheduledSlotPhotos ScheduledSlotPhoto[]
 
     @@id(name: "photoId", [id, userId])
     @@index([tweetId])
@@ -97,9 +123,10 @@ model Photo {
 }
 
 model PublishedPhoto {
-    photoId String @map("photo_id")
-    userId  String @map("user_id") @db.Uuid
-    chatId  BigInt @map("chat_id")
+    photoId         String  @map("photo_id")
+    userId          String  @map("user_id") @db.Uuid
+    chatId          BigInt  @map("chat_id")
+    scheduledSlotId String? @map("scheduled_slot_id") @db.Uuid
 
     mediaGroupId         String? @map("media_group_id")
     messageId            BigInt  @map("message_id")
@@ -109,11 +136,74 @@ model PublishedPhoto {
     publishedAt DateTime @default(now()) @map("published_at")
 
     // Relations
-    photo Photo @relation(fields: [photoId, userId], references: [id, userId], onDelete: Restrict)
-    user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
-    chat  Chat  @relation(fields: [chatId], references: [id], onDelete: Restrict)
+    photo         Photo          @relation(fields: [photoId, userId], references: [id, userId], onDelete: Restrict)
+    user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+    chat          Chat           @relation(fields: [chatId], references: [id], onDelete: Restrict)
+    scheduledSlot ScheduledSlot? @relation(fields: [scheduledSlotId], references: [id], onDelete: SetNull)
 
     @@id([photoId, userId, chatId])
     @@index([messageId])
+    @@index([scheduledSlotId])
     @@map("published_photos")
+}
+
+model ScheduledSlot {
+    id           String   @id @default(uuid(7)) @db.Uuid
+    userId       String   @map("user_id") @db.Uuid
+    chatId       BigInt   @map("chat_id")
+    scheduledFor DateTime @map("scheduled_for")
+    status       String   @default("waiting")
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    // Relations
+    user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+    postingChannel      PostingChannel       @relation(fields: [userId, chatId], references: [userId, chatId], onDelete: Restrict)
+    publishedPhotos     PublishedPhoto[]
+    scheduledSlotTweets ScheduledSlotTweet[]
+
+    @@index([userId])
+    @@index([chatId])
+    @@index([scheduledFor])
+    @@index([status])
+    @@index([createdAt(sort: Desc)])
+    @@map("scheduled_slots")
+}
+
+model ScheduledSlotTweet {
+    id              String @id @default(uuid(7)) @db.Uuid
+    scheduledSlotId String @map("scheduled_slot_id") @db.Uuid
+    tweetId         String @map("tweet_id")
+    userId          String @map("user_id") @db.Uuid
+
+    createdAt DateTime @default(now()) @map("created_at")
+
+    // Relations
+    scheduledSlot       ScheduledSlot        @relation(fields: [scheduledSlotId], references: [id], onDelete: Cascade)
+    tweet               Tweet                @relation(fields: [tweetId, userId], references: [id, userId], onDelete: Restrict)
+    scheduledSlotPhotos ScheduledSlotPhoto[]
+
+    @@unique([scheduledSlotId, tweetId, userId])
+    @@index([scheduledSlotId])
+    @@index([tweetId, userId])
+    @@map("scheduled_slot_tweets")
+}
+
+model ScheduledSlotPhoto {
+    id                   String @id @default(uuid(7)) @db.Uuid
+    scheduledSlotTweetId String @map("scheduled_slot_tweet_id") @db.Uuid
+    photoId              String @map("photo_id")
+    userId               String @map("user_id") @db.Uuid
+
+    createdAt DateTime @default(now()) @map("created_at")
+
+    // Relations
+    scheduledSlotTweet ScheduledSlotTweet @relation(fields: [scheduledSlotTweetId], references: [id], onDelete: Cascade)
+    photo              Photo              @relation(fields: [photoId, userId], references: [id, userId], onDelete: Restrict)
+
+    @@unique([scheduledSlotTweetId, photoId, userId])
+    @@index([scheduledSlotTweetId])
+    @@index([photoId, userId])
+    @@map("scheduled_slot_photos")
 }

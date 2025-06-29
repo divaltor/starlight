@@ -1,5 +1,6 @@
 import { bot } from "@/bot";
 import imageHandler from "@/handlers/image";
+import publicationsHandler from "@/handlers/publications";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
 import { imagesWorker } from "@/queue/image-collector";
@@ -21,6 +22,7 @@ const boundary = bot.errorBoundary((error) => {
 
 boundary.use(videoHandler);
 boundary.use(imageHandler);
+boundary.use(publicationsHandler);
 
 logger.info("Bot is starting...");
 

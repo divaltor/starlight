@@ -1,4 +1,3 @@
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import Sqids from "sqids";
 import { parse as uuidParse } from "uuid";
@@ -6,10 +5,6 @@ import env from "./config";
 
 const sqids = new Sqids({
 	minLength: 12,
-});
-
-const adapter = new PrismaPg({
-	connectionString: env.DATABASE_URL,
 });
 
 export function createPrismaClient() {

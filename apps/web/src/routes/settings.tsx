@@ -1,3 +1,6 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { AlertCircle, Cookie, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,15 +13,12 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { decodeCookies } from "@/lib/utils";
+import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
 import {
 	deleteCookies,
 	saveCookies,
 	verifyCookies,
 } from "@/routes/api/cookies";
-import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
-import { backButton, useRawInitData } from "@telegram-apps/sdk-react";
-import { AlertCircle, Cookie, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/settings")({
 	component: RouteComponent,
@@ -32,27 +32,15 @@ function RouteComponent() {
 	const [showCookieInput, setShowCookieInput] = useState(false);
 	const [twitterId, setTwitterId] = useState<string | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
-	const router = useRouter();
 
-	let initDataRaw: string | undefined;
-	try {
-		initDataRaw = useRawInitData();
-	} catch (error) {}
+	const { rawInitData } = useTelegramContext();
 
 	// Verify cookies on page load
 	useEffect(() => {
 		const checkCookieStatus = async () => {
 			try {
-				if (!initDataRaw) {
-					setCookiesStored(false);
-					setTwitterId(null);
-					setShowCookieInput(true);
-					setIsLoading(false);
-					return;
-				}
-
 				const result = await verifyCookies({
-					data: { initData: initDataRaw },
+					data: { initData: rawInitData },
 				});
 
 				if (result.hasValidCookies && result.twitterId) {
@@ -75,31 +63,10 @@ function RouteComponent() {
 		};
 
 		checkCookieStatus();
-	}, [initDataRaw]);
+	}, [rawInitData]);
 
-	// Handle back button
-	useEffect(() => {
-		// TODO: Simplify
-		if (!backButton.isSupported()) return;
-
-		backButton.show();
-
-		const handleBackClick = () => {
-			router.navigate({ to: "/app" });
-		};
-
-		if (backButton.onClick.isAvailable()) {
-			const unsubscribe = backButton.onClick(handleBackClick);
-			return () => {
-				if (unsubscribe) unsubscribe();
-				backButton.hide.ifAvailable();
-			};
-		}
-
-		return () => {
-			backButton.hide.ifAvailable();
-		};
-	}, [router]);
+	// Back button is now handled globally by TelegramButtonsProvider
+	// No need for manual button setup here
 
 	const handleSaveCookies = async (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
@@ -131,14 +98,6 @@ function RouteComponent() {
 				return;
 			}
 
-			// Get Telegram init data for authorization
-			if (!initDataRaw) {
-				setError(
-					"Unable to authenticate with Telegram. Please make sure you're using this app within Telegram.",
-				);
-				return;
-			}
-
 			// Convert cookies to base64 for transmission
 			const cookiesBase64 = btoa(newCookies);
 
@@ -146,7 +105,7 @@ function RouteComponent() {
 			const result = await saveCookies({
 				data: {
 					cookies: cookiesBase64,
-					initData: initDataRaw,
+					initData: rawInitData,
 				},
 			});
 
@@ -157,7 +116,7 @@ function RouteComponent() {
 
 			// Success - verify cookies were saved by checking server status
 			const verifyResult = await verifyCookies({
-				data: { initData: initDataRaw },
+				data: { initData: rawInitData },
 			});
 			if (verifyResult.hasValidCookies && verifyResult.twitterId) {
 				setCookiesStored(true);
@@ -179,15 +138,8 @@ function RouteComponent() {
 		try {
 			setIsSubmitting(true);
 
-			if (!initDataRaw) {
-				setError(
-					"Unable to authenticate with Telegram. Please make sure you're using this app within Telegram.",
-				);
-				return;
-			}
-
 			const result = await deleteCookies({
-				data: { initData: initDataRaw },
+				data: { initData: rawInitData },
 			});
 
 			if (result.success) {

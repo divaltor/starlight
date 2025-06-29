@@ -1,3 +1,17 @@
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useSignal, viewport } from "@telegram-apps/sdk-react";
+import { format } from "date-fns";
+import {
+	Calendar,
+	Check,
+	ChevronLeft,
+	ChevronRight,
+	Filter,
+	Loader2,
+	RefreshCw,
+	X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
@@ -11,29 +25,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTweets } from "@/hooks/useTweets";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { settingsButton, useSignal, viewport } from "@telegram-apps/sdk-react";
-import { format } from "date-fns";
-import {
-	Calendar,
-	Check,
-	ChevronLeft,
-	ChevronRight,
-	Filter,
-	Loader2,
-	RefreshCw,
-	X,
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-type DateFilter =
-	| "all"
-	| "today"
-	| "week"
-	| "month"
-	| "3months"
-	| "6months"
-	| "year";
+import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
+import type { DateFilter } from "@/types/dates";
 
 function TwitterArtViewer() {
 	const [selectedImage, setSelectedImage] = useState<number | null>(null);
@@ -45,6 +38,7 @@ function TwitterArtViewer() {
 	const [isMasonryReady, setIsMasonryReady] = useState(false);
 	const masonryGridRef = useRef<HTMLDivElement>(null);
 	const router = useRouter();
+	const { setMainButton } = useTelegramContext();
 
 	const viewportHeight = useSignal(viewport.height);
 	const viewportWidth = useSignal(viewport.width);
@@ -75,28 +69,12 @@ function TwitterArtViewer() {
 		setIsFilterActive(dateFilter !== "all");
 	}, [dateFilter]);
 
-	// Handle settings button
+	// Set main button for this page
 	useEffect(() => {
-		// TODO: Simplify
-		if (!settingsButton.isSupported()) return;
-
-		settingsButton.show();
-
-		const handleSettingsClick = () => {
-			router.navigate({ to: "/settings" });
-		};
-		if (settingsButton.onClick.isAvailable()) {
-			const unsubscribe = settingsButton.onClick(handleSettingsClick);
-			return () => {
-				if (unsubscribe) unsubscribe();
-				settingsButton.hide.ifAvailable();
-			};
-		}
-
-		return () => {
-			settingsButton.hide.ifAvailable();
-		};
-	}, [router]);
+		setMainButton("Publications", true, () => {
+			router.navigate({ to: "/publications" });
+		});
+	}, [setMainButton, router]);
 
 	// Reset filters
 	const resetFilters = useCallback(() => {

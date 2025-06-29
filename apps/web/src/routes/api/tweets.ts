@@ -1,3 +1,5 @@
+"use server";
+
 import { CursorPagination } from "@repo/crypto";
 import { env, getPrismaClient } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
@@ -42,7 +44,7 @@ const getUserTweets = createServerFn({ method: "GET" })
 			cursor: z.string().optional(),
 			limit: z.number().min(1).max(100).default(30),
 			dateFilter: z
-				.enum(["all", "today", "week", "month", "3months", "6months", "year"])
+				.enum(["all", "today", "yesterday", "3 days", "week"])
 				.optional(),
 		}),
 	)
@@ -120,17 +122,11 @@ const getUserTweets = createServerFn({ method: "GET" })
 					case "week":
 						cutoffDate.setDate(now.getDate() - 7);
 						break;
-					case "month":
-						cutoffDate.setMonth(now.getMonth() - 1);
+					case "yesterday":
+						cutoffDate.setDate(now.getDate() - 1);
 						break;
-					case "3months":
-						cutoffDate.setMonth(now.getMonth() - 3);
-						break;
-					case "6months":
-						cutoffDate.setMonth(now.getMonth() - 6);
-						break;
-					case "year":
-						cutoffDate.setFullYear(now.getFullYear() - 1);
+					case "3 days":
+						cutoffDate.setDate(now.getDate() - 3);
 						break;
 				}
 

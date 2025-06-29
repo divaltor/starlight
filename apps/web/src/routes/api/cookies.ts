@@ -1,26 +1,17 @@
-import { decodeCookies } from "@/lib/utils";
+"use server";
+
 import { CookieEncryption } from "@repo/crypto";
 import { env } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
-import {
-	setResponseHeaders,
-	setResponseStatus,
-} from "@tanstack/react-start/server";
-import { parse, validate } from "@telegram-apps/init-data-node";
 import { Bot } from "grammy";
 import Redis from "ioredis";
+import { z } from "zod/v4";
+import { decodeCookies } from "@/lib/utils";
+import { authMiddleware, optionalAuthMiddleware } from "@/middleware/auth";
 
-interface CookiesRequest {
-	// base64
-	cookies: string;
-	initData: string;
-}
-
-interface CookiesVerifyResponse {
-	hasValidCookies: boolean;
-	twitterId?: string;
-	error?: string;
-}
+const cookiesSchema = z.object({
+	cookies: z.string(),
+});
 
 const redis = new Redis(env.REDIS_URL);
 const bot = new Bot(env.BOT_TOKEN);
@@ -30,49 +21,25 @@ const cookieEncryption = new CookieEncryption(
 );
 
 export const saveCookies = createServerFn({ method: "POST" })
-	.validator((data: CookiesRequest) => data)
-	.handler(async ({ data }) => {
-		setResponseHeaders({ "Content-Type": "application/json" });
-
-		if (!data.initData) {
-			setResponseStatus(401);
-			return { error: "Unauthorized" };
-		}
-
-		// On dev, we don't need to validate the init data
-		if (env.ENVIRONMENT === "prod") {
-			try {
-				validate(data.initData, env.BOT_TOKEN);
-			} catch (error) {
-				setResponseStatus(400);
-				return { error: "Invalid init data" };
-			}
-		}
-
-		const parsedData = parse(data.initData);
-
-		if (!parsedData.user) {
-			setResponseStatus(400);
-			return { error: "Invalid init data" };
-		}
-
+	.middleware([authMiddleware])
+	.validator(cookiesSchema)
+	.handler(async ({ data, context }) => {
 		const decodedCookies = decodeCookies(data.cookies);
 
 		if (!decodedCookies) {
-			setResponseStatus(400);
-			return { error: "Invalid cookies" };
+			return { success: false, error: "Invalid cookies" };
 		}
 
-		// Encrypt and store cookies in Redis
 		const encryptedCookies = cookieEncryption.encrypt(
 			JSON.stringify(decodedCookies),
-			parsedData.user.id.toString(),
+			context.user.id.toString(),
 		);
-		await redis.set(`user:cookies:${parsedData.user.id}`, encryptedCookies);
 
+		await redis.set(`user:cookies:${context.user.id}`, encryptedCookies);
 
+		// TODO: Add inline keyboard
 		await bot.api.sendMessage(
-			parsedData.user.id,
+			context.user.id,
 			"Beep boop, cookies are saved. You can now enable daily parsing using /queue command",
 		);
 
@@ -80,93 +47,43 @@ export const saveCookies = createServerFn({ method: "POST" })
 	});
 
 export const verifyCookies = createServerFn({ method: "POST" })
-	.validator((data: { initData: string }) => data)
-	.handler(async ({ data }): Promise<CookiesVerifyResponse> => {
+	.middleware([optionalAuthMiddleware])
+	.handler(async ({ context }) => {
 		try {
-			if (!data.initData) {
-				return { hasValidCookies: false, error: "No init data provided" };
+			if (!context.user) {
+				return { hasValidCookies: false };
 			}
 
-			// On dev, we don't need to validate the init data
-			if (env.ENVIRONMENT === "prod") {
-				try {
-					validate(data.initData, env.BOT_TOKEN);
-				} catch (error) {
-					return { hasValidCookies: false, error: "Invalid init data" };
-				}
-			}
-
-			const parsedData = parse(data.initData);
-
-			if (!parsedData.user) {
-				return { hasValidCookies: false, error: "Invalid init data" };
-			}
-
-			// Check if cookies exist in Redis
-			const storedCookies = await redis.get(
-				`user:cookies:${parsedData.user.id}`,
-			);
+			const storedCookies = await redis.get(`user:cookies:${context.user.id}`);
 
 			if (!storedCookies) {
 				return { hasValidCookies: false };
 			}
 
-			// Test decryption to ensure cookies are valid
 			try {
-				cookieEncryption.safeDecrypt(
-					storedCookies,
-					parsedData.user.id.toString(),
-				);
+				cookieEncryption.safeDecrypt(storedCookies, context.user.id.toString());
 			} catch (error) {
-				// Failed to decrypt, remove invalid cookies
-				await redis.del(`user:cookies:${parsedData.user.id}`);
+				await redis.del(`user:cookies:${context.user.id}`);
 				return { hasValidCookies: false };
 			}
 
-			// Cookies are valid
 			return {
 				hasValidCookies: true,
-				twitterId: parsedData.user.id.toString(),
+				twitterId: context.user.id.toString(),
 			};
 		} catch (error) {
 			console.error("Error verifying cookies:", error);
-			return { hasValidCookies: false, error: "Failed to verify cookies" };
+			return {
+				hasValidCookies: false,
+				error: "Failed to verify cookies",
+			};
 		}
 	});
 
 export const deleteCookies = createServerFn({ method: "POST" })
-	.validator((data: { initData: string }) => data)
-	.handler(async ({ data }) => {
-		try {
-			if (!data.initData) {
-				setResponseStatus(401);
-				return { error: "Unauthorized" };
-			}
+	.middleware([authMiddleware])
+	.handler(async ({ context }) => {
+		await redis.del(`user:cookies:${context.user.id}`);
 
-			// On dev, we don't need to validate the init data
-			if (env.ENVIRONMENT === "prod") {
-				try {
-					validate(data.initData, env.BOT_TOKEN);
-				} catch (error) {
-					setResponseStatus(400);
-					return { error: "Invalid init data" };
-				}
-			}
-
-			const parsedData = parse(data.initData);
-
-			if (!parsedData.user) {
-				setResponseStatus(400);
-				return { error: "Invalid init data" };
-			}
-
-			// Delete cookies from Redis
-			await redis.del(`user:cookies:${parsedData.user.id}`);
-
-			return { success: true };
-		} catch (error) {
-			console.error("Error deleting cookies:", error);
-			setResponseStatus(500);
-			return { error: "Failed to delete cookies" };
-		}
+		return { success: true };
 	});

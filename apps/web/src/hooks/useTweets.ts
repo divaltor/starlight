@@ -1,9 +1,9 @@
-import { getUserTweets } from "@/routes/api/tweets";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { initData, useSignal } from "@telegram-apps/sdk-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-// @ts-ignore - dependency exists but TS can't find it
 import { useInView } from "react-intersection-observer";
+import { getUserTweets } from "@/routes/api/tweets";
+import type { DateFilter } from "@/types/dates";
 
 type TweetData = {
 	id: string;
@@ -21,14 +21,7 @@ type TweetData = {
 };
 
 type UseTweetsOptions = {
-	dateFilter?:
-		| "all"
-		| "today"
-		| "week"
-		| "month"
-		| "3months"
-		| "6months"
-		| "year";
+	dateFilter?: DateFilter;
 };
 
 export function useTweets(options: UseTweetsOptions = {}) {

@@ -12,8 +12,8 @@
 
 import { Route as rootRoute } from './routes/__root'
 import { Route as SettingsImport } from './routes/settings'
+import { Route as PublicationsImport } from './routes/publications'
 import { Route as AppImport } from './routes/app'
-import { Route as IndexImport } from './routes/index'
 
 // Create/Update Routes
 
@@ -23,15 +23,15 @@ const SettingsRoute = SettingsImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
-const AppRoute = AppImport.update({
-  id: '/app',
-  path: '/app',
+const PublicationsRoute = PublicationsImport.update({
+  id: '/publications',
+  path: '/publications',
   getParentRoute: () => rootRoute,
 } as any)
 
-const IndexRoute = IndexImport.update({
-  id: '/',
-  path: '/',
+const AppRoute = AppImport.update({
+  id: '/app',
+  path: '/app',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -39,18 +39,18 @@ const IndexRoute = IndexImport.update({
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexImport
-      parentRoute: typeof rootRoute
-    }
     '/app': {
       id: '/app'
       path: '/app'
       fullPath: '/app'
       preLoaderRoute: typeof AppImport
+      parentRoute: typeof rootRoute
+    }
+    '/publications': {
+      id: '/publications'
+      path: '/publications'
+      fullPath: '/publications'
+      preLoaderRoute: typeof PublicationsImport
       parentRoute: typeof rootRoute
     }
     '/settings': {
@@ -66,42 +66,42 @@ declare module '@tanstack/react-router' {
 // Create and export the route tree
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/publications': typeof PublicationsRoute
   '/settings': typeof SettingsRoute
 }
 
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/publications': typeof PublicationsRoute
   '/settings': typeof SettingsRoute
 }
 
 export interface FileRoutesById {
   __root__: typeof rootRoute
-  '/': typeof IndexRoute
   '/app': typeof AppRoute
+  '/publications': typeof PublicationsRoute
   '/settings': typeof SettingsRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/settings'
+  fullPaths: '/app' | '/publications' | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/app' | '/settings'
-  id: '__root__' | '/' | '/app' | '/settings'
+  to: '/app' | '/publications' | '/settings'
+  id: '__root__' | '/app' | '/publications' | '/settings'
   fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRoute
+  PublicationsRoute: typeof PublicationsRoute
   SettingsRoute: typeof SettingsRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
   AppRoute: AppRoute,
+  PublicationsRoute: PublicationsRoute,
   SettingsRoute: SettingsRoute,
 }
 
@@ -115,16 +115,16 @@ export const routeTree = rootRoute
     "__root__": {
       "filePath": "__root.tsx",
       "children": [
-        "/",
         "/app",
+        "/publications",
         "/settings"
       ]
     },
-    "/": {
-      "filePath": "index.tsx"
-    },
     "/app": {
       "filePath": "app.tsx"
+    },
+    "/publications": {
+      "filePath": "publications.tsx"
     },
     "/settings": {
       "filePath": "settings.tsx"

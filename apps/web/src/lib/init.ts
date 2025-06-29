@@ -1,5 +1,4 @@
 import {
-	type ThemeParams,
 	bindThemeParamsCssVars,
 	emitEvent,
 	init as initSDK,
@@ -13,6 +12,7 @@ import {
 	restoreInitData,
 	retrieveLaunchParams,
 	setDebug,
+	type ThemeParams,
 	themeParamsState,
 	viewport,
 } from "@telegram-apps/sdk-react";
