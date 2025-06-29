@@ -66,7 +66,8 @@ interface PublicationSections {
 function PublicationsPage() {
 	const [selectedPostingChannelId, setSelectedPostingChannelId] = useState<
 		number | undefined
-	>(undefined); // Default posting channel ID
+	>(undefined);
+	const [optimisticHasChannels, setOptimisticHasChannels] = useState(true);
 	const queryClient = useQueryClient();
 
 	const { rawInitData, setMainButton } = useTelegramContext();
@@ -88,6 +89,10 @@ function PublicationsPage() {
 			});
 		},
 		enabled: !!rawInitData,
+		staleTime: 2 * 60 * 1000,
+		gcTime: 5 * 60 * 1000,
+		refetchOnWindowFocus: false,
+		retry: 2,
 	});
 
 	const availablePostingChannels = useQuery({
@@ -98,6 +103,10 @@ function PublicationsPage() {
 			});
 		},
 		enabled: !!rawInitData,
+		staleTime: 5 * 60 * 1000,
+		gcTime: 10 * 60 * 1000,
+		refetchOnWindowFocus: false,
+		retry: 2,
 	});
 
 	useEffect(() => {
@@ -106,7 +115,6 @@ function PublicationsPage() {
 		});
 	}, [setMainButton, router]);
 
-	// Set default posting channel when data loads
 	useEffect(() => {
 		if (
 			!selectedPostingChannelId &&
@@ -118,6 +126,15 @@ function PublicationsPage() {
 			);
 		}
 	}, [availablePostingChannels.data, selectedPostingChannelId]);
+
+	useEffect(() => {
+		if (!availablePostingChannels.isLoading && availablePostingChannels.data) {
+			const hasChannels =
+				availablePostingChannels.data.postingChannels &&
+				availablePostingChannels.data.postingChannels.length > 0;
+			setOptimisticHasChannels(hasChannels);
+		}
+	}, [availablePostingChannels.isLoading, availablePostingChannels.data]);
 
 	const publications = publicationsData
 		? publicationsData.map((slot) => ({
@@ -131,7 +148,6 @@ function PublicationsPage() {
 
 	const createSlotMutation = useMutation({
 		mutationFn: async () => {
-			// Calculate next available slot time (9 AM - 11 PM)
 			const nextSlotTime = getNextAvailableSlotTime();
 
 			console.log("nextSlotTime", nextSlotTime);
@@ -146,7 +162,60 @@ function PublicationsPage() {
 				},
 			});
 		},
-		onSuccess: () => {
+		onMutate: async () => {
+			// Cancel any outgoing refetches to prevent them from overwriting our optimistic update
+			await queryClient.cancelQueries({
+				queryKey: ["scheduled-slots", selectedPostingChannelId],
+			});
+
+			// Snapshot the previous value
+			const previousSlots = queryClient.getQueryData([
+				"scheduled-slots",
+				selectedPostingChannelId,
+			]);
+
+			// Create optimistic slot
+			const nextSlotTime = getNextAvailableSlotTime();
+			const optimisticSlot = {
+				id: `optimistic-${Date.now()}`,
+				scheduledFor: nextSlotTime.toISOString(),
+				createdAt: new Date().toISOString(),
+				status: "WAITING" as ScheduledSlotStatus,
+				scheduledSlotTweets: [],
+			};
+
+			// Optimistically update to the new value
+			queryClient.setQueryData(
+				["scheduled-slots", selectedPostingChannelId],
+				(old: any) => (old ? [...old, optimisticSlot] : [optimisticSlot]),
+			);
+
+			// Return a context object with the snapshotted value
+			return { previousSlots, optimisticSlot };
+		},
+		onError: (err, newSlot, context) => {
+			// If the mutation fails, use the context returned from onMutate to roll back
+			if (context?.previousSlots) {
+				queryClient.setQueryData(
+					["scheduled-slots", selectedPostingChannelId],
+					context.previousSlots,
+				);
+			}
+		},
+		onSuccess: (data, variables, context) => {
+			// Replace optimistic slot with real data
+			queryClient.setQueryData(
+				["scheduled-slots", selectedPostingChannelId],
+				(old: any) => {
+					if (!old || !context?.optimisticSlot) return old;
+					return old.map((slot: any) =>
+						slot.id === context.optimisticSlot.id ? data : slot,
+					);
+				},
+			);
+		},
+		onSettled: () => {
+			// Always refetch after error or success to ensure data consistency
 			queryClient.invalidateQueries({
 				queryKey: ["scheduled-slots", selectedPostingChannelId],
 			});
@@ -167,7 +236,39 @@ function PublicationsPage() {
 				},
 			});
 		},
-		onSuccess: () => {
+		onMutate: async (slotId: string) => {
+			// Cancel any outgoing refetches
+			await queryClient.cancelQueries({
+				queryKey: ["scheduled-slots", selectedPostingChannelId],
+			});
+
+			// Snapshot the previous value
+			const previousSlots = queryClient.getQueryData([
+				"scheduled-slots",
+				selectedPostingChannelId,
+			]);
+
+			// Optimistically remove the slot
+			queryClient.setQueryData(
+				["scheduled-slots", selectedPostingChannelId],
+				(old: any) =>
+					old ? old.filter((slot: any) => slot.id !== slotId) : [],
+			);
+
+			// Return a context with the previous data and slotId
+			return { previousSlots, slotId };
+		},
+		onError: (err, slotId, context) => {
+			// If the mutation fails, roll back
+			if (context?.previousSlots) {
+				queryClient.setQueryData(
+					["scheduled-slots", selectedPostingChannelId],
+					context.previousSlots,
+				);
+			}
+		},
+		onSettled: () => {
+			// Always refetch after error or success
 			queryClient.invalidateQueries({
 				queryKey: ["scheduled-slots", selectedPostingChannelId],
 			});
@@ -179,7 +280,6 @@ function PublicationsPage() {
 	};
 
 	const handleReshuffleSlot = (_slotId: string) => {
-		// For now, just reload - reshuffling logic would need backend implementation
 		loadPublications();
 	};
 
@@ -199,7 +299,54 @@ function PublicationsPage() {
 				},
 			});
 		},
-		onSuccess: () => {
+		onMutate: async ({ slotId, photoId }) => {
+			// Cancel any outgoing refetches
+			await queryClient.cancelQueries({
+				queryKey: ["scheduled-slots", selectedPostingChannelId],
+			});
+
+			// Snapshot the previous value
+			const previousSlots = queryClient.getQueryData([
+				"scheduled-slots",
+				selectedPostingChannelId,
+			]);
+
+			// Optimistically remove the photo from the slot
+			queryClient.setQueryData(
+				["scheduled-slots", selectedPostingChannelId],
+				(old: any) => {
+					if (!old) return old;
+					return old.map((slot: any) => {
+						if (slot.id !== slotId) return slot;
+						return {
+							...slot,
+							scheduledSlotTweets: slot.scheduledSlotTweets.map(
+								(tweet: any) => ({
+									...tweet,
+									scheduledSlotPhotos: tweet.scheduledSlotPhotos.filter(
+										(photo: any) => photo.photo.id !== photoId,
+									),
+								}),
+							),
+						};
+					});
+				},
+			);
+
+			// Return a context with the previous data
+			return { previousSlots, slotId, photoId };
+		},
+		onError: (err, variables, context) => {
+			// If the mutation fails, roll back
+			if (context?.previousSlots) {
+				queryClient.setQueryData(
+					["scheduled-slots", selectedPostingChannelId],
+					context.previousSlots,
+				);
+			}
+		},
+		onSettled: () => {
+			// Always refetch after error or success
 			queryClient.invalidateQueries({
 				queryKey: ["scheduled-slots", selectedPostingChannelId],
 			});
@@ -211,18 +358,15 @@ function PublicationsPage() {
 	};
 
 	const handleReshuffleImage = (slotId: string, photoId: string) => {
-		// TODO: Implement backend API for reshuffling specific images in slots
 		console.log("Reshuffling photo:", photoId, "in slot:", slotId);
 	};
 
 	const handleAddImage = (slotId: string) => {
-		// TODO: Implement backend API for adding specific images to slots
 		console.log("Adding image to slot:", slotId);
 	};
 
 	const getNextAvailableSlotTime = () => {
 		const today = new Date();
-		// Random time between 9 AM and 11 PM
 		today.setHours(
 			9 + Math.floor(Math.random() * 14),
 			Math.floor(Math.random() * 60),
@@ -230,7 +374,6 @@ function PublicationsPage() {
 			0,
 		);
 
-		// Check if today is already taken
 		const todaySlots = publications.filter((slot) => {
 			const slotDate = new Date(slot.scheduledFor);
 			return slotDate.toDateString() === today.toDateString();
@@ -240,7 +383,6 @@ function PublicationsPage() {
 			return today;
 		}
 
-		// Find next available day
 		const nextDay = new Date(today);
 		let attempts = 0;
 		while (attempts < 30) {
@@ -271,7 +413,7 @@ function PublicationsPage() {
 
 	const canAddMoreImages = (slot: ScheduledSlot) => {
 		const totalPhotos = getAllPhotosFromSlot(slot).length;
-		return totalPhotos < 15 && slot.status === "WAITING"; // Allow up to 15 photos per slot
+		return totalPhotos < 15 && slot.status === "WAITING";
 	};
 
 	const organizePublications = (pubs: ScheduledSlot[]): PublicationSections => {
@@ -312,10 +454,10 @@ function PublicationsPage() {
 
 	const sections = organizePublications(publications);
 
-	const hasPostingChannels =
-		!availablePostingChannels.isLoading &&
-		availablePostingChannels.data?.postingChannels &&
-		availablePostingChannels.data.postingChannels.length > 0;
+	const hasPostingChannels = availablePostingChannels.data
+		? availablePostingChannels.data.postingChannels &&
+			availablePostingChannels.data.postingChannels.length > 0
+		: optimisticHasChannels;
 
 	const renderNoChannelsState = () => (
 		<div className="flex min-h-[50vh] items-center justify-center">
@@ -493,7 +635,6 @@ function PublicationsPage() {
 				{/* Publications Sections */}
 				{!isLoading && hasPostingChannels && publications.length > 0 && (
 					<div className="space-y-6 sm:space-y-8">
-						{/* Today's Publications */}
 						{renderSection(
 							"Today",
 							<Clock className="h-5 w-5 text-blue-600" />,
@@ -501,7 +642,6 @@ function PublicationsPage() {
 							"No publications scheduled for today",
 						)}
 
-						{/* Tomorrow's Publications */}
 						{renderSection(
 							"Tomorrow",
 							<CalendarDays className="h-5 w-5 text-green-600" />,
@@ -509,7 +649,6 @@ function PublicationsPage() {
 							"No publications scheduled for tomorrow",
 						)}
 
-						{/* Upcoming Publications */}
 						{renderSection(
 							"Upcoming",
 							<Calendar className="h-5 w-5 text-orange-600" />,
@@ -517,7 +656,6 @@ function PublicationsPage() {
 							"No upcoming publications scheduled",
 						)}
 
-						{/* Completed Publications */}
 						{renderSection(
 							"Completed",
 							<CheckCircle2 className="h-5 w-5 text-gray-600" />,
