@@ -55,6 +55,14 @@ export function TweetCard({
 							<span className="font-medium text-gray-700 text-xs truncate">
 								@{author}
 							</span>
+							{createdAt && (
+								<>
+									<span className="text-gray-300 text-xs">•</span>
+									<span className="text-gray-400 text-xs whitespace-nowrap">
+										{formatDate(createdAt)}
+									</span>
+								</>
+							)}
 						</div>
 						{!readonly && (
 							<DropdownMenu>
@@ -106,16 +114,6 @@ export function TweetCard({
 									+{photos.length - 4}
 								</div>
 							)}
-						</div>
-					)}
-
-					{/* Compact footer */}
-					{createdAt && (
-						<div className="flex items-center gap-1 mt-2">
-							<Calendar className="h-3 w-3 text-gray-400" />
-							<span className="text-gray-400 text-xs">
-								{formatDate(createdAt)}
-							</span>
 						</div>
 					)}
 				</CardContent>
