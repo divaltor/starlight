@@ -99,11 +99,7 @@ function PublicationsPage() {
 		enabled: !!rawInitData,
 	});
 
-	useEffect(() => {
-		setMainButton("Gallery", true, () => {
-			router.navigate({ to: "/app" });
-		});
-	}, [setMainButton, router]);
+	setMainButton("Gallery", true, () => router.navigate({ to: "/app" }));
 
 	// Set default posting channel when data loads
 	useEffect(() => {

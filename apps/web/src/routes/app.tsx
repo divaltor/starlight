@@ -69,12 +69,9 @@ function TwitterArtViewer() {
 		setIsFilterActive(dateFilter !== "all");
 	}, [dateFilter]);
 
-	// Set main button for this page
-	useEffect(() => {
-		setMainButton("Publications", true, () => {
-			router.navigate({ to: "/publications" });
-		});
-	}, [setMainButton, router]);
+	setMainButton("Publications", true, () => {
+		router.navigate({ to: "/publications" });
+	});
 
 	// Reset filters
 	const resetFilters = useCallback(() => {
