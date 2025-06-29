@@ -6,7 +6,7 @@ export const getPostingChannels = createServerFn({ method: "GET" })
 	.middleware([authMiddleware])
 	.handler(async ({ context }) => {
 		const prisma = getPrismaClient();
-		const userId = context.user.id.toString();
+		const userId = context.databaseUserId;
 
 		const postingChannels = await prisma.postingChannel.findMany({
 			where: {

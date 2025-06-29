@@ -1,13 +1,4 @@
-import { TweetCard } from "@/components/tweet-card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import type { ScheduledSlotStatus } from "@repo/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import {
 	Calendar,
@@ -19,6 +10,16 @@ import {
 	Trash2,
 } from "lucide-react";
 import { useState } from "react";
+import { TweetCard } from "@/components/tweet-card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface SlotTweet {
 	id: string;
@@ -40,7 +41,7 @@ interface SlotCardProps {
 	id: string;
 	scheduledFor: Date;
 	createdAt: Date;
-	status: "waiting" | "published" | "done";
+	status: ScheduledSlotStatus;
 	scheduledSlotTweets: SlotTweet[];
 	channelName?: string;
 	onDelete?: (id: string) => void;
@@ -118,7 +119,7 @@ export function SlotCard({
 	];
 
 	const canAddMoreTweets =
-		scheduledSlotTweets.length < 5 && status === "waiting";
+		scheduledSlotTweets.length < 5 && status === "WAITING";
 
 	return (
 		<Card
@@ -152,7 +153,7 @@ export function SlotCard({
 						{/* Status and Summary */}
 						<div className="flex flex-wrap items-center gap-2">
 							<Badge
-								variant={status === "waiting" ? "default" : "secondary"}
+								variant={status === "WAITING" ? "default" : "secondary"}
 								className="text-xs capitalize"
 							>
 								{status}
@@ -208,7 +209,7 @@ export function SlotCard({
 										Reshuffle All
 									</DropdownMenuItem>
 								)}
-								{onDelete && status === "waiting" && (
+								{onDelete && status === "WAITING" && (
 									<DropdownMenuItem
 										onClick={() => onDelete(id)}
 										className="gap-2 text-red-600 focus:text-red-600"
@@ -245,7 +246,7 @@ export function SlotCard({
 								Reshuffle
 							</Button>
 						)}
-						{onDelete && status === "waiting" && (
+						{onDelete && status === "WAITING" && (
 							<Button
 								variant="outline"
 								size="sm"
@@ -282,21 +283,21 @@ export function SlotCard({
 										"/placeholder.svg",
 								}))}
 								onDeleteImage={
-									onDeleteImage && status === "waiting"
+									onDeleteImage && status === "WAITING"
 										? (photoId) => onDeleteImage(id, photoId)
 										: undefined
 								}
 								onReshuffleImage={
-									onReshuffleImage && status === "waiting"
+									onReshuffleImage && status === "WAITING"
 										? (photoId) => onReshuffleImage(id, photoId)
 										: undefined
 								}
-								readonly={status !== "waiting"}
+								readonly={status !== "WAITING"}
 							/>
 						))}
 
 						{/* Add tweet button */}
-						{canAddMoreTweets && onAddTweet && status === "waiting" && (
+						{canAddMoreTweets && onAddTweet && status === "WAITING" && (
 							<button
 								type="button"
 								onClick={() => onAddTweet(id)}

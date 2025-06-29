@@ -9,13 +9,13 @@ const getScheduledSlotsSchema = z.object({
 
 const createSlotSchema = z.object({
 	scheduledFor: z.string().datetime(),
-	tweetCount: z.number().min(1).max(5).default(3),
+	tweetCount: z.number().min(1).max(10).default(5),
 	postingChannelId: z.number(),
 });
 
 const updateSlotSchema = z.object({
 	slotId: z.string().uuid(),
-	status: z.enum(["waiting", "published", "done"]).optional(),
+	status: z.enum(["WAITING", "PUBLISHED"]).optional(),
 	postingChannelId: z.number().optional(),
 });
 
@@ -54,7 +54,7 @@ export const getScheduledSlots = createServerFn({ method: "GET" })
 			orderBy: [{ scheduledFor: "asc" }, { createdAt: "desc" }],
 		});
 
-		return { slots };
+		return slots;
 	});
 
 export const createScheduledSlot = createServerFn({ method: "POST" })
@@ -129,7 +129,7 @@ export const createScheduledSlot = createServerFn({ method: "POST" })
 				userId,
 				chatId: postingChannelId,
 				scheduledFor: new Date(scheduledFor),
-				status: "waiting",
+				status: "WAITING",
 			},
 		});
 
@@ -335,7 +335,7 @@ export async function createScheduledSlotForToday(
 			userId,
 			chatId: postingChannelId,
 			scheduledFor: today,
-			status: "waiting",
+			status: "WAITING",
 		},
 		include: {
 			scheduledSlotTweets: {

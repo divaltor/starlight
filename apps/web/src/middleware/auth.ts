@@ -49,8 +49,13 @@ export const authMiddleware = createMiddleware()
 			},
 		});
 
+		// Like impossible to happen because if user is not in the database, they won't be able to use the bot
+		if (!databaseUser) {
+			throw new Error("User not found");
+		}
+
 		return next({
-			context: { user: parsedData.user, databaseUserId: databaseUser?.id },
+			context: { user: parsedData.user, databaseUserId: databaseUser.id },
 		});
 	});
 

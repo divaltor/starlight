@@ -1,19 +1,22 @@
+import type { ScheduledSlotStatus } from "@repo/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import {
+	AlertTriangle,
 	Calendar,
 	CalendarDays,
 	CheckCircle2,
 	Clock,
 	Plus,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SlotCard } from "@/components/slot-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
+import { getPostingChannels } from "@/routes/api/posting-channels";
 import {
 	createScheduledSlot,
 	deleteScheduledSlot,
@@ -43,7 +46,7 @@ interface ScheduledSlot {
 	id: string;
 	scheduledFor: Date;
 	createdAt: Date;
-	status: "waiting" | "published" | "done";
+	status: ScheduledSlotStatus;
 	scheduledSlotTweets: ScheduledSlotTweet[];
 }
 
@@ -80,12 +83,35 @@ function PublicationsPage() {
 		enabled: !!rawInitData,
 	});
 
-	const publications: ScheduledSlot[] = publicationsData?.slots
-		? publicationsData.slots.map((slot: any) => ({
+	const availablePostingChannels = useQuery({
+		queryKey: ["available-posting-channels"],
+		queryFn: async () => {
+			return await getPostingChannels({
+				data: { initData: rawInitData },
+			});
+		},
+		enabled: !!rawInitData,
+	});
+
+	// Set default posting channel when data loads
+	useEffect(() => {
+		if (
+			!selectedPostingChannelId &&
+			availablePostingChannels.data?.postingChannels &&
+			availablePostingChannels.data.postingChannels.length > 0
+		) {
+			setSelectedPostingChannelId(
+				Number(availablePostingChannels.data.postingChannels[0].chat.id),
+			);
+		}
+	}, [availablePostingChannels.data, selectedPostingChannelId]);
+
+	const publications = publicationsData
+		? publicationsData.map((slot) => ({
 				id: slot.id,
 				scheduledFor: new Date(slot.scheduledFor),
 				createdAt: new Date(slot.createdAt),
-				status: slot.status as "waiting" | "published" | "done",
+				status: slot.status,
 				scheduledSlotTweets: slot.scheduledSlotTweets || [],
 			}))
 		: [];
@@ -229,7 +255,7 @@ function PublicationsPage() {
 
 	const canAddMoreImages = (slot: ScheduledSlot) => {
 		const totalPhotos = getAllPhotosFromSlot(slot).length;
-		return totalPhotos < 15 && slot.status === "waiting"; // Allow up to 15 photos per slot
+		return totalPhotos < 15 && slot.status === "WAITING"; // Allow up to 15 photos per slot
 	};
 
 	const organizePublications = (pubs: ScheduledSlot[]): PublicationSections => {
@@ -247,7 +273,7 @@ function PublicationsPage() {
 					pubDate.getDate(),
 				);
 
-				if (pub.status === "published" || pub.status === "done") {
+				if (pub.status === "PUBLISHED") {
 					sections.completed.push(pub);
 				} else if (pubDay.getTime() === today.getTime()) {
 					sections.today.push(pub);
@@ -269,6 +295,26 @@ function PublicationsPage() {
 	};
 
 	const sections = organizePublications(publications);
+
+	const hasPostingChannels =
+		availablePostingChannels.data?.postingChannels &&
+		availablePostingChannels.data.postingChannels.length > 0;
+
+	const renderNoChannelsState = () => (
+		<Card className="border-orange-200 bg-orange-50">
+			<CardContent className="py-12 text-center">
+				<AlertTriangle className="mx-auto mb-4 h-12 w-12 text-orange-500" />
+				<p className="mb-2 text-orange-800 text-lg font-medium">
+					No Posting Channels Available
+				</p>
+				<p className="mb-4 text-orange-700 text-sm">
+					You need to add at least one posting channel before you can create and
+					schedule publications. Please configure your channels using /connect
+					command in chat.
+				</p>
+			</CardContent>
+		</Card>
+	);
 
 	const renderSection = (
 		title: string,
@@ -376,40 +422,50 @@ function PublicationsPage() {
 				</div>
 
 				{/* Chat Selector and Create New Slot Button */}
-				<div className="mb-6 space-y-4 sm:mb-8">
-					<div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-						<div className="flex flex-col gap-2">
-							<label
-								htmlFor="chatSelect"
-								className="font-medium text-gray-700 text-sm"
+				{hasPostingChannels && (
+					<div className="mb-6 space-y-4 sm:mb-8">
+						<div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+							<div className="flex flex-col gap-2">
+								<label
+									htmlFor="chatSelect"
+									className="font-medium text-gray-700 text-sm"
+								>
+									Target Channel:
+								</label>
+								<select
+									id="chatSelect"
+									value={selectedPostingChannelId}
+									onChange={(e) => {
+										setSelectedPostingChannelId(Number(e.target.value));
+									}}
+									className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+								>
+									{availablePostingChannels.data?.postingChannels.map(
+										(channel) => (
+											<option
+												key={channel.chat.id}
+												value={channel.chat.id.toString()}
+											>
+												{channel.chat.title}
+											</option>
+										),
+									)}
+								</select>{" "}
+							</div>
+							<Button
+								onClick={handleCreateNewSlot}
+								disabled={createSlotMutation.isPending}
+								className="gap-2"
+								size="lg"
 							>
-								Target Channel:
-							</label>
-							<select
-								id="chatSelect"
-								value={selectedPostingChannelId}
-								onChange={(e) => {
-									setSelectedPostingChannelId(Number(e.target.value));
-								}}
-								className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-							>
-								<option value="">All Channels</option>
-								<option value="channel-1">Main Channel</option>
-								<option value="channel-2">Secondary Channel</option>
-								<option value="channel-3">Test Channel</option>
-							</select>{" "}
+								<Plus className="h-4 w-4" />
+								{createSlotMutation.isPending
+									? "Creating..."
+									: "Create New Slot"}
+							</Button>
 						</div>
-						<Button
-							onClick={handleCreateNewSlot}
-							disabled={createSlotMutation.isPending}
-							className="gap-2"
-							size="lg"
-						>
-							<Plus className="h-4 w-4" />
-							{createSlotMutation.isPending ? "Creating..." : "Create New Slot"}
-						</Button>
 					</div>
-				</div>
+				)}
 
 				{/* Error State */}
 				{error?.message && (
@@ -433,14 +489,21 @@ function PublicationsPage() {
 				{/* Loading State */}
 				{isLoading && renderLoadingSkeleton()}
 
+				{/* No Channels State */}
+				{!availablePostingChannels.isLoading &&
+					!availablePostingChannels.error &&
+					!hasPostingChannels &&
+					renderNoChannelsState()}
+
 				{/* Empty State */}
 				{!isLoading &&
 					!error &&
+					hasPostingChannels &&
 					publications.length === 0 &&
 					renderEmptyState()}
 
 				{/* Publications Sections */}
-				{!isLoading && publications.length > 0 && (
+				{!isLoading && hasPostingChannels && publications.length > 0 && (
 					<div className="space-y-6 sm:space-y-8">
 						{/* Today's Publications */}
 						{renderSection(

@@ -148,11 +148,11 @@ model PublishedPhoto {
 }
 
 model ScheduledSlot {
-    id           String   @id @default(uuid(7)) @db.Uuid
-    userId       String   @map("user_id") @db.Uuid
-    chatId       BigInt   @map("chat_id")
-    scheduledFor DateTime @map("scheduled_for")
-    status       String   @default("waiting")
+    id           String              @id @default(uuid(7)) @db.Uuid
+    userId       String              @map("user_id") @db.Uuid
+    chatId       BigInt              @map("chat_id")
+    scheduledFor DateTime            @map("scheduled_for")
+    status       ScheduledSlotStatus @default(WAITING)
 
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
@@ -169,6 +169,11 @@ model ScheduledSlot {
     @@index([status])
     @@index([createdAt(sort: Desc)])
     @@map("scheduled_slots")
+}
+
+enum ScheduledSlotStatus {
+    WAITING
+    PUBLISHED
 }
 
 model ScheduledSlotTweet {
