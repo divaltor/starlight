@@ -41,9 +41,13 @@ channelChat.command("connect", async (ctx) => {
 	const chat = ctx.chat;
 
 	const botMember = await ctx.api.getChatMember(chat.id, ctx.me.id);
-
-	if (botMember.status !== "administrator") {
-		const text = fmt`❌ I don't have permission to send messages in channel - ${b}${chat.title}${b}!\n\nPlease add me as an administrator with permissions to send and delete messages, then try again.`;
+	if (
+		botMember.status !== "administrator" ||
+		!botMember.can_post_messages ||
+		!botMember.can_delete_messages ||
+		!botMember.can_edit_messages
+	) {
+		const text = fmt`❌ I don't have required permissions in channel - ${b}${chat.title}${b}!\n\nPlease add me as an administrator with permissions to send, delete and edit messages, then try again.`;
 		await bot.api.sendMessage(ctx.from?.id as number, text.text, {
 			entities: text.entities,
 		});
