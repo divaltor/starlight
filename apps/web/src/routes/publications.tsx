@@ -296,6 +296,7 @@ function PublicationsPage() {
 	const sections = organizePublications(publications);
 
 	const hasPostingChannels =
+		!availablePostingChannels.isLoading &&
 		availablePostingChannels.data?.postingChannels &&
 		availablePostingChannels.data.postingChannels.length > 0;
 
@@ -454,7 +455,9 @@ function PublicationsPage() {
 				{/* No Channels State */}
 				{!availablePostingChannels.isLoading &&
 					!availablePostingChannels.error &&
-					!hasPostingChannels &&
+					availablePostingChannels.data &&
+					(!availablePostingChannels.data.postingChannels ||
+						availablePostingChannels.data.postingChannels.length === 0) &&
 					renderNoChannelsState()}
 
 				{/* Empty State */}
