@@ -114,7 +114,7 @@ export function SlotCard({
 			<CardHeader className="pb-3">
 				<div className="flex items-start justify-between gap-3">
 					<div className="flex flex-col gap-2">
-						{/* Date and Time */}
+						{/* Date and Status */}
 						<div className="flex items-center gap-2">
 							<Badge
 								variant="outline"
@@ -123,16 +123,16 @@ export function SlotCard({
 								<Calendar className="h-3 w-3" />
 								{formatDate(scheduledFor)}
 							</Badge>
-						</div>
-
-						{/* Status and Summary */}
-						<div className="flex flex-wrap items-center gap-2">
 							<Badge
 								variant={status === "WAITING" ? "default" : "secondary"}
 								className="text-xs capitalize"
 							>
 								{status}
 							</Badge>
+						</div>
+
+						{/* Summary */}
+						<div className="flex flex-wrap items-center gap-2">
 							{channelName && (
 								<Badge variant="outline" className="text-xs">
 									📢 {channelName}
