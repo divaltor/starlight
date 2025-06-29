@@ -300,19 +300,21 @@ function PublicationsPage() {
 		availablePostingChannels.data.postingChannels.length > 0;
 
 	const renderNoChannelsState = () => (
-		<Card className="border-orange-200 bg-orange-50">
-			<CardContent className="py-12 text-center">
-				<AlertTriangle className="mx-auto mb-4 h-12 w-12 text-orange-500" />
-				<p className="mb-2 text-orange-800 text-lg font-medium">
-					No Posting Channels Available
-				</p>
-				<p className="mb-4 text-orange-700 text-sm">
-					You need to add at least one posting channel before you can create and
-					schedule publications. Please configure your channels using /connect
-					command in chat.
-				</p>
-			</CardContent>
-		</Card>
+		<div className="flex min-h-[50vh] items-center justify-center">
+			<Card className="border-orange-200 bg-orange-50 max-w-md mx-auto">
+				<CardContent className="py-12 text-center">
+					<AlertTriangle className="mx-auto mb-4 h-12 w-12 text-orange-500" />
+					<p className="mb-2 text-orange-800 text-lg font-medium">
+						No Posting Channels Available
+					</p>
+					<p className="mb-4 text-orange-700 text-sm">
+						You need to add at least one posting channel before you can create
+						and schedule publications. Please configure your channels using
+						/connect command in chat.
+					</p>
+				</CardContent>
+			</Card>
+		</div>
 	);
 
 	const renderSection = (
