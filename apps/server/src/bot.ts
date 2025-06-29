@@ -1,13 +1,12 @@
+import { autoRetry } from "@grammyjs/auto-retry";
+import { env } from "@repo/utils";
+import { autoQuote } from "@roziscoding/grammy-autoquote";
 import { Bot, session } from "grammy";
-
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
 import { attachChat, attachUser } from "@/middlewares/session";
 import { RedisAdapter, redis } from "@/storage";
 import type { Context } from "@/types";
-import { autoRetry } from "@grammyjs/auto-retry";
-import { env } from "@repo/utils";
-import { autoQuote } from "@roziscoding/grammy-autoquote";
 
 const bot = new Bot<Context>(env.BOT_TOKEN);
 

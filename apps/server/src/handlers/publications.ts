@@ -1,8 +1,9 @@
+import { b, fmt } from "@grammyjs/parse-mode";
+import { env } from "@repo/utils";
+import { Composer, InlineKeyboard } from "grammy";
 import { bot } from "@/bot";
 import { prisma } from "@/storage";
 import type { Context } from "@/types";
-import { env } from "@repo/utils";
-import { Composer, InlineKeyboard } from "grammy";
 
 const composer = new Composer<Context>();
 
@@ -16,7 +17,8 @@ const keyboard = new InlineKeyboard().webApp(
 
 privateChat.command("connect", async (ctx) => {
 	await ctx.reply(
-		"Please, to connect a channel add me as an administrator to a group or channel and write that command there.\n\n*Required permissions* - send and delete messages.",
+		fmt`Please, to connect a channel add me as an administrator to a group or channel and write that command there.\n\n${b}Required permissions${b} - send and delete messages.`
+			.text,
 	);
 });
 
@@ -43,7 +45,8 @@ channelChat.command("connect", async (ctx) => {
 	if (botMember.status !== "administrator") {
 		await bot.api.sendMessage(
 			ctx.from?.id as number,
-			`❌ I don't have permission to send messages in channel - *${chat.title}*!\n\nPlease add me as an administrator with permissions to send and delete messages, then try again.`,
+			fmt`❌ I don't have permission to send messages in channel - ${b}${chat.title}${b}!\n\nPlease add me as an administrator with permissions to send and delete messages, then try again.`
+				.text,
 		);
 		return;
 	}
@@ -59,7 +62,8 @@ channelChat.command("connect", async (ctx) => {
 		if (existingChannel.isActive) {
 			await bot.api.sendMessage(
 				ctx.from?.id as number,
-				`✅ Channel "${chat.title}" is already connected!\n\nYou can manage your publications using the web app.`,
+				fmt`✅ Channel ${b}${chat.title}${b} is already connected!\n\nYou can manage your publications using the web app.`
+					.text,
 				{ reply_markup: keyboard },
 			);
 		} else {
@@ -75,7 +79,8 @@ channelChat.command("connect", async (ctx) => {
 
 			await bot.api.sendMessage(
 				ctx.from?.id as number,
-				`✅ Channel *${chat.title}* was reconnected!\n\nYou can manage your publications using the web app.`,
+				fmt`✅ Channel ${b}${chat.title}${b} was reconnected!\n\nYou can manage your publications using the web app.`
+					.text,
 				{ reply_markup: keyboard },
 			);
 		}
@@ -101,7 +106,8 @@ channelChat.command("connect", async (ctx) => {
 
 	await bot.api.sendMessage(
 		ctx.from?.id as number,
-		`🎉 Channel *${chat.title}* connected! Open the publications manager to start scheduling posts:`,
+		fmt`🎉 Channel ${b}${chat.title}${b} connected! Open the publications manager to start scheduling posts:`
+			.text,
 		{ reply_markup: keyboard },
 	);
 });

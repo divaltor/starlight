@@ -10,14 +10,14 @@
 		"test:watch": "bun test --watch"
 	},
 	"dependencies": {
-		"@repo/crypto": "workspace:*",
-		"@repo/utils": "workspace:*",
 		"@axiomhq/pino": "^1.3.1",
 		"@grammyjs/auto-retry": "^2.0.2",
 		"@grammyjs/hydrate": "^1.4.1",
-		"@grammyjs/parse-mode": "^2.1.2",
+		"@grammyjs/parse-mode": "^2.2.0",
 		"@grammyjs/router": "^2.0.0",
 		"@grammyjs/runner": "^2.0.3",
+		"@repo/crypto": "workspace:*",
+		"@repo/utils": "workspace:*",
 		"@roziscoding/grammy-autoquote": "^2.0.9",
 		"@the-convocation/twitter-scraper": "catalog:",
 		"bullmq": "^5.53.0",
