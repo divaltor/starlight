@@ -39,8 +39,26 @@ channelChat.command("connect", async (ctx) => {
 	}
 
 	const chat = ctx.chat;
+	const creator = await ctx.api.getChatAdministrators(chat.id);
+
+	const creatorId = creator.find((admin) => admin.status === "creator")?.user
+		.id;
+
+	// It's literally impossible to happen because admins can add other bots as admins only and we can't get wrong information from that API
+	if (!creatorId) {
+		ctx.logger.warn(
+			{
+				chatId: chat.id,
+				chatTitle: chat.title,
+			},
+			"Can't find creator in channel %s",
+			chat.title,
+		);
+		return;
+	}
 
 	const botMember = await ctx.api.getChatMember(chat.id, ctx.me.id);
+
 	if (
 		botMember.status !== "administrator" ||
 		!botMember.can_post_messages ||
@@ -48,7 +66,7 @@ channelChat.command("connect", async (ctx) => {
 		!botMember.can_edit_messages
 	) {
 		const text = fmt`❌ I don't have required permissions in channel - ${b}${chat.title}${b}!\n\nPlease add me as an administrator with permissions to send, delete and edit messages, then try again.`;
-		await bot.api.sendMessage(ctx.from?.id as number, text.text, {
+		await bot.api.sendMessage(creatorId, text.text, {
 			entities: text.entities,
 		});
 		return;
@@ -64,7 +82,7 @@ channelChat.command("connect", async (ctx) => {
 	if (existingChannel) {
 		if (existingChannel.isActive) {
 			const text = fmt`✅ Channel ${b}${chat.title}${b} is already connected!\n\nYou can manage your publications using the web app.`;
-			await bot.api.sendMessage(ctx.from?.id as number, text.text, {
+			await bot.api.sendMessage(creatorId, text.text, {
 				entities: text.entities,
 				reply_markup: keyboard,
 			});
@@ -80,7 +98,7 @@ channelChat.command("connect", async (ctx) => {
 				data: { isActive: true },
 			});
 
-			await bot.api.sendMessage(ctx.from?.id as number, text.text, {
+			await bot.api.sendMessage(creatorId, text.text, {
 				entities: text.entities,
 				reply_markup: keyboard,
 			});
@@ -106,7 +124,7 @@ channelChat.command("connect", async (ctx) => {
 	);
 
 	const text = fmt`🎉 Channel ${b}${chat.title}${b} connected! Open the publications manager to start scheduling posts:`;
-	await bot.api.sendMessage(ctx.from?.id as number, text.text, {
+	await bot.api.sendMessage(creatorId, text.text, {
 		entities: text.entities,
 		reply_markup: keyboard,
 	});
