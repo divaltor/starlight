@@ -127,6 +127,9 @@ function PublicationsPage() {
 			// Calculate next available slot time (9 AM - 11 PM)
 			const nextSlotTime = getNextAvailableSlotTime();
 
+			console.log("nextSlotTime", nextSlotTime);
+			console.log("selectedPostingChannelId", selectedPostingChannelId);
+
 			return await createScheduledSlot({
 				data: {
 					initData: rawInitData,
