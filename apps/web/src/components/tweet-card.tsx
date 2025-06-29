@@ -1,5 +1,7 @@
 "use client";
 
+import { Calendar, MessageSquare, MoreVertical, User } from "lucide-react";
+import { useState } from "react";
 import { ImageCard } from "@/components/image-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,8 +12,6 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Calendar, MessageSquare, MoreVertical, User } from "lucide-react";
-import { useState } from "react";
 
 interface TweetPhoto {
 	id: string;
@@ -79,10 +79,6 @@ export function TweetCard({
 									</span>
 								</div>
 							)}
-							<Badge variant="outline" className="text-xs">
-								<MessageSquare className="mr-1 h-3 w-3" />
-								Tweet
-							</Badge>
 						</div>
 
 						{/* Tweet Text */}
