@@ -1,15 +1,9 @@
 "use client";
 
-import { Calendar, MoreVertical } from "lucide-react";
+import { Calendar, Trash2 } from "lucide-react";
 import { ImageCard } from "@/components/image-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 interface TweetPhoto {
 	id: string;
@@ -65,25 +59,14 @@ export function TweetCard({
 							)}
 						</div>
 						{!readonly && (
-							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
-									<Button
-										variant="ghost"
-										size="sm"
-										className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center"
-									>
-										<MoreVertical className="h-3 w-3" />
-									</Button>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end" className="w-40">
-									<DropdownMenuItem
-										onClick={() => console.log("Remove tweet from slot")}
-										className="gap-2 text-red-600 focus:text-red-600"
-									>
-										Remove Tweet
-									</DropdownMenuItem>
-								</DropdownMenuContent>
-							</DropdownMenu>
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={() => console.log("Remove tweet from slot")}
+								className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-red-600 hover:text-red-700 hover:bg-red-50"
+							>
+								<Trash2 className="h-3 w-3" />
+							</Button>
 						)}
 					</div>
 
@@ -145,27 +128,16 @@ export function TweetCard({
 						</div>
 					</div>
 
-					{/* Three dots menu - properly centered */}
+					{/* Trash button */}
 					{!readonly && (
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button
-									variant="ghost"
-									size="sm"
-									className="h-7 w-7 p-0 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100"
-								>
-									<MoreVertical className="h-4 w-4" />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-40">
-								<DropdownMenuItem
-									onClick={() => console.log("Remove tweet from slot")}
-									className="gap-2 text-red-600 focus:text-red-600"
-								>
-									Remove Tweet
-								</DropdownMenuItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={() => console.log("Remove tweet from slot")}
+							className="h-7 w-7 p-0 flex-shrink-0 flex items-center justify-center rounded-full text-red-600 hover:text-red-700 hover:bg-red-50"
+						>
+							<Trash2 className="h-4 w-4" />
+						</Button>
 					)}
 				</div>
 			</CardHeader>
