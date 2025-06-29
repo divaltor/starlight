@@ -374,7 +374,7 @@ function PublicationsPage() {
 					onClick={handleCreateNewSlot}
 					disabled={createSlotMutation.isPending}
 				>
-					<Plus className="mr-2 h-4 w-4" />
+					<Calendar className="mr-2 h-4 w-4" />
 					{createSlotMutation.isPending ? "Creating..." : "Create First Slot"}
 				</Button>
 			</CardContent>
@@ -395,7 +395,7 @@ function PublicationsPage() {
 				</div>
 
 				{/* Chat Selector and Create New Slot Button */}
-				{hasPostingChannels && (
+				{hasPostingChannels && publications.length > 0 && (
 					<div className="mb-6 space-y-4 sm:mb-8">
 						<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 							<div className="flex flex-col gap-2">
