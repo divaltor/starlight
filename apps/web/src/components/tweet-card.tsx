@@ -1,7 +1,7 @@
 "use client";
 
 import { Calendar, MessageSquare, MoreVertical, User } from "lucide-react";
-import { useState } from "react";
+import React from "react";
 import { ImageCard } from "@/components/image-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,8 +39,6 @@ export function TweetCard({
 	readonly = false,
 	className = "",
 }: TweetCardProps) {
-	const [isPressed, setIsPressed] = useState(false);
-
 	const formatDate = (date: Date) => {
 		return new Intl.DateTimeFormat("en-US", {
 			month: "short",
@@ -50,16 +48,7 @@ export function TweetCard({
 	};
 
 	return (
-		<Card
-			className={`overflow-hidden transition-transform duration-150 ${
-				isPressed ? "scale-98" : "scale-100"
-			} ${className}`}
-			onTouchStart={() => setIsPressed(true)}
-			onTouchEnd={() => setIsPressed(false)}
-			onMouseDown={() => setIsPressed(true)}
-			onMouseUp={() => setIsPressed(false)}
-			onMouseLeave={() => setIsPressed(false)}
-		>
+		<Card className={`overflow-hidden ${className}`}>
 			<CardHeader className="pb-3">
 				<div className="flex items-start justify-between gap-3">
 					<div className="flex flex-1 flex-col gap-2">
