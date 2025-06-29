@@ -45,7 +45,7 @@ interface SlotCardProps {
 	onReshuffle?: (id: string) => void;
 	onAddTweet?: (id: string) => void;
 	onDeleteImage?: (id: string, photoId: string) => void;
-	onReshuffleImage?: (id: string, photoId: string) => void;
+	onShuffleTweet?: (id: string, tweetId: string) => void;
 	className?: string;
 }
 
@@ -60,7 +60,7 @@ export function SlotCard({
 	onReshuffle,
 	onAddTweet,
 	onDeleteImage,
-	onReshuffleImage,
+	onShuffleTweet,
 	className = "",
 }: SlotCardProps) {
 	const formatDate = (date: Date) => {
@@ -181,7 +181,7 @@ export function SlotCard({
 										className="gap-2"
 									>
 										<Shuffle className="h-4 w-4" />
-										Reshuffle All
+										Reshuffle
 									</DropdownMenuItem>
 								)}
 								{onDelete && status === "WAITING" && (
@@ -190,7 +190,7 @@ export function SlotCard({
 										className="gap-2 text-red-600 focus:text-red-600"
 									>
 										<Trash2 className="h-4 w-4" />
-										Delete Slot
+										Delete
 									</DropdownMenuItem>
 								)}
 							</DropdownMenuContent>
@@ -262,9 +262,9 @@ export function SlotCard({
 											? (photoId) => onDeleteImage(id, photoId)
 											: undefined
 									}
-									onReshuffleImage={
-										onReshuffleImage && status === "WAITING"
-											? (photoId) => onReshuffleImage(id, photoId)
+									onShuffleTweet={
+										onShuffleTweet && status === "WAITING"
+											? () => onShuffleTweet(id, slotTweet.id)
 											: undefined
 									}
 									readonly={status !== "WAITING"}
@@ -294,9 +294,9 @@ export function SlotCard({
 											? (photoId) => onDeleteImage(id, photoId)
 											: undefined
 									}
-									onReshuffleImage={
-										onReshuffleImage && status === "WAITING"
-											? (photoId) => onReshuffleImage(id, photoId)
+									onShuffleTweet={
+										onShuffleTweet && status === "WAITING"
+											? () => onShuffleTweet(id, slotTweet.id)
 											: undefined
 									}
 									readonly={status !== "WAITING"}

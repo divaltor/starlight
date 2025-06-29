@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Trash2 } from "lucide-react";
+import { Calendar, Shuffle, Trash2 } from "lucide-react";
 import { ImageCard } from "@/components/image-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -15,7 +15,7 @@ interface TweetCardProps {
 	createdAt?: Date;
 	photos: TweetPhoto[];
 	onDeleteImage?: (photoId: string) => void;
-	onReshuffleImage?: (photoId: string) => void;
+	onShuffleTweet?: () => void;
 	readonly?: boolean;
 	compact?: boolean;
 	className?: string;
@@ -26,7 +26,7 @@ export function TweetCard({
 	createdAt,
 	photos,
 	onDeleteImage,
-	onReshuffleImage,
+	onShuffleTweet,
 	readonly = false,
 	compact = false,
 	className = "",
@@ -59,14 +59,26 @@ export function TweetCard({
 							)}
 						</div>
 						{!readonly && (
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => console.log("Remove tweet from slot")}
-								className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-red-600 hover:text-red-700 hover:bg-red-50"
-							>
-								<Trash2 className="h-3 w-3" />
-							</Button>
+							<div className="flex items-center gap-1">
+								{onShuffleTweet && (
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={onShuffleTweet}
+										className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+									>
+										<Shuffle className="h-3 w-3" />
+									</Button>
+								)}
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => console.log("Remove tweet from slot")}
+									className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-red-600 hover:text-red-700 hover:bg-red-50"
+								>
+									<Trash2 className="h-3 w-3" />
+								</Button>
+							</div>
 						)}
 					</div>
 
@@ -83,11 +95,6 @@ export function TweetCard({
 									onDelete={
 										onDeleteImage && !readonly
 											? () => onDeleteImage(photo.id)
-											: () => {}
-									}
-									onReshuffle={
-										onReshuffleImage && !readonly
-											? () => onReshuffleImage(photo.id)
 											: () => {}
 									}
 								/>
@@ -128,16 +135,28 @@ export function TweetCard({
 						</div>
 					</div>
 
-					{/* Trash button */}
+					{/* Action buttons */}
 					{!readonly && (
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => console.log("Remove tweet from slot")}
-							className="h-7 w-7 p-0 flex-shrink-0 flex items-center justify-center rounded-full text-red-600 hover:text-red-700 hover:bg-red-50"
-						>
-							<Trash2 className="h-4 w-4" />
-						</Button>
+						<div className="flex items-center gap-1">
+							{onShuffleTweet && (
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={onShuffleTweet}
+									className="h-7 w-7 p-0 flex-shrink-0 flex items-center justify-center rounded-full text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+								>
+									<Shuffle className="h-4 w-4" />
+								</Button>
+							)}
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={() => console.log("Remove tweet from slot")}
+								className="h-7 w-7 p-0 flex-shrink-0 flex items-center justify-center rounded-full text-red-600 hover:text-red-700 hover:bg-red-50"
+							>
+								<Trash2 className="h-4 w-4" />
+							</Button>
+						</div>
 					)}
 				</div>
 			</CardHeader>
@@ -156,11 +175,6 @@ export function TweetCard({
 								onDelete={
 									onDeleteImage && !readonly
 										? () => onDeleteImage(photo.id)
-										: () => {}
-								}
-								onReshuffle={
-									onReshuffleImage && !readonly
-										? () => onReshuffleImage(photo.id)
 										: () => {}
 								}
 							/>

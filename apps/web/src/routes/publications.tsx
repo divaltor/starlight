@@ -27,6 +27,7 @@ import {
 	createScheduledSlot,
 	deleteScheduledSlot,
 	getScheduledSlots,
+	shuffleTweet,
 } from "@/routes/api/scheduled-slots";
 import { deletePhoto } from "@/routes/api/scheduled-slots/photos";
 
@@ -199,9 +200,32 @@ function PublicationsPage() {
 		deletePhotoMutation.mutate({ slotId, photoId });
 	};
 
-	const handleReshuffleImage = (slotId: string, photoId: string) => {
-		// TODO: Implement backend API for reshuffling specific images in slots
-		console.log("Reshuffling photo:", photoId, "in slot:", slotId);
+	const shuffleTweetMutation = useMutation({
+		mutationFn: async ({
+			slotId,
+			tweetId,
+		}: {
+			slotId: string;
+			tweetId: string;
+		}) => {
+			return await shuffleTweet({
+				headers: { Authorization: rawInitData ?? "" },
+				data: {
+					slotId,
+					tweetId,
+					postingChannelId: selectedPostingChannelId,
+				},
+			});
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({
+				queryKey: ["scheduled-slots", selectedPostingChannelId],
+			});
+		},
+	});
+
+	const handleShuffleTweet = (slotId: string, tweetId: string) => {
+		shuffleTweetMutation.mutate({ slotId, tweetId });
 	};
 
 	const handleAddImage = (slotId: string) => {
@@ -353,7 +377,7 @@ function PublicationsPage() {
 							onReshuffle={handleReshuffleSlot}
 							onAddTweet={canAddMoreImages(slot) ? handleAddImage : undefined}
 							onDeleteImage={handleDeleteImage}
-							onReshuffleImage={handleReshuffleImage}
+							onShuffleTweet={handleShuffleTweet}
 						/>
 					))}
 				</div>

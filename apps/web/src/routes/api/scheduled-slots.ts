@@ -24,6 +24,12 @@ const deleteSlotSchema = z.object({
 	postingChannelId: z.number().optional(),
 });
 
+const shuffleTweetSchema = z.object({
+	slotId: z.string().uuid(),
+	tweetId: z.string().uuid(),
+	postingChannelId: z.number().optional(),
+});
+
 export const getScheduledSlots = createServerFn({ method: "GET" })
 	.middleware([authMiddleware])
 	.validator(getScheduledSlotsSchema)
@@ -250,6 +256,23 @@ export const deleteScheduledSlot = createServerFn({ method: "POST" })
 		return { success: true };
 	});
 
+export const shuffleTweet = createServerFn({ method: "POST" })
+	.middleware([authMiddleware])
+	.validator(shuffleTweetSchema)
+	.handler(async ({ data, context }) => {
+		const { slotId, tweetId, postingChannelId } = data;
+		const userId = context.databaseUserId;
+
+		const updatedSlot = await shuffleSlotTweet(
+			slotId,
+			tweetId,
+			userId,
+			postingChannelId,
+		);
+
+		return { slot: updatedSlot };
+	});
+
 // Helper functions for slot management
 export async function getAvailablePhotosForUser(
 	userId: string,
@@ -352,8 +375,9 @@ export async function createScheduledSlotForToday(
 	});
 }
 
-export async function reshuffleSlotPhotos(
+export async function shuffleSlotTweet(
 	slotId: string,
+	tweetId: string,
 	userId: string,
 	postingChannelId?: number,
 ) {
@@ -369,7 +393,12 @@ export async function reshuffleSlotPhotos(
 		include: {
 			scheduledSlotTweets: {
 				include: {
-					scheduledSlotPhotos: true,
+					scheduledSlotPhotos: {
+						include: {
+							photo: true,
+						},
+					},
+					tweet: true,
 				},
 			},
 		},
@@ -379,26 +408,99 @@ export async function reshuffleSlotPhotos(
 		throw new Error("Slot not found");
 	}
 
-	// Get current photo count
-	const currentPhotoCount = slot.scheduledSlotTweets.reduce(
-		(total: number, tweet: any) => total + tweet.scheduledSlotPhotos.length,
-		0,
-	);
-
-	// Get new random photos
-	const availablePhotos = await getAvailablePhotosForUser(
-		userId,
-		postingChannelId,
-		currentPhotoCount * 2,
-	);
-
-	if (availablePhotos.length === 0) {
-		throw new Error("No available photos for reshuffling");
+	// Find the specific tweet in the slot
+	const slotTweet = slot.scheduledSlotTweets.find((st) => st.id === tweetId);
+	if (!slotTweet) {
+		throw new Error("Tweet not found in slot");
 	}
 
-	// This would require additional logic to manage the relationship
-	// between scheduled slots and photos since we don't have a direct
-	// many-to-many relationship in the current schema
+	// Get currently used tweet IDs in this slot to avoid duplicates
+	const currentTweetIds = slot.scheduledSlotTweets.map((st) => st.tweet.id);
 
-	return slot;
+	// Get available tweets with unpublished photos (excluding currently used tweets)
+	const availableTweets = await prisma.tweet.findMany({
+		where: {
+			userId,
+			id: { notIn: currentTweetIds }, // Exclude currently used tweets
+			photos: {
+				some: {
+					deletedAt: null,
+					s3Path: { not: null },
+					publishedPhotos: postingChannelId
+						? {
+								none: { chatId: postingChannelId },
+							}
+						: { none: {} },
+					scheduledSlotPhotos: { none: {} },
+				},
+			},
+		},
+		include: {
+			photos: {
+				where: {
+					deletedAt: null,
+					s3Path: { not: null },
+					publishedPhotos: postingChannelId
+						? {
+								none: { chatId: postingChannelId },
+							}
+						: { none: {} },
+					scheduledSlotPhotos: { none: {} },
+				},
+			},
+		},
+		orderBy: { createdAt: "desc" },
+		take: 20, // Get multiple options for random selection
+	});
+
+	if (availableTweets.length === 0) {
+		throw new Error("No available tweets for shuffling");
+	}
+
+	// Select a random tweet
+	const newTweet =
+		availableTweets[Math.floor(Math.random() * availableTweets.length)];
+
+	// Remove existing photos for this slot tweet
+	await prisma.scheduledSlotPhoto.deleteMany({
+		where: {
+			scheduledSlotTweetId: tweetId,
+		},
+	});
+
+	// Update the slot tweet to use the new tweet
+	await prisma.scheduledSlotTweet.update({
+		where: { id: tweetId },
+		data: {
+			tweetId: newTweet.id,
+		},
+	});
+
+	// Add photos from the new tweet
+	await prisma.scheduledSlotPhoto.createMany({
+		data: newTweet.photos.map((photo) => ({
+			scheduledSlotTweetId: tweetId,
+			photoId: photo.id,
+			userId,
+		})),
+	});
+
+	// Return updated slot
+	const updatedSlot = await prisma.scheduledSlot.findUnique({
+		where: { id: slotId },
+		include: {
+			scheduledSlotTweets: {
+				include: {
+					tweet: true,
+					scheduledSlotPhotos: {
+						include: {
+							photo: true,
+						},
+					},
+				},
+			},
+		},
+	});
+
+	return updatedSlot;
 }
