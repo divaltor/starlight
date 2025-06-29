@@ -16,10 +16,10 @@ const keyboard = new InlineKeyboard().webApp(
 );
 
 privateChat.command("connect", async (ctx) => {
-	await ctx.reply(
-		fmt`Please, to connect a channel add me as an administrator to a group or channel and write that command there.\n\n${b}Required permissions${b} - send and delete messages.`
-			.text,
-	);
+	const text = fmt`Please, to connect a channel add me as an administrator to a group or channel and write that command there.\n\n${b}Required permissions${b} - send and delete messages.`;
+	await ctx.reply(text.text, {
+		entities: text.entities,
+	});
 });
 
 privateChat.command("disconnect", async (ctx) => {
@@ -43,11 +43,10 @@ channelChat.command("connect", async (ctx) => {
 	const botMember = await ctx.api.getChatMember(chat.id, ctx.me.id);
 
 	if (botMember.status !== "administrator") {
-		await bot.api.sendMessage(
-			ctx.from?.id as number,
-			fmt`❌ I don't have permission to send messages in channel - ${b}${chat.title}${b}!\n\nPlease add me as an administrator with permissions to send and delete messages, then try again.`
-				.text,
-		);
+		const text = fmt`❌ I don't have permission to send messages in channel - ${b}${chat.title}${b}!\n\nPlease add me as an administrator with permissions to send and delete messages, then try again.`;
+		await bot.api.sendMessage(ctx.from?.id as number, text.text, {
+			entities: text.entities,
+		});
 		return;
 	}
 
@@ -60,13 +59,13 @@ channelChat.command("connect", async (ctx) => {
 
 	if (existingChannel) {
 		if (existingChannel.isActive) {
-			await bot.api.sendMessage(
-				ctx.from?.id as number,
-				fmt`✅ Channel ${b}${chat.title}${b} is already connected!\n\nYou can manage your publications using the web app.`
-					.text,
-				{ reply_markup: keyboard },
-			);
+			const text = fmt`✅ Channel ${b}${chat.title}${b} is already connected!\n\nYou can manage your publications using the web app.`;
+			await bot.api.sendMessage(ctx.from?.id as number, text.text, {
+				entities: text.entities,
+				reply_markup: keyboard,
+			});
 		} else {
+			const text = fmt`✅ Channel ${b}${chat.title}${b} was reconnected!\n\nYou can manage your publications using the web app.`;
 			await prisma.postingChannel.update({
 				where: {
 					userId_chatId: {
@@ -77,12 +76,10 @@ channelChat.command("connect", async (ctx) => {
 				data: { isActive: true },
 			});
 
-			await bot.api.sendMessage(
-				ctx.from?.id as number,
-				fmt`✅ Channel ${b}${chat.title}${b} was reconnected!\n\nYou can manage your publications using the web app.`
-					.text,
-				{ reply_markup: keyboard },
-			);
+			await bot.api.sendMessage(ctx.from?.id as number, text.text, {
+				entities: text.entities,
+				reply_markup: keyboard,
+			});
 		}
 		return;
 	}
@@ -104,12 +101,11 @@ channelChat.command("connect", async (ctx) => {
 		chat.title,
 	);
 
-	await bot.api.sendMessage(
-		ctx.from?.id as number,
-		fmt`🎉 Channel ${b}${chat.title}${b} connected! Open the publications manager to start scheduling posts:`
-			.text,
-		{ reply_markup: keyboard },
-	);
+	const text = fmt`🎉 Channel ${b}${chat.title}${b} connected! Open the publications manager to start scheduling posts:`;
+	await bot.api.sendMessage(ctx.from?.id as number, text.text, {
+		entities: text.entities,
+		reply_markup: keyboard,
+	});
 });
 
 export default composer;
