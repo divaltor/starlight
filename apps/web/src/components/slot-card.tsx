@@ -31,8 +31,7 @@ interface SlotTweet {
 		id: string;
 		photo: {
 			id: string;
-			s3Path: string | null;
-			originalUrl: string;
+			s3Url: string;
 		};
 	}>;
 }
@@ -277,10 +276,7 @@ export function SlotCard({
 								}
 								photos={slotTweet.scheduledSlotPhotos.map((sp) => ({
 									id: sp.photo.id,
-									url:
-										sp.photo.s3Path ||
-										sp.photo.originalUrl ||
-										"/placeholder.svg",
+									url: sp.photo.s3Url,
 								}))}
 								onDeleteImage={
 									onDeleteImage && status === "WAITING"

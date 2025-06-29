@@ -34,8 +34,7 @@ interface ScheduledSlotPhoto {
 	id: string;
 	photo: {
 		id: string;
-		s3Path: string | null;
-		originalUrl: string;
+		s3Url: string;
 	};
 }
 
@@ -259,7 +258,7 @@ function PublicationsPage() {
 		return slot.scheduledSlotTweets.flatMap((tweet) =>
 			tweet.scheduledSlotPhotos.map((sp) => ({
 				id: sp.photo.id,
-				url: sp.photo.s3Path || sp.photo.originalUrl || "/placeholder.svg",
+				url: sp.photo.s3Url,
 				tweetId: tweet.tweet.id,
 				author: tweet.tweet.tweetData?.username || "unknown",
 			})),
