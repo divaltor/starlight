@@ -121,6 +121,10 @@ function PublicationsPage() {
 			availablePostingChannels.data?.postingChannels &&
 			availablePostingChannels.data.postingChannels.length > 0
 		) {
+			console.log(
+				"availablePostingChannels.data.postingChannels",
+				availablePostingChannels.data.postingChannels,
+			);
 			setSelectedPostingChannelId(
 				Number(availablePostingChannels.data.postingChannels[0].chat.id),
 			);
@@ -150,15 +154,11 @@ function PublicationsPage() {
 		mutationFn: async () => {
 			const nextSlotTime = getNextAvailableSlotTime();
 
-			console.log("nextSlotTime", nextSlotTime);
-			console.log("selectedPostingChannelId", selectedPostingChannelId);
-
 			return await createScheduledSlot({
 				data: {
 					initData: rawInitData,
 					postingChannelId: selectedPostingChannelId!,
 					scheduledFor: nextSlotTime.toISOString(),
-					tweetCount: 3,
 				},
 			});
 		},
