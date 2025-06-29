@@ -57,6 +57,23 @@ channelChat.command("connect", async (ctx) => {
 		return;
 	}
 
+	const user = await prisma.user.findUnique({
+		where: {
+			telegramId: creatorId,
+		},
+	});
+
+	if (!user) {
+		ctx.logger.warn(
+			{
+				chatId: chat.id,
+				chatTitle: chat.title,
+			},
+			"Can't find user in database",
+		);
+		return;
+	}
+
 	const botMember = await ctx.api.getChatMember(chat.id, ctx.me.id);
 
 	if (
@@ -74,7 +91,7 @@ channelChat.command("connect", async (ctx) => {
 
 	const existingChannel = await prisma.postingChannel.findFirst({
 		where: {
-			userId: ctx.user?.id as string,
+			userId: user.id,
 			chatId: chat.id,
 		},
 	});
@@ -91,7 +108,7 @@ channelChat.command("connect", async (ctx) => {
 			await prisma.postingChannel.update({
 				where: {
 					userId_chatId: {
-						userId: ctx.user?.id as string,
+						userId: user.id,
 						chatId: chat.id,
 					},
 				},
@@ -108,18 +125,18 @@ channelChat.command("connect", async (ctx) => {
 
 	await prisma.postingChannel.create({
 		data: {
-			userId: ctx.user?.id as string,
+			userId: user.id,
 			chatId: chat.id,
 		},
 	});
 
 	ctx.logger.info(
 		{
-			userId: ctx.user?.id,
+			userId: user.id,
 			chatId: chat.id,
 		},
 		"Created new posting channel connection for user %s in chat %s",
-		ctx.user?.id,
+		user.id,
 		chat.title,
 	);
 
