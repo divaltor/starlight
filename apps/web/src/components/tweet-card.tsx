@@ -20,7 +20,6 @@ interface TweetPhoto {
 
 interface TweetCardProps {
 	author: string;
-	text?: string;
 	createdAt?: Date;
 	photos: TweetPhoto[];
 	onDeleteImage?: (photoId: string) => void;
@@ -31,7 +30,6 @@ interface TweetCardProps {
 
 export function TweetCard({
 	author,
-	text,
 	createdAt,
 	photos,
 	onDeleteImage,
@@ -55,7 +53,6 @@ export function TweetCard({
 						{/* Tweet Info */}
 						<div className="flex flex-wrap items-center gap-2">
 							<div className="flex items-center gap-1">
-								<User className="h-3 w-3 text-gray-500" />
 								<span className="font-medium text-gray-700 text-sm">
 									@{author}
 								</span>
@@ -68,18 +65,6 @@ export function TweetCard({
 									</span>
 								</div>
 							)}
-						</div>
-
-						{/* Tweet Text */}
-						{text && (
-							<p className="line-clamp-2 text-gray-600 text-sm">{text}</p>
-						)}
-
-						{/* Photo Count */}
-						<div className="flex items-center gap-2">
-							<span className="text-gray-500 text-xs">
-								{photos.length} photo{photos.length !== 1 ? "s" : ""}
-							</span>
 						</div>
 					</div>
 

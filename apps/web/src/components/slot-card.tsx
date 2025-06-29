@@ -131,10 +131,6 @@ export function SlotCard({
 								<Calendar className="h-3 w-3" />
 								{formatDate(scheduledFor)}
 							</Badge>
-							<Badge variant="secondary" className="gap-1 text-xs">
-								<Clock className="h-3 w-3" />
-								{formatTime(scheduledFor)}
-							</Badge>
 						</div>
 
 						{/* Status and Summary */}
@@ -256,7 +252,6 @@ export function SlotCard({
 							<TweetCard
 								key={slotTweet.id}
 								author={slotTweet.tweet.tweetData?.username || "unknown"}
-								text={slotTweet.tweet.tweetData?.text}
 								createdAt={
 									slotTweet.tweet.tweetData?.timeParsed
 										? new Date(slotTweet.tweet.tweetData.timeParsed)
