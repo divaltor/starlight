@@ -1,5 +1,3 @@
-"use server";
-
 import { CursorPagination } from "@repo/crypto";
 import { env, getPrismaClient } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";

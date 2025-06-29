@@ -1,4 +1,4 @@
-import { redirect, useRouter } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import { useRawInitData } from "@telegram-apps/sdk-react";
 import { createContext, useContext, useEffect, useMemo } from "react";
 import { useTelegramButtons } from "@/hooks/useTelegramButtons";
@@ -9,7 +9,7 @@ interface TelegramButtonsContextValue {
 	resetButtons: () => void;
 	getButtonState: (buttonType: keyof RouteButtonConfig) => ButtonState;
 	setMainButton: (text: string, visible?: boolean, action?: () => void) => void;
-	rawInitData: string;
+	rawInitData: string | undefined;
 }
 
 const TelegramButtonsContext =
@@ -71,7 +71,10 @@ export function TelegramButtonsProvider({
 		buttonManager.updateConfig(currentConfig);
 	}, [currentConfig, buttonManager]);
 
-	const rawInitData = useRawInitData();
+	let rawInitData: string | undefined;
+	try {
+		rawInitData = useRawInitData();
+	} catch (error) {}
 
 	// Helper function for main button
 	const setMainButton = (text: string, visible = true, action?: () => void) => {
@@ -96,10 +99,6 @@ export function TelegramButtonsProvider({
 		setMainButton,
 		rawInitData,
 	};
-
-	if (!rawInitData) {
-		throw redirect({ href: "https://youtu.be/dQw4w9WgXcQ", throw: true });
-	}
 
 	return (
 		<TelegramButtonsContext.Provider value={contextValue}>

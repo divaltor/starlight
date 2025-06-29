@@ -1,5 +1,3 @@
-"use server";
-
 import { CookieEncryption } from "@repo/crypto";
 import { env } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";

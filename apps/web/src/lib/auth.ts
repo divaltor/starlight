@@ -1,5 +1,3 @@
-"use server";
-
 import { env } from "@repo/utils";
 import { parse, validate } from "@telegram-apps/init-data-node";
 

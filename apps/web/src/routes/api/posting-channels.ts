@@ -1,5 +1,3 @@
-"use server";
-
 import { getPrismaClient } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/middleware/auth";

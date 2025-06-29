@@ -654,13 +654,7 @@ function TwitterArtViewer() {
 											? "Today"
 											: dateFilter === "week"
 												? "This Week"
-												: dateFilter === "month"
-													? "This Month"
-													: dateFilter === "3months"
-														? "Last 3 Months"
-														: dateFilter === "6months"
-															? "Last 6 Months"
-															: "This Year"}
+												: "This Year"}
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent className="w-56">
@@ -671,9 +665,6 @@ function TwitterArtViewer() {
 										{ value: "all", label: "All Time" },
 										{ value: "today", label: "Today" },
 										{ value: "week", label: "This Week" },
-										{ value: "month", label: "This Month" },
-										{ value: "3months", label: "Last 3 Months" },
-										{ value: "6months", label: "Last 6 Months" },
 										{ value: "year", label: "This Year" },
 									].map((option) => (
 										<DropdownMenuItem

@@ -15,7 +15,7 @@ export interface AuthContext {
 }
 
 const authDataSchema = z.object({
-	initData: z.string(),
+	initData: z.string().optional(),
 });
 
 export const authMiddleware = createMiddleware()
