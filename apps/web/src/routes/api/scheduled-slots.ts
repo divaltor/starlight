@@ -1,7 +1,7 @@
 import { getPrismaClient, type Prisma } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { authMiddleware, userMiddleware } from "@/middleware/auth";
+import { authMiddleware } from "@/middleware/auth";
 
 const getScheduledSlotsSchema = z.object({
 	postingChannelId: z.number().optional(),
@@ -25,7 +25,7 @@ const deleteSlotSchema = z.object({
 });
 
 export const getScheduledSlots = createServerFn({ method: "GET" })
-	.middleware([authMiddleware, userMiddleware])
+	.middleware([authMiddleware])
 	.validator(getScheduledSlotsSchema)
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
@@ -58,7 +58,7 @@ export const getScheduledSlots = createServerFn({ method: "GET" })
 	});
 
 export const createScheduledSlot = createServerFn({ method: "POST" })
-	.middleware([authMiddleware, userMiddleware])
+	.middleware([authMiddleware])
 	.validator(createSlotSchema)
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
@@ -176,7 +176,7 @@ export const createScheduledSlot = createServerFn({ method: "POST" })
 	});
 
 export const updateScheduledSlot = createServerFn({ method: "POST" })
-	.middleware([authMiddleware, userMiddleware])
+	.middleware([authMiddleware])
 	.validator(updateSlotSchema)
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
@@ -220,7 +220,7 @@ export const updateScheduledSlot = createServerFn({ method: "POST" })
 	});
 
 export const deleteScheduledSlot = createServerFn({ method: "POST" })
-	.middleware([authMiddleware, userMiddleware])
+	.middleware([authMiddleware])
 	.validator(deleteSlotSchema)
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();

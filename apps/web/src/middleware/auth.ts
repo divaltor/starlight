@@ -40,29 +40,22 @@ export const authMiddleware = createMiddleware()
 			throw new Error("Invalid init data: No user found");
 		}
 
-		return next({ context: { user: parsedData.user } });
-	});
-
-export const userMiddleware = createMiddleware()
-	.validator(z.object({ userId: z.number() }))
-	.server(async ({ next, data }) => {
 		const prisma = getPrismaClient();
-		const user = await prisma.user.findUnique({
-			where: { telegramId: data.userId },
+
+		const databaseUser = await prisma.user.findUnique({
+			where: { telegramId: parsedData.user.id },
 			select: {
 				id: true,
 			},
 		});
 
-		if (!user) {
-			throw new Error("User not found");
-		}
-
-		return next({ context: { databaseUserId: user.id } });
+		return next({
+			context: { user: parsedData.user, databaseUserId: databaseUser?.id },
+		});
 	});
 
 export const optionalAuthMiddleware = createMiddleware()
-	.validator(z.object({ initData: z.string().optional() }))
+	.validator(authDataSchema)
 	.server(async ({ next, data }) => {
 		let authContext: AuthContext | null = null;
 
