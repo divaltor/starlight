@@ -1,9 +1,7 @@
 "use client";
 
-import { Calendar, MessageSquare, MoreVertical, User } from "lucide-react";
-import React from "react";
+import { Calendar, MoreVertical } from "lucide-react";
 import { ImageCard } from "@/components/image-card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
@@ -25,6 +23,7 @@ interface TweetCardProps {
 	onDeleteImage?: (photoId: string) => void;
 	onReshuffleImage?: (photoId: string) => void;
 	readonly?: boolean;
+	compact?: boolean;
 	className?: string;
 }
 
@@ -35,6 +34,7 @@ export function TweetCard({
 	onDeleteImage,
 	onReshuffleImage,
 	readonly = false,
+	compact = false,
 	className = "",
 }: TweetCardProps) {
 	const formatDate = (date: Date) => {
@@ -44,6 +44,84 @@ export function TweetCard({
 			year: "numeric",
 		}).format(date);
 	};
+
+	if (compact) {
+		return (
+			<Card className={`overflow-hidden h-full ${className}`}>
+				<CardContent className="p-3">
+					{/* Compact header */}
+					<div className="flex items-center justify-between gap-2 mb-3">
+						<div className="flex items-center gap-1 min-w-0">
+							<span className="font-medium text-gray-700 text-xs truncate">
+								@{author}
+							</span>
+						</div>
+						{!readonly && (
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										variant="ghost"
+										size="sm"
+										className="h-6 w-6 p-0 flex-shrink-0"
+									>
+										<MoreVertical className="h-3 w-3" />
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end" className="w-40">
+									<DropdownMenuItem
+										onClick={() => console.log("Remove tweet from slot")}
+										className="gap-2 text-red-600 focus:text-red-600"
+									>
+										Remove Tweet
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
+						)}
+					</div>
+
+					{/* Compact images grid */}
+					{photos.length > 0 && (
+						<div className="grid grid-cols-2 gap-1">
+							{photos.slice(0, 4).map((photo, index) => (
+								<ImageCard
+									key={photo.id}
+									src={photo.url}
+									alt={`Tweet image ${index + 1}`}
+									index={index}
+									canDelete={!readonly && photos.length > 1}
+									onDelete={
+										onDeleteImage && !readonly
+											? () => onDeleteImage(photo.id)
+											: () => {}
+									}
+									onReshuffle={
+										onReshuffleImage && !readonly
+											? () => onReshuffleImage(photo.id)
+											: () => {}
+									}
+								/>
+							))}
+							{photos.length > 4 && (
+								<div className="flex items-center justify-center bg-gray-100 rounded text-gray-500 text-xs">
+									+{photos.length - 4}
+								</div>
+							)}
+						</div>
+					)}
+
+					{/* Compact footer */}
+					{createdAt && (
+						<div className="flex items-center gap-1 mt-2">
+							<Calendar className="h-3 w-3 text-gray-400" />
+							<span className="text-gray-400 text-xs">
+								{formatDate(createdAt)}
+							</span>
+						</div>
+					)}
+				</CardContent>
+			</Card>
+		);
+	}
 
 	return (
 		<Card className={`overflow-hidden ${className}`}>

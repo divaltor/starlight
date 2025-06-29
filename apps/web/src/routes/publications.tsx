@@ -68,8 +68,7 @@ function PublicationsPage() {
 	>(undefined); // Default posting channel ID
 	const queryClient = useQueryClient();
 
-	const { rawInitData, setMainButton } = useTelegramContext();
-	const router = useRouter();
+	const { rawInitData } = useTelegramContext();
 
 	const {
 		data: publicationsData,
@@ -98,8 +97,6 @@ function PublicationsPage() {
 		},
 		enabled: !!rawInitData,
 	});
-
-	setMainButton("Gallery", true, () => router.navigate({ to: "/app" }));
 
 	// Set default posting channel when data loads
 	useEffect(() => {

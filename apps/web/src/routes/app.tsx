@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useSignal, viewport } from "@telegram-apps/sdk-react";
 import { format } from "date-fns";
 import {
@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTweets } from "@/hooks/useTweets";
-import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
 import type { DateFilter } from "@/types/dates";
 
 function TwitterArtViewer() {
@@ -37,8 +36,6 @@ function TwitterArtViewer() {
 	const [isFilterActive, setIsFilterActive] = useState(false);
 	const [isMasonryReady, setIsMasonryReady] = useState(false);
 	const masonryGridRef = useRef<HTMLDivElement>(null);
-	const router = useRouter();
-	const { setMainButton } = useTelegramContext();
 
 	const viewportHeight = useSignal(viewport.height);
 	const viewportWidth = useSignal(viewport.width);
@@ -68,10 +65,6 @@ function TwitterArtViewer() {
 	useEffect(() => {
 		setIsFilterActive(dateFilter !== "all");
 	}, [dateFilter]);
-
-	setMainButton("Publications", true, () => {
-		router.navigate({ to: "/publications" });
-	});
 
 	// Reset filters
 	const resetFilters = useCallback(() => {

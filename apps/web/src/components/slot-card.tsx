@@ -2,7 +2,6 @@ import type { ScheduledSlotStatus } from "@repo/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import {
 	Calendar,
-	Clock,
 	MessageSquare,
 	MoreVertical,
 	Plus,
@@ -78,13 +77,6 @@ export function SlotCard({
 		return new Intl.DateTimeFormat("en-US", {
 			month: "short",
 			day: "numeric",
-		}).format(date);
-	};
-
-	const formatTime = (date: Date) => {
-		return new Intl.DateTimeFormat("en-US", {
-			hour: "2-digit",
-			minute: "2-digit",
 		}).format(date);
 	};
 
@@ -247,40 +239,92 @@ export function SlotCard({
 			<CardContent className="pt-0">
 				{/* Tweets */}
 				{scheduledSlotTweets.length > 0 ? (
-					<div className="space-y-3">
-						{scheduledSlotTweets.map((slotTweet) => (
-							<TweetCard
-								key={slotTweet.id}
-								author={slotTweet.tweet.tweetData?.username || "unknown"}
-								createdAt={
-									slotTweet.tweet.tweetData?.timeParsed
-										? new Date(slotTweet.tweet.tweetData.timeParsed)
-										: undefined
-								}
-								photos={slotTweet.scheduledSlotPhotos.map((sp) => ({
-									id: sp.photo.id,
-									url: sp.photo.s3Url,
-								}))}
-								onDeleteImage={
-									onDeleteImage && status === "WAITING"
-										? (photoId) => onDeleteImage(id, photoId)
-										: undefined
-								}
-								onReshuffleImage={
-									onReshuffleImage && status === "WAITING"
-										? (photoId) => onReshuffleImage(id, photoId)
-										: undefined
-								}
-								readonly={status !== "WAITING"}
-							/>
-						))}
+					<div className="space-y-3 md:space-y-0">
+						{/* Mobile: Stack vertically */}
+						<div className="space-y-3 md:hidden">
+							{scheduledSlotTweets.map((slotTweet) => (
+								<TweetCard
+									key={slotTweet.id}
+									author={slotTweet.tweet.tweetData?.username || "unknown"}
+									createdAt={
+										slotTweet.tweet.tweetData?.timeParsed
+											? new Date(slotTweet.tweet.tweetData.timeParsed)
+											: undefined
+									}
+									photos={slotTweet.scheduledSlotPhotos
+										.filter((sp) => sp.photo.s3Url)
+										.map((sp) => ({
+											id: sp.photo.id,
+											url: sp.photo.s3Url,
+										}))}
+									onDeleteImage={
+										onDeleteImage && status === "WAITING"
+											? (photoId) => onDeleteImage(id, photoId)
+											: undefined
+									}
+									onReshuffleImage={
+										onReshuffleImage && status === "WAITING"
+											? (photoId) => onReshuffleImage(id, photoId)
+											: undefined
+									}
+									readonly={status !== "WAITING"}
+								/>
+							))}
+						</div>
 
-						{/* Add tweet button */}
+						{/* Desktop: Grid layout */}
+						<div className="hidden md:grid md:grid-cols-2 md:gap-3 lg:grid-cols-3 xl:grid-cols-4">
+							{scheduledSlotTweets.map((slotTweet) => (
+								<TweetCard
+									key={slotTweet.id}
+									author={slotTweet.tweet.tweetData?.username || "unknown"}
+									createdAt={
+										slotTweet.tweet.tweetData?.timeParsed
+											? new Date(slotTweet.tweet.tweetData.timeParsed)
+											: undefined
+									}
+									photos={slotTweet.scheduledSlotPhotos
+										.filter((sp) => sp.photo.s3Url)
+										.map((sp) => ({
+											id: sp.photo.id,
+											url: sp.photo.s3Url,
+										}))}
+									onDeleteImage={
+										onDeleteImage && status === "WAITING"
+											? (photoId) => onDeleteImage(id, photoId)
+											: undefined
+									}
+									onReshuffleImage={
+										onReshuffleImage && status === "WAITING"
+											? (photoId) => onReshuffleImage(id, photoId)
+											: undefined
+									}
+									readonly={status !== "WAITING"}
+									compact={true}
+								/>
+							))}
+
+							{/* Add tweet button for desktop grid */}
+							{canAddMoreTweets && onAddTweet && status === "WAITING" && (
+								<button
+									type="button"
+									onClick={() => onAddTweet(id)}
+									className="flex h-full min-h-[120px] items-center justify-center rounded-lg border-2 border-gray-300 border-dashed bg-gray-50 transition-transform hover:border-gray-400 hover:bg-gray-100 active:scale-95"
+								>
+									<div className="flex flex-col items-center gap-2 text-gray-500">
+										<Plus className="h-5 w-5" />
+										<span className="text-center text-sm">Add Tweet</span>
+									</div>
+								</button>
+							)}
+						</div>
+
+						{/* Add tweet button for mobile */}
 						{canAddMoreTweets && onAddTweet && status === "WAITING" && (
 							<button
 								type="button"
 								onClick={() => onAddTweet(id)}
-								className="flex w-full items-center justify-center rounded-lg border-2 border-gray-300 border-dashed bg-gray-50 py-4 transition-transform hover:border-gray-400 hover:bg-gray-100 active:scale-95"
+								className="flex w-full items-center justify-center rounded-lg border-2 border-gray-300 border-dashed bg-gray-50 py-4 transition-transform hover:border-gray-400 hover:bg-gray-100 active:scale-95 md:hidden"
 							>
 								<div className="flex items-center gap-2 text-gray-500">
 									<Plus className="h-5 w-5" />
