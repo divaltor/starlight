@@ -397,7 +397,7 @@ function PublicationsPage() {
 				{/* Chat Selector and Create New Slot Button */}
 				{hasPostingChannels && (
 					<div className="mb-6 space-y-4 sm:mb-8">
-						<div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+						<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 							<div className="flex flex-col gap-2">
 								<label className="font-medium text-gray-700 text-sm">
 									Target Channel:
@@ -408,7 +408,7 @@ function PublicationsPage() {
 										setSelectedPostingChannelId(Number(value));
 									}}
 								>
-									<SelectTrigger className="w-[280px]">
+									<SelectTrigger className="w-full lg:w-[280px]">
 										<SelectValue placeholder="Select a channel" />
 									</SelectTrigger>
 									<SelectContent>
@@ -425,17 +425,19 @@ function PublicationsPage() {
 									</SelectContent>
 								</Select>
 							</div>
-							<Button
-								onClick={handleCreateNewSlot}
-								disabled={createSlotMutation.isPending}
-								className="gap-2"
-								size="lg"
-							>
-								<Plus className="h-4 w-4" />
-								{createSlotMutation.isPending
-									? "Creating..."
-									: "Create New Slot"}
-							</Button>
+							<div className="flex justify-center lg:justify-end">
+								<Button
+									onClick={handleCreateNewSlot}
+									disabled={createSlotMutation.isPending}
+									className="gap-2 w-[70%] lg:w-auto"
+									size="lg"
+								>
+									<Plus className="h-4 w-4" />
+									{createSlotMutation.isPending
+										? "Creating..."
+										: "Create New Slot"}
+								</Button>
+							</div>
 						</div>
 					</div>
 				)}
