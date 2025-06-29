@@ -1,6 +1,7 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,57 +27,138 @@ export const Route = createFileRoute("/settings")({
 
 function RouteComponent() {
 	const [newCookies, setNewCookies] = useState("");
-	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [cookiesStored, setCookiesStored] = useState(false);
 	const [showCookieInput, setShowCookieInput] = useState(false);
-	const [twitterId, setTwitterId] = useState<string | null>(null);
-	const [isLoading, setIsLoading] = useState(true);
 
-	const { rawInitData, updateButtons } = useTelegramContext();
+	const { rawInitData } = useTelegramContext();
+	const queryClient = useQueryClient();
 
-	updateButtons({
-		mainButton: {
-			state: "hidden",
+	// Query for cookie status with caching and background validation
+	const {
+		data: cookieStatus,
+		isLoading,
+		error: cookieError,
+		refetch: refetchCookieStatus,
+	} = useQuery({
+		queryKey: ["cookie-status"],
+		queryFn: async () => {
+			return await verifyCookies({
+				headers: { Authorization: rawInitData ?? "" },
+			});
+		},
+		enabled: !!rawInitData,
+		staleTime: 10 * 60 * 1000, // 10 minutes - consider data fresh
+		gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache
+		refetchOnWindowFocus: true, // Validate when user returns to page
+		refetchInterval: 5 * 60 * 1000, // Background validation every 5 minutes
+		retry: 2,
+	});
+
+	// Derive state from query data
+	const cookiesStored = cookieStatus?.hasValidCookies ?? false;
+	const twitterId = cookieStatus?.twitterId ?? null;
+
+	// Show cookie input if no cookies stored or user explicitly wants to update
+	const shouldShowCookieInput = !cookiesStored || showCookieInput;
+
+	// Mutation for saving cookies with optimistic updates
+	const saveCookiesMutation = useMutation({
+		mutationFn: async (cookiesData: { cookies: string }) => {
+			return await saveCookies({
+				headers: { Authorization: rawInitData ?? "" },
+				data: cookiesData,
+			});
+		},
+		onMutate: async () => {
+			// Cancel any outgoing refetches
+			await queryClient.cancelQueries({ queryKey: ["cookie-status"] });
+
+			// Return context for rollback
+			const previousStatus = queryClient.getQueryData(["cookie-status"]);
+			return { previousStatus };
+		},
+		onSuccess: async (result, variables, context) => {
+			if (result.error) {
+				setError(result.error);
+				return;
+			}
+
+			// Verify the cookies were saved correctly
+			const verifyResult = await verifyCookies({
+				headers: { Authorization: rawInitData ?? "" },
+			});
+
+			// Update cache with fresh data
+			queryClient.setQueryData(["cookie-status"], verifyResult);
+
+			if (verifyResult.hasValidCookies) {
+				setShowCookieInput(false);
+				setNewCookies("");
+				setError(null);
+			}
+		},
+		onError: (error, variables, context) => {
+			// Rollback on error
+			if (context?.previousStatus) {
+				queryClient.setQueryData(["cookie-status"], context.previousStatus);
+			}
+			setError(
+				"An error occurred while saving your cookies. Please try again.",
+			);
+		},
+		onSettled: () => {
+			// Always refetch to ensure consistency
+			queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
 		},
 	});
 
-	// Verify cookies on page load
-	useEffect(() => {
-		const checkCookieStatus = async () => {
-			try {
-				const result = await verifyCookies({
-					headers: { Authorization: rawInitData ?? "" },
-				});
+	// Mutation for deleting cookies with optimistic updates
+	const deleteCookiesMutation = useMutation({
+		mutationFn: async () => {
+			return await deleteCookies({
+				headers: { Authorization: rawInitData ?? "" },
+			});
+		},
+		onMutate: async () => {
+			// Cancel any outgoing refetches
+			await queryClient.cancelQueries({ queryKey: ["cookie-status"] });
 
-				if (result.hasValidCookies && result.twitterId) {
-					setCookiesStored(true);
-					setTwitterId(result.twitterId);
-					setShowCookieInput(false);
-				} else {
-					setCookiesStored(false);
-					setTwitterId(null);
-					setShowCookieInput(true);
-				}
-			} catch (error) {
-				console.error("Error checking cookie status:", error);
-				setCookiesStored(false);
-				setTwitterId(null);
+			// Optimistically update to show no cookies
+			const previousStatus = queryClient.getQueryData(["cookie-status"]);
+			queryClient.setQueryData(["cookie-status"], {
+				hasValidCookies: false,
+				twitterId: null,
+			});
+
+			return { previousStatus };
+		},
+		onSuccess: (result, variables, context) => {
+			if (result.success) {
 				setShowCookieInput(true);
-			} finally {
-				setIsLoading(false);
+				setError(null);
+			} else {
+				// Rollback on server error
+				if (context?.previousStatus) {
+					queryClient.setQueryData(["cookie-status"], context.previousStatus);
+				}
+				setError("Failed to delete cookies. Please try again.");
 			}
-		};
-
-		checkCookieStatus();
-	}, [rawInitData]);
-
-	// Back button is now handled globally by TelegramButtonsProvider
-	// No need for manual button setup here
+		},
+		onError: (error, variables, context) => {
+			// Rollback on error
+			if (context?.previousStatus) {
+				queryClient.setQueryData(["cookie-status"], context.previousStatus);
+			}
+			setError("An error occurred while deleting cookies. Please try again.");
+		},
+		onSettled: () => {
+			// Always refetch to ensure consistency
+			queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
+		},
+	});
 
 	const handleSaveCookies = async (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
-		setIsSubmitting(true);
 		setError(null);
 
 		try {
@@ -107,63 +189,22 @@ function RouteComponent() {
 			// Convert cookies to base64 for transmission
 			const cookiesBase64 = btoa(newCookies);
 
-			// Call the save cookies API with proper authorization
-			const result = await saveCookies({
-				headers: { Authorization: rawInitData ?? "" },
-				data: {
-					cookies: cookiesBase64,
-				},
-			});
-
-			if (result.error) {
-				setError(result.error);
-				return;
-			}
-
-			// Success - verify cookies were saved by checking server status
-			const verifyResult = await verifyCookies({
-				headers: { Authorization: rawInitData ?? "" },
-			});
-			if (verifyResult.hasValidCookies && verifyResult.twitterId) {
-				setCookiesStored(true);
-				setShowCookieInput(false);
-				setNewCookies("");
-				setTwitterId(verifyResult.twitterId);
-			}
+			// Execute mutation
+			saveCookiesMutation.mutate({ cookies: cookiesBase64 });
 		} catch (error) {
-			console.error("Error submitting cookies:", error);
+			console.error("Error processing cookies:", error);
 			setError(
-				"An error occurred while saving your cookies. Please try again.",
+				"An error occurred while processing your cookies. Please try again.",
 			);
-		} finally {
-			setIsSubmitting(false);
 		}
 	};
 
 	const handleDeleteCookies = async () => {
-		try {
-			setIsSubmitting(true);
-
-			const result = await deleteCookies({
-				headers: { Authorization: rawInitData ?? "" },
-			});
-
-			if (result.success) {
-				setCookiesStored(false);
-				setTwitterId(null);
-				setShowCookieInput(true);
-			} else {
-				setError("Failed to delete cookies. Please try again.");
-			}
-		} catch (error) {
-			console.error("Error deleting cookies:", error);
-			setError("An error occurred while deleting cookies. Please try again.");
-		} finally {
-			setIsSubmitting(false);
-		}
+		deleteCookiesMutation.mutate();
 	};
 
-	if (isLoading) {
+	// Show skeleton only on initial load, not on subsequent visits due to caching
+	if (isLoading && !cookieStatus) {
 		return (
 			<main className="container mx-auto max-w-2xl px-4 py-10">
 				<div className="mb-8 flex items-center justify-between">
@@ -194,6 +235,37 @@ function RouteComponent() {
 			</main>
 		);
 	}
+
+	// Show error state if query failed
+	if (cookieError && !cookieStatus) {
+		return (
+			<main className="container mx-auto max-w-2xl px-4 py-10">
+				<div className="mb-8 flex items-center justify-between">
+					<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
+				</div>
+				<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
+					<CardContent className="py-8">
+						<Alert variant="destructive">
+							<AlertCircle className="h-4 w-4" />
+							<AlertTitle>Failed to load settings</AlertTitle>
+							<div className="mt-2">
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => refetchCookieStatus()}
+								>
+									Retry
+								</Button>
+							</div>
+						</Alert>
+					</CardContent>
+				</Card>
+			</main>
+		);
+	}
+
+	const isSubmitting =
+		saveCookiesMutation.isPending || deleteCookiesMutation.isPending;
 
 	return (
 		<main className="container mx-auto max-w-2xl px-4 py-10">
@@ -231,7 +303,7 @@ function RouteComponent() {
 
 					{/* Cookie Management Section */}
 					<div className="space-y-4">
-						{cookiesStored && !showCookieInput ? (
+						{cookiesStored && !shouldShowCookieInput ? (
 							<Alert>
 								<AlertTitle className="flex w-full items-center justify-between">
 									<span className="flex items-center gap-2">
@@ -285,8 +357,21 @@ function RouteComponent() {
 
 									<div className="flex gap-2">
 										<Button type="submit" size="sm" disabled={isSubmitting}>
-											{isSubmitting ? "Connecting..." : "Connect Account"}
+											{saveCookiesMutation.isPending
+												? "Connecting..."
+												: "Connect Account"}
 										</Button>
+										{cookiesStored && (
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												onClick={() => setShowCookieInput(false)}
+												disabled={isSubmitting}
+											>
+												Cancel
+											</Button>
+										)}
 									</div>
 								</form>
 							</div>
