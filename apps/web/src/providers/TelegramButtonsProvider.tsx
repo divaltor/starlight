@@ -1,4 +1,4 @@
-import { useRouter } from "@tanstack/react-router";
+import { useCanGoBack, useRouter } from "@tanstack/react-router";
 import { useRawInitData } from "@telegram-apps/sdk-react";
 import { createContext, useContext, useEffect, useMemo } from "react";
 import { useTelegramButtons } from "@/hooks/useTelegramButtons";
@@ -33,12 +33,10 @@ export function TelegramButtonsProvider({
 	children: React.ReactNode;
 }) {
 	const router = useRouter();
-	const history = router.history;
+	const canGoBack = useCanGoBack();
 
-	// Simple configuration based on router history and always-visible settings
+	// Simple configuration using TanStack Router's built-in navigation state
 	const currentConfig = useMemo(() => {
-		const canGoBack = history.length > 1;
-
 		return {
 			// Settings button always visible
 			settingsButton: {
@@ -48,18 +46,21 @@ export function TelegramButtonsProvider({
 					payload: "/settings",
 				},
 			},
-			// Back button visible when there's history to go back to
+			// Back button visible when router can go back
 			backButton: canGoBack
 				? {
 						state: "visible" as const,
 						action: {
 							type: "callback" as const,
-							payload: () => history.back(),
+							payload: () => {
+								// Use router's built-in back navigation
+								router.history.back();
+							},
 						},
 					}
 				: undefined,
 		};
-	}, [history]);
+	}, [canGoBack, router]);
 
 	const buttonManager = useTelegramButtons(currentConfig, {
 		autoCleanup: true,
