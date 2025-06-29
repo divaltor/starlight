@@ -367,9 +367,16 @@ function PublicationsPage() {
 			<CardContent className="py-12 text-center">
 				<Calendar className="mx-auto mb-4 h-12 w-12 text-gray-400" />
 				<p className="mb-2 text-gray-500 text-lg">No scheduled publications</p>
-				<p className="text-gray-400 text-sm">
+				<p className="mb-4 text-gray-400 text-sm">
 					Create your first scheduled slot to get started
 				</p>
+				<Button
+					onClick={handleCreateNewSlot}
+					disabled={createSlotMutation.isPending}
+				>
+					<Plus className="mr-2 h-4 w-4" />
+					{createSlotMutation.isPending ? "Creating..." : "Create First Slot"}
+				</Button>
 			</CardContent>
 		</Card>
 	);
@@ -387,8 +394,8 @@ function PublicationsPage() {
 					</p>
 				</div>
 
-				{/* Chat Selector and Create New Slot Button - Show when there are publications */}
-				{hasPostingChannels && publications.length > 0 && (
+				{/* Chat Selector and Create New Slot Button */}
+				{hasPostingChannels && (
 					<div className="mb-6 space-y-4 sm:mb-8">
 						<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 							<div className="flex flex-col gap-2">
@@ -432,21 +439,6 @@ function PublicationsPage() {
 								</Button>
 							</div>
 						</div>
-					</div>
-				)}
-
-				{/* Simple Create Button - Show when there are no publications */}
-				{hasPostingChannels && publications.length === 0 && (
-					<div className="mb-6 flex justify-center sm:mb-8">
-						<Button
-							onClick={handleCreateNewSlot}
-							disabled={createSlotMutation.isPending}
-							className="gap-2"
-							size="lg"
-						>
-							<Calendar className="h-4 w-4" />
-							{createSlotMutation.isPending ? "Creating..." : "Create New Slot"}
-						</Button>
 					</div>
 				)}
 
