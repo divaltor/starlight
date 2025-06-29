@@ -432,13 +432,13 @@ function PublicationsPage() {
 								<Button
 									onClick={handleCreateNewSlot}
 									disabled={createSlotMutation.isPending}
-									className="gap-2 w-[70%] lg:w-auto"
+									className="gap-2 w-[50%] lg:w-auto"
 									size="lg"
 								>
 									<Plus className="h-4 w-4" />
 									{createSlotMutation.isPending
 										? "Creating..."
-										: "Create New Slot"}
+										: "Create new slot"}
 								</Button>
 							</div>
 						</div>
