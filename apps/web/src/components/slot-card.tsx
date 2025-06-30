@@ -66,6 +66,7 @@ export function SlotCard({
 	className = "",
 }: SlotCardProps) {
 	const [isMasonryReady, setIsMasonryReady] = useState(false);
+	const [isResizing, setIsResizing] = useState(false);
 	const [isImageLoading, setIsImageLoading] = useState<{
 		[key: string]: boolean;
 	}>({});
@@ -159,64 +160,77 @@ export function SlotCard({
 		}
 
 		const items = Array.from(grid.children) as HTMLElement[];
-		if (items.length === 0) return;
-
-		// Get grid gap and calculate number of columns based on viewport width
-		// Using consistent gap-4 (16px) to match Tailwind CSS class
-		let columns = 1;
-		const gap = 16; // gap-4 = 1rem = 16px (consistent across all breakpoints)
-		const width = window.innerWidth;
-
-		if (width >= 1536) {
-			columns = 6; // 2xl:grid-cols-6
-		} else if (width >= 1280) {
-			columns = 5; // xl:grid-cols-5
-		} else if (width >= 1024) {
-			columns = 4; // lg:grid-cols-4
-		} else if (width >= 768) {
-			columns = 3; // md:grid-cols-3
-		} else if (width >= 640) {
-			columns = 2; // sm:grid-cols-2
+		if (items.length === 0) {
+			setIsMasonryReady(true);
+			return;
 		}
 
-		// Calculate column width
-		const gridWidth = grid.offsetWidth;
-		const columnWidth = (gridWidth - gap * (columns - 1)) / columns;
+		// Use requestAnimationFrame for smoother layout
+		requestAnimationFrame(() => {
+			// Get grid gap and calculate number of columns based on viewport width
+			// Using consistent gap-4 (16px) to match Tailwind CSS class
+			let columns = 1;
+			const gap = 16; // gap-4 = 1rem = 16px (consistent across all breakpoints)
+			const width = window.innerWidth;
 
-		// Initialize column heights array
-		const columnHeights = new Array(columns).fill(0);
+			if (width >= 1536) {
+				columns = 6; // 2xl:grid-cols-6
+			} else if (width >= 1280) {
+				columns = 5; // xl:grid-cols-5
+			} else if (width >= 1024) {
+				columns = 4; // lg:grid-cols-4
+			} else if (width >= 768) {
+				columns = 3; // md:grid-cols-3
+			} else if (width >= 640) {
+				columns = 2; // sm:grid-cols-2
+			}
 
-		// Position each item
-		items.forEach((item) => {
-			// Find the shortest column
-			const shortestColumnIndex = columnHeights.indexOf(
-				Math.min(...columnHeights),
-			);
+			// Calculate column width
+			const gridWidth = grid.offsetWidth;
+			const columnWidth = (gridWidth - gap * (columns - 1)) / columns;
 
-			// Calculate position
-			const x = shortestColumnIndex * (columnWidth + gap);
-			const y = columnHeights[shortestColumnIndex];
+			// Initialize column heights array
+			const columnHeights = new Array(columns).fill(0);
 
-			// Position the item
-			item.style.left = `${x}px`;
-			item.style.top = `${y}px`;
-			item.style.width = `${columnWidth}px`;
+			// Set grid positioning context
+			grid.style.position = "relative";
 
-			// Update column height
-			columnHeights[shortestColumnIndex] += item.offsetHeight + gap;
+			// Position each item
+			items.forEach((item) => {
+				// Find the shortest column
+				const shortestColumnIndex = columnHeights.indexOf(
+					Math.min(...columnHeights),
+				);
+
+				// Calculate position
+				const x = shortestColumnIndex * (columnWidth + gap);
+				const y = columnHeights[shortestColumnIndex];
+
+				// Position the item
+				item.style.position = "absolute";
+				item.style.left = `${x}px`;
+				item.style.top = `${y}px`;
+				item.style.width = `${columnWidth}px`;
+
+				// Update column height
+				columnHeights[shortestColumnIndex] += item.offsetHeight + gap;
+			});
+
+			// Set container height
+			const maxHeight = Math.max(...columnHeights);
+			grid.style.height = `${maxHeight}px`;
+
+			// Show the grid after layout is complete
+			setIsMasonryReady(true);
 		});
-
-		// Set container height
-		const maxHeight = Math.max(...columnHeights);
-		grid.style.height = `${maxHeight}px`;
-
-		// Show the grid after layout is complete
-		setIsMasonryReady(true);
 	}, []);
 
 	// Trigger layout on data changes and window resize
 	useEffect(() => {
-		setIsMasonryReady(false);
+		// Only hide content if this is the initial load or data changed
+		if (tweetsForDisplay.length > 0) {
+			setIsMasonryReady(false);
+		}
 		const timeoutId = setTimeout(layoutMasonry, 100);
 		return () => clearTimeout(timeoutId);
 	}, [layoutMasonry, tweetsForDisplay.length]);
@@ -225,12 +239,14 @@ export function SlotCard({
 		let resizeTimeout: NodeJS.Timeout;
 
 		const handleResize = () => {
-			setIsMasonryReady(false);
+			setIsResizing(true);
+			// Don't hide the grid during resize, just mark as resizing
 			// Debounce resize to avoid excessive calculations
 			clearTimeout(resizeTimeout);
 			resizeTimeout = setTimeout(() => {
 				layoutMasonry();
-			}, 100);
+				setIsResizing(false);
+			}, 150);
 		};
 
 		window.addEventListener("resize", handleResize);
@@ -647,9 +663,9 @@ export function SlotCard({
 				{tweetsForDisplay.length > 0 ? (
 					<div
 						ref={masonryGridRef}
-						className={`masonry-grid w-full overflow-hidden grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
+						className={`masonry-grid w-full overflow-hidden grid-cols-1 gap-4 transition-opacity duration-300 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
 							isMasonryReady ? "opacity-100" : "opacity-0"
-						}`}
+						} ${isResizing ? "pointer-events-none" : ""}`}
 					>
 						{tweetsForDisplay.map((tweet, index) => (
 							<div
