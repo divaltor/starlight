@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useSignal, viewport } from "@telegram-apps/sdk-react";
 import { format } from "date-fns";
 import {
 	Calendar,
@@ -25,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTweets } from "@/hooks/useTweets";
+import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
 import type { DateFilter } from "@/types/dates";
 
 function TwitterArtViewer() {
@@ -37,8 +37,28 @@ function TwitterArtViewer() {
 	const [isMasonryReady, setIsMasonryReady] = useState(false);
 	const masonryGridRef = useRef<HTMLDivElement>(null);
 
-	const viewportHeight = useSignal(viewport.height);
-	const viewportWidth = useSignal(viewport.width);
+	const { updateButtons } = useTelegramContext();
+
+	useEffect(() => {
+		updateButtons({
+			mainButton: {
+				state: "visible",
+				text: "Publications",
+				action: {
+					type: "navigate",
+					payload: "/publications",
+				},
+			},
+		});
+
+		return () => {
+			updateButtons({
+				mainButton: {
+					state: "hidden",
+				},
+			});
+		};
+	}, [updateButtons]);
 
 	const {
 		tweets,
@@ -617,10 +637,9 @@ function TwitterArtViewer() {
 		<div
 			className="bg-gray-50 p-4"
 			style={{
-				minHeight: viewportHeight ? `${viewportHeight}px` : "100vh",
-				height: viewportHeight ? `${viewportHeight}px` : "100vh",
+				minHeight: "100vh",
+				height: "100vh",
 				overflow: "auto",
-				maxWidth: viewportWidth ? `${viewportWidth}px` : undefined,
 			}}
 		>
 			{/* Header with Filters */}
