@@ -1,7 +1,5 @@
-import type { ScheduledSlotStatus } from "@repo/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-import type { Tweet } from "@the-convocation/twitter-scraper";
+import { createFileRoute } from "@tanstack/react-router";
 import {
 	AlertTriangle,
 	Calendar,
@@ -28,34 +26,10 @@ import {
 	createScheduledSlot,
 	deleteScheduledSlot,
 	getScheduledSlots,
+	type ScheduledSlot,
 	shuffleTweet,
 } from "@/routes/api/scheduled-slots";
 import { deletePhoto } from "@/routes/api/scheduled-slots/photos";
-
-interface ScheduledSlotPhoto {
-	id: string;
-	photo: {
-		id: string;
-		s3Url: string;
-	};
-}
-
-interface ScheduledSlotTweet {
-	id: string;
-	tweet: {
-		id: string;
-		tweetData: Tweet;
-	};
-	scheduledSlotPhotos: ScheduledSlotPhoto[];
-}
-
-interface ScheduledSlot {
-	id: string;
-	scheduledFor: Date;
-	createdAt: Date;
-	status: ScheduledSlotStatus;
-	scheduledSlotTweets: ScheduledSlotTweet[];
-}
 
 interface PublicationSections {
 	today: ScheduledSlot[];
@@ -73,7 +47,7 @@ function PublicationsPage() {
 	const { rawInitData } = useTelegramContext();
 
 	const {
-		data: publicationsData,
+		data: publications = [],
 		isLoading,
 		error,
 		refetch: loadPublications,
@@ -112,16 +86,6 @@ function PublicationsPage() {
 			);
 		}
 	}, [availablePostingChannels.data, selectedPostingChannelId]);
-
-	const publications = publicationsData
-		? publicationsData.map((slot) => ({
-				id: slot.id,
-				scheduledFor: new Date(slot.scheduledFor),
-				createdAt: new Date(slot.createdAt),
-				status: slot.status,
-				scheduledSlotTweets: slot.scheduledSlotTweets || [],
-			}))
-		: [];
 
 	const createSlotMutation = useMutation({
 		mutationFn: async () => {
@@ -167,11 +131,6 @@ function PublicationsPage() {
 
 	const handleDeleteSlot = (slotId: string) => {
 		deleteSlotMutation.mutate(slotId);
-	};
-
-	const handleReshuffleSlot = (_slotId: string) => {
-		// For now, just reload - reshuffling logic would need backend implementation
-		loadPublications();
 	};
 
 	const deletePhotoMutation = useMutation({
@@ -378,7 +337,6 @@ function PublicationsPage() {
 							status={slot.status}
 							scheduledSlotTweets={slot.scheduledSlotTweets}
 							onDelete={handleDeleteSlot}
-							onReshuffle={handleReshuffleSlot}
 							onAddTweet={canAddMoreTweets(slot) ? handleAddTweet : undefined}
 							onDeleteImage={handleDeleteImage}
 							onShuffleTweet={handleShuffleTweet}

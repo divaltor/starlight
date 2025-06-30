@@ -1,5 +1,4 @@
 import type { ScheduledSlotStatus } from "@repo/utils";
-import type { Tweet } from "@the-convocation/twitter-scraper";
 import { format } from "date-fns";
 import {
 	Calendar,
@@ -20,30 +19,15 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-interface SlotTweet {
-	id: string;
-	tweet: {
-		id: string;
-		tweetData: Tweet;
-	};
-	scheduledSlotPhotos: Array<{
-		id: string;
-		photo: {
-			id: string;
-			s3Url: string;
-		};
-	}>;
-}
+import type { ScheduledSlotWithTweets } from "@/routes/api/scheduled-slots";
 
 interface SlotCardProps {
 	id: string;
 	scheduledFor: Date;
 	status: ScheduledSlotStatus;
-	scheduledSlotTweets: SlotTweet[];
+	scheduledSlotTweets: ScheduledSlotWithTweets;
 	channelName?: string;
 	onDelete?: (id: string) => void;
-	onReshuffle?: (id: string) => void;
 	onAddTweet?: (id: string) => void;
 	onDeleteImage?: (id: string, photoId: string) => void;
 	onShuffleTweet?: (id: string, tweetId: string) => void;
@@ -57,7 +41,6 @@ export function SlotCard({
 	scheduledSlotTweets,
 	channelName,
 	onDelete,
-	onReshuffle,
 	onAddTweet,
 	onDeleteImage,
 	onShuffleTweet,
@@ -91,16 +74,16 @@ export function SlotCard({
 		return format(date, "MMM d, yyyy");
 	}, []);
 
-	const getStatusColor = (status: string) => {
-		switch (status) {
+	const getStatusVariant = (status: string) => {
+		switch (status.toLowerCase()) {
 			case "waiting":
-				return "bg-yellow-100 text-yellow-800 border-yellow-200";
+				return "waiting" as const;
 			case "published":
-				return "bg-blue-100 text-blue-800 border-blue-200";
+				return "published" as const;
 			case "done":
-				return "bg-green-100 text-green-800 border-green-200";
+				return "done" as const;
 			default:
-				return "bg-gray-100 text-gray-800 border-gray-200";
+				return "outline" as const;
 		}
 	};
 
@@ -515,15 +498,12 @@ export function SlotCard({
 					<div className="flex flex-col gap-2">
 						{/* Date and Status */}
 						<div className="flex items-center gap-2">
-							<Badge
-								variant="outline"
-								className={`gap-1 text-xs ${getStatusColor(status)}`}
-							>
+							<Badge variant="outline" className="gap-1 text-xs">
 								<Calendar className="h-3 w-3" />
 								{formatDate(scheduledFor)}
 							</Badge>
 							<Badge
-								variant={status === "WAITING" ? "default" : "secondary"}
+								variant={getStatusVariant(status)}
 								className="text-xs capitalize"
 							>
 								{status}
@@ -574,15 +554,7 @@ export function SlotCard({
 										Add Tweet
 									</DropdownMenuItem>
 								)}
-								{onReshuffle && (
-									<DropdownMenuItem
-										onClick={() => onReshuffle(id)}
-										className="gap-2"
-									>
-										<Shuffle className="h-4 w-4" />
-										Reshuffle
-									</DropdownMenuItem>
-								)}
+
 								{onDelete && status === "WAITING" && (
 									<DropdownMenuItem
 										onClick={() => onDelete(id)}
@@ -607,17 +579,6 @@ export function SlotCard({
 							>
 								<Plus className="h-3 w-3" />
 								Add Tweet
-							</Button>
-						)}
-						{onReshuffle && (
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => onReshuffle(id)}
-								className="gap-1 text-xs"
-							>
-								<Shuffle className="h-3 w-3" />
-								Reshuffle
 							</Button>
 						)}
 						{onDelete && status === "WAITING" && (

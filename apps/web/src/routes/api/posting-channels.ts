@@ -21,3 +21,5 @@ export const getPostingChannels = createServerFn({ method: "GET" })
 
 		return { postingChannels };
 	});
+
+export type PostingChannel = Awaited<ReturnType<typeof getPostingChannels>>;

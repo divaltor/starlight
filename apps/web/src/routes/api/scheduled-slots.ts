@@ -70,6 +70,10 @@ export const getScheduledSlots = createServerFn({ method: "GET" })
 		return slots;
 	});
 
+export type ScheduledSlots = Awaited<ReturnType<typeof getScheduledSlots>>;
+export type ScheduledSlot = ScheduledSlots[number];
+export type ScheduledSlotWithTweets = ScheduledSlot["scheduledSlotTweets"];
+
 export const createScheduledSlot = createServerFn({ method: "POST" })
 	.middleware([authMiddleware])
 	.validator(createSlotSchema)
