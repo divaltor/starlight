@@ -1,8 +1,8 @@
-import { downloadVideo } from "@/services/video";
-import type { Context } from "@/types";
 import AbortController from "abort-controller";
 import { Composer, GrammyError, InputFile } from "grammy";
 import tmp from "tmp";
+import { downloadVideo } from "@/services/video";
+import type { Context } from "@/types";
 
 const composer = new Composer<Context>();
 
@@ -12,7 +12,8 @@ feature.on(":text").filter(
 	(ctx) =>
 		ctx.msg.text.startsWith("https://x.com") ||
 		ctx.msg.text.startsWith("https://www.instagram.com") ||
-		ctx.msg.text.startsWith("https://instagram.com"),
+		ctx.msg.text.startsWith("https://instagram.com") ||
+		ctx.msg.text.startsWith("https://coub.com"),
 	async (ctx) => {
 		const abortController = new AbortController();
 
