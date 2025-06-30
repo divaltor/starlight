@@ -39,7 +39,6 @@ interface SlotTweet {
 interface SlotCardProps {
 	id: string;
 	scheduledFor: Date;
-	createdAt: Date;
 	status: ScheduledSlotStatus;
 	scheduledSlotTweets: SlotTweet[];
 	channelName?: string;

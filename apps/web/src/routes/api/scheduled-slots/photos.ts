@@ -19,7 +19,7 @@ export const deletePhoto = createServerFn({ method: "POST" })
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
 		const { slotId, photoId } = data;
-		const userId = context.user.id.toString();
+		const userId = context.databaseUserId;
 
 		const existingSlot = await prisma.scheduledSlot.findFirst({
 			where: { id: slotId, userId },
@@ -104,7 +104,7 @@ export const addPhoto = createServerFn({ method: "POST" })
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
 		const { slotId, photoId } = data;
-		const userId = context.user.id.toString();
+		const userId = context.databaseUserId;
 
 		const existingSlot = await prisma.scheduledSlot.findFirst({
 			where: { id: slotId, userId },
