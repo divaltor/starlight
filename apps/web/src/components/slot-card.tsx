@@ -287,7 +287,11 @@ export function SlotCard({
 														e.stopPropagation();
 														onDeleteImage(id, photo.id);
 													}}
-													className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-white/20"
+													className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white bg-black/50 backdrop-blur-sm hover:bg-red-500/80 hover:text-white transition-all duration-200 border border-white/20 rounded-full"
+													style={{
+														filter: "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))",
+														mixBlendMode: "difference",
+													}}
 												>
 													<X className="h-3 w-3" />
 												</Button>
@@ -373,7 +377,11 @@ export function SlotCard({
 													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
-												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-black/20"
+												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white bg-black/50 backdrop-blur-sm hover:bg-red-500/80 hover:text-white transition-all duration-200 border border-white/20 rounded-full"
+												style={{
+													filter: "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))",
+													mixBlendMode: "difference",
+												}}
 											>
 												<X className="h-3 w-3" />
 											</Button>
@@ -416,7 +424,11 @@ export function SlotCard({
 													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
-												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-black/20"
+												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white bg-black/50 backdrop-blur-sm hover:bg-red-500/80 hover:text-white transition-all duration-200 border border-white/20 rounded-full"
+												style={{
+													filter: "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))",
+													mixBlendMode: "difference",
+												}}
 											>
 												<X className="h-3 w-3" />
 											</Button>
@@ -457,7 +469,11 @@ export function SlotCard({
 													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
-												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-black/20"
+												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white bg-black/50 backdrop-blur-sm hover:bg-red-500/80 hover:text-white transition-all duration-200 border border-white/20 rounded-full"
+												style={{
+													filter: "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))",
+													mixBlendMode: "difference",
+												}}
 											>
 												<X className="h-3 w-3" />
 											</Button>
@@ -465,58 +481,6 @@ export function SlotCard({
 									)}
 								</div>
 							))}
-						</div>
-					)}
-
-					{photos.length > 4 && (
-						<div className="grid grid-cols-3 gap-2">
-							{photos.slice(0, 6).map((photo, index) => {
-								const isLastVisible = index === 5 && photos.length > 6;
-
-								return (
-									<div
-										key={photo.id}
-										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
-									>
-										{isImageLoading[photo.id] && (
-											<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
-												<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-											</div>
-										)}
-										<img
-											src={photo.url}
-											alt={photo.alt}
-											width={400}
-											height={400}
-											className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
-											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoadWithLayout(photo.id)}
-										/>
-										{isLastVisible && (
-											<div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
-												<span className="font-medium text-lg">
-													+{photos.length - 6}
-												</span>
-											</div>
-										)}
-										{status === "WAITING" && onDeleteImage && (
-											<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={(e) => {
-														e.stopPropagation();
-														onDeleteImage(id, photo.id);
-													}}
-													className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-black/20"
-												>
-													<X className="h-3 w-3" />
-												</Button>
-											</div>
-										)}
-									</div>
-								);
-							})}
 						</div>
 					)}
 				</div>
