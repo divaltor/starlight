@@ -516,7 +516,7 @@ export function SlotCard({
 	);
 
 	return (
-		<Card className={`overflow-hidden ${className}`}>
+		<Card className={`overflow-hidden shadow-sm ${className}`}>
 			<CardHeader className="pb-3">
 				<div className="flex items-start justify-between gap-3">
 					<div className="flex flex-col gap-2">
@@ -678,25 +678,6 @@ export function SlotCard({
 						)}
 					</div>
 				)}
-
-				{/* Footer info */}
-				<div className="mt-4 flex items-center justify-between gap-2 border-gray-100 border-t pt-4">
-					<div className="text-gray-500 text-xs sm:text-sm">
-						{scheduledSlotTweets.length} tweet
-						{scheduledSlotTweets.length !== 1 ? "s" : ""}, {totalPhotos} photo
-						{totalPhotos !== 1 ? "s" : ""}
-					</div>
-
-					<div className="text-gray-400 text-xs">
-						Created{" "}
-						{new Intl.DateTimeFormat("en-US", {
-							month: "short",
-							day: "numeric",
-							hour: "2-digit",
-							minute: "2-digit",
-						}).format(createdAt)}
-					</div>
-				</div>
 			</CardContent>
 		</Card>
 	);
