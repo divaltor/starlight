@@ -146,10 +146,10 @@ export function SlotCard({
 		setIsImageLoading((prev) => ({ ...prev, [imageId]: true }));
 	}, []);
 
-	// JavaScript masonry layout
+	// JavaScript masonry layout for browsers without masonry support
 	const layoutMasonry = useCallback(() => {
 		const grid = masonryGridRef.current;
-		if (!grid || tweetsForDisplay.length === 0) return;
+		if (!grid) return;
 
 		// Check if masonry is supported
 		const supportsGridMasonry = CSS.supports("grid-template-rows", "masonry");
@@ -161,17 +161,31 @@ export function SlotCard({
 		const items = Array.from(grid.children) as HTMLElement[];
 		if (items.length === 0) return;
 
-		// Get grid gap
-		const gap = 8; // 0.5rem = 8px
+		// Get grid gap and calculate number of columns based on viewport width
+		let columns = 1;
+		let gap = 16; // 1rem = 16px for single column
+		const width = window.innerWidth;
 
-		// Calculate number of columns based on container width
-		let columns = 2;
-		const width = grid.offsetWidth;
-		if (width >= 768) columns = 3;
-		if (width >= 1024) columns = 4;
+		if (width >= 1536) {
+			columns = 6;
+			gap = 13.33; // 0.833rem
+		} else if (width >= 1280) {
+			columns = 5;
+			gap = 12.8; // 0.8rem
+		} else if (width >= 1024) {
+			columns = 4;
+			gap = 12; // 0.75rem
+		} else if (width >= 768) {
+			columns = 3;
+			gap = 10.67; // 0.667rem
+		} else if (width >= 640) {
+			columns = 2;
+			gap = 8; // 0.5rem
+		}
 
 		// Calculate column width
-		const columnWidth = (width - gap * (columns - 1)) / columns;
+		const gridWidth = grid.offsetWidth;
+		const columnWidth = (gridWidth - gap * (columns - 1)) / columns;
 
 		// Initialize column heights array
 		const columnHeights = new Array(columns).fill(0);
@@ -202,13 +216,23 @@ export function SlotCard({
 
 		// Show the grid after layout is complete
 		setIsMasonryReady(true);
-	}, [tweetsForDisplay.length]);
+	}, []);
 
-	// Trigger layout on data changes
+	// Trigger layout on data changes and window resize
 	useEffect(() => {
 		setIsMasonryReady(false);
 		const timeoutId = setTimeout(layoutMasonry, 100);
 		return () => clearTimeout(timeoutId);
+	}, [layoutMasonry, tweetsForDisplay.length]);
+
+	useEffect(() => {
+		const handleResize = () => {
+			setIsMasonryReady(false);
+			layoutMasonry();
+		};
+
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
 	}, [layoutMasonry]);
 
 	// Re-layout when images load
@@ -630,11 +654,20 @@ export function SlotCard({
 				{tweetsForDisplay.length > 0 ? (
 					<div
 						ref={masonryGridRef}
-						className={`masonry-grid grid-cols-2 gap-2 transition-opacity duration-200 md:grid-cols-3 lg:grid-cols-4 ${
+						className={`masonry-grid w-full overflow-hidden grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
 							isMasonryReady ? "opacity-100" : "opacity-0"
 						}`}
 					>
-						{tweetsForDisplay.map((tweet) => renderTweetImages(tweet))}
+						{tweetsForDisplay.map((tweet, index) => (
+							<div
+								key={tweet.id}
+								data-tweet-index={index}
+								data-tweet-id={tweet.id}
+								className="will-change-auto"
+							>
+								{renderTweetImages(tweet)}
+							</div>
+						))}
 					</div>
 				) : (
 					<div className="py-8 text-center">
