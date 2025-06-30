@@ -162,21 +162,25 @@ export function SlotCard({
 		if (items.length === 0) return;
 
 		// Get grid gap and calculate number of columns based on viewport width
-		// Using consistent gap-4 (16px) to match Tailwind CSS class
 		let columns = 1;
-		const gap = 16; // gap-4 = 1rem = 16px (consistent across all breakpoints)
+		let gap = 16; // 1rem = 16px for single column
 		const width = window.innerWidth;
 
 		if (width >= 1536) {
-			columns = 6; // 2xl:grid-cols-6
+			columns = 6;
+			gap = 13.33; // 0.833rem
 		} else if (width >= 1280) {
-			columns = 5; // xl:grid-cols-5
+			columns = 5;
+			gap = 12.8; // 0.8rem
 		} else if (width >= 1024) {
-			columns = 4; // lg:grid-cols-4
+			columns = 4;
+			gap = 12; // 0.75rem
 		} else if (width >= 768) {
-			columns = 3; // md:grid-cols-3
+			columns = 3;
+			gap = 10.67; // 0.667rem
 		} else if (width >= 640) {
-			columns = 2; // sm:grid-cols-2
+			columns = 2;
+			gap = 8; // 0.5rem
 		}
 
 		// Calculate column width
@@ -222,22 +226,13 @@ export function SlotCard({
 	}, [layoutMasonry, tweetsForDisplay.length]);
 
 	useEffect(() => {
-		let resizeTimeout: NodeJS.Timeout;
-
 		const handleResize = () => {
 			setIsMasonryReady(false);
-			// Debounce resize to avoid excessive calculations
-			clearTimeout(resizeTimeout);
-			resizeTimeout = setTimeout(() => {
-				layoutMasonry();
-			}, 100);
+			layoutMasonry();
 		};
 
 		window.addEventListener("resize", handleResize);
-		return () => {
-			window.removeEventListener("resize", handleResize);
-			clearTimeout(resizeTimeout);
-		};
+		return () => window.removeEventListener("resize", handleResize);
 	}, [layoutMasonry]);
 
 	// Re-layout when images load
