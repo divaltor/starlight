@@ -30,6 +30,11 @@ const shuffleTweetSchema = z.object({
 	postingChannelId: z.number().optional(),
 });
 
+const addTweetSchema = z.object({
+	slotId: z.string().uuid(),
+	postingChannelId: z.number().optional(),
+});
+
 export const getScheduledSlots = createServerFn({ method: "GET" })
 	.middleware([authMiddleware])
 	.validator(getScheduledSlotsSchema)
@@ -279,6 +284,22 @@ export const shuffleTweet = createServerFn({ method: "POST" })
 		return { slot: updatedSlot };
 	});
 
+export const addTweetToSlot = createServerFn({ method: "POST" })
+	.middleware([authMiddleware])
+	.validator(addTweetSchema)
+	.handler(async ({ data, context }) => {
+		const { slotId, postingChannelId } = data;
+		const userId = context.databaseUserId;
+
+		const updatedSlot = await addRandomTweetToSlot(
+			slotId,
+			userId,
+			postingChannelId,
+		);
+
+		return { slot: updatedSlot };
+	});
+
 // Helper functions for slot management
 export async function getAvailablePhotosForUser(
 	userId: string,
@@ -490,6 +511,126 @@ export async function shuffleSlotTweet(
 	await prisma.scheduledSlotPhoto.createMany({
 		data: newTweet.photos.map((photo) => ({
 			scheduledSlotTweetId: tweetId,
+			photoId: photo.id,
+			userId,
+		})),
+	});
+
+	// Return updated slot
+	const updatedSlot = await prisma.scheduledSlot.findUnique({
+		where: { id: slotId },
+		include: {
+			scheduledSlotTweets: {
+				include: {
+					tweet: true,
+					scheduledSlotPhotos: {
+						include: {
+							photo: true,
+						},
+						orderBy: { createdAt: "asc" },
+					},
+				},
+				orderBy: { createdAt: "asc" },
+			},
+		},
+	});
+
+	return updatedSlot;
+}
+
+export async function addRandomTweetToSlot(
+	slotId: string,
+	userId: string,
+	postingChannelId?: number,
+) {
+	const prisma = getPrismaClient();
+
+	// Verify slot belongs to user and get current state
+	const whereClause: Prisma.ScheduledSlotWhereInput = { id: slotId, userId };
+	if (postingChannelId) {
+		whereClause.postingChannel = { chatId: postingChannelId };
+	}
+
+	const slot = await prisma.scheduledSlot.findFirst({
+		where: whereClause,
+		include: {
+			scheduledSlotTweets: {
+				include: {
+					tweet: true,
+				},
+			},
+		},
+	});
+
+	if (!slot) {
+		throw new Error("Slot not found");
+	}
+
+	// Check if slot already has maximum tweets (5)
+	if (slot.scheduledSlotTweets.length >= 5) {
+		throw new Error("Slot already has maximum number of tweets");
+	}
+
+	// Get currently used tweet IDs in this slot to avoid duplicates
+	const currentTweetIds = slot.scheduledSlotTweets.map((st) => st.tweet.id);
+
+	// Get available tweets with unpublished photos (excluding currently used tweets)
+	const availableTweets = await prisma.tweet.findMany({
+		where: {
+			userId,
+			id: { notIn: currentTweetIds }, // Exclude currently used tweets
+			photos: {
+				some: {
+					deletedAt: null,
+					s3Path: { not: null },
+					publishedPhotos: postingChannelId
+						? {
+								none: { chatId: postingChannelId },
+							}
+						: { none: {} },
+					scheduledSlotPhotos: { none: {} },
+				},
+			},
+		},
+		include: {
+			photos: {
+				where: {
+					deletedAt: null,
+					s3Path: { not: null },
+					publishedPhotos: postingChannelId
+						? {
+								none: { chatId: postingChannelId },
+							}
+						: { none: {} },
+					scheduledSlotPhotos: { none: {} },
+				},
+			},
+		},
+		orderBy: { createdAt: "desc" },
+		take: 20, // Get multiple options for random selection
+	});
+
+	if (availableTweets.length === 0) {
+		throw new Error("No available tweets to add");
+	}
+
+	// Select a random tweet
+	const randomTweet =
+		availableTweets[Math.floor(Math.random() * availableTweets.length)];
+
+	// Create the scheduled slot tweet
+	const scheduledSlotTweet = await prisma.scheduledSlotTweet.create({
+		data: {
+			scheduledSlotId: slotId,
+			tweetId: randomTweet.id,
+			userId,
+		},
+	});
+
+	// Add all available photos from this tweet
+	await prisma.scheduledSlotPhoto.createMany({
+		data: randomTweet.photos.map((photo) => ({
+			scheduledSlotTweetId: scheduledSlotTweet.id,
 			photoId: photo.id,
 			userId,
 		})),

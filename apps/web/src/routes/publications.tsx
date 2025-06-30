@@ -24,6 +24,7 @@ import {
 import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
 import { getPostingChannels } from "@/routes/api/posting-channels";
 import {
+	addTweetToSlot,
 	createScheduledSlot,
 	deleteScheduledSlot,
 	getScheduledSlots,
@@ -228,6 +229,27 @@ function PublicationsPage() {
 		shuffleTweetMutation.mutate({ slotId, tweetId });
 	};
 
+	const addTweetMutation = useMutation({
+		mutationFn: async ({ slotId }: { slotId: string }) => {
+			return await addTweetToSlot({
+				headers: { Authorization: rawInitData ?? "" },
+				data: {
+					slotId,
+					postingChannelId: selectedPostingChannelId,
+				},
+			});
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({
+				queryKey: ["scheduled-slots", selectedPostingChannelId],
+			});
+		},
+	});
+
+	const handleAddTweet = (slotId: string) => {
+		addTweetMutation.mutate({ slotId });
+	};
+
 	const handleAddImage = (slotId: string) => {
 		// TODO: Implement backend API for adding specific images to slots
 		console.log("Adding image to slot:", slotId);
@@ -282,9 +304,8 @@ function PublicationsPage() {
 		);
 	};
 
-	const canAddMoreImages = (slot: ScheduledSlot) => {
-		const totalPhotos = getAllPhotosFromSlot(slot).length;
-		return totalPhotos < 15 && slot.status === "WAITING"; // Allow up to 15 photos per slot
+	const canAddMoreTweets = (slot: ScheduledSlot) => {
+		return slot.scheduledSlotTweets.length < 10 && slot.status === "WAITING"; // Allow up to 5 tweets per slot
 	};
 
 	const organizePublications = (pubs: ScheduledSlot[]): PublicationSections => {
@@ -375,7 +396,7 @@ function PublicationsPage() {
 							scheduledSlotTweets={slot.scheduledSlotTweets}
 							onDelete={handleDeleteSlot}
 							onReshuffle={handleReshuffleSlot}
-							onAddTweet={canAddMoreImages(slot) ? handleAddImage : undefined}
+							onAddTweet={canAddMoreTweets(slot) ? handleAddTweet : undefined}
 							onDeleteImage={handleDeleteImage}
 							onShuffleTweet={handleShuffleTweet}
 						/>

@@ -673,6 +673,24 @@ export function SlotCard({
 						)}
 					</div>
 				)}
+
+				{/* Footer with Add Tweet button when tweets exist */}
+				{tweetsForDisplay.length > 0 &&
+					onAddTweet &&
+					canAddMoreTweets &&
+					status === "WAITING" && (
+						<div className="border-gray-200 border-t p-3 bg-gray-50">
+							<Button
+								variant="outline"
+								onClick={() => onAddTweet(id)}
+								className="w-full gap-2 text-sm"
+								size="sm"
+							>
+								<Plus className="h-4 w-4" />
+								Add tweet
+							</Button>
+						</div>
+					)}
 			</CardContent>
 		</Card>
 	);
