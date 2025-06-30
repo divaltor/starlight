@@ -271,6 +271,7 @@ export function SlotCard({
 							onLoadStart={() => handleImageLoadStart(photo.id)}
 							onLoad={() => handleImageLoadWithLayout(photo.id)}
 						/>
+						<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
 						<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
 							<div className="p-3 text-white w-full">
 								<div className="flex items-center justify-between">
@@ -311,11 +312,7 @@ export function SlotCard({
 														e.stopPropagation();
 														onDeleteImage(id, photo.id);
 													}}
-													className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white bg-black/50 backdrop-blur-sm hover:bg-red-500/80 hover:text-white transition-all duration-200 border border-white/20 rounded-full"
-													style={{
-														filter: "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))",
-														mixBlendMode: "difference",
-													}}
+													className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-white/20"
 												>
 													<X className="h-3 w-3" />
 												</Button>
@@ -392,6 +389,7 @@ export function SlotCard({
 										onLoadStart={() => handleImageLoadStart(photo.id)}
 										onLoad={() => handleImageLoadWithLayout(photo.id)}
 									/>
+									<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
 									{status === "WAITING" && onDeleteImage && (
 										<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
 											<Button
@@ -401,11 +399,7 @@ export function SlotCard({
 													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
-												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white bg-black/50 backdrop-blur-sm hover:bg-red-500/80 hover:text-white transition-all duration-200 border border-white/20 rounded-full"
-												style={{
-													filter: "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))",
-													mixBlendMode: "difference",
-												}}
+												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-white/20"
 											>
 												<X className="h-3 w-3" />
 											</Button>
@@ -439,6 +433,7 @@ export function SlotCard({
 										onLoadStart={() => handleImageLoadStart(photo.id)}
 										onLoad={() => handleImageLoadWithLayout(photo.id)}
 									/>
+									<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
 									{status === "WAITING" && onDeleteImage && (
 										<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
 											<Button
@@ -448,11 +443,7 @@ export function SlotCard({
 													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
-												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white bg-black/50 backdrop-blur-sm hover:bg-red-500/80 hover:text-white transition-all duration-200 border border-white/20 rounded-full"
-												style={{
-													filter: "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))",
-													mixBlendMode: "difference",
-												}}
+												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-white/20"
 											>
 												<X className="h-3 w-3" />
 											</Button>
@@ -484,6 +475,7 @@ export function SlotCard({
 										onLoadStart={() => handleImageLoadStart(photo.id)}
 										onLoad={() => handleImageLoadWithLayout(photo.id)}
 									/>
+									<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
 									{status === "WAITING" && onDeleteImage && (
 										<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
 											<Button
@@ -493,11 +485,7 @@ export function SlotCard({
 													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
-												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white bg-black/50 backdrop-blur-sm hover:bg-red-500/80 hover:text-white transition-all duration-200 border border-white/20 rounded-full"
-												style={{
-													filter: "drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))",
-													mixBlendMode: "difference",
-												}}
+												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-white/20"
 											>
 												<X className="h-3 w-3" />
 											</Button>
