@@ -1,5 +1,6 @@
 import type { ScheduledSlotStatus } from "@repo/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
+import { format } from "date-fns";
 import {
 	Calendar,
 	MessageSquare,
@@ -9,6 +10,7 @@ import {
 	Trash2,
 	X,
 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -18,8 +20,6 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { format } from "date-fns";
 
 interface SlotTweet {
 	id: string;
@@ -122,19 +122,21 @@ export function SlotCard({
 	const canAddMoreTweets =
 		scheduledSlotTweets.length < 5 && status === "WAITING";
 
-	// Flatten all photos into a single array for masonry layout
-	const allPhotos = scheduledSlotTweets.flatMap((slotTweet) =>
-		slotTweet.scheduledSlotPhotos
+	// Transform scheduled slot tweets to match the app.tsx structure
+	const tweetsForDisplay = scheduledSlotTweets.map((slotTweet) => ({
+		id: slotTweet.tweet.id,
+		artist: slotTweet.tweet.tweetData?.username || "unknown",
+		date: slotTweet.tweet.tweetData?.timeParsed || "",
+		photoCount: slotTweet.scheduledSlotPhotos.length,
+		photos: slotTweet.scheduledSlotPhotos
 			.filter((sp) => sp.photo.s3Url)
 			.map((sp) => ({
 				id: sp.photo.id,
 				url: sp.photo.s3Url,
-				tweetId: slotTweet.tweet.id,
-				author: slotTweet.tweet.tweetData?.username || "unknown",
-				date: slotTweet.tweet.tweetData?.timeParsed || "",
-				slotTweetId: slotTweet.id,
-			}))
-	);
+				alt: `Photo by ${slotTweet.tweet.tweetData?.username || "unknown"}`,
+			})),
+		slotTweetId: slotTweet.id,
+	}));
 
 	const handleImageLoad = useCallback((imageId: string) => {
 		setIsImageLoading((prev) => ({ ...prev, [imageId]: false }));
@@ -147,7 +149,7 @@ export function SlotCard({
 	// JavaScript masonry layout
 	const layoutMasonry = useCallback(() => {
 		const grid = masonryGridRef.current;
-		if (!grid || allPhotos.length === 0) return;
+		if (!grid || tweetsForDisplay.length === 0) return;
 
 		// Check if masonry is supported
 		const supportsGridMasonry = CSS.supports("grid-template-rows", "masonry");
@@ -200,7 +202,7 @@ export function SlotCard({
 
 		// Show the grid after layout is complete
 		setIsMasonryReady(true);
-	}, [allPhotos.length]);
+	}, [tweetsForDisplay.length]);
 
 	// Trigger layout on data changes
 	useEffect(() => {
@@ -216,6 +218,320 @@ export function SlotCard({
 			setTimeout(layoutMasonry, 50);
 		},
 		[handleImageLoad, layoutMasonry],
+	);
+
+	// Render image grid based on tweet structure (similar to app.tsx)
+	const renderTweetImages = useCallback(
+		(tweet: (typeof tweetsForDisplay)[0]) => {
+			const photos = tweet.photos;
+
+			if (photos.length === 1) {
+				const photo = photos[0];
+
+				return (
+					<div
+						key={tweet.id}
+						className="group relative cursor-pointer overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-300 hover:shadow-md will-change-auto"
+					>
+						{isImageLoading[photo.id] && (
+							<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
+								<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+							</div>
+						)}
+						<img
+							src={photo.url}
+							alt={photo.alt}
+							width={400}
+							height={400}
+							className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
+							onLoadStart={() => handleImageLoadStart(photo.id)}
+							onLoad={() => handleImageLoadWithLayout(photo.id)}
+						/>
+						<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
+							<div className="p-3 text-white w-full">
+								<div className="flex items-center justify-between">
+									<div>
+										<p className="font-medium text-sm drop-shadow-lg">
+											{tweet.artist}
+										</p>
+										{tweet.date && (
+											<p className="text-gray-200 text-xs drop-shadow-lg">
+												{formatTweetDate(
+													typeof tweet.date === "string"
+														? tweet.date
+														: tweet.date.toISOString(),
+												)}
+											</p>
+										)}
+									</div>
+									{status === "WAITING" && (
+										<div className="flex items-center gap-1">
+											{onShuffleTweet && (
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={(e) => {
+														e.stopPropagation();
+														onShuffleTweet(id, tweet.slotTweetId);
+													}}
+													className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-blue-300 hover:bg-white/20"
+												>
+													<Shuffle className="h-3 w-3" />
+												</Button>
+											)}
+											{onDeleteImage && (
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={(e) => {
+														e.stopPropagation();
+														onDeleteImage(id, photo.id);
+													}}
+													className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-white/20"
+												>
+													<X className="h-3 w-3" />
+												</Button>
+											)}
+										</div>
+									)}
+								</div>
+							</div>
+						</div>
+					</div>
+				);
+			}
+
+			// Multiple images layout with responsive grid
+			return (
+				<div
+					key={tweet.id}
+					className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow duration-300 hover:shadow-md will-change-auto"
+				>
+					{/* Post header */}
+					<div className="mb-3 flex items-center justify-between">
+						<div>
+							<p className="font-medium text-gray-900 text-sm">
+								{tweet.artist}
+							</p>
+							<p className="text-gray-500 text-xs">
+								{tweet.date &&
+									formatTweetDate(
+										typeof tweet.date === "string"
+											? tweet.date
+											: tweet.date.toISOString(),
+									)}
+							</p>
+						</div>
+						<div className="flex items-center gap-2">
+							<span className="text-gray-500 text-xs">
+								{tweet.photoCount} images
+							</span>
+							{status === "WAITING" && onShuffleTweet && (
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={(e) => {
+										e.stopPropagation();
+										onShuffleTweet(id, tweet.slotTweetId);
+									}}
+									className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-gray-100"
+								>
+									<Shuffle className="h-3 w-3" />
+								</Button>
+							)}
+						</div>
+					</div>
+
+					{/* Dynamic grid based on number of images */}
+					{photos.length === 2 && (
+						<div className="grid grid-cols-2 gap-2">
+							{photos.map((photo) => (
+								<div
+									key={photo.id}
+									className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
+								>
+									{isImageLoading[photo.id] && (
+										<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
+											<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+										</div>
+									)}
+									<img
+										src={photo.url}
+										alt={photo.alt}
+										width={400}
+										height={400}
+										className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
+										onLoadStart={() => handleImageLoadStart(photo.id)}
+										onLoad={() => handleImageLoadWithLayout(photo.id)}
+									/>
+									{status === "WAITING" && onDeleteImage && (
+										<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={(e) => {
+													e.stopPropagation();
+													onDeleteImage(id, photo.id);
+												}}
+												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-black/20"
+											>
+												<X className="h-3 w-3" />
+											</Button>
+										</div>
+									)}
+								</div>
+							))}
+						</div>
+					)}
+
+					{photos.length === 3 && (
+						<div className="grid grid-cols-2 gap-2">
+							{photos.map((photo, index) => (
+								<div
+									key={photo.id}
+									className={`group relative cursor-pointer overflow-hidden rounded bg-gray-100 ${
+										index === 0 ? "col-span-2" : ""
+									}`}
+								>
+									{isImageLoading[photo.id] && (
+										<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
+											<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+										</div>
+									)}
+									<img
+										src={photo.url}
+										alt={photo.alt}
+										width={400}
+										height={400}
+										className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
+										onLoadStart={() => handleImageLoadStart(photo.id)}
+										onLoad={() => handleImageLoadWithLayout(photo.id)}
+									/>
+									{status === "WAITING" && onDeleteImage && (
+										<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={(e) => {
+													e.stopPropagation();
+													onDeleteImage(id, photo.id);
+												}}
+												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-black/20"
+											>
+												<X className="h-3 w-3" />
+											</Button>
+										</div>
+									)}
+								</div>
+							))}
+						</div>
+					)}
+
+					{photos.length === 4 && (
+						<div className="grid grid-cols-2 gap-2">
+							{photos.map((photo) => (
+								<div
+									key={photo.id}
+									className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
+								>
+									{isImageLoading[photo.id] && (
+										<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
+											<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+										</div>
+									)}
+									<img
+										src={photo.url}
+										alt={photo.alt}
+										width={400}
+										height={400}
+										className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
+										onLoadStart={() => handleImageLoadStart(photo.id)}
+										onLoad={() => handleImageLoadWithLayout(photo.id)}
+									/>
+									{status === "WAITING" && onDeleteImage && (
+										<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={(e) => {
+													e.stopPropagation();
+													onDeleteImage(id, photo.id);
+												}}
+												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-black/20"
+											>
+												<X className="h-3 w-3" />
+											</Button>
+										</div>
+									)}
+								</div>
+							))}
+						</div>
+					)}
+
+					{photos.length > 4 && (
+						<div className="grid grid-cols-3 gap-2">
+							{photos.slice(0, 6).map((photo, index) => {
+								const isLastVisible = index === 5 && photos.length > 6;
+
+								return (
+									<div
+										key={photo.id}
+										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
+									>
+										{isImageLoading[photo.id] && (
+											<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
+												<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+											</div>
+										)}
+										<img
+											src={photo.url}
+											alt={photo.alt}
+											width={400}
+											height={400}
+											className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
+											onLoadStart={() => handleImageLoadStart(photo.id)}
+											onLoad={() => handleImageLoadWithLayout(photo.id)}
+										/>
+										{isLastVisible && (
+											<div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
+												<span className="font-medium text-lg">
+													+{photos.length - 6}
+												</span>
+											</div>
+										)}
+										{status === "WAITING" && onDeleteImage && (
+											<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={(e) => {
+														e.stopPropagation();
+														onDeleteImage(id, photo.id);
+													}}
+													className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-black/20"
+												>
+													<X className="h-3 w-3" />
+												</Button>
+											</div>
+										)}
+									</div>
+								);
+							})}
+						</div>
+					)}
+				</div>
+			);
+		},
+		[
+			formatTweetDate,
+			handleImageLoadStart,
+			isImageLoading,
+			handleImageLoadWithLayout,
+			status,
+			onShuffleTweet,
+			onDeleteImage,
+			id,
+		],
 	);
 
 	return (
@@ -347,82 +663,14 @@ export function SlotCard({
 
 			<CardContent className="pt-0">
 				{/* Images Masonry Grid */}
-				{allPhotos.length > 0 ? (
+				{tweetsForDisplay.length > 0 ? (
 					<div
 						ref={masonryGridRef}
 						className={`masonry-grid grid-cols-2 gap-2 transition-opacity duration-200 md:grid-cols-3 lg:grid-cols-4 ${
 							isMasonryReady ? "opacity-100" : "opacity-0"
 						}`}
 					>
-						{allPhotos.map((photo) => (
-							<div
-								key={photo.id}
-								className="group relative cursor-pointer overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-300 hover:shadow-md will-change-auto"
-							>
-								{isImageLoading[photo.id] && (
-									<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
-										<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-									</div>
-								)}
-								<img
-									src={photo.url}
-									alt={`Photo by ${photo.author}`}
-									width={400}
-									height={400}
-									className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
-									onLoadStart={() => handleImageLoadStart(photo.id)}
-									onLoad={() => handleImageLoadWithLayout(photo.id)}
-								/>
-								<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
-									<div className="p-3 text-white w-full">
-										<div className="flex items-center justify-between">
-											<div>
-												<p className="font-medium text-sm drop-shadow-lg">
-													{photo.author}
-												</p>
-												{photo.date && (
-													<p className="text-gray-200 text-xs drop-shadow-lg">
-														{formatTweetDate(
-															typeof photo.date === "string" ? photo.date : photo.date.toISOString()
-														)}
-													</p>
-												)}
-											</div>
-											{status === "WAITING" && (
-												<div className="flex items-center gap-1">
-													{onShuffleTweet && (
-														<Button
-															variant="ghost"
-															size="sm"
-															onClick={(e) => {
-																e.stopPropagation();
-																onShuffleTweet(id, photo.slotTweetId);
-															}}
-															className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-blue-300 hover:bg-white/20"
-														>
-															<Shuffle className="h-3 w-3" />
-														</Button>
-													)}
-													{onDeleteImage && (
-														<Button
-															variant="ghost"
-															size="sm"
-															onClick={(e) => {
-																e.stopPropagation();
-																onDeleteImage(id, photo.id);
-															}}
-															className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-white/20"
-														>
-															<X className="h-3 w-3" />
-														</Button>
-													)}
-												</div>
-											)}
-										</div>
-									</div>
-								</div>
-							</div>
-						))}
+						{tweetsForDisplay.map((tweet) => renderTweetImages(tweet))}
 					</div>
 				) : (
 					<div className="py-8 text-center">
