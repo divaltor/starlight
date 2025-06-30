@@ -53,8 +53,10 @@ export const getScheduledSlots = createServerFn({ method: "GET" })
 							include: {
 								photo: true,
 							},
+							orderBy: { createdAt: "asc" },
 						},
 					},
+					orderBy: { createdAt: "asc" },
 				},
 			},
 			orderBy: [{ scheduledFor: "asc" }, { createdAt: "desc" }],
@@ -172,8 +174,10 @@ export const createScheduledSlot = createServerFn({ method: "POST" })
 							include: {
 								photo: true,
 							},
+							orderBy: { createdAt: "asc" },
 						},
 					},
+					orderBy: { createdAt: "asc" },
 				},
 			},
 		});
@@ -216,8 +220,10 @@ export const updateScheduledSlot = createServerFn({ method: "POST" })
 							include: {
 								photo: true,
 							},
+							orderBy: { createdAt: "asc" },
 						},
 					},
+					orderBy: { createdAt: "asc" },
 				},
 			},
 		});
@@ -368,8 +374,10 @@ export async function createScheduledSlotForToday(
 						include: {
 							photo: true,
 						},
+						orderBy: { createdAt: "asc" },
 					},
 				},
+				orderBy: { createdAt: "asc" },
 			},
 		},
 	});
@@ -397,9 +405,11 @@ export async function shuffleSlotTweet(
 						include: {
 							photo: true,
 						},
+						orderBy: { createdAt: "asc" },
 					},
 					tweet: true,
 				},
+				orderBy: { createdAt: "asc" },
 			},
 		},
 	});
@@ -496,8 +506,10 @@ export async function shuffleSlotTweet(
 						include: {
 							photo: true,
 						},
+						orderBy: { createdAt: "asc" },
 					},
 				},
+				orderBy: { createdAt: "asc" },
 			},
 		},
 	});
