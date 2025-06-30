@@ -54,7 +54,6 @@ interface SlotCardProps {
 export function SlotCard({
 	id,
 	scheduledFor,
-	createdAt,
 	status,
 	scheduledSlotTweets,
 	channelName,
@@ -120,7 +119,7 @@ export function SlotCard({
 	];
 
 	const canAddMoreTweets =
-		scheduledSlotTweets.length < 5 && status === "WAITING";
+		scheduledSlotTweets.length < 10 && status === "WAITING";
 
 	// Transform scheduled slot tweets to match the app.tsx structure
 	const tweetsForDisplay = scheduledSlotTweets.map((slotTweet) => ({

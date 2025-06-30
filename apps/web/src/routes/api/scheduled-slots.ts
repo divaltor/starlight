@@ -566,8 +566,8 @@ export async function addRandomTweetToSlot(
 		throw new Error("Slot not found");
 	}
 
-	// Check if slot already has maximum tweets (5)
-	if (slot.scheduledSlotTweets.length >= 5) {
+	// Check if slot already has maximum tweets (10)
+	if (slot.scheduledSlotTweets.length >= 10) {
 		throw new Error("Slot already has maximum number of tweets");
 	}
 

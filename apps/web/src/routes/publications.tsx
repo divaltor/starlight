@@ -250,11 +250,6 @@ function PublicationsPage() {
 		addTweetMutation.mutate({ slotId });
 	};
 
-	const handleAddImage = (slotId: string) => {
-		// TODO: Implement backend API for adding specific images to slots
-		console.log("Adding image to slot:", slotId);
-	};
-
 	const getNextAvailableSlotTime = () => {
 		const today = new Date();
 		// Random time between 9 AM and 11 PM
@@ -291,17 +286,6 @@ function PublicationsPage() {
 		}
 
 		return nextDay;
-	};
-
-	const getAllPhotosFromSlot = (slot: ScheduledSlot) => {
-		return slot.scheduledSlotTweets.flatMap((tweet) =>
-			tweet.scheduledSlotPhotos.map((sp) => ({
-				id: sp.photo.id,
-				url: sp.photo.s3Url,
-				tweetId: tweet.tweet.id,
-				author: tweet.tweet.tweetData?.username || "unknown",
-			})),
-		);
 	};
 
 	const canAddMoreTweets = (slot: ScheduledSlot) => {
@@ -391,7 +375,6 @@ function PublicationsPage() {
 							key={slot.id}
 							id={slot.id}
 							scheduledFor={slot.scheduledFor}
-							createdAt={slot.createdAt}
 							status={slot.status}
 							scheduledSlotTweets={slot.scheduledSlotTweets}
 							onDelete={handleDeleteSlot}
