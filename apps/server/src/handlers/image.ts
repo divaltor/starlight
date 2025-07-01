@@ -1,10 +1,10 @@
+import { env, type Prisma } from "@repo/utils";
+import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { imagesQueue } from "@/queue/image-collector";
 import { publishingQueue } from "@/queue/publishing";
 import { scrapperQueue } from "@/queue/scrapper";
 import { prisma } from "@/storage";
 import type { Context } from "@/types";
-import { env } from "@repo/utils";
-import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 
 const composer = new Composer<Context>();
 
@@ -14,6 +14,7 @@ const groupChat = composer.chatType(["group", "supergroup"]);
 composer.on("inline_query", async (ctx) => {
 	const offset = ctx.inlineQuery.offset || "0";
 	const photoOffset = Number(offset) || 0;
+	const query = ctx.inlineQuery.query.trim();
 
 	// Fetch more tweets than we need to ensure we can find 50 photos
 	// We'll fetch in batches and keep going until we have enough photos
@@ -28,6 +29,16 @@ composer.on("inline_query", async (ctx) => {
 
 	// Keep fetching tweets until we have enough photos to satisfy the offset + 50 results
 	while (totalPhotosFound <= photoOffset + 50) {
+		const whereClause: Prisma.TweetWhereInput = {};
+
+		if (query) {
+			whereClause.tweetData = {
+				path: ["text"],
+				string_contains: query,
+				mode: "insensitive",
+			};
+		}
+
 		const tweets = await prisma.tweet.findMany({
 			where: {
 				userId: ctx.user?.id as string,
@@ -37,6 +48,7 @@ composer.on("inline_query", async (ctx) => {
 						s3Path: { not: null },
 					},
 				},
+				...whereClause,
 			},
 			include: {
 				photos: {
