@@ -92,10 +92,14 @@ function PublicationsPage() {
 		updateButtons({
 			mainButton: {
 				text: "Publish",
-				state: selectedPostingChannelId ? "visible" : "hidden",
+				state:
+					selectedPostingChannelId && publications.length > 0
+						? "visible"
+						: "hidden",
 				isEnabled:
 					!!selectedPostingChannelId &&
-					!!availablePostingChannels.data?.postingChannels?.length,
+					publications.length > 0 &&
+					publications.some((pub) => pub.status === "WAITING"),
 				hasShineEffect: true,
 				action: {
 					type: "callback",
@@ -127,7 +131,7 @@ function PublicationsPage() {
 				},
 			});
 		};
-	}, [availablePostingChannels.data, selectedPostingChannelId]);
+	}, [selectedPostingChannelId, publications]);
 
 	const createSlotMutation = useMutation({
 		mutationFn: async () => {
