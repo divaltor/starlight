@@ -32,11 +32,7 @@ composer.on("inline_query", async (ctx) => {
 		const whereClause: Prisma.TweetWhereInput = {};
 
 		if (query) {
-			whereClause.tweetData = {
-				path: ["text"],
-				string_contains: query,
-				mode: "insensitive",
-			};
+			whereClause.tweetText = { contains: query, mode: "insensitive" };
 		}
 
 		const tweets = await prisma.tweet.findMany({

@@ -81,6 +81,10 @@ model Tweet {
     /// [TweetType]
     tweetData Json @map("tweet_data")
 
+    // Virtual columns, manually generated in SQL migration
+    tweetText String? @map("tweet_text")
+    username  String? @map("username")
+
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -90,7 +94,7 @@ model Tweet {
     scheduledSlotTweets ScheduledSlotTweet[]
 
     @@id(name: "tweetId", [id, userId])
-    @@index([createdAt(sort: Desc), userId])
+    @@index([userId, createdAt(sort: Desc)])
     @@map("tweets")
 }
 
