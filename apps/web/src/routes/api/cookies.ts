@@ -1,22 +1,12 @@
-import { CookieEncryption } from "@repo/crypto";
-import { env } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
-import { Bot } from "grammy";
-import Redis from "ioredis";
 import { z } from "zod/v4";
+import { bot, cookieEncryption, redis } from "@/lib/actions";
 import { decodeCookies } from "@/lib/utils";
 import { authMiddleware, optionalAuthMiddleware } from "@/middleware/auth";
 
 const cookiesSchema = z.object({
 	cookies: z.string(),
 });
-
-const redis = new Redis(env.REDIS_URL);
-const bot = new Bot(env.BOT_TOKEN);
-const cookieEncryption = new CookieEncryption(
-	env.COOKIE_ENCRYPTION_KEY,
-	env.COOKIE_ENCRYPTION_SALT,
-);
 
 export const saveCookies = createServerFn({ method: "POST" })
 	.middleware([authMiddleware])

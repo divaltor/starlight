@@ -51,7 +51,11 @@ export const authMiddleware = createMiddleware().server(async ({ next }) => {
 	}
 
 	return next({
-		context: { user: parsedData.user, databaseUserId: databaseUser.id },
+		context: {
+			user: parsedData.user,
+			databaseUserId: databaseUser.id,
+			queryId: parsedData.query_id,
+		},
 	});
 });
 

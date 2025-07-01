@@ -11,18 +11,6 @@ const composer = new Composer<Context>();
 const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
-composer.on(":web_app_data", async (ctx) => {
-	const data = ctx.msg.web_app_data.data;
-
-	ctx.logger.info("Received web app data %s from %s user", data, ctx.from?.id);
-
-	if (data.startsWith("publish:")) {
-		const chatId = data.split(":")[1];
-
-		await ctx.reply(`Publishing to chat ${chatId}`);
-	}
-});
-
 composer.on("inline_query", async (ctx) => {
 	const offset = ctx.inlineQuery.offset || "0";
 	const photoOffset = Number(offset) || 0;

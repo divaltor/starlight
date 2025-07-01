@@ -21,6 +21,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
+import { respondToWebAppData } from "@/routes/api/bot";
 import { getPostingChannels } from "@/routes/api/posting-channels";
 import {
 	addTweetToSlot,
@@ -125,7 +126,12 @@ function PublicationsPage() {
 					action: {
 						type: "callback",
 						payload: () => {
-							sendData(`publish:${selectedPostingChannelId ?? ""}`);
+							respondToWebAppData({
+								headers: { Authorization: rawInitData ?? "" },
+								data: {
+									slotId: publications[0].id,
+								},
+							});
 						},
 					},
 				},
