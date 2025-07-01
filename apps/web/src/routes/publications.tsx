@@ -89,37 +89,66 @@ function PublicationsPage() {
 	}, [availablePostingChannels.data, selectedPostingChannelId]);
 
 	useEffect(() => {
-		updateButtons({
-			mainButton: {
-				text: "Publish",
-				state:
-					selectedPostingChannelId && publications.length > 0
-						? "visible"
-						: "hidden",
-				isEnabled:
-					!!selectedPostingChannelId &&
-					publications.length > 0 &&
-					publications.some((pub) => pub.status === "WAITING"),
-				hasShineEffect: true,
-				action: {
-					type: "callback",
-					payload: () => {
-						sendData(`publish:${selectedPostingChannelId ?? ""}`);
+		if (publications.length === 0 && selectedPostingChannelId) {
+			updateButtons({
+				mainButton: {
+					state: "visible",
+					text: "Add slot",
+					hasShineEffect: true,
+					isEnabled: true,
+					action: {
+						type: "callback",
+						payload: () => {
+							handleCreateNewSlot();
+						},
 					},
 				},
-			},
-			secondaryButton: {
-				text: "Add slot",
-				state: selectedPostingChannelId ? "visible" : "hidden",
-				isEnabled: !!selectedPostingChannelId,
-				action: {
-					type: "callback",
-					payload: () => {
-						handleCreateNewSlot();
+				secondaryButton: {
+					state: "hidden",
+				},
+			});
+		} else if (publications.length > 0 && selectedPostingChannelId) {
+			updateButtons({
+				mainButton: {
+					text: "Publish",
+					state:
+						selectedPostingChannelId && publications.length > 0
+							? "visible"
+							: "hidden",
+					isEnabled:
+						!!selectedPostingChannelId &&
+						publications.length > 0 &&
+						publications.some((pub) => pub.status === "WAITING"),
+					hasShineEffect: true,
+					action: {
+						type: "callback",
+						payload: () => {
+							sendData(`publish:${selectedPostingChannelId ?? ""}`);
+						},
 					},
 				},
-			},
-		});
+				secondaryButton: {
+					text: "Add slot",
+					state: selectedPostingChannelId ? "visible" : "hidden",
+					isEnabled: !!selectedPostingChannelId,
+					action: {
+						type: "callback",
+						payload: () => {
+							handleCreateNewSlot();
+						},
+					},
+				},
+			});
+		} else {
+			updateButtons({
+				mainButton: {
+					state: "hidden",
+				},
+				secondaryButton: {
+					state: "hidden",
+				},
+			});
+		}
 
 		return () => {
 			updateButtons({
@@ -131,7 +160,7 @@ function PublicationsPage() {
 				},
 			});
 		};
-	}, [selectedPostingChannelId, publications]);
+	}, [availablePostingChannels.data, selectedPostingChannelId, publications]);
 
 	const createSlotMutation = useMutation({
 		mutationFn: async () => {
