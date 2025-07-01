@@ -180,6 +180,7 @@ model ScheduledSlot {
 enum ScheduledSlotStatus {
     WAITING
     PUBLISHED
+    PUBLISHING
 }
 
 model ScheduledSlotTweet {

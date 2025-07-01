@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { closeMiniApp, postEvent } from "@telegram-apps/sdk-react";
 import {
 	AlertTriangle,
 	Calendar,
@@ -44,7 +45,7 @@ function PublicationsPage() {
 	>(undefined); // Default posting channel ID
 	const queryClient = useQueryClient();
 
-	const { rawInitData } = useTelegramContext();
+	const { rawInitData, updateButtons } = useTelegramContext();
 
 	const {
 		data: publications = [],
@@ -86,6 +87,37 @@ function PublicationsPage() {
 			);
 		}
 	}, [availablePostingChannels.data, selectedPostingChannelId]);
+
+	useEffect(() => {
+		updateButtons({
+			mainButton: {
+				text: "Publish",
+				state: "visible",
+				hasShineEffect: true,
+				action: {
+					type: "callback",
+					payload: () => {
+						postEvent("web_app_data_send", {
+							data: `publish:${selectedPostingChannelId ?? ""}`,
+						});
+						if (closeMiniApp.isAvailable()) {
+							closeMiniApp();
+						}
+					},
+				},
+			},
+			secondaryButton: {
+				text: "Add slot",
+				state: "visible",
+				action: {
+					type: "callback",
+					payload: () => {
+						handleCreateNewSlot();
+					},
+				},
+			},
+		});
+	}, [availablePostingChannels.data]);
 
 	const createSlotMutation = useMutation({
 		mutationFn: async () => {
@@ -387,33 +419,37 @@ function PublicationsPage() {
 				{hasPostingChannels && publications.length > 0 && (
 					<div className="mb-6 space-y-4 sm:mb-8">
 						<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-							<div className="flex flex-col gap-2">
-								<label className="font-medium text-gray-700 text-sm">
-									Target Channel:
-								</label>
-								<Select
-									value={selectedPostingChannelId?.toString()}
-									onValueChange={(value) => {
-										setSelectedPostingChannelId(Number(value));
-									}}
-								>
-									<SelectTrigger className="w-full md:w-[280px]">
-										<SelectValue placeholder="Select a channel" />
-									</SelectTrigger>
-									<SelectContent>
-										{availablePostingChannels.data?.postingChannels.map(
-											(channel) => (
-												<SelectItem
-													key={channel.chat.id}
-													value={channel.chat.id.toString()}
-												>
-													{channel.chat.title}
-												</SelectItem>
-											),
-										)}
-									</SelectContent>
-								</Select>
-							</div>
+							{/* Only show channel selector if there are more than 1 channels */}
+							{availablePostingChannels.data?.postingChannels &&
+								availablePostingChannels.data.postingChannels.length > 1 && (
+									<div className="flex flex-col gap-2">
+										<label className="font-medium text-gray-700 text-sm">
+											Target Channel:
+										</label>
+										<Select
+											value={selectedPostingChannelId?.toString()}
+											onValueChange={(value) => {
+												setSelectedPostingChannelId(Number(value));
+											}}
+										>
+											<SelectTrigger className="w-full md:w-[280px]">
+												<SelectValue placeholder="Select a channel" />
+											</SelectTrigger>
+											<SelectContent>
+												{availablePostingChannels.data?.postingChannels.map(
+													(channel) => (
+														<SelectItem
+															key={channel.chat.id}
+															value={channel.chat.id.toString()}
+														>
+															{channel.chat.title}
+														</SelectItem>
+													),
+												)}
+											</SelectContent>
+										</Select>
+									</div>
+								)}
 							<div className="flex justify-center md:justify-end">
 								<Button
 									onClick={handleCreateNewSlot}

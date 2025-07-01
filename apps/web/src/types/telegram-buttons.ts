@@ -16,6 +16,7 @@ export interface MainButtonConfig extends BaseButtonConfig {
 	color?: string;
 	textColor?: string;
 	isLoading?: boolean;
+	hasShineEffect?: boolean;
 }
 
 export interface SettingsButtonConfig extends BaseButtonConfig {
@@ -26,9 +27,13 @@ export interface BackButtonConfig extends BaseButtonConfig {
 	// Back button has fixed appearance
 }
 
+export interface SecondaryButtonConfig extends MainButtonConfig {
+	// Secondary button has fixed appearance
+}
+
 export interface RouteButtonConfig {
 	mainButton?: MainButtonConfig;
 	settingsButton?: SettingsButtonConfig;
 	backButton?: BackButtonConfig;
-	// Future buttons can be added here
+	secondaryButton?: SecondaryButtonConfig;
 }

@@ -7,12 +7,14 @@ import {
 	mountClosingBehavior,
 	mountMainButton,
 	mountMiniAppSync,
+	mountSecondaryButton,
 	mountSettingsButton,
 	mountSwipeBehavior,
 	restoreInitData,
 	retrieveLaunchParams,
 	setDebug,
 	type ThemeParams,
+	themeParams,
 	themeParamsState,
 	viewport,
 } from "@telegram-apps/sdk-react";
@@ -68,14 +70,14 @@ export async function initTMA(): Promise<void> {
 		});
 	}
 
-	await mountComponents();
-
-	restoreInitData();
-
 	if (mountMiniAppSync.isAvailable()) {
 		mountMiniAppSync();
 		bindThemeParamsCssVars();
 	}
+
+	await mountComponents();
+
+	restoreInitData();
 }
 
 /**
@@ -87,6 +89,7 @@ async function mountComponents(): Promise<void> {
 	mountSettingsButton.ifAvailable();
 	mountSwipeBehavior.ifAvailable();
 	mountClosingBehavior.ifAvailable();
+	mountSecondaryButton.ifAvailable();
 
 	viewport.mount.ifAvailable();
 	viewport.bindCssVars.ifAvailable();
