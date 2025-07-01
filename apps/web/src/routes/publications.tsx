@@ -76,10 +76,10 @@ function PublicationsPage() {
 		enabled: !!rawInitData,
 	});
 
-	// Set default posting channel when data loads
+	// Set default posting channel when data loads (only once)
 	useEffect(() => {
 		if (
-			!selectedPostingChannelId &&
+			selectedPostingChannelId === undefined &&
 			availablePostingChannels.data?.postingChannels &&
 			availablePostingChannels.data.postingChannels.length > 0
 		) {
@@ -87,88 +87,7 @@ function PublicationsPage() {
 				Number(availablePostingChannels.data.postingChannels[0].chat.id),
 			);
 		}
-	}, [availablePostingChannels.data, selectedPostingChannelId]);
-
-	useEffect(() => {
-		console.log("selectedPostingChannelId", selectedPostingChannelId);
-		console.log("publications", publications);
-		if (publications.length === 0 && selectedPostingChannelId) {
-			updateButtons({
-				mainButton: {
-					state: "visible",
-					text: "Add slot",
-					hasShineEffect: true,
-					isEnabled: true,
-					action: {
-						type: "callback",
-						payload: () => {
-							handleCreateNewSlot();
-						},
-					},
-				},
-				secondaryButton: {
-					state: "hidden",
-				},
-			});
-		} else if (publications.length > 0 && selectedPostingChannelId) {
-			updateButtons({
-				mainButton: {
-					text: "Publish",
-					state:
-						selectedPostingChannelId && publications.length > 0
-							? "visible"
-							: "hidden",
-					isEnabled:
-						!!selectedPostingChannelId &&
-						publications.length > 0 &&
-						publications.some((pub) => pub.status === "WAITING"),
-					hasShineEffect: true,
-					action: {
-						type: "callback",
-						payload: () => {
-							respondToWebAppData({
-								headers: { Authorization: rawInitData ?? "" },
-								data: {
-									slotId: publications[0].id,
-								},
-							});
-						},
-					},
-				},
-				secondaryButton: {
-					text: "Add slot",
-					state: selectedPostingChannelId ? "visible" : "hidden",
-					isEnabled: !!selectedPostingChannelId,
-					action: {
-						type: "callback",
-						payload: () => {
-							handleCreateNewSlot();
-						},
-					},
-				},
-			});
-		} else {
-			updateButtons({
-				mainButton: {
-					state: "hidden",
-				},
-				secondaryButton: {
-					state: "hidden",
-				},
-			});
-		}
-
-		return () => {
-			updateButtons({
-				mainButton: {
-					state: "hidden",
-				},
-				secondaryButton: {
-					state: "hidden",
-				},
-			});
-		};
-	}, [selectedPostingChannelId, publications]);
+	}, [availablePostingChannels.data]); // Remove selectedPostingChannelId from deps
 
 	const createSlotMutation = useMutation({
 		mutationFn: async () => {
@@ -190,10 +109,6 @@ function PublicationsPage() {
 			});
 		},
 	});
-
-	const handleCreateNewSlot = () => {
-		createSlotMutation.mutate();
-	};
 
 	const deleteSlotMutation = useMutation({
 		mutationFn: async (slotId: string) => {
@@ -291,6 +206,73 @@ function PublicationsPage() {
 	const handleAddTweet = (slotId: string) => {
 		addTweetMutation.mutate({ slotId });
 	};
+
+	// Simple effect that only runs when we have meaningful data
+	useEffect(() => {
+		console.log("Updating buttons for:", {
+			channelId: selectedPostingChannelId,
+			publicationsCount: publications.length,
+		});
+
+		if (publications.length === 0) {
+			// No publications - show "Add slot" button
+			updateButtons({
+				mainButton: {
+					state: "visible",
+					text: "Add slot",
+					hasShineEffect: true,
+					isEnabled: true,
+					action: {
+						type: "callback",
+						payload: () => createSlotMutation.mutate(),
+					},
+				},
+				secondaryButton: {
+					state: "hidden",
+				},
+			});
+		} else {
+			// Has publications - show "Publish" and "Add slot" buttons
+			const hasWaitingPubs = publications.some(
+				(pub) => pub.status === "WAITING",
+			);
+			updateButtons({
+				mainButton: {
+					text: "Publish",
+					state: "visible",
+					isEnabled: hasWaitingPubs,
+					hasShineEffect: true,
+					action: {
+						type: "callback",
+						payload: () => {
+							respondToWebAppData({
+								headers: { Authorization: rawInitData ?? "" },
+								data: {
+									slotId: publications[0].id,
+								},
+							});
+						},
+					},
+				},
+				secondaryButton: {
+					text: "Add slot",
+					state: "visible",
+					isEnabled: true,
+					action: {
+						type: "callback",
+						payload: () => createSlotMutation.mutate(),
+					},
+				},
+			});
+		}
+
+		return () => {
+			updateButtons({
+				mainButton: { state: "hidden" },
+				secondaryButton: { state: "hidden" },
+			});
+		};
+	}, [selectedPostingChannelId, publications, isLoading]);
 
 	const getNextAvailableSlotTime = () => {
 		const today = new Date();
