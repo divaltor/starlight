@@ -11,6 +11,10 @@ const composer = new Composer<Context>();
 const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
+composer.on("chosen_inline_result", async (ctx) => {
+	await ctx.reply(`Received chosen inline result: ${ctx.chosenInlineResult}`);
+});
+
 composer.on("inline_query", async (ctx) => {
 	const offset = ctx.inlineQuery.offset || "0";
 	const photoOffset = Number(offset) || 0;
