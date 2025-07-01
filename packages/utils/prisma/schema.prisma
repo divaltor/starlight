@@ -82,8 +82,8 @@ model Tweet {
     tweetData Json @map("tweet_data")
 
     // Virtual columns, manually generated in SQL migration
-    tweetText String? @map("tweet_text")
-    username  String? @map("username")
+    tweetText String? @default(dbgenerated()) @map("tweet_text") @db.Text
+    username  String? @default(dbgenerated()) @map("username") @db.Text
 
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
@@ -95,6 +95,8 @@ model Tweet {
 
     @@id(name: "tweetId", [id, userId])
     @@index([userId, createdAt(sort: Desc)])
+    @@index([tweetText])
+    @@index([username])
     @@map("tweets")
 }
 
