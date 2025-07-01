@@ -221,7 +221,7 @@ function PublicationsPage() {
 					state: "visible",
 					text: "Add slot",
 					hasShineEffect: true,
-					isEnabled: true,
+					isEnabled: selectedPostingChannelId !== undefined,
 					action: {
 						type: "callback",
 						payload: () => createSlotMutation.mutate(),
