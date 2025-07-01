@@ -16,6 +16,7 @@ export interface MainButtonConfig extends BaseButtonConfig {
 	color?: string;
 	textColor?: string;
 	isLoading?: boolean;
+	isEnabled?: boolean;
 	hasShineEffect?: boolean;
 }
 

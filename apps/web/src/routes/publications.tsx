@@ -92,7 +92,10 @@ function PublicationsPage() {
 		updateButtons({
 			mainButton: {
 				text: "Publish",
-				state: "visible",
+				state: selectedPostingChannelId ? "visible" : "hidden",
+				isEnabled:
+					!!selectedPostingChannelId &&
+					!!availablePostingChannels.data?.postingChannels?.length,
 				hasShineEffect: true,
 				action: {
 					type: "callback",
@@ -108,7 +111,8 @@ function PublicationsPage() {
 			},
 			secondaryButton: {
 				text: "Add slot",
-				state: "visible",
+				state: selectedPostingChannelId ? "visible" : "hidden",
+				isEnabled: !!selectedPostingChannelId,
 				action: {
 					type: "callback",
 					payload: () => {
@@ -117,7 +121,18 @@ function PublicationsPage() {
 				},
 			},
 		});
-	}, [availablePostingChannels.data]);
+
+		return () => {
+			updateButtons({
+				mainButton: {
+					state: "hidden",
+				},
+				secondaryButton: {
+					state: "hidden",
+				},
+			});
+		};
+	}, [availablePostingChannels.data, selectedPostingChannelId]);
 
 	const createSlotMutation = useMutation({
 		mutationFn: async () => {
