@@ -2,6 +2,7 @@ import { useRouter } from "@tanstack/react-router";
 import {
 	backButton,
 	mainButton,
+	secondaryButton,
 	settingsButton,
 } from "@telegram-apps/sdk-react";
 import { useCallback, useEffect, useRef } from "react";
@@ -64,7 +65,8 @@ export function useTelegramButtons(
 
 			// Main Button Logic
 			if (config.mainButton) {
-				const { state, text, action, condition, isLoading } = config.mainButton;
+				const { state, text, action, condition, isLoading, hasShineEffect } =
+					config.mainButton;
 
 				const shouldShow = condition ? condition() : state === "visible";
 
@@ -74,6 +76,7 @@ export function useTelegramButtons(
 						isVisible: true,
 						isEnabled: state !== "disabled",
 						isLoaderVisible: isLoading || false,
+						hasShineEffect: hasShineEffect || false,
 					});
 
 					if (action && mainButton.onClick.isAvailable()) {
@@ -84,6 +87,32 @@ export function useTelegramButtons(
 					}
 				} else if (mainButton.isMounted()) {
 					mainButton.setParams({ isVisible: false });
+				}
+			}
+
+			if (config.secondaryButton) {
+				const { state, text, action, condition, isLoading, hasShineEffect } =
+					config.secondaryButton;
+
+				const shouldShow = condition ? condition() : state === "visible";
+
+				if (shouldShow && secondaryButton.isMounted()) {
+					secondaryButton.setParams({
+						text,
+						isVisible: true,
+						isEnabled: state !== "disabled",
+						isLoaderVisible: isLoading || false,
+						hasShineEffect: hasShineEffect || false,
+					});
+
+					if (action && secondaryButton.onClick.isAvailable()) {
+						const unsubscribe = secondaryButton.onClick(() => {
+							executeButtonAction(action, "secondaryButton");
+						});
+						cleanupFunctions.current.push(() => unsubscribe?.());
+					}
+				} else if (secondaryButton.isMounted()) {
+					secondaryButton.setParams({ isVisible: false });
 				}
 			}
 

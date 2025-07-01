@@ -405,16 +405,6 @@ function PublicationsPage() {
 	return (
 		<div className="min-h-screen bg-gray-50 p-2 sm:p-4">
 			<div className="mx-auto max-w-4xl">
-				{/* Header */}
-				<div className="mb-6 sm:mb-8">
-					<h1 className="mb-2 font-bold text-2xl text-gray-900 sm:text-3xl">
-						Publication Scheduler
-					</h1>
-					<p className="text-gray-600 text-sm sm:text-base">
-						Schedule and manage your social media publications
-					</p>
-				</div>
-
 				{/* Chat Selector and Create New Slot Button */}
 				{hasPostingChannels && publications.length > 0 && (
 					<div className="mb-6 space-y-4 sm:mb-8">
@@ -450,19 +440,6 @@ function PublicationsPage() {
 										</Select>
 									</div>
 								)}
-							<div className="flex justify-center md:justify-end">
-								<Button
-									onClick={handleCreateNewSlot}
-									disabled={createSlotMutation.isPending}
-									className="gap-2 w-[50%] md:w-auto"
-									size="lg"
-								>
-									<Plus className="h-4 w-4" />
-									{createSlotMutation.isPending
-										? "Creating..."
-										: "Create new slot"}
-								</Button>
-							</div>
 						</div>
 					</div>
 				)}
