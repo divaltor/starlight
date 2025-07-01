@@ -255,12 +255,13 @@ function PublicationsPage() {
 					},
 				},
 				secondaryButton: {
-					text: "Add slot",
+					text: "Add tweet",
 					state: "visible",
 					isEnabled: true,
 					action: {
 						type: "callback",
-						payload: () => createSlotMutation.mutate(),
+						payload: () =>
+							addTweetMutation.mutate({ slotId: publications[0].id }),
 					},
 				},
 			});
