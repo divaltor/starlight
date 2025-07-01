@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { closeMiniApp, postEvent } from "@telegram-apps/sdk-react";
+import { closeMiniApp, postEvent, sendData } from "@telegram-apps/sdk-react";
 import {
 	AlertTriangle,
 	Calendar,
@@ -100,12 +100,7 @@ function PublicationsPage() {
 				action: {
 					type: "callback",
 					payload: () => {
-						postEvent("web_app_data_send", {
-							data: `publish:${selectedPostingChannelId ?? ""}`,
-						});
-						if (closeMiniApp.isAvailable()) {
-							closeMiniApp();
-						}
+						sendData(`publish:${selectedPostingChannelId ?? ""}`);
 					},
 				},
 			},
