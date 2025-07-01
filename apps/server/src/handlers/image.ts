@@ -14,6 +14,8 @@ const groupChat = composer.chatType(["group", "supergroup"]);
 privateChat.on(":web_app_data", async (ctx) => {
 	const data = ctx.msg.web_app_data.data;
 
+	ctx.logger.info("Received web app data %s from %s user", data, ctx.from?.id);
+
 	if (data.startsWith("publish:")) {
 		const chatId = data.split(":")[1];
 
