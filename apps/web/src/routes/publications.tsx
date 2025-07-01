@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { closeMiniApp, postEvent, sendData } from "@telegram-apps/sdk-react";
+import { sendData } from "@telegram-apps/sdk-react";
 import {
 	AlertTriangle,
 	Calendar,
@@ -89,6 +89,8 @@ function PublicationsPage() {
 	}, [availablePostingChannels.data, selectedPostingChannelId]);
 
 	useEffect(() => {
+		console.log("selectedPostingChannelId", selectedPostingChannelId);
+		console.log("publications", publications);
 		if (publications.length === 0 && selectedPostingChannelId) {
 			updateButtons({
 				mainButton: {
