@@ -160,7 +160,7 @@ function PublicationsPage() {
 				},
 			});
 		};
-	}, [availablePostingChannels.data, selectedPostingChannelId, publications]);
+	}, [selectedPostingChannelId, publications]);
 
 	const createSlotMutation = useMutation({
 		mutationFn: async () => {
