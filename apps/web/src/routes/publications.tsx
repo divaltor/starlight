@@ -395,24 +395,13 @@ function PublicationsPage() {
 
 	const renderEmptyState = () => (
 		<div className="flex min-h-[50vh] items-center justify-center">
-			<Card className="max-w-md mx-auto">
-				<CardContent className="py-12 text-center">
-					<Calendar className="mx-auto mb-4 h-12 w-12 text-gray-400" />
-					<p className="mb-2 text-gray-500 text-lg">
-						No scheduled publications
-					</p>
-					<p className="mb-4 text-gray-400 text-sm">
-						Create your first scheduled slot to get started
-					</p>
-					<Button
-						onClick={handleCreateNewSlot}
-						disabled={createSlotMutation.isPending}
-					>
-						<Calendar className="mr-2 h-4 w-4" />
-						{createSlotMutation.isPending ? "Creating..." : "Create first slot"}
-					</Button>
-				</CardContent>
-			</Card>
+			<div className="text-center">
+				<Calendar className="mx-auto mb-4 h-12 w-12 text-gray-400" />
+				<p className="mb-2 text-gray-500 text-lg">No scheduled publications</p>
+				<p className="text-gray-400 text-sm">
+					Create your first scheduled slot to get started
+				</p>
+			</div>
 		</div>
 	);
 
