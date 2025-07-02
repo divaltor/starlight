@@ -62,6 +62,11 @@ export const scheduledSlotWorker = new Worker<ScheduledSlotJobData>(
 			status,
 		);
 	},
+	{
+		connection: redis,
+		concurrency: 10,
+		autorun: false,
+	},
 );
 
 export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
