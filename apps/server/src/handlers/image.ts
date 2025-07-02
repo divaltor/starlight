@@ -70,9 +70,9 @@ privateChat.on(":text").filter(
 					await tx.publishedPhoto.create({
 						data: {
 							photoId: scheduledSlotTweet.tweet.photos[0]?.id as string,
-							userId: scheduledSlotTweet.tweet.userId,
+							userId: slot.userId,
 							chatId: slot.chatId,
-							scheduledSlotId: scheduledSlotTweet.id,
+							scheduledSlotId: slot.id,
 							messageId: message.message_id,
 							telegramFileId: message.photo[0]?.file_id as string,
 							telegramFileUniqueId: message.photo[0]?.file_unique_id as string,
@@ -93,9 +93,9 @@ privateChat.on(":text").filter(
 					await tx.publishedPhoto.createMany({
 						data: messages.map((message, index) => ({
 							photoId: scheduledSlotTweet.tweet.photos[index]?.id as string,
-							userId: scheduledSlotTweet.tweet.userId,
+							userId: slot.userId,
 							chatId: slot.chatId,
-							scheduledSlotId: scheduledSlotTweet.id,
+							scheduledSlotId: slot.id,
 							messageId: message.message_id,
 							telegramFileId: message.photo[0]?.file_id as string,
 							telegramFileUniqueId: message.photo[0]?.file_unique_id as string,
