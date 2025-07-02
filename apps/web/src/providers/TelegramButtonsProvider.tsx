@@ -32,6 +32,8 @@ export function TelegramButtonsProvider({
 }: {
 	children: React.ReactNode;
 }) {
+	"use client";
+
 	const router = useRouter();
 	const canGoBack = useCanGoBack();
 
