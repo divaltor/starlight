@@ -138,6 +138,9 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 				await bot.api.sendPhoto(
 					scheduledTweet.scheduledSlot.chatId.toString(),
 					photo.s3Url as string,
+					{
+						caption: `https://x.com/i/status/${scheduledTweet.tweetId}`,
+					},
 				),
 			];
 		} else {
