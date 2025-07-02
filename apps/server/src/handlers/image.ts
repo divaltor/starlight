@@ -1,5 +1,6 @@
 import { env, type Prisma } from "@repo/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
+import { webAppKeyboard } from "@/bot";
 import { imagesQueue } from "@/queue/image-collector";
 import { publishingQueue } from "@/queue/publishing";
 import { schedulerFlow } from "@/queue/scheduler";
@@ -45,6 +46,23 @@ privateChat.on(":text").filter(
 		});
 
 		if (!slot) {
+			return;
+		}
+
+		if (slot.status === "PUBLISHING") {
+			await ctx.reply(
+				"Slot is already being published. While you waiting you can review your gallery ✨",
+				{
+					reply_markup: webAppKeyboard("app"),
+				},
+			);
+			return;
+		}
+
+		if (slot.status === "PUBLISHED") {
+			await ctx.reply("Slot is already published, create new one here 🪶.", {
+				reply_markup: webAppKeyboard("publications"),
+			});
 			return;
 		}
 

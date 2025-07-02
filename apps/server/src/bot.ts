@@ -1,7 +1,7 @@
 import { autoRetry } from "@grammyjs/auto-retry";
 import { env } from "@repo/utils";
 import { autoQuote } from "@roziscoding/grammy-autoquote";
-import { Bot, session } from "grammy";
+import { Bot, InlineKeyboard, session } from "grammy";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
 import { attachChat, attachUser } from "@/middlewares/session";
@@ -21,6 +21,11 @@ bot.use(
 		},
 	}),
 );
+
+export const webAppKeyboard = (page: "app" | "publications" | "settings") =>
+	new InlineKeyboard().webApp("Create new slot", {
+		url: `${env.BASE_FRONTEND_URL}/${page}`,
+	});
 
 bot.use(async (ctx, next) => {
 	ctx.logger = logger.child({});
