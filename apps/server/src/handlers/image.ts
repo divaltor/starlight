@@ -1,9 +1,16 @@
-import { env, type Prisma } from "@repo/utils";
-import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
+import { env, getPrismaClient, type Prisma } from "@repo/utils";
+import {
+	Composer,
+	InlineKeyboard,
+	InlineQueryResultBuilder,
+	InputMediaBuilder,
+} from "grammy";
+import type { Message } from "grammy/types";
+import { bot } from "@/bot";
 import { imagesQueue } from "@/queue/image-collector";
 import { publishingQueue } from "@/queue/publishing";
 import { scrapperQueue } from "@/queue/scrapper";
-import { prisma } from "@/storage";
+import { prisma, redis } from "@/storage";
 import type { Context } from "@/types";
 
 const composer = new Composer<Context>();
@@ -12,14 +19,96 @@ const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
 privateChat.on(":text").filter(
-	(ctx) => ctx.msg.via_bot !== undefined,
+	(ctx) => ctx.msg.via_bot !== undefined && ctx.msg.text.startsWith("🪶"),
 	async (ctx) => {
-		const match = ctx.msg.text.match(/^🪶href="(.*)"[^>]*>(.*)/);
-		if (match?.[1]) {
-			const slotId = match[1].trim();
+		const slotId = await redis.getdel(`${ctx.user?.telegramId}:publish`);
 
-			await ctx.reply(slotId);
+		if (!slotId) {
+			return;
 		}
+
+		const prisma = getPrismaClient();
+
+		const slot = await prisma.scheduledSlot.findUnique({
+			where: {
+				id: slotId,
+				userId: ctx.user?.id as string,
+			},
+			include: {
+				postingChannel: {
+					include: {
+						chat: true,
+					},
+				},
+				scheduledSlotTweets: {
+					include: {
+						tweet: {
+							include: {
+								photos: true,
+							},
+						},
+					},
+				},
+			},
+		});
+
+		if (!slot) {
+			return;
+		}
+
+		await prisma.$transaction(async (tx) => {
+			for (const scheduledSlotTweet of slot.scheduledSlotTweets) {
+				if (scheduledSlotTweet.tweet.photos.length === 1) {
+					const message = await bot.api.sendPhoto(
+						slot.chatId.toString(),
+						scheduledSlotTweet.tweet.photos[0]?.s3Url as string,
+						{
+							caption: `https://x.com/i/status/${scheduledSlotTweet.tweet.id}`,
+						},
+					);
+
+					await tx.publishedPhoto.create({
+						data: {
+							photoId: scheduledSlotTweet.tweet.photos[0]?.id as string,
+							userId: scheduledSlotTweet.tweet.userId,
+							chatId: slot.chatId,
+							scheduledSlotId: scheduledSlotTweet.id,
+							messageId: message.message_id,
+							telegramFileId: message.photo[0]?.file_id as string,
+							telegramFileUniqueId: message.photo[0]?.file_unique_id as string,
+						},
+					});
+				} else {
+					const messages = (await bot.api.sendMediaGroup(
+						slot.chatId.toString(),
+						scheduledSlotTweet.tweet.photos.map((photo, index) =>
+							InputMediaBuilder.photo(photo.s3Url as string, {
+								...(index === 0 && {
+									caption: `https://x.com/i/status/${scheduledSlotTweet.tweet.id}`,
+								}),
+							}),
+						),
+					)) as Message.PhotoMessage[];
+
+					await tx.publishedPhoto.createMany({
+						data: messages.map((message, index) => ({
+							photoId: scheduledSlotTweet.tweet.photos[index]?.id as string,
+							userId: scheduledSlotTweet.tweet.userId,
+							chatId: slot.chatId,
+							scheduledSlotId: scheduledSlotTweet.id,
+							messageId: message.message_id,
+							telegramFileId: message.photo[0]?.file_id as string,
+							telegramFileUniqueId: message.photo[0]?.file_unique_id as string,
+						})),
+					});
+				}
+			}
+
+			await tx.scheduledSlot.update({
+				where: { id: slotId },
+				data: { status: "PUBLISHED" },
+			});
+		});
 	},
 );
 

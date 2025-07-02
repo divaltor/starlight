@@ -3,7 +3,7 @@ import { getPrismaClient } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
 import { InlineQueryResultBuilder } from "grammy";
 import { z } from "zod/v4";
-import { bot } from "@/lib/actions";
+import { bot, redis } from "@/lib/actions";
 import { authMiddleware } from "@/middleware/auth";
 
 const publishSchema = z.object({
@@ -44,20 +44,14 @@ export const respondToWebAppData = createServerFn({ method: "GET" })
 
 		const postingChannel = slot.postingChannel;
 
+		await redis.setex(`${context.user.id}:publish`, 60 * 5, slot.id);
+
 		await bot.api.answerWebAppQuery(
 			context.queryId,
 			InlineQueryResultBuilder.article(
 				`${data.slotId}`,
 				`Publish slot ${postingChannel.chat.title}`,
-			).text(
-				`🪶[ ](https://example.com/${slot.id})${postingChannel.chat.title}`,
-				{
-					parse_mode: "MarkdownV2",
-					link_preview_options: {
-						is_disabled: true,
-					},
-				},
-			),
+			).text(`🪶 ${postingChannel.chat.title}`),
 		);
 
 		return { success: true };
