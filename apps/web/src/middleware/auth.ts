@@ -25,7 +25,7 @@ export const authMiddleware = createMiddleware().server(async ({ next }) => {
 	if (env.ENVIRONMENT === "prod") {
 		try {
 			validate(auth, env.BOT_TOKEN);
-		} catch (error) {
+		} catch {
 			throw new Error("Invalid init data");
 		}
 	}
@@ -79,7 +79,7 @@ export const optionalAuthMiddleware = createMiddleware().server(
 						user: parsedData.user,
 					};
 				}
-			} catch (error) {
+			} catch {
 				// Ignore auth errors for optional auth
 			}
 		}

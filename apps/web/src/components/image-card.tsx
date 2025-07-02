@@ -16,7 +16,6 @@ interface ImageCardProps {
 	index: number;
 	canDelete: boolean;
 	onDelete: (index: number) => void;
-	onReshuffle?: (index: number) => void;
 }
 
 export function ImageCard({
@@ -25,20 +24,20 @@ export function ImageCard({
 	index,
 	canDelete,
 	onDelete,
-	onReshuffle,
 }: ImageCardProps) {
 	const [isPressed, setIsPressed] = useState(false);
 
 	return (
-		<div
+		<button
+			type="button"
 			className={`group relative aspect-square overflow-hidden rounded-lg bg-gray-100 transition-transform duration-150 ${
 				isPressed ? "scale-95" : "scale-100"
 			}`}
-			onTouchStart={() => setIsPressed(true)}
-			onTouchEnd={() => setIsPressed(false)}
 			onMouseDown={() => setIsPressed(true)}
 			onMouseUp={() => setIsPressed(false)}
 			onMouseLeave={() => setIsPressed(false)}
+			onTouchStart={() => setIsPressed(true)}
+			onTouchEnd={() => setIsPressed(false)}
 		>
 			<img
 				src={src || "/placeholder.svg"}
@@ -93,6 +92,6 @@ export function ImageCard({
 					{index + 1}
 				</div>
 			</div>
-		</div>
+		</button>
 	);
 }

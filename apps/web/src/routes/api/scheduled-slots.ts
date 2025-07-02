@@ -10,7 +10,7 @@ const getScheduledSlotsSchema = z.object({
 const createSlotSchema = z.object({
 	scheduledFor: z.string().datetime(),
 	tweetCount: z.number().min(1).max(10).default(5),
-	postingChannelId: z.number(),
+	postingChannelId: z.number().optional(),
 });
 
 const updateSlotSchema = z.object({
@@ -78,8 +78,13 @@ export const createScheduledSlot = createServerFn({ method: "POST" })
 	.middleware([authMiddleware])
 	.validator(createSlotSchema)
 	.handler(async ({ data, context }) => {
-		const prisma = getPrismaClient();
 		const { scheduledFor, tweetCount, postingChannelId } = data;
+
+		if (!postingChannelId) {
+			throw new Error("Posting channel ID is required");
+		}
+
+		const prisma = getPrismaClient();
 		const userId = context.databaseUserId;
 
 		// Check if user exists and get posting channel

@@ -72,10 +72,7 @@ export function TelegramButtonsProvider({
 		buttonManager.updateConfig(currentConfig);
 	}, [currentConfig, buttonManager]);
 
-	let rawInitData: string | undefined;
-	try {
-		rawInitData = useRawInitData();
-	} catch (error) {}
+	const rawInitData = useRawInitData();
 
 	// Helper function for main button
 	const setMainButton = (text: string, visible = true, action?: () => void) => {

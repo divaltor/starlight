@@ -77,7 +77,7 @@ function RouteComponent() {
 			const previousStatus = queryClient.getQueryData(["cookie-status"]);
 			return { previousStatus };
 		},
-		onSuccess: async (result, variables, context) => {
+		onSuccess: async (result, _variables, _context) => {
 			if (result.error) {
 				setError(result.error);
 				return;
@@ -97,7 +97,7 @@ function RouteComponent() {
 				setError(null);
 			}
 		},
-		onError: (error, variables, context) => {
+		onError: (_error, _variables, context) => {
 			// Rollback on error
 			if (context?.previousStatus) {
 				queryClient.setQueryData(["cookie-status"], context.previousStatus);
@@ -132,7 +132,7 @@ function RouteComponent() {
 
 			return { previousStatus };
 		},
-		onSuccess: (result, variables, context) => {
+		onSuccess: (result, _variables, context) => {
 			if (result.success) {
 				setShowCookieInput(true);
 				setError(null);
@@ -144,7 +144,7 @@ function RouteComponent() {
 				setError("Failed to delete cookies. Please try again.");
 			}
 		},
-		onError: (error, variables, context) => {
+		onError: (_error, _variables, context) => {
 			// Rollback on error
 			if (context?.previousStatus) {
 				queryClient.setQueryData(["cookie-status"], context.previousStatus);
@@ -191,8 +191,7 @@ function RouteComponent() {
 
 			// Execute mutation
 			saveCookiesMutation.mutate({ cookies: cookiesBase64 });
-		} catch (error) {
-			console.error("Error processing cookies:", error);
+		} catch {
 			setError(
 				"An error occurred while processing your cookies. Please try again.",
 			);

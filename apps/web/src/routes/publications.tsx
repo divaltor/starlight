@@ -1,13 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { sendData } from "@telegram-apps/sdk-react";
 import {
 	AlertTriangle,
 	Calendar,
 	CalendarDays,
 	CheckCircle2,
 	Clock,
-	Plus,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SlotCard } from "@/components/slot-card";
@@ -87,7 +85,7 @@ function PublicationsPage() {
 				Number(availablePostingChannels.data.postingChannels[0].chat.id),
 			);
 		}
-	}, [availablePostingChannels.data]); // Remove selectedPostingChannelId from deps
+	}, [availablePostingChannels.data, selectedPostingChannelId]); // Remove selectedPostingChannelId from deps
 
 	const createSlotMutation = useMutation({
 		mutationFn: async () => {
@@ -98,7 +96,7 @@ function PublicationsPage() {
 				type: "dynamic",
 				headers: { Authorization: rawInitData ?? "" },
 				data: {
-					postingChannelId: selectedPostingChannelId!,
+					postingChannelId: selectedPostingChannelId,
 					scheduledFor: nextSlotTime.toISOString(),
 				},
 			});
@@ -273,7 +271,14 @@ function PublicationsPage() {
 				secondaryButton: { state: "hidden" },
 			});
 		};
-	}, [selectedPostingChannelId, publications, isLoading]);
+	}, [
+		selectedPostingChannelId,
+		publications,
+		addTweetMutation.mutate,
+		createSlotMutation.mutate,
+		rawInitData,
+		updateButtons,
+	]);
 
 	const getNextAvailableSlotTime = () => {
 		const today = new Date();
@@ -436,7 +441,10 @@ function PublicationsPage() {
 							{availablePostingChannels.data?.postingChannels &&
 								availablePostingChannels.data.postingChannels.length > 1 && (
 									<div className="flex flex-col gap-2">
-										<label className="font-medium text-gray-700 text-sm">
+										<label
+											htmlFor="channel-selector"
+											className="font-medium text-gray-700 text-sm"
+										>
 											Target Channel:
 										</label>
 										<Select

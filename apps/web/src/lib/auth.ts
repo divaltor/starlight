@@ -41,7 +41,7 @@ export async function verifyAuth(
 	if (env.ENVIRONMENT === "prod") {
 		try {
 			validate(initData, env.BOT_TOKEN);
-		} catch (error) {
+		} catch {
 			return {
 				success: false,
 				error: "Invalid init data",
@@ -90,7 +90,7 @@ export async function verifyOptionalAuth(
 				user: parsedData.user,
 			};
 		}
-	} catch (error) {
+	} catch {
 		// Ignore auth errors for optional auth
 	}
 

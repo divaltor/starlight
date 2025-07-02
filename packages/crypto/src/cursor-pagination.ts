@@ -82,7 +82,7 @@ export const CursorPagination = {
 			}
 
 			return data;
-		} catch (error) {
+		} catch {
 			return null; // Invalid cursor format or decryption failed
 		}
 	},

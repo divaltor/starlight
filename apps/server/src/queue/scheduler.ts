@@ -196,7 +196,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 	},
 );
 
-scheduledTweetWorker.on("failed", async (job, err) => {
+scheduledTweetWorker.on("failed", async (job, _err) => {
 	logger.error(
 		{
 			jobId: job?.id,

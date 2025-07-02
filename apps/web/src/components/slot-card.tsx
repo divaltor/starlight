@@ -204,7 +204,7 @@ export function SlotCard({
 		setIsMasonryReady(false);
 		const timeoutId = setTimeout(layoutMasonry, 100);
 		return () => clearTimeout(timeoutId);
-	}, [layoutMasonry, tweetsForDisplay.length]);
+	}, [layoutMasonry]);
 
 	useEffect(() => {
 		const handleResize = () => {

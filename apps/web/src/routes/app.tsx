@@ -346,7 +346,7 @@ function TwitterArtViewer() {
 				const imageIndex = getImageIndex(tweet.id, photo.id);
 
 				return (
-					<div
+					<button
 						className="group relative cursor-pointer overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-300 hover:shadow-md"
 						onClick={() => openImage(imageIndex)}
 						onKeyDown={(e) => {
@@ -356,7 +356,7 @@ function TwitterArtViewer() {
 							}
 						}}
 						tabIndex={0}
-						role="button"
+						type="button"
 						aria-label={`View image by ${tweet.artist}`}
 					>
 						{isImageLoading[photo.id] && (
@@ -383,7 +383,7 @@ function TwitterArtViewer() {
 								</p>
 							</div>
 						</div>
-					</div>
+					</button>
 				);
 			}
 
@@ -410,7 +410,7 @@ function TwitterArtViewer() {
 								const imageIndex = getImageIndex(tweet.id, photo.id);
 
 								return (
-									<div
+									<button
 										key={photo.id}
 										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
 										onClick={() => openImage(imageIndex)}
@@ -421,8 +421,8 @@ function TwitterArtViewer() {
 											}
 										}}
 										tabIndex={0}
-										role="button"
 										aria-label={`View image ${photo.id}`}
+										type="button"
 									>
 										{isImageLoading[photo.id] && (
 											<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
@@ -439,7 +439,7 @@ function TwitterArtViewer() {
 											onLoad={() => handleImageLoadWithLayout(photo.id)}
 										/>
 										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
-									</div>
+									</button>
 								);
 							})}
 						</div>
@@ -451,7 +451,7 @@ function TwitterArtViewer() {
 								const imageIndex = getImageIndex(tweet.id, photo.id);
 
 								return (
-									<div
+									<button
 										key={photo.id}
 										className={`group relative cursor-pointer overflow-hidden rounded bg-gray-100 ${
 											index === 0 ? "col-span-2" : ""
@@ -464,8 +464,8 @@ function TwitterArtViewer() {
 											}
 										}}
 										tabIndex={0}
-										role="button"
 										aria-label={`View image ${photo.id}`}
+										type="button"
 									>
 										{isImageLoading[photo.id] && (
 											<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
@@ -484,7 +484,7 @@ function TwitterArtViewer() {
 											onLoad={() => handleImageLoadWithLayout(photo.id)}
 										/>
 										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
-									</div>
+									</button>
 								);
 							})}
 						</div>
@@ -496,7 +496,7 @@ function TwitterArtViewer() {
 								const imageIndex = getImageIndex(tweet.id, photo.id);
 
 								return (
-									<div
+									<button
 										key={photo.id}
 										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
 										onClick={() => openImage(imageIndex)}
@@ -507,7 +507,7 @@ function TwitterArtViewer() {
 											}
 										}}
 										tabIndex={0}
-										role="button"
+										type="button"
 										aria-label={`View image ${photo.id}`}
 									>
 										{isImageLoading[photo.id] && (
@@ -525,7 +525,7 @@ function TwitterArtViewer() {
 											onLoad={() => handleImageLoadWithLayout(photo.id)}
 										/>
 										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
-									</div>
+									</button>
 								);
 							})}
 						</div>
@@ -538,7 +538,7 @@ function TwitterArtViewer() {
 								const isLastVisible = index === 5 && photos.length > 6;
 
 								return (
-									<div
+									<button
 										key={photo.id}
 										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
 										onClick={() => openImage(imageIndex)}
@@ -549,7 +549,7 @@ function TwitterArtViewer() {
 											}
 										}}
 										tabIndex={0}
-										role="button"
+										type="button"
 										aria-label={`View image ${photo.id}`}
 									>
 										{isImageLoading[photo.id] && (
@@ -574,7 +574,7 @@ function TwitterArtViewer() {
 											</div>
 										)}
 										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
-									</div>
+									</button>
 								);
 							})}
 						</div>
@@ -715,6 +715,7 @@ function TwitterArtViewer() {
 					<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 						{Array.from({ length: 12 }).map((_, i) => (
 							<Skeleton
+								// biome-ignore lint/suspicious/noArrayIndexKey: Don't care
 								key={i}
 								className={`rounded-lg ${
 									i % 3 === 0 ? "h-80" : i % 3 === 1 ? "h-60" : "h-96"
@@ -748,6 +749,7 @@ function TwitterArtViewer() {
 						<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 							{Array.from({ length: 8 }).map((_, i) => (
 								<Skeleton
+									// biome-ignore lint/suspicious/noArrayIndexKey: Don't care
 									key={i}
 									className={`rounded-lg ${
 										i % 3 === 0 ? "h-80" : i % 3 === 1 ? "h-60" : "h-96"

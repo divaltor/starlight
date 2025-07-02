@@ -14,7 +14,6 @@ import {
 	retrieveLaunchParams,
 	setDebug,
 	type ThemeParams,
-	themeParams,
 	themeParamsState,
 	viewport,
 } from "@telegram-apps/sdk-react";

@@ -50,7 +50,7 @@ export const verifyCookies = createServerFn({ method: "POST" })
 
 			try {
 				cookieEncryption.safeDecrypt(storedCookies, context.user.id.toString());
-			} catch (error) {
+			} catch {
 				await redis.del(`user:cookies:${context.user.id}`);
 				return { hasValidCookies: false };
 			}
@@ -59,8 +59,7 @@ export const verifyCookies = createServerFn({ method: "POST" })
 				hasValidCookies: true,
 				twitterId: context.user.id.toString(),
 			};
-		} catch (error) {
-			console.error("Error verifying cookies:", error);
+		} catch {
 			return {
 				hasValidCookies: false,
 				error: "Failed to verify cookies",

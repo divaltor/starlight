@@ -24,7 +24,7 @@ feature.on(":text").filter(
 		const tempDir = tmp.dirSync({ unsafeCleanup: true });
 		try {
 			videos = await downloadVideo(ctx.msg.text, tempDir.name);
-		} catch (error) {
+		} catch {
 			abortController.abort();
 
 			await ctx.reply(`${ctx.from?.username} fuck off.`);
