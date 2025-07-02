@@ -74,7 +74,14 @@ export function TelegramButtonsProvider({
 		buttonManager.updateConfig(currentConfig);
 	}, [currentConfig, buttonManager]);
 
-	const rawInitData = useRawInitData();
+	let rawInitData: string | undefined;
+
+	try {
+		// biome-ignore lint/correctness/useHookAtTopLevel: We can't use it in SSR because `window` is not presented and we fail
+		rawInitData = useRawInitData();
+	} catch (error) {
+		console.error(error);
+	}
 
 	// Helper function for main button
 	const setMainButton = (text: string, visible = true, action?: () => void) => {
