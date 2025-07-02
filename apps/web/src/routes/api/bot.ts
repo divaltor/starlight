@@ -50,7 +50,7 @@ export const respondToWebAppData = createServerFn({ method: "GET" })
 				`${data.slotId}`,
 				`Publish slot ${postingChannel.chat.title}`,
 			).text(
-				`[🪶](https://example.com/${slot.id}) ${postingChannel.chat.title}`,
+				`🪶[ ](https://example.com/${slot.id})${postingChannel.chat.title}`,
 				{
 					parse_mode: "MarkdownV2",
 					link_preview_options: {
