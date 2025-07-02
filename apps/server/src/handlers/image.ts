@@ -11,8 +11,19 @@ const composer = new Composer<Context>();
 const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
-privateChat.on("message", async (ctx) => {
-	await ctx.reply(ctx.inlineMessageId ?? "No inline message ID");
+privateChat.on(":text").filter(
+	(ctx) => ctx.msg.via_bot !== undefined && ctx.msg.text?.startsWith("🪶"),
+	async (ctx) => {
+		await ctx.reply(ctx.msg.via_bot?.username ?? "No username");
+
+		await ctx.reply(ctx.msg.via_bot?.id.toString() ?? "No id");
+	},
+);
+
+composer.on("chosen_inline_result", async (ctx) => {
+	ctx.logger.debug(ctx.chosenInlineResult);
+
+	await ctx.reply(ctx.chosenInlineResult.result_id);
 });
 
 composer.on("inline_query", async (ctx) => {
