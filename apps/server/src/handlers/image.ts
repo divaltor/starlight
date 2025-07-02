@@ -11,8 +11,8 @@ const composer = new Composer<Context>();
 const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
-composer.on("chosen_inline_result", async (ctx) => {
-	await ctx.reply(`Received chosen inline result: ${ctx.chosenInlineResult}`);
+privateChat.on("message", async (ctx) => {
+	await ctx.reply(ctx.inlineMessageId ?? "No inline message ID");
 });
 
 composer.on("inline_query", async (ctx) => {
