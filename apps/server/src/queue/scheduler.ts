@@ -15,6 +15,55 @@ interface ScheduledTweetJobData {
 	tweetId: string;
 }
 
+interface ScheduledSlotJobData {
+	userId: string;
+	slotId: string;
+	status: "PUBLISHING" | "PUBLISHED";
+}
+
+export const scheduledSlotWorker = new Worker<ScheduledSlotJobData>(
+	"scheduled-slots",
+	async (job) => {
+		const { userId, slotId, status } = job.data;
+
+		logger.debug({ userId, slotId }, "Processing scheduled slot");
+
+		const slot = await prisma.scheduledSlot.findUnique({
+			where: {
+				id: slotId,
+				userId,
+			},
+			include: {
+				scheduledSlotTweets: true,
+			},
+		});
+
+		if (!slot) {
+			logger.warn(
+				{ userId, slotId },
+				"Scheduled slot %s not found for user %s",
+				slotId,
+				userId,
+			);
+			return;
+		}
+
+		await prisma.scheduledSlot.update({
+			where: { id: slotId },
+			data: {
+				status,
+			},
+		});
+
+		logger.info(
+			{ userId, slotId },
+			"Scheduled slot %s marked as %s",
+			slotId,
+			status,
+		);
+	},
+);
+
 export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 	"scheduled-tweet",
 	async (job) => {

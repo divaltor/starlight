@@ -31,53 +31,6 @@ export const rateLimiter = new RateLimiterRedis({
 	blockDuration: 60, // block for 60 seconds when limit exceeded
 });
 
-interface ScheduledSlotJobData {
-	userId: string;
-	slotId: string;
-}
-
-export const scheduledSlotWorker = new Worker<ScheduledSlotJobData>(
-	"scheduled-slots",
-	async (job) => {
-		const { userId, slotId } = job.data;
-
-		logger.debug({ userId, slotId }, "Processing scheduled slot");
-
-		const slot = await prisma.scheduledSlot.findUnique({
-			where: {
-				id: slotId,
-				userId,
-			},
-			include: {
-				scheduledSlotTweets: true,
-			},
-		});
-
-		if (!slot) {
-			logger.warn(
-				{ userId, slotId },
-				"Scheduled slot %s not found for user %s",
-				slotId,
-				userId,
-			);
-			return;
-		}
-
-		await prisma.scheduledSlot.update({
-			where: { id: slotId },
-			data: {
-				status: "PUBLISHING",
-			},
-		});
-
-		logger.info(
-			{ userId, slotId },
-			"Scheduled slot %s marked as PUBLISHING",
-			slotId,
-		);
-	},
-);
-
 // Single worker that handles all chats with intelligent routing
 export const publishingWorker = new Worker<PublishingJobData>(
 	"publishing",

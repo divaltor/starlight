@@ -49,21 +49,32 @@ privateChat.on(":text").filter(
 		}
 
 		await schedulerFlow.add({
-			name: "publish-slot",
+			name: "completed-slot",
 			queueName: "scheduled-slots",
+			data: {
+				userId: ctx.user?.id as string,
+				slotId,
+				status: "PUBLISHED",
+			},
+			opts: {
+				deduplication: {
+					id: `completed-slot-${slotId}`,
+				},
+			},
 			children: [
 				{
-					name: "progress-slot",
+					name: "publishing-slot",
 					queueName: "scheduled-slots",
 					data: {
 						userId: ctx.user?.id as string,
 						slotId,
+						status: "PUBLISHING",
 					},
 					opts: {
 						removeOnComplete: true,
 						removeOnFail: true,
 						deduplication: {
-							id: `progress-slot-${slotId}`,
+							id: `publishing-slot-${slotId}`,
 						},
 					},
 				},
