@@ -1,14 +1,8 @@
-import { env, getPrismaClient, type Prisma } from "@repo/utils";
-import {
-	Composer,
-	InlineKeyboard,
-	InlineQueryResultBuilder,
-	InputMediaBuilder,
-} from "grammy";
-import type { Message } from "grammy/types";
-import { bot } from "@/bot";
+import { env, type Prisma } from "@repo/utils";
+import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { imagesQueue } from "@/queue/image-collector";
 import { publishingQueue } from "@/queue/publishing";
+import { schedulerFlow } from "@/queue/scheduler";
 import { scrapperQueue } from "@/queue/scrapper";
 import { prisma, redis } from "@/storage";
 import type { Context } from "@/types";
@@ -26,8 +20,6 @@ privateChat.on(":text").filter(
 		if (!slotId) {
 			return;
 		}
-
-		const prisma = getPrismaClient();
 
 		const slot = await prisma.scheduledSlot.findUnique({
 			where: {
@@ -56,58 +48,45 @@ privateChat.on(":text").filter(
 			return;
 		}
 
-		await prisma.$transaction(async (tx) => {
-			for (const scheduledSlotTweet of slot.scheduledSlotTweets) {
-				if (scheduledSlotTweet.tweet.photos.length === 1) {
-					const message = await bot.api.sendPhoto(
-						slot.chatId.toString(),
-						scheduledSlotTweet.tweet.photos[0]?.s3Url as string,
-						{
-							caption: `https://x.com/i/status/${scheduledSlotTweet.tweet.id}`,
+		await schedulerFlow.add({
+			name: "publish-slot",
+			queueName: "scheduled-slots",
+			children: [
+				{
+					name: "progress-slot",
+					queueName: "scheduled-slots",
+					data: {
+						userId: ctx.user?.id as string,
+						slotId,
+					},
+					opts: {
+						removeOnComplete: true,
+						removeOnFail: true,
+						deduplication: {
+							id: `progress-slot-${slotId}`,
 						},
-					);
-
-					await tx.publishedPhoto.create({
-						data: {
-							photoId: scheduledSlotTweet.tweet.photos[0]?.id as string,
-							userId: slot.userId,
-							chatId: slot.chatId,
-							scheduledSlotId: slot.id,
-							messageId: message.message_id,
-							telegramFileId: message.photo[0]?.file_id as string,
-							telegramFileUniqueId: message.photo[0]?.file_unique_id as string,
+					},
+				},
+				...slot.scheduledSlotTweets.map((tweet, index) => ({
+					name: "scheduled-tweet",
+					queueName: "scheduled-tweet",
+					data: {
+						userId: ctx.user?.id as string,
+						slotId,
+						tweetId: tweet.id,
+					},
+					opts: {
+						deduplication: {
+							id: `scheduled-tweet-${tweet.id}`,
 						},
-					});
-				} else {
-					const messages = (await bot.api.sendMediaGroup(
-						slot.chatId.toString(),
-						scheduledSlotTweet.tweet.photos.map((photo, index) =>
-							InputMediaBuilder.photo(photo.s3Url as string, {
-								...(index === 0 && {
-									caption: `https://x.com/i/status/${scheduledSlotTweet.tweet.id}`,
-								}),
-							}),
-						),
-					)) as Message.PhotoMessage[];
-
-					await tx.publishedPhoto.createMany({
-						data: messages.map((message, index) => ({
-							photoId: scheduledSlotTweet.tweet.photos[index]?.id as string,
-							userId: slot.userId,
-							chatId: slot.chatId,
-							scheduledSlotId: slot.id,
-							messageId: message.message_id,
-							telegramFileId: message.photo[0]?.file_id as string,
-							telegramFileUniqueId: message.photo[0]?.file_unique_id as string,
-						})),
-					});
-				}
-			}
-
-			await tx.scheduledSlot.update({
-				where: { id: slotId },
-				data: { status: "PUBLISHED" },
-			});
+						attempts: 3,
+						backoff: 1500,
+						delay: index * 1500,
+						removeOnComplete: true,
+						priority: index,
+					},
+				})),
+			],
 		});
 	},
 );

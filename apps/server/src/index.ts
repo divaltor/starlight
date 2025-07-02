@@ -1,3 +1,5 @@
+import { run } from "@grammyjs/runner";
+import dotenv from "dotenv";
 import { bot } from "@/bot";
 import imageHandler from "@/handlers/image";
 import publicationsHandler from "@/handlers/publications";
@@ -5,9 +7,8 @@ import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
 import { imagesWorker } from "@/queue/image-collector";
 import { publishingWorker } from "@/queue/publishing";
+import { scheduledTweetWorker } from "@/queue/scheduler";
 import { scrapperWorker } from "@/queue/scrapper";
-import { run } from "@grammyjs/runner";
-import dotenv from "dotenv";
 
 dotenv.config({ path: ".env" });
 
@@ -32,6 +33,7 @@ process.on("SIGINT", async () => {
 	await imagesWorker.close();
 	await scrapperWorker.close();
 	await publishingWorker.close();
+	await scheduledTweetWorker.close();
 	if (runner.isRunning()) await runner.stop();
 });
 
@@ -39,9 +41,11 @@ process.on("SIGTERM", async () => {
 	await imagesWorker.close();
 	await scrapperWorker.close();
 	await publishingWorker.close();
+	await scheduledTweetWorker.close();
 	if (runner.isRunning()) await runner.stop();
 });
 
 imagesWorker.run();
 scrapperWorker.run();
 publishingWorker.run();
+scheduledTweetWorker.run();

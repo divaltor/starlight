@@ -9,7 +9,7 @@ export interface AuthResult<T = any> {
 
 export async function withAuth<T = any>(
 	request: Request,
-	requireAuth = true
+	requireAuth = true,
 ): Promise<AuthResult<T>> {
 	try {
 		const body = await request.json();
@@ -20,10 +20,9 @@ export async function withAuth<T = any>(
 				return { error: authResult.error, status: 401 };
 			}
 			return { auth: authResult.auth, body };
-		} else {
-			const auth = await verifyOptionalAuth(body.initData);
-			return { auth, body };
 		}
+		const auth = await verifyOptionalAuth(body.initData);
+		return { auth, body };
 	} catch (error) {
 		return { error: "Invalid request data", status: 400 };
 	}
@@ -31,7 +30,7 @@ export async function withAuth<T = any>(
 
 export async function withValidatedAuth<T = any>(
 	request: Request,
-	validator: (data: any) => { success: boolean; data?: T; error?: string }
+	validator: (data: any) => { success: boolean; data?: T; error?: string },
 ): Promise<AuthResult<T>> {
 	try {
 		const body = await request.json();

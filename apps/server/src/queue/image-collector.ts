@@ -1,10 +1,9 @@
-import { logger } from "@/logger";
-import { calculatePerceptualHash } from "@/services/image";
-import { redis, s3 } from "@/storage";
-import { prisma } from "@/storage";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import UserAgent from "user-agents";
+import { logger } from "@/logger";
+import { calculatePerceptualHash } from "@/services/image";
+import { prisma, redis, s3 } from "@/storage";
 
 export const imagesQueue = new Queue<ImageCollectorJobData>(
 	"images-collector",

@@ -1,7 +1,7 @@
-import { initTMA } from "@/lib/init";
-import { mockEnv } from "@/lib/mockEnv";
 import { StartClient } from "@tanstack/react-start";
 import { hydrateRoot } from "react-dom/client";
+import { initTMA } from "@/lib/init";
+import { mockEnv } from "@/lib/mockEnv";
 
 import { createRouter } from "@/router";
 

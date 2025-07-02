@@ -1,4 +1,3 @@
-import { logger } from "@/logger";
 import { env, getPrismaClient } from "@repo/utils";
 import { S3Client } from "bun";
 import type { StorageAdapter } from "grammy";

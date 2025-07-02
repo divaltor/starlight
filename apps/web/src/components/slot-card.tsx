@@ -236,7 +236,7 @@ export function SlotCard({
 				return (
 					<div
 						key={tweet.id}
-						className="group relative cursor-pointer overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-300 hover:shadow-md will-change-auto"
+						className="group relative cursor-pointer overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md"
 					>
 						{isImageLoading[photo.id] && (
 							<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
@@ -252,9 +252,9 @@ export function SlotCard({
 							onLoadStart={() => handleImageLoadStart(photo.id)}
 							onLoad={() => handleImageLoadWithLayout(photo.id)}
 						/>
-						<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
+						<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 						<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
-							<div className="p-3 text-white w-full">
+							<div className="w-full p-3 text-white">
 								<div className="flex items-center justify-between">
 									<div>
 										<p className="font-medium text-sm drop-shadow-lg">
@@ -280,7 +280,7 @@ export function SlotCard({
 														e.stopPropagation();
 														onShuffleTweet(id, tweet.slotTweetId);
 													}}
-													className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-blue-300 hover:bg-white/20"
+													className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-blue-300"
 												>
 													<Shuffle className="h-3 w-3" />
 												</Button>
@@ -293,7 +293,7 @@ export function SlotCard({
 														e.stopPropagation();
 														onDeleteImage(id, photo.id);
 													}}
-													className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-white/20"
+													className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 												>
 													<X className="h-3 w-3" />
 												</Button>
@@ -311,7 +311,7 @@ export function SlotCard({
 			return (
 				<div
 					key={tweet.id}
-					className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow duration-300 hover:shadow-md will-change-auto"
+					className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md"
 				>
 					{/* Post header */}
 					<div className="mb-3 flex items-center justify-between">
@@ -340,7 +340,7 @@ export function SlotCard({
 										e.stopPropagation();
 										onShuffleTweet(id, tweet.slotTweetId);
 									}}
-									className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-gray-100"
+									className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-gray-600 hover:bg-gray-100 hover:text-blue-600"
 								>
 									<Shuffle className="h-3 w-3" />
 								</Button>
@@ -370,9 +370,9 @@ export function SlotCard({
 										onLoadStart={() => handleImageLoadStart(photo.id)}
 										onLoad={() => handleImageLoadWithLayout(photo.id)}
 									/>
-									<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
+									<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 									{status === "WAITING" && onDeleteImage && (
-										<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+										<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
 											<Button
 												variant="ghost"
 												size="sm"
@@ -380,7 +380,7 @@ export function SlotCard({
 													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
-												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-white/20"
+												className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 											>
 												<X className="h-3 w-3" />
 											</Button>
@@ -414,9 +414,9 @@ export function SlotCard({
 										onLoadStart={() => handleImageLoadStart(photo.id)}
 										onLoad={() => handleImageLoadWithLayout(photo.id)}
 									/>
-									<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
+									<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 									{status === "WAITING" && onDeleteImage && (
-										<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+										<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
 											<Button
 												variant="ghost"
 												size="sm"
@@ -424,7 +424,7 @@ export function SlotCard({
 													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
-												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-white/20"
+												className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 											>
 												<X className="h-3 w-3" />
 											</Button>
@@ -456,9 +456,9 @@ export function SlotCard({
 										onLoadStart={() => handleImageLoadStart(photo.id)}
 										onLoad={() => handleImageLoadWithLayout(photo.id)}
 									/>
-									<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
+									<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 									{status === "WAITING" && onDeleteImage && (
-										<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+										<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
 											<Button
 												variant="ghost"
 												size="sm"
@@ -466,7 +466,7 @@ export function SlotCard({
 													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
-												className="h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center text-white hover:text-red-300 hover:bg-white/20"
+												className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 											>
 												<X className="h-3 w-3" />
 											</Button>
@@ -601,7 +601,7 @@ export function SlotCard({
 				{tweetsForDisplay.length > 0 ? (
 					<div
 						ref={masonryGridRef}
-						className={`masonry-grid w-full overflow-hidden grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
+						className={`masonry-grid w-full grid-cols-1 gap-4 overflow-hidden transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
 							isMasonryReady ? "opacity-100" : "opacity-0"
 						}`}
 					>
@@ -638,7 +638,7 @@ export function SlotCard({
 					onAddTweet &&
 					canAddMoreTweets &&
 					status === "WAITING" && (
-						<div className="border-gray-200 border-t p-3 bg-gray-50">
+						<div className="border-gray-200 border-t bg-gray-50 p-3">
 							<Button
 								variant="outline"
 								onClick={() => onAddTweet(id)}

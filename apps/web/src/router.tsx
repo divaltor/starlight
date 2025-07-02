@@ -1,12 +1,12 @@
 import { createRouter as createTanstackRouter } from "@tanstack/react-router";
 import "@/index.css";
-import { routeTree } from "@/routeTree.gen";
 import {
 	QueryCache,
 	QueryClient,
 	QueryClientProvider,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { routeTree } from "@/routeTree.gen";
 
 export const queryClient = new QueryClient({
 	queryCache: new QueryCache({

@@ -1,6 +1,3 @@
-import { logger } from "@/logger";
-import { imagesQueue } from "@/queue/image-collector";
-import { Cookies, prisma, redis } from "@/storage";
 import { CookieEncryption } from "@repo/crypto";
 import type { User } from "@repo/utils";
 import { env } from "@repo/utils";
@@ -12,6 +9,9 @@ import {
 	type Tweet,
 } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
+import { logger } from "@/logger";
+import { imagesQueue } from "@/queue/image-collector";
+import { Cookies, prisma, redis } from "@/storage";
 
 const cookieEncryption = new CookieEncryption(
 	env.COOKIE_ENCRYPTION_KEY,

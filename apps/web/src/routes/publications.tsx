@@ -362,10 +362,10 @@ function PublicationsPage() {
 
 	const renderNoChannelsState = () => (
 		<div className="flex min-h-[50vh] items-center justify-center">
-			<Card className="border-orange-200 bg-orange-50 max-w-md mx-auto">
+			<Card className="mx-auto max-w-md border-orange-200 bg-orange-50">
 				<CardContent className="py-12 text-center">
 					<AlertTriangle className="mx-auto mb-4 h-12 w-12 text-orange-500" />
-					<p className="mb-2 text-orange-800 text-lg font-medium">
+					<p className="mb-2 font-medium text-lg text-orange-800">
 						No Posting Channels Available
 					</p>
 					<p className="mb-4 text-orange-700 text-sm">

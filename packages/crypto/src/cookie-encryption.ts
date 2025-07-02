@@ -5,8 +5,7 @@ import {
 	hexToBytes,
 	utf8ToBytes,
 } from "@noble/ciphers/utils";
-import { managedNonce } from "@noble/ciphers/webcrypto";
-import { randomBytes } from "@noble/ciphers/webcrypto";
+import { managedNonce, randomBytes } from "@noble/ciphers/webcrypto";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 

@@ -1,7 +1,7 @@
-import { logger } from "@/logger";
-import { redis } from "@/storage";
 import { CookieEncryption } from "@repo/crypto";
 import { env } from "@repo/utils";
+import { logger } from "@/logger";
+import { redis } from "@/storage";
 
 const cookieEncryption = new CookieEncryption(
 	env.COOKIE_ENCRYPTION_KEY,

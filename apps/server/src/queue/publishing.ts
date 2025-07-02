@@ -1,10 +1,10 @@
-import { bot } from "@/bot";
-import { logger } from "@/logger";
-import { prisma, redis } from "@/storage";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import { GrammyError, InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
 import { RateLimiterRedis, type RateLimiterRes } from "rate-limiter-flexible";
+import { bot } from "@/bot";
+import { logger } from "@/logger";
+import { prisma, redis } from "@/storage";
 
 interface PublishingJobData {
 	chatId: number;
@@ -23,19 +23,68 @@ export const publishingQueue = new Queue<PublishingJobData>("publishing", {
 });
 
 // Rate limiter: 10 photos per minute per chat
-const rateLimiter = new RateLimiterRedis({
+export const rateLimiter = new RateLimiterRedis({
 	storeClient: redis,
-	points: 10, // 10 photos
+	points: 15, // 15 photos
 	duration: 60, // per 60 seconds
 	keyPrefix: "chat-publishing",
 	blockDuration: 60, // block for 60 seconds when limit exceeded
 });
+
+interface ScheduledSlotJobData {
+	userId: string;
+	slotId: string;
+}
+
+export const scheduledSlotWorker = new Worker<ScheduledSlotJobData>(
+	"scheduled-slots",
+	async (job) => {
+		const { userId, slotId } = job.data;
+
+		logger.debug({ userId, slotId }, "Processing scheduled slot");
+
+		const slot = await prisma.scheduledSlot.findUnique({
+			where: {
+				id: slotId,
+				userId,
+			},
+			include: {
+				scheduledSlotTweets: true,
+			},
+		});
+
+		if (!slot) {
+			logger.warn(
+				{ userId, slotId },
+				"Scheduled slot %s not found for user %s",
+				slotId,
+				userId,
+			);
+			return;
+		}
+
+		await prisma.scheduledSlot.update({
+			where: { id: slotId },
+			data: {
+				status: "PUBLISHING",
+			},
+		});
+
+		logger.info(
+			{ userId, slotId },
+			"Scheduled slot %s marked as PUBLISHING",
+			slotId,
+		);
+	},
+);
 
 // Single worker that handles all chats with intelligent routing
 export const publishingWorker = new Worker<PublishingJobData>(
 	"publishing",
 	async (job) => {
 		const { chatId, userId, photoIds } = job.data;
+
+		logger.debug({ chatId, userId, photoIds }, "Processing publishing job");
 
 		// Pre-check rate limit availability
 		try {

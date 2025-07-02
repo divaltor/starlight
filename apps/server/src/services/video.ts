@@ -1,9 +1,8 @@
 import path from "node:path";
+import { env } from "@repo/utils";
 import { Glob } from "bun";
 import { create } from "youtube-dl-exec";
-
 import { logger } from "@/logger";
-import { env } from "@repo/utils";
 
 const filesGlob = new Glob("*.mp4");
 

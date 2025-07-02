@@ -1,6 +1,6 @@
+import type { NextFunction } from "grammy";
 import { prisma } from "@/storage";
 import type { Context } from "@/types";
-import type { NextFunction } from "grammy";
 
 export async function attachUser(ctx: Context, next: NextFunction) {
 	if (!ctx.from) {
