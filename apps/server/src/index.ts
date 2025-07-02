@@ -7,7 +7,7 @@ import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
 import { imagesWorker } from "@/queue/image-collector";
 import { publishingWorker } from "@/queue/publishing";
-import { scheduledTweetWorker } from "@/queue/scheduler";
+import { scheduledSlotWorker, scheduledTweetWorker } from "@/queue/scheduler";
 import { scrapperWorker } from "@/queue/scrapper";
 
 dotenv.config({ path: ".env" });
@@ -34,6 +34,7 @@ process.on("SIGINT", async () => {
 	await scrapperWorker.close();
 	await publishingWorker.close();
 	await scheduledTweetWorker.close();
+	await scheduledSlotWorker.close();
 	if (runner.isRunning()) await runner.stop();
 });
 
@@ -42,6 +43,7 @@ process.on("SIGTERM", async () => {
 	await scrapperWorker.close();
 	await publishingWorker.close();
 	await scheduledTweetWorker.close();
+	await scheduledSlotWorker.close();
 	if (runner.isRunning()) await runner.stop();
 });
 
@@ -49,3 +51,4 @@ imagesWorker.run();
 scrapperWorker.run();
 publishingWorker.run();
 scheduledTweetWorker.run();
+scheduledSlotWorker.run();
