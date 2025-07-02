@@ -74,6 +74,13 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 	async (job) => {
 		const { userId, slotId, tweetId } = job.data;
 
+		logger.info(
+			{ userId, slotId, tweetId },
+			"Processing scheduled tweet %s for user %s in slot %s",
+			tweetId,
+			userId,
+		);
+
 		const scheduledTweet = await prisma.scheduledSlotTweet.findUnique({
 			where: { id: tweetId, userId, scheduledSlotId: slotId },
 			include: {
@@ -172,6 +179,14 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 				scheduledSlotId: scheduledTweet.scheduledSlotId,
 			})),
 		});
+
+		logger.info(
+			{ userId, slotId, tweetId },
+			"Scheduled tweet %s for user %s in slot %s published",
+			tweetId,
+			userId,
+			slotId,
+		);
 	},
 	{
 		connection: redis,
