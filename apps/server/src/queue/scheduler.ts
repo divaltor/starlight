@@ -164,6 +164,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 				photoId: scheduledPhoto.photoId,
 				userId,
 				chatId: scheduledTweet.scheduledSlot.chatId,
+				mediaGroupId: messages[index]?.media_group_id,
 				messageId: messages[index]?.message_id as number,
 				telegramFileId: messages[index]?.photo?.[0]?.file_id as string,
 				telegramFileUniqueId: messages[index]?.photo?.[0]
