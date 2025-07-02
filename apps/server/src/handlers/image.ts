@@ -12,19 +12,16 @@ const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
 privateChat.on(":text").filter(
-	(ctx) => ctx.msg.via_bot !== undefined && ctx.msg.text?.startsWith("🪶"),
+	(ctx) => ctx.msg.via_bot !== undefined,
 	async (ctx) => {
-		await ctx.reply(ctx.msg.via_bot?.username ?? "No username");
+		const match = ctx.msg.text.match(/^🪶href="(.*)"[^>]*>(.*)/);
+		if (match?.[1]) {
+			const slotId = match[1].trim();
 
-		await ctx.reply(ctx.msg.via_bot?.id.toString() ?? "No id");
+			await ctx.reply(slotId);
+		}
 	},
 );
-
-composer.on("chosen_inline_result", async (ctx) => {
-	ctx.logger.debug(ctx.chosenInlineResult);
-
-	await ctx.reply(ctx.chosenInlineResult.result_id);
-});
 
 composer.on("inline_query", async (ctx) => {
 	const offset = ctx.inlineQuery.offset || "0";

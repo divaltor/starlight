@@ -1,3 +1,5 @@
+import { getPrismaClient } from "@repo/utils";
+
 import { createServerFn } from "@tanstack/react-start";
 import { InlineQueryResultBuilder } from "grammy";
 import { z } from "zod/v4";
@@ -20,12 +22,42 @@ export const respondToWebAppData = createServerFn({ method: "GET" })
 			return { success: false, error: "No query ID provided" };
 		}
 
+		const prisma = getPrismaClient();
+
+		const slot = await prisma.scheduledSlot.findUnique({
+			where: {
+				id: data.slotId,
+				userId: context.databaseUserId,
+			},
+			include: {
+				postingChannel: {
+					include: {
+						chat: true,
+					},
+				},
+			},
+		});
+
+		if (!slot) {
+			return { success: false, error: "Slot not found" };
+		}
+
+		const postingChannel = slot.postingChannel;
+
 		await bot.api.answerWebAppQuery(
 			context.queryId,
 			InlineQueryResultBuilder.article(
-				`publish:${data.slotId}`,
-				"Publish",
-			).text("Publish"),
+				`${data.slotId}`,
+				`Publish slot ${postingChannel.chat.title}`,
+			).text(
+				`[🪶](https://example.com/${slot.id}) ${postingChannel.chat.title}`,
+				{
+					parse_mode: "MarkdownV2",
+					link_preview_options: {
+						is_disabled: true,
+					},
+				},
+			),
 		);
 
 		return { success: true };
