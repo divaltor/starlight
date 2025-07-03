@@ -9,7 +9,7 @@ import {
 	Trash2,
 	X,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -19,7 +19,6 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Masonry } from "masonic";
 import type { ScheduledSlotWithTweets } from "@/routes/api/scheduled-slots";
 
 interface SlotCardProps {
@@ -47,9 +46,11 @@ export function SlotCard({
 	onShuffleTweet,
 	className = "",
 }: SlotCardProps) {
+	const [isMasonryReady, setIsMasonryReady] = useState(false);
 	const [isImageLoading, setIsImageLoading] = useState<{
 		[key: string]: boolean;
 	}>({});
+	const masonryGridRef = useRef<HTMLDivElement>(null);
 
 	const formatDate = (date: Date) => {
 		const today = new Date();
@@ -126,6 +127,104 @@ export function SlotCard({
 		setIsImageLoading((prev) => ({ ...prev, [imageId]: true }));
 	}, []);
 
+	// JavaScript masonry layout for browsers without masonry support
+	const layoutMasonry = useCallback(() => {
+		const grid = masonryGridRef.current;
+		if (!grid) return;
+
+		// Check if masonry is supported
+		const supportsGridMasonry = CSS.supports("grid-template-rows", "masonry");
+		if (supportsGridMasonry) {
+			setIsMasonryReady(true);
+			return;
+		}
+
+		const items = Array.from(grid.children) as HTMLElement[];
+		if (items.length === 0) return;
+
+		// Get grid gap and calculate number of columns based on viewport width
+		let columns = 1;
+		let gap = 16; // 1rem = 16px for single column
+		const width = window.innerWidth;
+
+		if (width >= 1536) {
+			columns = 6;
+			gap = 13.33; // 0.833rem
+		} else if (width >= 1280) {
+			columns = 5;
+			gap = 12.8; // 0.8rem
+		} else if (width >= 1024) {
+			columns = 4;
+			gap = 12; // 0.75rem
+		} else if (width >= 768) {
+			columns = 3;
+			gap = 10.67; // 0.667rem
+		} else if (width >= 640) {
+			columns = 2;
+			gap = 8; // 0.5rem
+		}
+
+		// Calculate column width
+		const gridWidth = grid.offsetWidth;
+		const columnWidth = (gridWidth - gap * (columns - 1)) / columns;
+
+		// Initialize column heights array
+		const columnHeights = new Array(columns).fill(0);
+
+		// Position each item
+		items.forEach((item) => {
+			// Find the shortest column
+			const shortestColumnIndex = columnHeights.indexOf(
+				Math.min(...columnHeights),
+			);
+
+			// Calculate position
+			const x = shortestColumnIndex * (columnWidth + gap);
+			const y = columnHeights[shortestColumnIndex];
+
+			// Position the item
+			item.style.left = `${x}px`;
+			item.style.top = `${y}px`;
+			item.style.width = `${columnWidth}px`;
+
+			// Update column height
+			columnHeights[shortestColumnIndex] += item.offsetHeight + gap;
+		});
+
+		// Set container height
+		const maxHeight = Math.max(...columnHeights);
+		grid.style.height = `${maxHeight}px`;
+
+		// Show the grid after layout is complete
+		setIsMasonryReady(true);
+	}, []);
+
+	// Trigger layout on data changes and window resize  
+	useEffect(() => {
+		setIsMasonryReady(false);
+		const timeoutId = setTimeout(layoutMasonry, 100);
+		return () => clearTimeout(timeoutId);
+	}, [layoutMasonry, totalPhotos, scheduledSlotTweets.length]);
+
+	useEffect(() => {
+		const handleResize = () => {
+			setIsMasonryReady(false);
+			layoutMasonry();
+		};
+
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
+	}, [layoutMasonry]);
+
+	// Re-layout when images load
+	const handleImageLoadWithLayout = useCallback(
+		(imageId: string) => {
+			handleImageLoad(imageId);
+			setTimeout(layoutMasonry, 50);
+		},
+		[handleImageLoad, layoutMasonry],
+	);
+
 	// Render image grid based on tweet structure (similar to app.tsx)
 	const renderTweetImages = useCallback(
 		(tweet: (typeof tweetsForDisplay)[0]) => {
@@ -149,9 +248,9 @@ export function SlotCard({
 							alt={photo.alt}
 							width={400}
 							height={400}
-							className="h-auto w-full object-cover"
+							className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 							onLoadStart={() => handleImageLoadStart(photo.id)}
-							onLoad={() => handleImageLoad(photo.id)}
+							onLoad={() => handleImageLoadWithLayout(photo.id)}
 						/>
 						<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 						<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
@@ -178,8 +277,7 @@ export function SlotCard({
 													variant="ghost"
 													size="sm"
 													onClick={(e) => {
-														e.preventDefault();
-										e.stopPropagation();
+														e.stopPropagation();
 														onShuffleTweet(id, tweet.slotTweetId);
 													}}
 													className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-blue-300"
@@ -192,8 +290,7 @@ export function SlotCard({
 													variant="ghost"
 													size="sm"
 													onClick={(e) => {
-														e.preventDefault();
-										e.stopPropagation();
+														e.stopPropagation();
 														onDeleteImage(id, photo.id);
 													}}
 													className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
@@ -240,7 +337,6 @@ export function SlotCard({
 									variant="ghost"
 									size="sm"
 									onClick={(e) => {
-										e.preventDefault();
 										e.stopPropagation();
 										onShuffleTweet(id, tweet.slotTweetId);
 									}}
@@ -270,9 +366,9 @@ export function SlotCard({
 										alt={photo.alt}
 										width={400}
 										height={400}
-										className="h-auto w-full object-cover"
+										className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 										onLoadStart={() => handleImageLoadStart(photo.id)}
-										onLoad={() => handleImageLoad(photo.id)}
+										onLoad={() => handleImageLoadWithLayout(photo.id)}
 									/>
 									<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 									{status === "WAITING" && onDeleteImage && (
@@ -281,8 +377,7 @@ export function SlotCard({
 												variant="ghost"
 												size="sm"
 												onClick={(e) => {
-													e.preventDefault();
-										e.stopPropagation();
+													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
 												className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
@@ -315,9 +410,9 @@ export function SlotCard({
 										alt={photo.alt}
 										width={400}
 										height={400}
-										className="h-auto w-full object-cover"
+										className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 										onLoadStart={() => handleImageLoadStart(photo.id)}
-										onLoad={() => handleImageLoad(photo.id)}
+										onLoad={() => handleImageLoadWithLayout(photo.id)}
 									/>
 									<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 									{status === "WAITING" && onDeleteImage && (
@@ -326,8 +421,7 @@ export function SlotCard({
 												variant="ghost"
 												size="sm"
 												onClick={(e) => {
-													e.preventDefault();
-										e.stopPropagation();
+													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
 												className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
@@ -358,9 +452,9 @@ export function SlotCard({
 										alt={photo.alt}
 										width={400}
 										height={400}
-										className="h-auto w-full object-cover"
+										className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 										onLoadStart={() => handleImageLoadStart(photo.id)}
-										onLoad={() => handleImageLoad(photo.id)}
+										onLoad={() => handleImageLoadWithLayout(photo.id)}
 									/>
 									<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 									{status === "WAITING" && onDeleteImage && (
@@ -369,8 +463,7 @@ export function SlotCard({
 												variant="ghost"
 												size="sm"
 												onClick={(e) => {
-													e.preventDefault();
-										e.stopPropagation();
+													e.stopPropagation();
 													onDeleteImage(id, photo.id);
 												}}
 												className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
@@ -390,7 +483,7 @@ export function SlotCard({
 			formatTweetDate,
 			handleImageLoadStart,
 			isImageLoading,
-			handleImageLoad,
+			handleImageLoadWithLayout,
 			status,
 			onShuffleTweet,
 			onDeleteImage,
@@ -505,31 +598,22 @@ export function SlotCard({
 
 			<CardContent className="pt-0">
 				{/* Images Masonry Grid */}
-				<div className="w-full overflow-hidden relative">
-					<Masonry
-						items={tweetsForDisplay}
-						render={({ index, data: tweet, width }) => (
-							<div
-								data-tweet-index={index}
-								data-tweet-id={tweet.id}
-								style={{
-									width: `${width}px`,
-									boxSizing: 'border-box',
-									pointerEvents: 'auto'
-								}}
-								className="masonry-slot-item"
-							>
-								{renderTweetImages(tweet)}
-							</div>
-						)}
-						columnWidth={240}
-						columnGutter={12}
-						rowGutter={12}
-						maxColumnCount={3}
-						itemHeightEstimate={250}
-						overscanBy={1}
-						key={`slot-masonry-${tweetsForDisplay.length}`}
-					/>
+				<div
+					ref={masonryGridRef}
+					className={`masonry-grid w-full grid-cols-1 gap-4 overflow-hidden transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
+						isMasonryReady ? "opacity-100" : "opacity-0"
+					}`}
+				>
+					{tweetsForDisplay.map((tweet, index) => (
+						<div
+							key={tweet.id}
+							data-tweet-index={index}
+							data-tweet-id={tweet.id}
+							className="will-change-auto"
+						>
+							{renderTweetImages(tweet)}
+						</div>
+					))}
 				</div>
 			</CardContent>
 		</Card>

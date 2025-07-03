@@ -10,8 +10,7 @@ import {
 	RefreshCw,
 	X,
 } from "lucide-react";
-import { Masonry, useInfiniteLoader } from "masonic";
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
@@ -35,20 +34,10 @@ function TwitterArtViewer() {
 	}>({});
 	const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 	const [isFilterActive, setIsFilterActive] = useState(false);
-	const [isMobile, setIsMobile] = useState(false);
+	const [isMasonryReady, setIsMasonryReady] = useState(false);
+	const masonryGridRef = useRef<HTMLDivElement>(null);
 
 	const { updateButtons } = useTelegramContext();
-
-	// Set up mobile detection with proper cleanup
-	useEffect(() => {
-		const checkMobile = () => {
-			setIsMobile(window.innerWidth < 768);
-		};
-		
-		checkMobile();
-		window.addEventListener('resize', checkMobile);
-		return () => window.removeEventListener('resize', checkMobile);
-	}, []);
 
 	useEffect(() => {
 		updateButtons({
@@ -79,7 +68,6 @@ function TwitterArtViewer() {
 		isFetchingNextPage,
 		hasNextPage,
 		error,
-		fetchNextPage,
 	} = useTweets({
 		dateFilter,
 	});
@@ -87,37 +75,6 @@ function TwitterArtViewer() {
 	// Server-side filtering eliminates the need for client-side processing
 	// tweets are already filtered by the server based on dateFilter
 	const filteredTweets = tweets;
-
-	// Infinite loader for masonic - use a simpler approach
-	const loadMoreItems = useCallback(
-		(startIndex: number, stopIndex: number) => {
-			// Only load more if we're near the end of current items
-			if (stopIndex >= filteredTweets.length - 5 && hasNextPage && !isFetchingNextPage) {
-				console.log('Masonic triggering fetchNextPage', { startIndex, stopIndex, itemsLength: filteredTweets.length });
-				fetchNextPage();
-			}
-		},
-		[hasNextPage, isFetchingNextPage, fetchNextPage, filteredTweets.length],
-	);
-
-	// Stable infinite loader configuration
-	const infiniteLoaderConfig = useMemo(() => ({
-		isItemLoaded: (index: number) => !!filteredTweets[index],
-		minimumBatchSize: 5,
-		threshold: 3,
-	}), [filteredTweets]);
-
-	const infiniteLoader = useInfiniteLoader(loadMoreItems, infiniteLoaderConfig);
-
-	// Stable masonry configuration
-	const masonryConfig = useMemo(() => ({
-		columnWidth: isMobile ? 280 : 300,
-		columnGutter: 16,
-		rowGutter: 16,
-		maxColumnCount: isMobile ? 2 : 6,
-		itemHeightEstimate: 300,
-		overscanBy: 5,
-	}), [isMobile]);
 
 	// Calculate total photos count - O(1) space, O(n) time but only when needed
 	const totalPhotosCount = useMemo(() => {
@@ -291,6 +248,94 @@ function TwitterArtViewer() {
 		return format(date, "MMM d, yyyy");
 	}, []);
 
+	// JavaScript masonry layout for browsers without masonry support
+	const layoutMasonry = useCallback(() => {
+		const grid = masonryGridRef.current;
+		if (!grid) return;
+
+		// Check if masonry is supported
+		const supportsGridMasonry = CSS.supports("grid-template-rows", "masonry");
+		if (supportsGridMasonry) {
+			setIsMasonryReady(true);
+			return;
+		}
+
+		const items = Array.from(grid.children) as HTMLElement[];
+		if (items.length === 0) return;
+
+		// Get grid gap
+		const gap = 16; // 1rem = 16px
+
+		// Calculate number of columns based on viewport width
+		let columns = 1;
+		const width = window.innerWidth;
+		if (width >= 1536) columns = 6;
+		else if (width >= 1280) columns = 5;
+		else if (width >= 1024) columns = 4;
+		else if (width >= 768) columns = 3;
+		else if (width >= 640) columns = 2;
+
+		// Calculate column width
+		const gridWidth = grid.offsetWidth;
+		const columnWidth = (gridWidth - gap * (columns - 1)) / columns;
+
+		// Initialize column heights array
+		const columnHeights = new Array(columns).fill(0);
+
+		// Position each item
+		items.forEach((item) => {
+			// Find the shortest column
+			const shortestColumnIndex = columnHeights.indexOf(
+				Math.min(...columnHeights),
+			);
+
+			// Calculate position
+			const x = shortestColumnIndex * (columnWidth + gap);
+			const y = columnHeights[shortestColumnIndex];
+
+			// Position the item
+			item.style.left = `${x}px`;
+			item.style.top = `${y}px`;
+			item.style.width = `${columnWidth}px`;
+
+			// Update column height
+			columnHeights[shortestColumnIndex] += item.offsetHeight + gap;
+		});
+
+		// Set container height
+		const maxHeight = Math.max(...columnHeights);
+		grid.style.height = `${maxHeight}px`;
+
+		// Show the grid after layout is complete
+		setIsMasonryReady(true);
+	}, []);
+
+	// Trigger layout on data changes and window resize
+	useEffect(() => {
+		setIsMasonryReady(false);
+		const timeoutId = setTimeout(layoutMasonry, 100);
+		return () => clearTimeout(timeoutId);
+	}, [layoutMasonry]);
+
+	useEffect(() => {
+		const handleResize = () => {
+			setIsMasonryReady(false);
+			layoutMasonry();
+		};
+
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
+	}, [layoutMasonry]);
+
+	// Re-layout when images load
+	const handleImageLoadWithLayout = useCallback(
+		(imageId: string) => {
+			handleImageLoad(imageId);
+			setTimeout(layoutMasonry, 50);
+		},
+		[handleImageLoad, layoutMasonry],
+	);
+
 	// Optimized image grid rendering with memoization
 	const renderImageGrid = useCallback(
 		(tweet: (typeof tweets)[0]) => {
@@ -302,12 +347,8 @@ function TwitterArtViewer() {
 
 				return (
 					<button
-						className="group relative cursor-pointer overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-200 hover:shadow-lg"
-						onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								openImage(imageIndex);
-							}}
+						className="group relative cursor-pointer overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-300 hover:shadow-md"
+						onClick={() => openImage(imageIndex)}
 						onKeyDown={(e) => {
 							if (e.key === "Enter" || e.key === " ") {
 								e.preventDefault();
@@ -328,9 +369,9 @@ function TwitterArtViewer() {
 							alt={photo.alt}
 							width={400}
 							height={400}
-							className="h-auto w-full object-cover"
+							className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 							onLoadStart={() => handleImageLoadStart(photo.id)}
-							onLoad={() => handleImageLoad(photo.id)}
+							onLoad={() => handleImageLoadWithLayout(photo.id)}
 						/>
 						<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
 							<div className="p-3 text-white">
@@ -371,12 +412,8 @@ function TwitterArtViewer() {
 								return (
 									<button
 										key={photo.id}
-										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100 transition-all duration-200 hover:shadow-md" style={{ position: 'relative', zIndex: 1 }}
-										onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								openImage(imageIndex);
-							}}
+										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
+										onClick={() => openImage(imageIndex)}
 										onKeyDown={(e) => {
 											if (e.key === "Enter" || e.key === " ") {
 												e.preventDefault();
@@ -397,9 +434,9 @@ function TwitterArtViewer() {
 											alt={photo.alt}
 											width={400}
 											height={400}
-											className="h-auto w-full object-cover"
+											className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoad(photo.id)}
+											onLoad={() => handleImageLoadWithLayout(photo.id)}
 										/>
 										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
 									</button>
@@ -419,11 +456,7 @@ function TwitterArtViewer() {
 										className={`group relative cursor-pointer overflow-hidden rounded bg-gray-100 ${
 											index === 0 ? "col-span-2" : ""
 										}`}
-										onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								openImage(imageIndex);
-							}}
+										onClick={() => openImage(imageIndex)}
 										onKeyDown={(e) => {
 											if (e.key === "Enter" || e.key === " ") {
 												e.preventDefault();
@@ -448,7 +481,7 @@ function TwitterArtViewer() {
 												index === 0 ? "h-auto" : "h-auto"
 											}`}
 											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoad(photo.id)}
+											onLoad={() => handleImageLoadWithLayout(photo.id)}
 										/>
 										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
 									</button>
@@ -465,12 +498,8 @@ function TwitterArtViewer() {
 								return (
 									<button
 										key={photo.id}
-										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100 transition-all duration-200 hover:shadow-md" style={{ position: 'relative', zIndex: 1 }}
-										onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								openImage(imageIndex);
-							}}
+										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
+										onClick={() => openImage(imageIndex)}
 										onKeyDown={(e) => {
 											if (e.key === "Enter" || e.key === " ") {
 												e.preventDefault();
@@ -491,9 +520,9 @@ function TwitterArtViewer() {
 											alt={photo.alt}
 											width={400}
 											height={400}
-											className="h-auto w-full object-cover"
+											className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoad(photo.id)}
+											onLoad={() => handleImageLoadWithLayout(photo.id)}
 										/>
 										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
 									</button>
@@ -511,12 +540,8 @@ function TwitterArtViewer() {
 								return (
 									<button
 										key={photo.id}
-										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100 transition-all duration-200 hover:shadow-md" style={{ position: 'relative', zIndex: 1 }}
-										onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								openImage(imageIndex);
-							}}
+										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
+										onClick={() => openImage(imageIndex)}
 										onKeyDown={(e) => {
 											if (e.key === "Enter" || e.key === " ") {
 												e.preventDefault();
@@ -537,9 +562,9 @@ function TwitterArtViewer() {
 											alt={photo.alt}
 											width={400}
 											height={400}
-											className="h-auto w-full object-cover"
+											className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoad(photo.id)}
+											onLoad={() => handleImageLoadWithLayout(photo.id)}
 										/>
 										{isLastVisible && (
 											<div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
@@ -563,25 +588,9 @@ function TwitterArtViewer() {
 			openImage,
 			handleImageLoadStart,
 			isImageLoading,
-			handleImageLoad,
+			handleImageLoadWithLayout,
 		],
 	);
-
-	// Stable masonry render function
-	const renderMasonryItem = useCallback(({ index, data: tweet, width }: { index: number; data: (typeof tweets)[0]; width: number }) => (
-		<div
-			data-tweet-index={index}
-			data-tweet-id={tweet.id}
-			style={{
-				width: `${width}px`,
-				boxSizing: 'border-box',
-				minHeight: '200px'
-			}}
-			className="masonry-item"
-		>
-			{renderImageGrid(tweet)}
-		</div>
-	), [renderImageGrid]);
 
 	// Keyboard navigation
 	useEffect(() => {
@@ -736,32 +745,56 @@ function TwitterArtViewer() {
 			{/* Responsive Grid */}
 			{filteredTweets.length > 0 && (
 				<div className="mx-auto max-w-7xl">
-					<div className="relative">
-						<Masonry
-							items={filteredTweets}
-							render={renderMasonryItem}
-							key={`masonry-${filteredTweets.length}-${isMobile}`}
-							{...masonryConfig}
-							{...infiniteLoader}
-						/>
-					</div>
-
-					{/* Loading indicator */}
-					{isFetchingNextPage && (
-						<div className="mt-8 flex min-h-[60px] items-center justify-center">
-							<div className="flex items-center gap-2 text-gray-600">
-								<Loader2 className="h-5 w-5 animate-spin" />
-								Loading more images...
-							</div>
+					{!isMasonryReady && (
+						<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+							{Array.from({ length: 8 }).map((_, i) => (
+								<Skeleton
+									// biome-ignore lint/suspicious/noArrayIndexKey: Don't care
+									key={i}
+									className={`rounded-lg ${
+										i % 3 === 0 ? "h-80" : i % 3 === 1 ? "h-60" : "h-96"
+									}`}
+								/>
+							))}
 						</div>
 					)}
-					{!hasNextPage && !isFetching && filteredTweets.length > 0 && (
-						<div className="mt-8 flex min-h-[60px] items-center justify-center">
+					<div
+						ref={masonryGridRef}
+						className={`masonry-grid grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
+							isMasonryReady ? "opacity-100" : "opacity-0"
+						}`}
+					>
+						{filteredTweets.map((tweet, index) => (
+							<div
+								key={tweet.id}
+								data-tweet-index={index}
+								data-tweet-id={tweet.id}
+								className="will-change-auto"
+							>
+								{renderImageGrid(tweet)}
+							</div>
+						))}
+					</div>
+
+					{/* Infinite Scroll Trigger - Fixed positioning to prevent shifts */}
+					<div className="mt-8 flex min-h-[60px] items-center justify-center">
+						{hasNextPage ? (
+							<div ref={loadMoreRef}>
+								{isFetchingNextPage ? (
+									<div className="flex items-center gap-2 text-gray-600">
+										<Loader2 className="h-5 w-5 animate-spin" />
+										Loading more images...
+									</div>
+								) : (
+									<div className="text-gray-500">Scroll to load more</div>
+								)}
+							</div>
+						) : !isFetching ? (
 							<div className="text-center text-gray-500">
 								You've reached the end! 🎉
 							</div>
-						</div>
-					)}
+						) : null}
+					</div>
 				</div>
 			)}
 
