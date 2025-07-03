@@ -204,7 +204,7 @@ export function SlotCard({
 		setIsMasonryReady(false);
 		const timeoutId = setTimeout(layoutMasonry, 100);
 		return () => clearTimeout(timeoutId);
-	}, [layoutMasonry]);
+	}, [layoutMasonry, totalPhotos]);
 
 	useEffect(() => {
 		const handleResize = () => {
@@ -599,7 +599,6 @@ export function SlotCard({
 			<CardContent className="pt-0">
 				{/* Images Masonry Grid */}
 				<div
-					key={`masonry-${totalPhotos}-${scheduledSlotTweets.length}`}
 					ref={masonryGridRef}
 					className={`masonry-grid w-full grid-cols-1 gap-4 overflow-hidden transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
 						isMasonryReady ? "opacity-100" : "opacity-0"

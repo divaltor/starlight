@@ -146,7 +146,49 @@ function PublicationsPage() {
 				},
 			});
 		},
-		onSuccess: () => {
+		onMutate: async ({ slotId, photoId }) => {
+			await queryClient.cancelQueries({
+				queryKey: ["scheduled-slots", selectedPostingChannelId],
+			});
+
+			const previousData = queryClient.getQueryData<ScheduledSlot[]>([
+				"scheduled-slots",
+				selectedPostingChannelId,
+			]);
+
+			if (previousData) {
+				const optimisticData = previousData.map((slot) => {
+					if (slot.id === slotId) {
+						return {
+							...slot,
+							scheduledSlotTweets: slot.scheduledSlotTweets.map((tweet) => ({
+								...tweet,
+								scheduledSlotPhotos: tweet.scheduledSlotPhotos.filter(
+									(photo) => photo.photo.id !== photoId,
+								),
+							})),
+						};
+					}
+					return slot;
+				});
+
+				queryClient.setQueryData(
+					["scheduled-slots", selectedPostingChannelId],
+					optimisticData,
+				);
+			}
+
+			return { previousData };
+		},
+		onError: (_err, _variables, context) => {
+			if (context?.previousData) {
+				queryClient.setQueryData(
+					["scheduled-slots", selectedPostingChannelId],
+					context.previousData,
+				);
+			}
+		},
+		onSettled: () => {
 			queryClient.invalidateQueries({
 				queryKey: ["scheduled-slots", selectedPostingChannelId],
 			});
@@ -174,10 +216,27 @@ function PublicationsPage() {
 				},
 			});
 		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({
-				queryKey: ["scheduled-slots", selectedPostingChannelId],
-			});
+		onSuccess: (data) => {
+			if (data?.scheduledSlot) {
+				const previousData = queryClient.getQueryData<ScheduledSlot[]>([
+					"scheduled-slots",
+					selectedPostingChannelId,
+				]);
+
+				if (previousData) {
+					const optimisticData = previousData.map((slot) => {
+						if (slot.id === data.scheduledSlot.id) {
+							return data.scheduledSlot;
+						}
+						return slot;
+					});
+
+					queryClient.setQueryData(
+						["scheduled-slots", selectedPostingChannelId],
+						optimisticData,
+					);
+				}
+			}
 		},
 	});
 
