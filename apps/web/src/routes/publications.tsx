@@ -216,27 +216,10 @@ function PublicationsPage() {
 				},
 			});
 		},
-		onSuccess: (data) => {
-			if (data?.scheduledSlot) {
-				const previousData = queryClient.getQueryData<ScheduledSlot[]>([
-					"scheduled-slots",
-					selectedPostingChannelId,
-				]);
-
-				if (previousData) {
-					const optimisticData = previousData.map((slot) => {
-						if (slot.id === data.scheduledSlot.id) {
-							return data.scheduledSlot;
-						}
-						return slot;
-					});
-
-					queryClient.setQueryData(
-						["scheduled-slots", selectedPostingChannelId],
-						optimisticData,
-					);
-				}
-			}
+		onSuccess: () => {
+			queryClient.invalidateQueries({
+				queryKey: ["scheduled-slots", selectedPostingChannelId],
+			});
 		},
 	});
 

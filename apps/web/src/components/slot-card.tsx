@@ -199,12 +199,12 @@ export function SlotCard({
 		setIsMasonryReady(true);
 	}, []);
 
-	// Trigger layout on data changes and window resize
+	// Trigger layout on data changes and window resize  
 	useEffect(() => {
 		setIsMasonryReady(false);
 		const timeoutId = setTimeout(layoutMasonry, 100);
 		return () => clearTimeout(timeoutId);
-	}, [layoutMasonry, totalPhotos]);
+	}, [layoutMasonry, totalPhotos, scheduledSlotTweets.length]);
 
 	useEffect(() => {
 		const handleResize = () => {
