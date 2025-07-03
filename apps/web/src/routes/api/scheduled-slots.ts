@@ -1,10 +1,18 @@
-import { getPrismaClient, type Prisma } from "@repo/utils";
+import { getPrismaClient, type Prisma, ScheduledSlotStatus } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/middleware/auth";
 
 const getScheduledSlotsSchema = z.object({
 	postingChannelId: z.number().optional(),
+	status: z
+		.enum([
+			ScheduledSlotStatus.WAITING,
+			ScheduledSlotStatus.PUBLISHED,
+			ScheduledSlotStatus.PUBLISHING,
+		])
+		.optional(),
+	limit: z.number().min(1).max(30).default(10),
 });
 
 const createSlotSchema = z.object({
@@ -15,7 +23,9 @@ const createSlotSchema = z.object({
 
 const updateSlotSchema = z.object({
 	slotId: z.string().uuid(),
-	status: z.enum(["WAITING", "PUBLISHED"]).optional(),
+	status: z
+		.enum([ScheduledSlotStatus.PUBLISHED, ScheduledSlotStatus.PUBLISHING])
+		.optional(),
 	postingChannelId: z.number().optional(),
 });
 
@@ -41,11 +51,15 @@ export const getScheduledSlots = createServerFn({ method: "GET" })
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
 		const userId = context.databaseUserId;
-		const { postingChannelId } = data;
+		const { postingChannelId, status, limit } = data;
 
 		const whereClause: Prisma.ScheduledSlotWhereInput = { userId };
 		if (postingChannelId) {
 			whereClause.chatId = postingChannelId;
+		}
+
+		if (status) {
+			whereClause.status = status;
 		}
 
 		const slots = await prisma.scheduledSlot.findMany({
@@ -65,6 +79,7 @@ export const getScheduledSlots = createServerFn({ method: "GET" })
 				},
 			},
 			orderBy: [{ scheduledFor: "asc" }, { createdAt: "desc" }],
+			take: limit,
 		});
 
 		return slots;
@@ -151,7 +166,7 @@ export const createScheduledSlot = createServerFn({ method: "POST" })
 				userId,
 				chatId: postingChannelId,
 				scheduledFor: new Date(scheduledFor),
-				status: "WAITING",
+				status: ScheduledSlotStatus.WAITING,
 			},
 		});
 
@@ -254,8 +269,11 @@ export const deleteScheduledSlot = createServerFn({ method: "POST" })
 		const userId = context.databaseUserId;
 
 		// Verify slot belongs to user and optionally postingChannelId
-		// biome-ignore lint/suspicious/noExplicitAny: Need to export types from Prisma, don't want to do that
-		const whereClause: any = { id: slotId, userId };
+		const whereClause: Prisma.ScheduledSlotWhereInput = {
+			id: slotId,
+			userId,
+			status: ScheduledSlotStatus.WAITING,
+		};
 		if (postingChannelId) {
 			whereClause.postingChannel = { chatId: postingChannelId };
 		}
@@ -317,8 +335,9 @@ export async function getAvailablePhotosForUser(
 ) {
 	const prisma = getPrismaClient();
 
-	// biome-ignore lint/suspicious/noExplicitAny: Need to export types from Prisma, don't want to do that
-	let publishedPhotosFilter: any = { none: {} };
+	let publishedPhotosFilter: Prisma.PublishedPhotoListRelationFilter = {
+		none: {},
+	};
 
 	if (postingChannelId) {
 		// Get the chatId from the posting channel
@@ -332,7 +351,9 @@ export async function getAvailablePhotosForUser(
 		});
 
 		if (postingChannel) {
-			publishedPhotosFilter = { none: { chatId: postingChannel.chatId } };
+			publishedPhotosFilter = {
+				none: { chatId: postingChannel.chatId },
+			};
 		}
 	}
 
@@ -394,7 +415,7 @@ export async function createScheduledSlotForToday(
 			userId,
 			chatId: postingChannelId,
 			scheduledFor: today,
-			status: "WAITING",
+			status: ScheduledSlotStatus.WAITING,
 		},
 		include: {
 			scheduledSlotTweets: {

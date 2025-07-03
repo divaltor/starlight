@@ -1,3 +1,4 @@
+import { ScheduledSlotStatus } from "@repo/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
@@ -58,6 +59,8 @@ function PublicationsPage() {
 				headers: { Authorization: rawInitData ?? "" },
 				data: {
 					postingChannelId: selectedPostingChannelId,
+					status: ScheduledSlotStatus.WAITING,
+					limit: 10,
 				},
 			});
 		},
@@ -212,7 +215,7 @@ function PublicationsPage() {
 			publicationsCount: publications.length,
 		});
 
-		if (publications.length === 0) {
+		if (publications.filter((pub) => pub.status === "WAITING").length === 0) {
 			// No publications - show "Add slot" button
 			updateButtons({
 				mainButton: {
