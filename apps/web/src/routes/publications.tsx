@@ -6,6 +6,8 @@ import {
 	CalendarDays,
 	CheckCircle2,
 	Clock,
+	ChevronDown,
+	ChevronUp,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SlotCard } from "@/components/slot-card";
@@ -47,6 +49,7 @@ function PublicationsPage() {
 	const [selectedPostingChannelId, setSelectedPostingChannelId] = useState<
 		number | undefined
 	>(undefined); // Default posting channel ID
+	const [isPublishedCollapsed, setIsPublishedCollapsed] = useState(true);
 	const queryClient = useQueryClient();
 
 	const { rawInitData, updateButtons } = useTelegramContext();
@@ -220,8 +223,12 @@ function PublicationsPage() {
 	useEffect(() => {
 		console.log("Updating buttons for:", {
 			channelId: selectedPostingChannelId,
-			publicationsCount: publications.length,
+			waitingCount: groupedPublications?.waiting.length || 0,
+			totalCount: publications.length,
 		});
+
+		const waitingSlots = groupedPublications?.waiting || [];
+		const hasWaitingSlots = waitingSlots.length > 0;
 
 		if (publications.length === 0) {
 			// No publications - show "Add slot" button
@@ -240,16 +247,31 @@ function PublicationsPage() {
 					state: "hidden",
 				},
 			});
+		} else if (!hasWaitingSlots) {
+			// No waiting slots - allow creating new slot
+			updateButtons({
+				mainButton: {
+					state: "visible",
+					text: "Add slot",
+					hasShineEffect: true,
+					isEnabled: selectedPostingChannelId !== undefined,
+					action: {
+						type: "callback",
+						payload: () => createSlotMutation.mutate(),
+					},
+				},
+				secondaryButton: {
+					state: "hidden",
+				},
+			});
 		} else {
-			// Has publications - show "Publish" and "Add slot" buttons
-			const hasWaitingPubs = publications.some(
-				(pub) => pub.status === "WAITING",
-			);
+			// Has waiting slots - show "Publish" and "Add tweet" buttons
+			const firstWaitingSlot = waitingSlots[0];
 			updateButtons({
 				mainButton: {
 					text: "Publish",
 					state: "visible",
-					isEnabled: hasWaitingPubs,
+					isEnabled: hasWaitingSlots,
 					hasShineEffect: true,
 					action: {
 						type: "callback",
@@ -257,7 +279,7 @@ function PublicationsPage() {
 							respondToWebAppData({
 								headers: { Authorization: rawInitData ?? "" },
 								data: {
-									slotId: publications[0].id,
+									slotId: firstWaitingSlot.id,
 								},
 							});
 						},
@@ -270,7 +292,7 @@ function PublicationsPage() {
 					action: {
 						type: "callback",
 						payload: () =>
-							addTweetMutation.mutate({ slotId: publications[0].id }),
+							addTweetMutation.mutate({ slotId: firstWaitingSlot.id }),
 					},
 				},
 			});
@@ -284,7 +306,8 @@ function PublicationsPage() {
 		};
 	}, [
 		selectedPostingChannelId,
-		publications,
+		groupedPublications,
+		publications.length,
 		addTweetMutation.mutate,
 		createSlotMutation.mutate,
 		rawInitData,
@@ -333,43 +356,23 @@ function PublicationsPage() {
 		return slot.scheduledSlotTweets.length < 10 && slot.status === "WAITING"; // Allow up to 5 tweets per slot
 	};
 
-	const organizePublications = (pubs: ScheduledSlot[]): PublicationSections => {
-		const now = new Date();
-		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-		const tomorrow = new Date(today);
-		tomorrow.setDate(tomorrow.getDate() + 1);
+	const organizePublications = (grouped: GroupedPublications | undefined): PublicationSections => {
+		if (!grouped) {
+			return {
+				waiting: [],
+				publishing: [],
+				published: [],
+			};
+		}
 
-		return pubs.reduce(
-			(sections, pub) => {
-				const pubDate = new Date(pub.scheduledFor);
-				const pubDay = new Date(
-					pubDate.getFullYear(),
-					pubDate.getMonth(),
-					pubDate.getDate(),
-				);
-
-				if (pub.status === "PUBLISHED") {
-					sections.completed.push(pub);
-				} else if (pubDay.getTime() === today.getTime()) {
-					sections.today.push(pub);
-				} else if (pubDay.getTime() === tomorrow.getTime()) {
-					sections.tomorrow.push(pub);
-				} else {
-					sections.upcoming.push(pub);
-				}
-
-				return sections;
-			},
-			{
-				today: [],
-				tomorrow: [],
-				upcoming: [],
-				completed: [],
-			} as PublicationSections,
-		);
+		return {
+			waiting: grouped.waiting,
+			publishing: grouped.publishing,
+			published: grouped.published,
+		};
 	};
 
-	const sections = organizePublications(publications);
+	const sections = organizePublications(groupedPublications);
 
 	const hasPostingChannels =
 		!availablePostingChannels.isLoading &&
