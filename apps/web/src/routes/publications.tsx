@@ -32,10 +32,15 @@ import {
 import { deletePhoto } from "@/routes/api/scheduled-slots/photos";
 
 interface PublicationSections {
-	today: ScheduledSlot[];
-	tomorrow: ScheduledSlot[];
-	upcoming: ScheduledSlot[];
-	completed: ScheduledSlot[];
+	waiting: ScheduledSlot[];
+	publishing: ScheduledSlot[];
+	published: ScheduledSlot[];
+}
+
+interface GroupedPublications {
+	waiting: ScheduledSlot[];
+	published: ScheduledSlot[];
+	publishing: ScheduledSlot[];
 }
 
 function PublicationsPage() {
@@ -47,7 +52,7 @@ function PublicationsPage() {
 	const { rawInitData, updateButtons } = useTelegramContext();
 
 	const {
-		data: publications = [],
+		data: groupedPublications,
 		isLoading,
 		error,
 		refetch: loadPublications,
@@ -58,11 +63,17 @@ function PublicationsPage() {
 				headers: { Authorization: rawInitData ?? "" },
 				data: {
 					postingChannelId: selectedPostingChannelId,
+					grouped: true,
 				},
 			});
 		},
 		enabled: !!rawInitData,
 	});
+
+	// Get all publications for backward compatibility
+	const publications = groupedPublications 
+		? [...groupedPublications.waiting, ...groupedPublications.publishing, ...groupedPublications.published]
+		: [];
 
 	const availablePostingChannels = useQuery({
 		queryKey: ["available-posting-channels"],

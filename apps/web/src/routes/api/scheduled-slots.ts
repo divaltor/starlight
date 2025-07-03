@@ -5,6 +5,7 @@ import { authMiddleware } from "@/middleware/auth";
 
 const getScheduledSlotsSchema = z.object({
 	postingChannelId: z.number().optional(),
+	grouped: z.boolean().optional().default(false),
 });
 
 const createSlotSchema = z.object({
@@ -41,7 +42,7 @@ export const getScheduledSlots = createServerFn({ method: "GET" })
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
 		const userId = context.databaseUserId;
-		const { postingChannelId } = data;
+		const { postingChannelId, grouped } = data;
 
 		const whereClause: Prisma.ScheduledSlotWhereInput = { userId };
 		if (postingChannelId) {
@@ -66,6 +67,14 @@ export const getScheduledSlots = createServerFn({ method: "GET" })
 			},
 			orderBy: [{ scheduledFor: "asc" }, { createdAt: "desc" }],
 		});
+
+		if (grouped) {
+			return {
+				waiting: slots.filter((slot: typeof slots[0]) => slot.status === "WAITING"),
+				published: slots.filter((slot: typeof slots[0]) => slot.status === "PUBLISHED"),
+				publishing: slots.filter((slot: typeof slots[0]) => slot.status === "PUBLISHING"),
+			};
+		}
 
 		return slots;
 	});
