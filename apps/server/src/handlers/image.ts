@@ -1,6 +1,6 @@
 import { env, type Prisma } from "@repo/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
-import { webAppKeyboard } from "@/bot";
+import { channelKeyboard, webAppKeyboard } from "@/bot";
 import { imagesQueue } from "@/queue/image-collector";
 import { publishingQueue } from "@/queue/publishing";
 import { schedulerFlow } from "@/queue/scheduler";
@@ -117,6 +117,19 @@ privateChat.on(":text").filter(
 				})),
 			],
 		});
+
+		if (slot.postingChannel.chat.username) {
+			await ctx.reply(
+				`We are publishing your photos to ${slot.postingChannel.chat.title} channel ✨.`,
+				{
+					reply_markup: channelKeyboard(slot.postingChannel.chat.username),
+				},
+			);
+		} else {
+			await ctx.reply(
+				`We are publishing your photos to ${slot.postingChannel.chat.title} channel ✨.`,
+			);
+		}
 	},
 );
 

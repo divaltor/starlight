@@ -27,6 +27,11 @@ export const webAppKeyboard = (page: "app" | "publications" | "settings") =>
 		url: `${env.BASE_FRONTEND_URL}/${page}`,
 	});
 
+export const channelKeyboard = (channelUsername: string) =>
+	new InlineKeyboard().webApp("View channel", {
+		url: `https://t.me/${channelUsername}`,
+	});
+
 bot.use(async (ctx, next) => {
 	ctx.logger = logger.child({});
 
