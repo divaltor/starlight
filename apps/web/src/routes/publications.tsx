@@ -157,20 +157,31 @@ function PublicationsPage() {
 			]);
 
 			if (previousData) {
-				const optimisticData = previousData.map((slot) => {
-					if (slot.id === slotId) {
-						return {
-							...slot,
-							scheduledSlotTweets: slot.scheduledSlotTweets.map((tweet) => ({
-								...tweet,
-								scheduledSlotPhotos: tweet.scheduledSlotPhotos.filter(
-									(photo) => photo.photo.id !== photoId,
-								),
-							})),
-						};
-					}
-					return slot;
-				});
+				const optimisticData = previousData
+					.map((slot) => {
+						if (slot.id === slotId) {
+							const updatedSlot = {
+								...slot,
+								scheduledSlotTweets: slot.scheduledSlotTweets.map((tweet) => ({
+									...tweet,
+									scheduledSlotPhotos: tweet.scheduledSlotPhotos.filter(
+										(photo) => photo.photo.id !== photoId,
+									),
+								})),
+							};
+
+							// Remove tweets that have no photos left
+							updatedSlot.scheduledSlotTweets =
+								updatedSlot.scheduledSlotTweets.filter(
+									(tweet) => tweet.scheduledSlotPhotos.length > 0,
+								);
+
+							return updatedSlot;
+						}
+						return slot;
+					})
+					// Remove slots that have no tweets left
+					.filter((slot) => slot.scheduledSlotTweets.length > 0);
 
 				queryClient.setQueryData(
 					["scheduled-slots", selectedPostingChannelId],

@@ -92,15 +92,24 @@ export function useTweets(options: UseTweetsOptions = {}) {
 		enabled: !!user?.id,
 		staleTime: 5 * 60 * 1000,
 		gcTime: 10 * 60 * 1000,
-		structuralSharing: false,
+		structuralSharing: true,
 	});
+
+	// Stabilize fetchNextPage reference
+	const stableFetchNextPage = useCallback(() => {
+		fetchNextPage();
+	}, [fetchNextPage]);
 
 	// Auto-fetch next page when load more element comes into view
 	useEffect(() => {
 		if (inView && hasNextPage && !isFetchingNextPage && !isFetching) {
-			fetchNextPage();
+			stableFetchNextPage();
 		}
-	}, [inView, hasNextPage, isFetchingNextPage, isFetching, fetchNextPage]);
+	}, [inView, hasNextPage, isFetchingNextPage, isFetching, stableFetchNextPage]);
+
+	// Create stable page count for memoization
+	const pageCount = data?.pages?.length ?? 0;
+	const totalTweetCount = data ? data.pages.reduce((sum, page) => sum + page.tweets.length, 0) : 0;
 
 	// Create stable tweets array that only grows, never shuffles
 	const tweets = useMemo(() => {
@@ -130,14 +139,14 @@ export function useTweets(options: UseTweetsOptions = {}) {
 		}
 
 		return stableTweetsRef.current;
-	}, [data?.pages]);
+	}, [pageCount, totalTweetCount, dateFilter]);
 
 	// Helper function to manually trigger next page load
 	const loadMore = useCallback(() => {
 		if (hasNextPage && !isFetchingNextPage && !isFetching) {
-			fetchNextPage();
+			stableFetchNextPage();
 		}
-	}, [hasNextPage, isFetchingNextPage, isFetching, fetchNextPage]);
+	}, [hasNextPage, isFetchingNextPage, isFetching, stableFetchNextPage]);
 
 	return {
 		tweets,
@@ -148,6 +157,6 @@ export function useTweets(options: UseTweetsOptions = {}) {
 		isFetchingNextPage,
 		hasNextPage,
 		error,
-		fetchNextPage,
+		fetchNextPage: stableFetchNextPage,
 	};
 }
