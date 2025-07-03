@@ -598,58 +598,23 @@ export function SlotCard({
 
 			<CardContent className="pt-0">
 				{/* Images Masonry Grid */}
-				{tweetsForDisplay.length > 0 ? (
-					<div
-						ref={masonryGridRef}
-						className={`masonry-grid w-full grid-cols-1 gap-4 overflow-hidden transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
-							isMasonryReady ? "opacity-100" : "opacity-0"
-						}`}
-					>
-						{tweetsForDisplay.map((tweet, index) => (
-							<div
-								key={tweet.id}
-								data-tweet-index={index}
-								data-tweet-id={tweet.id}
-								className="will-change-auto"
-							>
-								{renderTweetImages(tweet)}
-							</div>
-						))}
-					</div>
-				) : (
-					<div className="py-8 text-center">
-						<MessageSquare className="mx-auto mb-2 h-12 w-12 text-gray-300" />
-						<p className="text-gray-500 text-sm">No images in this slot</p>
-						{canAddMoreTweets && onAddTweet && status === "WAITING" && (
-							<Button
-								variant="outline"
-								onClick={() => onAddTweet(id)}
-								className="mt-4 gap-2"
-							>
-								<Plus className="h-4 w-4" />
-								Add Tweet
-							</Button>
-						)}
-					</div>
-				)}
-
-				{/* Footer with Add Tweet button when tweets exist */}
-				{tweetsForDisplay.length > 0 &&
-					onAddTweet &&
-					canAddMoreTweets &&
-					status === "WAITING" && (
-						<div className="border-gray-200 border-t bg-gray-50 p-3">
-							<Button
-								variant="outline"
-								onClick={() => onAddTweet(id)}
-								className="w-full gap-2 text-sm"
-								size="sm"
-							>
-								<Plus className="h-4 w-4" />
-								Add tweet
-							</Button>
+				<div
+					ref={masonryGridRef}
+					className={`masonry-grid w-full grid-cols-1 gap-4 overflow-hidden transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
+						isMasonryReady ? "opacity-100" : "opacity-0"
+					}`}
+				>
+					{tweetsForDisplay.map((tweet, index) => (
+						<div
+							key={tweet.id}
+							data-tweet-index={index}
+							data-tweet-id={tweet.id}
+							className="will-change-auto"
+						>
+							{renderTweetImages(tweet)}
 						</div>
-					)}
+					))}
+				</div>
 			</CardContent>
 		</Card>
 	);
