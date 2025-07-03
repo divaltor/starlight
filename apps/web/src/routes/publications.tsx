@@ -1,4 +1,3 @@
-import { ScheduledSlotStatus } from "@repo/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
@@ -59,7 +58,7 @@ function PublicationsPage() {
 				headers: { Authorization: rawInitData ?? "" },
 				data: {
 					postingChannelId: selectedPostingChannelId,
-					status: ScheduledSlotStatus.WAITING,
+					status: "WAITING",
 					limit: 10,
 				},
 			});
@@ -96,7 +95,6 @@ function PublicationsPage() {
 			const nextSlotTime = getNextAvailableSlotTime();
 
 			return await createScheduledSlot({
-				type: "dynamic",
 				headers: { Authorization: rawInitData ?? "" },
 				data: {
 					postingChannelId: selectedPostingChannelId,

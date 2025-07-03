@@ -79,9 +79,7 @@ export function TelegramButtonsProvider({
 	try {
 		// biome-ignore lint/correctness/useHookAtTopLevel: We can't use it in SSR because `window` is not presented and we fail
 		rawInitData = useRawInitData();
-	} catch (error) {
-		console.error(error);
-	}
+	} catch {}
 
 	// Helper function for main button
 	const setMainButton = (text: string, visible = true, action?: () => void) => {
