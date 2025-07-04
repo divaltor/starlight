@@ -1,4 +1,4 @@
-import { fmt } from "@grammyjs/parse-mode";
+import { b, fmt } from "@grammyjs/parse-mode";
 import { env, type Prisma } from "@repo/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { channelKeyboard, webAppKeyboard } from "@/bot";
@@ -119,7 +119,7 @@ privateChat.on(":text").filter(
 			],
 		});
 
-		const title = fmt`We are publishing your photos to *${slot.postingChannel.chat.title || "your"}* channel ✨.`;
+		const title = fmt`We are publishing your photos to ${b}${slot.postingChannel.chat.title || "your"}${b} channel ✨.`;
 
 		if (slot.postingChannel.chat.username) {
 			await ctx.reply(title.text, {
