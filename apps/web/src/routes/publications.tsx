@@ -19,7 +19,7 @@ function PublicationsPage() {
 
 	const { rawInitData, updateButtons } = useTelegramContext();
 
-	const isDevWithMockedTGA = isTMA();
+	const isDevWithMockedTGA = isTMA() && process.env.ENVIRONMENT === "dev";
 
 	const {
 		data: publications = [],
