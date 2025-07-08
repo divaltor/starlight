@@ -294,6 +294,8 @@ export async function shuffleSlotTweet(
 	tweetId: string,
 	userId: string,
 ) {
+	"use server";
+
 	const prisma = getPrismaClient();
 
 	const whereClause: Prisma.ScheduledSlotWhereInput = { id: slotId, userId };
@@ -415,6 +417,8 @@ export async function shuffleSlotTweet(
 }
 
 export async function addRandomTweetToSlot(slotId: string, userId: string) {
+	"use server";
+
 	const prisma = getPrismaClient();
 
 	// Verify slot belongs to user and get current state
