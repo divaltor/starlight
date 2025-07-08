@@ -102,14 +102,14 @@ function PublicationsPage() {
 	useEffect(() => {
 		const waitingPubs = publications.filter((pub) => pub.status === "WAITING");
 
-		if (!isPending && waitingPubs.length === 0) {
+		if (isPending || waitingPubs.length === 0) {
 			// No publications - show "Add slot" button
 			updateButtons({
 				mainButton: {
 					state: "visible",
 					text: "Add slot",
 					hasShineEffect: true,
-					isEnabled: true,
+					isEnabled: !isPending,
 					action: {
 						type: "callback",
 						payload: handleCreateSlot,
