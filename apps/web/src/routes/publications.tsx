@@ -90,19 +90,20 @@ function PublicationsPage() {
 	};
 
 	const handleAddTweet = useCallback(() => {
-		if (publications.length > 0) {
+		if (publications.length > 0 && !isPending) {
 			addTweetMutation.mutate(publications[0].id);
 		}
-	}, [addTweetMutation.mutate, publications]);
+	}, [addTweetMutation.mutate, publications, isPending]);
 
 	const handleCreateSlot = useCallback(() => {
 		createSlotMutation.mutate();
 	}, [createSlotMutation.mutate]);
 
 	useEffect(() => {
-		console.log("publications", publications);
-
-		if (publications.filter((pub) => pub.status === "WAITING").length === 0) {
+		if (
+			!isPending &&
+			publications.filter((pub) => pub.status === "WAITING").length === 0
+		) {
 			// No publications - show "Add slot" button
 			updateButtons({
 				mainButton: {
@@ -166,6 +167,7 @@ function PublicationsPage() {
 		handleAddTweet,
 		rawInitData,
 		updateButtons,
+		isPending,
 	]);
 
 	const renderNoChannelsState = () => (
