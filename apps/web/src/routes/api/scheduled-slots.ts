@@ -1,10 +1,10 @@
 import { getPrismaClient, type Prisma, ScheduledSlotStatus } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
+import { setResponseStatus } from "@tanstack/react-start/server";
+import { z } from "zod/v4";
 import { authMiddleware } from "@/middleware/auth";
 
 const getScheduledSlotsSchema = z.object({
-	postingChannelId: z.number().optional(),
 	status: z
 		.enum([
 			ScheduledSlotStatus.WAITING,
@@ -16,33 +16,28 @@ const getScheduledSlotsSchema = z.object({
 });
 
 const createSlotSchema = z.object({
-	scheduledFor: z.string().datetime(),
+	scheduledFor: z.iso.datetime().optional(),
 	tweetCount: z.number().min(1).max(10).default(5),
-	postingChannelId: z.number().optional(),
 });
 
 const updateSlotSchema = z.object({
-	slotId: z.string().uuid(),
+	slotId: z.uuid(),
 	status: z
 		.enum([ScheduledSlotStatus.PUBLISHED, ScheduledSlotStatus.PUBLISHING])
 		.optional(),
-	postingChannelId: z.number().optional(),
 });
 
 const deleteSlotSchema = z.object({
-	slotId: z.string().uuid(),
-	postingChannelId: z.number().optional(),
+	slotId: z.uuid(),
 });
 
 const shuffleTweetSchema = z.object({
-	slotId: z.string().uuid(),
-	tweetId: z.string().uuid(),
-	postingChannelId: z.number().optional(),
+	slotId: z.uuid(),
+	tweetId: z.uuid(),
 });
 
 const addTweetSchema = z.object({
-	slotId: z.string().uuid(),
-	postingChannelId: z.number().optional(),
+	slotId: z.uuid(),
 });
 
 export const getScheduledSlots = createServerFn({ method: "GET" })
@@ -51,12 +46,9 @@ export const getScheduledSlots = createServerFn({ method: "GET" })
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
 		const userId = context.databaseUserId;
-		const { postingChannelId, status, limit } = data;
+		const { status, limit } = data;
 
 		const whereClause: Prisma.ScheduledSlotWhereInput = { userId };
-		if (postingChannelId) {
-			whereClause.chatId = postingChannelId;
-		}
 
 		if (status) {
 			whereClause.status = status;
@@ -88,32 +80,30 @@ export const getScheduledSlots = createServerFn({ method: "GET" })
 export type ScheduledSlots = Awaited<ReturnType<typeof getScheduledSlots>>;
 export type ScheduledSlot = ScheduledSlots[number];
 export type ScheduledSlotWithTweets = ScheduledSlot["scheduledSlotTweets"];
+export type ScheduledSlotTweet = ScheduledSlotWithTweets[number];
+export type ScheduledSlotTweetWithPhotos =
+	ScheduledSlotTweet["scheduledSlotPhotos"];
+export type ScheduledSlotTweetPhoto = ScheduledSlotTweetWithPhotos[number];
 
 export const createScheduledSlot = createServerFn({ method: "POST" })
 	.middleware([authMiddleware])
 	.validator(createSlotSchema)
 	.handler(async ({ data, context }) => {
-		const { scheduledFor, tweetCount, postingChannelId } = data;
-
-		if (!postingChannelId) {
-			throw new Error("Posting channel ID is required");
-		}
+		const { scheduledFor, tweetCount } = data;
 
 		const prisma = getPrismaClient();
 		const userId = context.databaseUserId;
 
 		// Check if user exists and get posting channel
-		const postingChannel = await prisma.postingChannel.findUnique({
+		const postingChannel = await prisma.postingChannel.findFirst({
 			where: {
-				userId_chatId: {
-					userId,
-					chatId: postingChannelId,
-				},
+				userId,
 			},
 		});
 
-		if (!postingChannel || postingChannel.userId !== userId) {
-			throw new Error("Posting channel not found or access denied");
+		if (!postingChannel) {
+			setResponseStatus(404);
+			return { slot: null, error: "Posting channel not found" };
 		}
 
 		// Get available tweets with unpublished photos for this channel
@@ -122,37 +112,27 @@ export const createScheduledSlot = createServerFn({ method: "POST" })
 				userId,
 				photos: {
 					some: {
-						deletedAt: null,
-						s3Path: { not: null },
-						publishedPhotos: {
-							none: {
-								chatId: postingChannel.chatId,
-							},
-						},
-						scheduledSlotPhotos: { none: {} },
+						...prisma.photo.unpublished(postingChannel.chatId),
 					},
 				},
 			},
 			include: {
 				photos: {
 					where: {
-						deletedAt: null,
-						s3Path: { not: null },
-						publishedPhotos: {
-							none: {
-								chatId: postingChannel.chatId,
-							},
-						},
-						scheduledSlotPhotos: { none: {} },
+						...prisma.photo.unpublished(postingChannel.chatId),
 					},
 				},
 			},
-			orderBy: { createdAt: "desc" },
+			orderBy: [{ createdAt: "desc" }, { id: "asc" }],
 			take: tweetCount * 2, // Get more tweets for random selection
 		});
 
 		if (availableTweets.length === 0) {
-			throw new Error("No tweets with unpublished photos available");
+			setResponseStatus(400);
+			return {
+				slot: null,
+				error: "No tweets with unpublished photos available",
+			};
 		}
 
 		// Randomly select tweets
@@ -160,49 +140,44 @@ export const createScheduledSlot = createServerFn({ method: "POST" })
 			.sort(() => Math.random() - 0.5)
 			.slice(0, Math.min(tweetCount, availableTweets.length));
 
-		// Create the scheduled slot
-		const scheduledSlot = await prisma.scheduledSlot.create({
-			data: {
-				userId,
-				chatId: postingChannelId,
-				scheduledFor: new Date(scheduledFor),
-				status: ScheduledSlotStatus.WAITING,
-			},
-		});
-
-		// Create scheduled slot tweets and their photos
-		for (const tweet of selectedTweets) {
-			const scheduledSlotTweet = await prisma.scheduledSlotTweet.create({
+		const createdSlot = await prisma.$transaction(async (tx) => {
+			const createdSlot = await tx.scheduledSlot.create({
 				data: {
-					scheduledSlotId: scheduledSlot.id,
-					tweetId: tweet.id,
 					userId,
+					chatId: postingChannel.chatId,
+					scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
 				},
 			});
 
-			// Add all available photos from this tweet
-			for (const photo of tweet.photos) {
-				await prisma.scheduledSlotPhoto.create({
+			for (const tweet of selectedTweets) {
+				const scheduledSlotTweet = await tx.scheduledSlotTweet.create({
 					data: {
-						scheduledSlotTweetId: scheduledSlotTweet.id,
-						photoId: photo.id,
+						scheduledSlotId: createdSlot.id,
+						tweetId: tweet.id,
 						userId,
 					},
 				});
-			}
-		}
 
-		// Fetch the complete slot with relations
-		const completeSlot = await prisma.scheduledSlot.findUnique({
-			where: { id: scheduledSlot.id },
+				await tx.scheduledSlotPhoto.createMany({
+					data: tweet.photos.map((photo) => ({
+						scheduledSlotTweetId: scheduledSlotTweet.id,
+						photoId: photo.id,
+						userId,
+					})),
+				});
+			}
+
+			return createdSlot;
+		});
+
+		const slot = await prisma.scheduledSlot.findUnique({
+			where: { id: createdSlot.id },
 			include: {
 				scheduledSlotTweets: {
 					include: {
 						tweet: true,
 						scheduledSlotPhotos: {
-							include: {
-								photo: true,
-							},
+							include: { photo: true },
 							orderBy: { createdAt: "asc" },
 						},
 					},
@@ -211,7 +186,7 @@ export const createScheduledSlot = createServerFn({ method: "POST" })
 			},
 		});
 
-		return { slot: completeSlot };
+		return { slot, error: null };
 	});
 
 export const updateScheduledSlot = createServerFn({ method: "POST" })
@@ -219,21 +194,19 @@ export const updateScheduledSlot = createServerFn({ method: "POST" })
 	.validator(updateSlotSchema)
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
-		const { slotId, status, postingChannelId } = data;
+		const { slotId, status } = data;
 		const userId = context.databaseUserId;
 
 		// Verify slot belongs to user and optionally postingChannelId
 		const whereClause: Prisma.ScheduledSlotWhereInput = { id: slotId, userId };
-		if (postingChannelId) {
-			whereClause.postingChannel = { chatId: postingChannelId };
-		}
 
 		const existingSlot = await prisma.scheduledSlot.findFirst({
 			where: whereClause,
 		});
 
 		if (!existingSlot) {
-			throw new Error("Scheduled slot not found");
+			setResponseStatus(404);
+			return { slot: null, error: "Scheduled slot not found" };
 		}
 
 		const updatedSlot = await prisma.scheduledSlot.update({
@@ -257,7 +230,7 @@ export const updateScheduledSlot = createServerFn({ method: "POST" })
 			},
 		});
 
-		return { slot: updatedSlot };
+		return { slot: updatedSlot, error: null };
 	});
 
 export const deleteScheduledSlot = createServerFn({ method: "POST" })
@@ -265,7 +238,7 @@ export const deleteScheduledSlot = createServerFn({ method: "POST" })
 	.validator(deleteSlotSchema)
 	.handler(async ({ data, context }) => {
 		const prisma = getPrismaClient();
-		const { slotId, postingChannelId } = data;
+		const { slotId } = data;
 		const userId = context.databaseUserId;
 
 		// Verify slot belongs to user and optionally postingChannelId
@@ -274,16 +247,14 @@ export const deleteScheduledSlot = createServerFn({ method: "POST" })
 			userId,
 			status: ScheduledSlotStatus.WAITING,
 		};
-		if (postingChannelId) {
-			whereClause.postingChannel = { chatId: postingChannelId };
-		}
 
 		const existingSlot = await prisma.scheduledSlot.findFirst({
 			where: whereClause,
 		});
 
 		if (!existingSlot) {
-			throw new Error("Scheduled slot not found");
+			setResponseStatus(404);
+			return { success: false, error: "Scheduled slot not found" };
 		}
 
 		// Delete the slot (this will set scheduledSlotId to null in related publishedPhotos due to SetNull)
@@ -291,161 +262,41 @@ export const deleteScheduledSlot = createServerFn({ method: "POST" })
 			where: { id: slotId },
 		});
 
-		return { success: true };
+		return { success: true, error: null };
 	});
 
 export const shuffleTweet = createServerFn({ method: "POST" })
 	.middleware([authMiddleware])
 	.validator(shuffleTweetSchema)
 	.handler(async ({ data, context }) => {
-		const { slotId, tweetId, postingChannelId } = data;
+		const { slotId, tweetId } = data;
 		const userId = context.databaseUserId;
 
-		const updatedSlot = await shuffleSlotTweet(
-			slotId,
-			tweetId,
-			userId,
-			postingChannelId,
-		);
+		const updatedSlot = await shuffleSlotTweet(slotId, tweetId, userId);
 
-		return { slot: updatedSlot };
+		return { slot: updatedSlot, error: null };
 	});
 
 export const addTweetToSlot = createServerFn({ method: "POST" })
 	.middleware([authMiddleware])
 	.validator(addTweetSchema)
 	.handler(async ({ data, context }) => {
-		const { slotId, postingChannelId } = data;
+		const { slotId } = data;
 		const userId = context.databaseUserId;
 
-		const updatedSlot = await addRandomTweetToSlot(
-			slotId,
-			userId,
-			postingChannelId,
-		);
+		const updatedSlot = await addRandomTweetToSlot(slotId, userId);
 
-		return { slot: updatedSlot };
+		return { slot: updatedSlot, error: null };
 	});
-
-// Helper functions for slot management
-export async function getAvailablePhotosForUser(
-	userId: string,
-	postingChannelId?: number,
-	limit = 20,
-) {
-	const prisma = getPrismaClient();
-
-	let publishedPhotosFilter: Prisma.PublishedPhotoListRelationFilter = {
-		none: {},
-	};
-
-	if (postingChannelId) {
-		// Get the chatId from the posting channel
-		const postingChannel = await prisma.postingChannel.findUnique({
-			where: {
-				userId_chatId: {
-					userId,
-					chatId: postingChannelId,
-				},
-			},
-		});
-
-		if (postingChannel) {
-			publishedPhotosFilter = {
-				none: { chatId: postingChannel.chatId },
-			};
-		}
-	}
-
-	return await prisma.photo.findMany({
-		where: {
-			userId,
-			deletedAt: null,
-			s3Path: { not: null },
-			publishedPhotos: publishedPhotosFilter,
-		},
-		include: {
-			tweet: true,
-		},
-		orderBy: { createdAt: "desc" },
-		take: limit,
-	});
-}
-
-export async function createScheduledSlotForToday(
-	userId: string,
-	postingChannelId: number,
-) {
-	const prisma = getPrismaClient();
-
-	const today = new Date();
-	today.setHours(
-		9 + Math.floor(Math.random() * 14),
-		Math.floor(Math.random() * 60),
-		0,
-		0,
-	);
-
-	// Check if there's already a slot for today
-	const startOfDay = new Date();
-	startOfDay.setHours(0, 0, 0, 0);
-	const endOfDay = new Date();
-	endOfDay.setHours(23, 59, 59, 999);
-
-	const existingSlot = await prisma.scheduledSlot.findFirst({
-		where: {
-			userId,
-			chatId: postingChannelId,
-			scheduledFor: {
-				gte: startOfDay,
-				lte: endOfDay,
-			},
-		},
-	});
-
-	if (existingSlot) {
-		// If today is taken, schedule for tomorrow
-		const tomorrow = new Date(today);
-		tomorrow.setDate(tomorrow.getDate() + 1);
-		today.setTime(tomorrow.getTime());
-	}
-
-	return await prisma.scheduledSlot.create({
-		data: {
-			userId,
-			chatId: postingChannelId,
-			scheduledFor: today,
-			status: ScheduledSlotStatus.WAITING,
-		},
-		include: {
-			scheduledSlotTweets: {
-				include: {
-					tweet: true,
-					scheduledSlotPhotos: {
-						include: {
-							photo: true,
-						},
-						orderBy: { createdAt: "asc" },
-					},
-				},
-				orderBy: { createdAt: "asc" },
-			},
-		},
-	});
-}
 
 export async function shuffleSlotTweet(
 	slotId: string,
 	tweetId: string,
 	userId: string,
-	postingChannelId?: number,
 ) {
 	const prisma = getPrismaClient();
 
 	const whereClause: Prisma.ScheduledSlotWhereInput = { id: slotId, userId };
-	if (postingChannelId) {
-		whereClause.postingChannel = { chatId: postingChannelId };
-	}
 
 	const slot = await prisma.scheduledSlot.findFirst({
 		where: whereClause,
@@ -466,13 +317,15 @@ export async function shuffleSlotTweet(
 	});
 
 	if (!slot) {
-		throw new Error("Slot not found");
+		setResponseStatus(404);
+		return { slot: null, error: "Slot not found" };
 	}
 
 	// Find the specific tweet in the slot
 	const slotTweet = slot.scheduledSlotTweets.find((st) => st.id === tweetId);
 	if (!slotTweet) {
-		throw new Error("Tweet not found in slot");
+		setResponseStatus(404);
+		return { slot: null, error: "Tweet not found in slot" };
 	}
 
 	// Get currently used tweet IDs in this slot to avoid duplicates
@@ -487,11 +340,7 @@ export async function shuffleSlotTweet(
 				some: {
 					deletedAt: null,
 					s3Path: { not: null },
-					publishedPhotos: postingChannelId
-						? {
-								none: { chatId: postingChannelId },
-							}
-						: { none: {} },
+					publishedPhotos: { none: {} },
 					scheduledSlotPhotos: { none: {} },
 				},
 			},
@@ -501,11 +350,7 @@ export async function shuffleSlotTweet(
 				where: {
 					deletedAt: null,
 					s3Path: { not: null },
-					publishedPhotos: postingChannelId
-						? {
-								none: { chatId: postingChannelId },
-							}
-						: { none: {} },
+					publishedPhotos: { none: {} },
 					scheduledSlotPhotos: { none: {} },
 				},
 			},
@@ -515,7 +360,8 @@ export async function shuffleSlotTweet(
 	});
 
 	if (availableTweets.length === 0) {
-		throw new Error("No available tweets for shuffling");
+		setResponseStatus(400);
+		return { slot: null, error: "No available tweets for shuffling" };
 	}
 
 	// Select a random tweet
@@ -568,18 +414,11 @@ export async function shuffleSlotTweet(
 	return updatedSlot;
 }
 
-export async function addRandomTweetToSlot(
-	slotId: string,
-	userId: string,
-	postingChannelId?: number,
-) {
+export async function addRandomTweetToSlot(slotId: string, userId: string) {
 	const prisma = getPrismaClient();
 
 	// Verify slot belongs to user and get current state
 	const whereClause: Prisma.ScheduledSlotWhereInput = { id: slotId, userId };
-	if (postingChannelId) {
-		whereClause.postingChannel = { chatId: postingChannelId };
-	}
 
 	const slot = await prisma.scheduledSlot.findFirst({
 		where: whereClause,
@@ -593,12 +432,14 @@ export async function addRandomTweetToSlot(
 	});
 
 	if (!slot) {
-		throw new Error("Slot not found");
+		setResponseStatus(404);
+		return { slot: null, error: "Slot not found" };
 	}
 
 	// Check if slot already has maximum tweets (10)
 	if (slot.scheduledSlotTweets.length >= 10) {
-		throw new Error("Slot already has maximum number of tweets");
+		setResponseStatus(400);
+		return { slot: null, error: "Slot already has maximum number of tweets" };
 	}
 
 	// Get currently used tweet IDs in this slot to avoid duplicates
@@ -613,11 +454,7 @@ export async function addRandomTweetToSlot(
 				some: {
 					deletedAt: null,
 					s3Path: { not: null },
-					publishedPhotos: postingChannelId
-						? {
-								none: { chatId: postingChannelId },
-							}
-						: { none: {} },
+					publishedPhotos: { none: {} },
 					scheduledSlotPhotos: { none: {} },
 				},
 			},
@@ -627,21 +464,18 @@ export async function addRandomTweetToSlot(
 				where: {
 					deletedAt: null,
 					s3Path: { not: null },
-					publishedPhotos: postingChannelId
-						? {
-								none: { chatId: postingChannelId },
-							}
-						: { none: {} },
+					publishedPhotos: { none: {} },
 					scheduledSlotPhotos: { none: {} },
 				},
 			},
 		},
 		orderBy: { createdAt: "desc" },
-		take: 20, // Get multiple options for random selection
+		take: 50, // Get multiple options for random selection
 	});
 
 	if (availableTweets.length === 0) {
-		throw new Error("No available tweets to add");
+		setResponseStatus(400);
+		return { slot: null, error: "No available tweets to add" };
 	}
 
 	// Select a random tweet

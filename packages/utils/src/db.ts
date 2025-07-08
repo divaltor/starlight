@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { type Prisma, PrismaClient } from "@prisma/client";
 import Sqids from "sqids";
 import { parse as uuidParse } from "uuid";
 import env from "./config";
@@ -50,6 +50,30 @@ export function createPrismaClient() {
 					},
 				},
 			},
+		},
+		model: {
+			photo: {
+				available: () => ({
+					deletedAt: null,
+					s3Path: { not: null },
+				}),
+				unpublished: (chatId: number | string | bigint) => ({
+					deletedAt: null,
+					s3Path: { not: null },
+					publishedPhotos: { none: { chatId: Number(chatId) } },
+					scheduledSlotPhotos: { none: {} },
+				}),
+			} satisfies Record<string, (...args: any) => Prisma.PhotoWhereInput>,
+			tweet: {
+				available: () => ({
+					photos: {
+						some: {
+							deletedAt: null,
+							s3Path: { not: null },
+						},
+					},
+				}),
+			} satisfies Record<string, (...args: any) => Prisma.TweetWhereInput>,
 		},
 	});
 }

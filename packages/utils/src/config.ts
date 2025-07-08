@@ -8,7 +8,6 @@ const env = createEnv({
 		REDIS_URL: z.url({ protocol: /^rediss?$/ }),
 		DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
 
-		SECRET_KEY: z.string().min(32),
 		COOKIE_ENCRYPTION_KEY: z
 			.string()
 			.min(

@@ -2,13 +2,13 @@ import { getPrismaClient } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/middleware/auth";
 
-export const getPostingChannels = createServerFn({ method: "GET" })
+export const getPostingChannel = createServerFn({ method: "GET" })
 	.middleware([authMiddleware])
 	.handler(async ({ context }) => {
 		const prisma = getPrismaClient();
 		const userId = context.databaseUserId;
 
-		const postingChannels = await prisma.postingChannel.findMany({
+		const postingChannel = await prisma.postingChannel.findFirst({
 			where: {
 				userId,
 				isActive: true,
@@ -16,10 +16,9 @@ export const getPostingChannels = createServerFn({ method: "GET" })
 			include: {
 				chat: true,
 			},
-			orderBy: [{ createdAt: "desc" }, { chat: { title: "asc" } }],
 		});
 
-		return { postingChannels };
+		return postingChannel;
 	});
 
-export type PostingChannel = Awaited<ReturnType<typeof getPostingChannels>>;
+export type PostingChannel = Awaited<ReturnType<typeof getPostingChannel>>;

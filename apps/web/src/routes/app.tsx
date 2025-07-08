@@ -1,18 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { format } from "date-fns";
-import {
-	Calendar,
-	Check,
-	ChevronLeft,
-	ChevronRight,
-	Filter,
-	Loader2,
-	RefreshCw,
-	X,
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Calendar, Check, Filter, RefreshCw } from "lucide-react";
+import { Masonry, useInfiniteLoader } from "masonic";
+import { useCallback, useEffect, useState } from "react";
+import { TweetImageGrid } from "@/components/tweet-image-grid";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -28,18 +19,13 @@ import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
 import type { DateFilter } from "@/types/dates";
 
 function TwitterArtViewer() {
-	const [selectedImage, setSelectedImage] = useState<number | null>(null);
-	const [isImageLoading, setIsImageLoading] = useState<{
-		[key: string]: boolean;
-	}>({});
 	const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 	const [isFilterActive, setIsFilterActive] = useState(false);
-	const [isMasonryReady, setIsMasonryReady] = useState(false);
-	const masonryGridRef = useRef<HTMLDivElement>(null);
 
 	const { updateButtons } = useTelegramContext();
 
 	useEffect(() => {
+		// TODO: Add condition when we don't have any posts available to parse or even didn't setup a bot yet.
 		updateButtons({
 			mainButton: {
 				state: "visible",
@@ -62,24 +48,25 @@ function TwitterArtViewer() {
 
 	const {
 		tweets,
-		loadMoreRef,
 		isLoading,
-		isFetching,
 		isFetchingNextPage,
 		hasNextPage,
 		error,
-	} = useTweets({
-		dateFilter,
-	});
+		fetchNextPage,
+	} = useTweets({ dateFilter });
 
-	// Server-side filtering eliminates the need for client-side processing
-	// tweets are already filtered by the server based on dateFilter
-	const filteredTweets = tweets;
-
-	// Calculate total photos count - O(1) space, O(n) time but only when needed
-	const totalPhotosCount = useMemo(() => {
-		return filteredTweets.reduce((sum, tweet) => sum + tweet.photoCount, 0);
-	}, [filteredTweets]);
+	const infiniteLoader = useInfiniteLoader(
+		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
+			if (hasNextPage && !isFetchingNextPage) {
+				await fetchNextPage();
+			}
+		},
+		{
+			isItemLoaded: (index, items) => !!items[index],
+			minimumBatchSize: 30,
+			threshold: 5,
+		},
+	);
 
 	// Update filter active state
 	useEffect(() => {
@@ -91,531 +78,23 @@ function TwitterArtViewer() {
 		setDateFilter("all");
 	}, []);
 
-	// O(1) space complexity helper functions
-	const getPhotoByGlobalIndex = useCallback(
-		(globalIndex: number) => {
-			if (globalIndex < 0 || globalIndex >= totalPhotosCount) return null;
-
-			let currentIndex = 0;
-			for (const tweet of filteredTweets) {
-				if (globalIndex < currentIndex + tweet.photoCount) {
-					const photoIndex = globalIndex - currentIndex;
-					const photo = tweet.photos[photoIndex];
-					return {
-						...photo,
-						tweetId: tweet.id,
-						artist: tweet.artist,
-						date: tweet.date,
-						tweetUrl: tweet.tweetUrl,
-						photoIndex,
-						totalPhotosInTweet: tweet.photoCount,
-					};
-				}
-				currentIndex += tweet.photoCount;
-			}
-			return null;
-		},
-		[filteredTweets, totalPhotosCount],
-	);
-
-	const getTweetByGlobalIndex = useCallback(
-		(globalIndex: number) => {
-			if (globalIndex < 0 || globalIndex >= totalPhotosCount) return null;
-
-			let currentIndex = 0;
-			for (
-				let tweetIndex = 0;
-				tweetIndex < filteredTweets.length;
-				tweetIndex++
-			) {
-				const tweet = filteredTweets[tweetIndex];
-				if (globalIndex < currentIndex + tweet.photoCount) {
-					return { ...tweet, index: tweetIndex };
-				}
-				currentIndex += tweet.photoCount;
-			}
-			return null;
-		},
-		[filteredTweets, totalPhotosCount],
-	);
-
-	const openImage = useCallback((imageIndex: number) => {
-		setSelectedImage(imageIndex);
-	}, []);
-
-	const closeImage = useCallback(() => {
-		setSelectedImage(null);
-	}, []);
-
-	const getTweetStartIndex = useCallback(
-		(tweetIndex: number) => {
-			if (tweetIndex < 0 || tweetIndex >= filteredTweets.length) return -1;
-
-			let startIndex = 0;
-			for (let i = 0; i < tweetIndex; i++) {
-				startIndex += filteredTweets[i].photoCount;
-			}
-			return startIndex;
-		},
-		[filteredTweets],
-	);
-
-	const navigateImage = useCallback(
-		(direction: "prev" | "next") => {
-			if (selectedImage === null || totalPhotosCount === 0) return;
-
-			const currentPhoto = getPhotoByGlobalIndex(selectedImage);
-			const currentTweet = getTweetByGlobalIndex(selectedImage);
-
-			if (!currentTweet || !currentPhoto) return;
-
-			// Get current position within the tweet
-			const currentPhotoIndexInTweet = currentPhoto.photoIndex;
-			const totalPhotosInTweet = currentTweet.photoCount;
-
-			if (direction === "next") {
-				// If not the last image in the current tweet, go to next image in same tweet
-				if (currentPhotoIndexInTweet < totalPhotosInTweet - 1) {
-					setSelectedImage(selectedImage + 1);
-				} else {
-					// Move to first image of next tweet
-					const currentTweetIndex = currentTweet.index;
-					const nextTweetIndex =
-						currentTweetIndex < filteredTweets.length - 1
-							? currentTweetIndex + 1
-							: 0; // Wrap to first tweet
-
-					const firstImageOfNextTweet = getTweetStartIndex(nextTweetIndex);
-					setSelectedImage(firstImageOfNextTweet);
-				}
-			} else {
-				// If not the first image in the current tweet, go to previous image in same tweet
-				if (currentPhotoIndexInTweet > 0) {
-					setSelectedImage(selectedImage - 1);
-				} else {
-					// Move to last image of previous tweet
-					const currentTweetIndex = currentTweet.index;
-					const prevTweetIndex =
-						currentTweetIndex > 0
-							? currentTweetIndex - 1
-							: filteredTweets.length - 1; // Wrap to last tweet
-
-					const prevTweet = filteredTweets[prevTweetIndex];
-					const lastImageOfPrevTweet =
-						getTweetStartIndex(prevTweetIndex) + prevTweet.photoCount - 1;
-					setSelectedImage(lastImageOfPrevTweet);
-				}
-			}
-		},
-		[
-			selectedImage,
-			totalPhotosCount,
-			getPhotoByGlobalIndex,
-			getTweetByGlobalIndex,
-			getTweetStartIndex,
-			filteredTweets,
-		],
-	);
-
-	const handleImageLoad = useCallback((imageId: string) => {
-		setIsImageLoading((prev) => ({ ...prev, [imageId]: false }));
-	}, []);
-
-	const handleImageLoadStart = useCallback((imageId: string) => {
-		setIsImageLoading((prev) => ({ ...prev, [imageId]: true }));
-	}, []);
-
-	// O(1) space complexity image index lookup
-	const getImageIndex = useCallback(
-		(tweetId: string, imageId: string) => {
-			let currentIndex = 0;
-			for (const tweet of filteredTweets) {
-				if (tweet.id === tweetId) {
-					const photoIndex = tweet.photos.findIndex(
-						(photo) => photo.id === imageId,
-					);
-					return photoIndex !== -1 ? currentIndex + photoIndex : -1;
-				}
-				currentIndex += tweet.photoCount;
-			}
-			return -1;
-		},
-		[filteredTweets],
-	);
-
-	const formatDate = useCallback((dateString: string) => {
-		const date = new Date(dateString);
-		return format(date, "MMM d, yyyy");
-	}, []);
-
-	// JavaScript masonry layout for browsers without masonry support
-	const layoutMasonry = useCallback(() => {
-		const grid = masonryGridRef.current;
-		if (!grid) return;
-
-		// Check if masonry is supported
-		const supportsGridMasonry = CSS.supports("grid-template-rows", "masonry");
-		if (supportsGridMasonry) {
-			setIsMasonryReady(true);
-			return;
-		}
-
-		const items = Array.from(grid.children) as HTMLElement[];
-		if (items.length === 0) return;
-
-		// Get grid gap
-		const gap = 16; // 1rem = 16px
-
-		// Calculate number of columns based on viewport width
-		let columns = 1;
-		const width = window.innerWidth;
-		if (width >= 1536) columns = 6;
-		else if (width >= 1280) columns = 5;
-		else if (width >= 1024) columns = 4;
-		else if (width >= 768) columns = 3;
-		else if (width >= 640) columns = 2;
-
-		// Calculate column width
-		const gridWidth = grid.offsetWidth;
-		const columnWidth = (gridWidth - gap * (columns - 1)) / columns;
-
-		// Initialize column heights array
-		const columnHeights = new Array(columns).fill(0);
-
-		// Position each item
-		items.forEach((item) => {
-			// Find the shortest column
-			const shortestColumnIndex = columnHeights.indexOf(
-				Math.min(...columnHeights),
-			);
-
-			// Calculate position
-			const x = shortestColumnIndex * (columnWidth + gap);
-			const y = columnHeights[shortestColumnIndex];
-
-			// Position the item
-			item.style.left = `${x}px`;
-			item.style.top = `${y}px`;
-			item.style.width = `${columnWidth}px`;
-
-			// Update column height
-			columnHeights[shortestColumnIndex] += item.offsetHeight + gap;
-		});
-
-		// Set container height
-		const maxHeight = Math.max(...columnHeights);
-		grid.style.height = `${maxHeight}px`;
-
-		// Show the grid after layout is complete
-		setIsMasonryReady(true);
-	}, []);
-
-	// Trigger layout on data changes and window resize
-	useEffect(() => {
-		setIsMasonryReady(false);
-		const timeoutId = setTimeout(layoutMasonry, 100);
-		return () => clearTimeout(timeoutId);
-	}, [layoutMasonry]);
-
-	useEffect(() => {
-		const handleResize = () => {
-			setIsMasonryReady(false);
-			layoutMasonry();
-		};
-
-		window.addEventListener("resize", handleResize);
-		return () => window.removeEventListener("resize", handleResize);
-	}, [layoutMasonry]);
-
-	// Re-layout when images load
-	const handleImageLoadWithLayout = useCallback(
-		(imageId: string) => {
-			handleImageLoad(imageId);
-			setTimeout(layoutMasonry, 50);
-		},
-		[handleImageLoad, layoutMasonry],
-	);
-
-	// Optimized image grid rendering with memoization
-	const renderImageGrid = useCallback(
-		(tweet: (typeof tweets)[0]) => {
-			const photos = tweet.photos;
-
-			if (photos.length === 1) {
-				const photo = photos[0];
-				const imageIndex = getImageIndex(tweet.id, photo.id);
-
-				return (
-					<button
-						className="group relative cursor-pointer overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-300 hover:shadow-md"
-						onClick={() => openImage(imageIndex)}
-						onKeyDown={(e) => {
-							if (e.key === "Enter" || e.key === " ") {
-								e.preventDefault();
-								openImage(imageIndex);
-							}
-						}}
-						tabIndex={0}
-						type="button"
-						aria-label={`View image by ${tweet.artist}`}
-					>
-						{isImageLoading[photo.id] && (
-							<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
-								<div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-							</div>
-						)}
-						<img
-							src={photo.url || "/placeholder.svg"}
-							alt={photo.alt}
-							width={400}
-							height={400}
-							className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
-							onLoadStart={() => handleImageLoadStart(photo.id)}
-							onLoad={() => handleImageLoadWithLayout(photo.id)}
-						/>
-						<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
-							<div className="p-3 text-white">
-								<p className="font-medium text-sm drop-shadow-lg">
-									{tweet.artist}
-								</p>
-								<p className="text-gray-200 text-xs drop-shadow-lg">
-									{formatDate(tweet.date)}
-								</p>
-							</div>
-						</div>
-					</button>
-				);
-			}
-
-			// Multiple images layout with responsive grid
+	const renderMasonryItem = useCallback(
+		({ data, width }: { data: (typeof tweets)[0]; width: number }) => {
 			return (
-				<div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow duration-300 hover:shadow-md">
-					{/* Post header */}
-					<div className="mb-3 flex items-center justify-between">
-						<div>
-							<p className="font-medium text-gray-900 text-sm">
-								{tweet.artist}
-							</p>
-							<p className="text-gray-500 text-xs">{formatDate(tweet.date)}</p>
-						</div>
-						<span className="text-gray-500 text-xs">
-							{tweet.photoCount} images
-						</span>
-					</div>
-
-					{/* Dynamic grid based on number of images */}
-					{photos.length === 2 && (
-						<div className="grid grid-cols-2 gap-2">
-							{photos.map((photo) => {
-								const imageIndex = getImageIndex(tweet.id, photo.id);
-
-								return (
-									<button
-										key={photo.id}
-										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
-										onClick={() => openImage(imageIndex)}
-										onKeyDown={(e) => {
-											if (e.key === "Enter" || e.key === " ") {
-												e.preventDefault();
-												openImage(imageIndex);
-											}
-										}}
-										tabIndex={0}
-										aria-label={`View image ${photo.id}`}
-										type="button"
-									>
-										{isImageLoading[photo.id] && (
-											<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
-												<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-											</div>
-										)}
-										<img
-											src={photo.url || "/placeholder.svg"}
-											alt={photo.alt}
-											width={400}
-											height={400}
-											className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
-											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoadWithLayout(photo.id)}
-										/>
-										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
-									</button>
-								);
-							})}
-						</div>
-					)}
-
-					{photos.length === 3 && (
-						<div className="grid grid-cols-2 gap-2">
-							{photos.map((photo, index) => {
-								const imageIndex = getImageIndex(tweet.id, photo.id);
-
-								return (
-									<button
-										key={photo.id}
-										className={`group relative cursor-pointer overflow-hidden rounded bg-gray-100 ${
-											index === 0 ? "col-span-2" : ""
-										}`}
-										onClick={() => openImage(imageIndex)}
-										onKeyDown={(e) => {
-											if (e.key === "Enter" || e.key === " ") {
-												e.preventDefault();
-												openImage(imageIndex);
-											}
-										}}
-										tabIndex={0}
-										aria-label={`View image ${photo.id}`}
-										type="button"
-									>
-										{isImageLoading[photo.id] && (
-											<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
-												<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-											</div>
-										)}
-										<img
-											src={photo.url || "/placeholder.svg"}
-											alt={photo.alt}
-											width={400}
-											height={400}
-											className={`w-full transition-transform duration-300 group-hover:scale-105 ${
-												index === 0 ? "h-auto" : "h-auto"
-											}`}
-											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoadWithLayout(photo.id)}
-										/>
-										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
-									</button>
-								);
-							})}
-						</div>
-					)}
-
-					{photos.length === 4 && (
-						<div className="grid grid-cols-2 gap-2">
-							{photos.map((photo) => {
-								const imageIndex = getImageIndex(tweet.id, photo.id);
-
-								return (
-									<button
-										key={photo.id}
-										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
-										onClick={() => openImage(imageIndex)}
-										onKeyDown={(e) => {
-											if (e.key === "Enter" || e.key === " ") {
-												e.preventDefault();
-												openImage(imageIndex);
-											}
-										}}
-										tabIndex={0}
-										type="button"
-										aria-label={`View image ${photo.id}`}
-									>
-										{isImageLoading[photo.id] && (
-											<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
-												<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-											</div>
-										)}
-										<img
-											src={photo.url || "/placeholder.svg"}
-											alt={photo.alt}
-											width={400}
-											height={400}
-											className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
-											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoadWithLayout(photo.id)}
-										/>
-										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
-									</button>
-								);
-							})}
-						</div>
-					)}
-
-					{photos.length > 4 && (
-						<div className="grid grid-cols-3 gap-2">
-							{photos.slice(0, 6).map((photo, index) => {
-								const imageIndex = getImageIndex(tweet.id, photo.id);
-								const isLastVisible = index === 5 && photos.length > 6;
-
-								return (
-									<button
-										key={photo.id}
-										className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
-										onClick={() => openImage(imageIndex)}
-										onKeyDown={(e) => {
-											if (e.key === "Enter" || e.key === " ") {
-												e.preventDefault();
-												openImage(imageIndex);
-											}
-										}}
-										tabIndex={0}
-										type="button"
-										aria-label={`View image ${photo.id}`}
-									>
-										{isImageLoading[photo.id] && (
-											<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
-												<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-											</div>
-										)}
-										<img
-											src={photo.url || "/placeholder.svg"}
-											alt={photo.alt}
-											width={400}
-											height={400}
-											className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
-											onLoadStart={() => handleImageLoadStart(photo.id)}
-											onLoad={() => handleImageLoadWithLayout(photo.id)}
-										/>
-										{isLastVisible && (
-											<div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
-												<span className="font-medium text-lg">
-													+{photos.length - 6}
-												</span>
-											</div>
-										)}
-										<div className="absolute inset-0 bg-opacity-0 transition-all duration-300 group-hover:bg-opacity-20" />
-									</button>
-								);
-							})}
-						</div>
-					)}
+				<div style={{ width }} className="mb-1">
+					<TweetImageGrid
+						id={data.id}
+						artist={data.artist}
+						date={data.date}
+						photos={data.photos}
+						showActions={false}
+						slotTweetId={data.id}
+					/>
 				</div>
 			);
 		},
-		[
-			getImageIndex,
-			formatDate,
-			openImage,
-			handleImageLoadStart,
-			isImageLoading,
-			handleImageLoadWithLayout,
-		],
+		[],
 	);
-
-	// Keyboard navigation
-	useEffect(() => {
-		const handleKeyDown = (e: KeyboardEvent) => {
-			if (selectedImage === null) return;
-
-			switch (e.key) {
-				case "ArrowLeft":
-					e.preventDefault();
-					navigateImage("prev");
-					break;
-				case "ArrowRight":
-					e.preventDefault();
-					navigateImage("next");
-					break;
-				case "Escape":
-					e.preventDefault();
-					closeImage();
-					break;
-			}
-		};
-
-		document.addEventListener("keydown", handleKeyDown);
-		return () => document.removeEventListener("keydown", handleKeyDown);
-	}, [selectedImage, navigateImage, closeImage]);
 
 	// Show error state
 	if (error) {
@@ -634,14 +113,7 @@ function TwitterArtViewer() {
 	}
 
 	return (
-		<div
-			className="bg-gray-50 p-4"
-			style={{
-				minHeight: "100vh",
-				height: "100vh",
-				overflow: "auto",
-			}}
-		>
+		<div className="bg-gray-50 p-4">
 			{/* Header with Filters */}
 			<div className="mx-auto mb-8 max-w-7xl">
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -727,7 +199,7 @@ function TwitterArtViewer() {
 			)}
 
 			{/* No Results */}
-			{!isLoading && filteredTweets.length === 0 && (
+			{!isLoading && tweets.length === 0 && (
 				<div className="flex flex-col items-center justify-center py-16">
 					<Filter className="mb-4 h-16 w-16 text-gray-400" />
 					<h3 className="mb-2 font-medium text-gray-900 text-xl">
@@ -742,188 +214,18 @@ function TwitterArtViewer() {
 				</div>
 			)}
 
-			{/* Responsive Grid */}
-			{filteredTweets.length > 0 && (
+			{/* Masonry Grid */}
+			{tweets.length > 0 && (
 				<div className="mx-auto max-w-7xl">
-					{!isMasonryReady && (
-						<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-							{Array.from({ length: 8 }).map((_, i) => (
-								<Skeleton
-									// biome-ignore lint/suspicious/noArrayIndexKey: Don't care
-									key={i}
-									className={`rounded-lg ${
-										i % 3 === 0 ? "h-80" : i % 3 === 1 ? "h-60" : "h-96"
-									}`}
-								/>
-							))}
-						</div>
-					)}
-					<div
-						ref={masonryGridRef}
-						className={`masonry-grid grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
-							isMasonryReady ? "opacity-100" : "opacity-0"
-						}`}
-					>
-						{filteredTweets.map((tweet, index) => (
-							<div
-								key={tweet.id}
-								data-tweet-index={index}
-								data-tweet-id={tweet.id}
-								className="will-change-auto"
-							>
-								{renderImageGrid(tweet)}
-							</div>
-						))}
-					</div>
-
-					{/* Infinite Scroll Trigger - Fixed positioning to prevent shifts */}
-					<div className="mt-8 flex min-h-[60px] items-center justify-center">
-						{hasNextPage ? (
-							<div ref={loadMoreRef}>
-								{isFetchingNextPage ? (
-									<div className="flex items-center gap-2 text-gray-600">
-										<Loader2 className="h-5 w-5 animate-spin" />
-										Loading more images...
-									</div>
-								) : (
-									<div className="text-gray-500">Scroll to load more</div>
-								)}
-							</div>
-						) : !isFetching ? (
-							<div className="text-center text-gray-500">
-								You've reached the end! 🎉
-							</div>
-						) : null}
-					</div>
+					<Masonry
+						items={tweets}
+						render={renderMasonryItem}
+						columnGutter={16}
+						onRender={infiniteLoader}
+						scrollFps={4}
+					/>
 				</div>
 			)}
-
-			{/* Full Screen Image Modal */}
-			<Dialog open={selectedImage !== null} onOpenChange={closeImage}>
-				<DialogContent className="max-h-[95vh] max-w-[95vw] border-0 bg-white p-0">
-					{selectedImage !== null &&
-						selectedImage < totalPhotosCount &&
-						(() => {
-							const currentPhoto = getPhotoByGlobalIndex(selectedImage);
-							const currentTweet = getTweetByGlobalIndex(selectedImage);
-
-							if (!currentPhoto || !currentTweet) return null;
-
-							return (
-								<div className="relative flex h-full w-full items-center justify-center">
-									{/* Close Button */}
-									<Button
-										variant="secondary"
-										size="icon"
-										className="absolute top-4 right-4 z-10 border border-white/20 bg-black/50 text-white shadow-2xl backdrop-blur-lg hover:bg-black/70 hover:shadow-3xl"
-										onClick={closeImage}
-									>
-										<X className="h-6 w-6" />
-									</Button>
-
-									{/* Navigation Buttons */}
-									<Button
-										variant="secondary"
-										size="icon"
-										className="-translate-y-1/2 absolute top-1/2 left-4 z-10 border border-white/20 bg-black/50 text-white shadow-2xl backdrop-blur-lg hover:bg-black/70 hover:shadow-3xl"
-										onClick={() => navigateImage("prev")}
-									>
-										<ChevronLeft className="h-8 w-8" />
-									</Button>
-
-									<Button
-										variant="secondary"
-										size="icon"
-										className="-translate-y-1/2 absolute top-1/2 right-4 z-10 border border-white/20 bg-black/50 text-white shadow-2xl backdrop-blur-lg hover:bg-black/70 hover:shadow-3xl"
-										onClick={() => navigateImage("next")}
-									>
-										<ChevronRight className="h-8 w-8" />
-									</Button>
-
-									{/* Main Image */}
-									<div className="flex max-h-full max-w-full flex-col items-center p-8">
-										<img
-											src={currentPhoto.url || "/placeholder.svg"}
-											alt={currentPhoto.alt}
-											width={800}
-											height={800}
-											className="h-auto max-h-[65vh] w-auto max-w-full object-contain"
-										/>
-
-										{/* Thumbnail Navigation for Multi-Image Tweets */}
-										{currentTweet.isMultiImage && (
-											<div className="mt-4 max-w-[90vw] overflow-x-auto">
-												<div className="flex gap-2 rounded-lg border border-gray-200 bg-white/90 p-2 backdrop-blur-sm">
-													{currentTweet.photos.map((tweetPhoto, index) => {
-														const imageIndex = getImageIndex(
-															currentTweet.id,
-															tweetPhoto.id,
-														);
-														const isActive = tweetPhoto.id === currentPhoto.id;
-
-														return (
-															<button
-																key={tweetPhoto.id}
-																type="button"
-																className={`relative cursor-pointer transition-all duration-200 ${
-																	isActive
-																		? "scale-110 ring-2 ring-blue-500 ring-offset-2 ring-offset-white"
-																		: "opacity-70 hover:scale-105 hover:opacity-100"
-																}`}
-																onClick={() => setSelectedImage(imageIndex)}
-																aria-label={`View image ${index + 1} of ${currentTweet.photoCount}`}
-															>
-																<img
-																	src={tweetPhoto.url || "/placeholder.svg"}
-																	alt={tweetPhoto.alt}
-																	width={400}
-																	height={400}
-																	className="h-16 w-16 rounded object-cover"
-																/>
-																{isActive && (
-																	<div className="absolute inset-0 rounded bg-blue-500/20" />
-																)}
-															</button>
-														);
-													})}
-												</div>
-											</div>
-										)}
-
-										{/* Image Counter */}
-										<div className="my-4 rounded-full border border-white/20 bg-black/50 px-3 py-1 text-sm text-white shadow-2xl backdrop-blur-lg">
-											{selectedImage + 1} / {totalPhotosCount}
-										</div>
-
-										{/* Image Info Card */}
-										<div className="w-full max-w-2xl rounded-lg border border-gray-200 bg-white p-6 text-gray-900 shadow-lg">
-											<div className="flex items-start justify-between">
-												<div>
-													<a
-														href={currentPhoto.tweetUrl}
-														target="_blank"
-														rel="noopener noreferrer"
-														className="font-medium text-gray-900 transition-colors hover:text-blue-600"
-														title="View original tweet"
-													>
-														{currentPhoto.artist}
-													</a>
-													<p className="text-gray-600 text-sm">
-														{formatDate(currentPhoto.date)}
-													</p>
-												</div>
-											</div>
-
-											<p className="mt-3 text-gray-500 text-sm">
-												← → Navigate between images
-											</p>
-										</div>
-									</div>
-								</div>
-							);
-						})()}
-				</DialogContent>
-			</Dialog>
 		</div>
 	);
 }

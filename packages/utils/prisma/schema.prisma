@@ -32,7 +32,7 @@ model User {
     photos          Photo[]
     publishedPhotos PublishedPhoto[]
     scheduledSlots  ScheduledSlot[]
-    postingChannels PostingChannel[]
+    postingChannels PostingChannel?
 
     @@map("users")
 }
@@ -54,7 +54,7 @@ model Chat {
 }
 
 model PostingChannel {
-    userId String @map("user_id") @db.Uuid
+    userId String @unique @map("user_id") @db.Uuid
     chatId BigInt @map("chat_id")
 
     isActive Boolean @default(true) @map("is_active")
@@ -67,7 +67,6 @@ model PostingChannel {
     chat           Chat            @relation(fields: [chatId], references: [id], onDelete: Cascade)
     scheduledSlots ScheduledSlot[]
 
-    @@unique([userId, chatId])
     @@index([userId])
     @@index([chatId])
     @@index([isActive])
@@ -157,7 +156,7 @@ model ScheduledSlot {
     id           String              @id @default(uuid(7)) @db.Uuid
     userId       String              @map("user_id") @db.Uuid
     chatId       BigInt              @map("chat_id")
-    scheduledFor DateTime            @map("scheduled_for")
+    scheduledFor DateTime?           @map("scheduled_for")
     status       ScheduledSlotStatus @default(WAITING)
 
     createdAt DateTime @default(now()) @map("created_at")
@@ -165,13 +164,12 @@ model ScheduledSlot {
 
     // Relations
     user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
-    postingChannel      PostingChannel       @relation(fields: [userId, chatId], references: [userId, chatId], onDelete: Restrict)
+    postingChannel      PostingChannel       @relation(fields: [userId], references: [userId], onDelete: Restrict, map: "posting_channel")
     publishedPhotos     PublishedPhoto[]
     scheduledSlotTweets ScheduledSlotTweet[]
 
     @@index([userId])
     @@index([chatId])
-    @@index([scheduledFor])
     @@index([status])
     @@index([createdAt(sort: Desc)])
     @@map("scheduled_slots")

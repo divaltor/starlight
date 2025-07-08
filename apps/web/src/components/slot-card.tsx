@@ -1,15 +1,13 @@
-import type { ScheduledSlotStatus } from "@repo/utils";
-import { format } from "date-fns";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { MessageSquare, MoreVertical, Plus, Trash2 } from "lucide-react";
 import {
-	Calendar,
-	MessageSquare,
-	MoreVertical,
-	Plus,
-	Shuffle,
-	Trash2,
-	X,
-} from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+	MasonryScroller,
+	useContainerPosition,
+	usePositioner,
+	useResizeObserver,
+} from "masonic";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { TweetImageGrid } from "@/components/tweet-image-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -19,61 +17,34 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { ScheduledSlotWithTweets } from "@/routes/api/scheduled-slots";
+import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
+import type {
+	ScheduledSlot,
+	ScheduledSlotTweet,
+	ScheduledSlotWithTweets,
+} from "@/routes/api/scheduled-slots";
+import { addTweetToSlot, shuffleTweet } from "@/routes/api/scheduled-slots";
+import { deletePhoto } from "@/routes/api/scheduled-slots/photos";
 
 interface SlotCardProps {
 	id: string;
-	scheduledFor: Date;
-	status: ScheduledSlotStatus;
+	status: "WAITING" | "PUBLISHED" | "PUBLISHING";
 	scheduledSlotTweets: ScheduledSlotWithTweets;
 	channelName?: string;
 	onDelete?: (id: string) => void;
-	onAddTweet?: (id: string) => void;
-	onDeleteImage?: (id: string, photoId: string) => void;
-	onShuffleTweet?: (id: string, tweetId: string) => void;
 	className?: string;
 }
 
 export function SlotCard({
 	id,
-	scheduledFor,
 	status,
 	scheduledSlotTweets,
 	channelName,
 	onDelete,
-	onAddTweet,
-	onDeleteImage,
-	onShuffleTweet,
 	className = "",
 }: SlotCardProps) {
-	const [isMasonryReady, setIsMasonryReady] = useState(false);
-	const [isImageLoading, setIsImageLoading] = useState<{
-		[key: string]: boolean;
-	}>({});
-	const masonryGridRef = useRef<HTMLDivElement>(null);
-
-	const formatDate = (date: Date) => {
-		const today = new Date();
-		const tomorrow = new Date(today);
-		tomorrow.setDate(tomorrow.getDate() + 1);
-
-		const isToday = date.toDateString() === today.toDateString();
-		const isTomorrow = date.toDateString() === tomorrow.toDateString();
-
-		if (isToday) return "Today";
-		if (isTomorrow) return "Tomorrow";
-
-		return new Intl.DateTimeFormat("en-US", {
-			month: "short",
-			day: "numeric",
-		}).format(date);
-	};
-
-	const formatTweetDate = useCallback((dateString: string) => {
-		const date = new Date(dateString);
-		return format(date, "MMM d, yyyy");
-	}, []);
-
+	const queryClient = useQueryClient();
+	const { rawInitData } = useTelegramContext();
 	const getStatusVariant = (status: string) => {
 		switch (status.toLowerCase()) {
 			case "waiting":
@@ -103,393 +74,202 @@ export function SlotCard({
 	const canAddMoreTweets =
 		scheduledSlotTweets.length < 10 && status === "WAITING";
 
-	// Transform scheduled slot tweets to match the app.tsx structure
-	const tweetsForDisplay = scheduledSlotTweets.map((slotTweet) => ({
-		id: slotTweet.tweet.id,
-		artist: slotTweet.tweet.tweetData?.username || "unknown",
-		date: slotTweet.tweet.tweetData?.timeParsed || "",
-		photoCount: slotTweet.scheduledSlotPhotos.length,
-		photos: slotTweet.scheduledSlotPhotos
-			.filter((sp) => sp.photo.s3Url)
-			.map((sp) => ({
-				id: sp.photo.id,
-				url: sp.photo.s3Url,
-				alt: `Photo by ${slotTweet.tweet.tweetData?.username || "unknown"}`,
-			})),
-		slotTweetId: slotTweet.id,
-	}));
-
-	const handleImageLoad = useCallback((imageId: string) => {
-		setIsImageLoading((prev) => ({ ...prev, [imageId]: false }));
-	}, []);
-
-	const handleImageLoadStart = useCallback((imageId: string) => {
-		setIsImageLoading((prev) => ({ ...prev, [imageId]: true }));
-	}, []);
-
-	// JavaScript masonry layout for browsers without masonry support
-	const layoutMasonry = useCallback(() => {
-		const grid = masonryGridRef.current;
-		if (!grid) return;
-
-		// Check if masonry is supported
-		const supportsGridMasonry = CSS.supports("grid-template-rows", "masonry");
-		if (supportsGridMasonry) {
-			setIsMasonryReady(true);
-			return;
-		}
-
-		const items = Array.from(grid.children) as HTMLElement[];
-		if (items.length === 0) return;
-
-		// Get grid gap and calculate number of columns based on viewport width
-		let columns = 1;
-		let gap = 16; // 1rem = 16px for single column
-		const width = window.innerWidth;
-
-		if (width >= 1536) {
-			columns = 6;
-			gap = 13.33; // 0.833rem
-		} else if (width >= 1280) {
-			columns = 5;
-			gap = 12.8; // 0.8rem
-		} else if (width >= 1024) {
-			columns = 4;
-			gap = 12; // 0.75rem
-		} else if (width >= 768) {
-			columns = 3;
-			gap = 10.67; // 0.667rem
-		} else if (width >= 640) {
-			columns = 2;
-			gap = 8; // 0.5rem
-		}
-
-		// Calculate column width
-		const gridWidth = grid.offsetWidth;
-		const columnWidth = (gridWidth - gap * (columns - 1)) / columns;
-
-		// Initialize column heights array
-		const columnHeights = new Array(columns).fill(0);
-
-		// Position each item
-		items.forEach((item) => {
-			// Find the shortest column
-			const shortestColumnIndex = columnHeights.indexOf(
-				Math.min(...columnHeights),
-			);
-
-			// Calculate position
-			const x = shortestColumnIndex * (columnWidth + gap);
-			const y = columnHeights[shortestColumnIndex];
-
-			// Position the item
-			item.style.left = `${x}px`;
-			item.style.top = `${y}px`;
-			item.style.width = `${columnWidth}px`;
-
-			// Update column height
-			columnHeights[shortestColumnIndex] += item.offsetHeight + gap;
-		});
-
-		// Set container height
-		const maxHeight = Math.max(...columnHeights);
-		grid.style.height = `${maxHeight}px`;
-
-		// Show the grid after layout is complete
-		setIsMasonryReady(true);
-	}, []);
-
-	// Trigger layout on data changes and window resize  
-	useEffect(() => {
-		setIsMasonryReady(false);
-		const timeoutId = setTimeout(layoutMasonry, 100);
-		return () => clearTimeout(timeoutId);
-	}, [layoutMasonry, totalPhotos, scheduledSlotTweets.length]);
-
-	useEffect(() => {
-		const handleResize = () => {
-			setIsMasonryReady(false);
-			layoutMasonry();
-		};
-
-		window.addEventListener("resize", handleResize);
-		return () => window.removeEventListener("resize", handleResize);
-	}, [layoutMasonry]);
-
-	// Re-layout when images load
-	const handleImageLoadWithLayout = useCallback(
-		(imageId: string) => {
-			handleImageLoad(imageId);
-			setTimeout(layoutMasonry, 50);
+	const deletePhotoMutation = useMutation({
+		mutationFn: async ({
+			slotId,
+			photoId,
+		}: {
+			slotId: string;
+			photoId: string;
+		}) => {
+			return await deletePhoto({
+				headers: { Authorization: rawInitData ?? "" },
+				data: {
+					slotId,
+					photoId,
+				},
+			});
 		},
-		[handleImageLoad, layoutMasonry],
-	);
+		onMutate: async ({ slotId, photoId }) => {
+			await queryClient.cancelQueries({
+				queryKey: ["scheduled-slots"],
+			});
 
-	// Render image grid based on tweet structure (similar to app.tsx)
-	const renderTweetImages = useCallback(
-		(tweet: (typeof tweetsForDisplay)[0]) => {
-			const photos = tweet.photos;
+			const previousData = queryClient.getQueryData<ScheduledSlot[]>([
+				"scheduled-slots",
+			]);
 
-			if (photos.length === 1) {
-				const photo = photos[0];
+			if (previousData) {
+				const optimisticData = previousData
+					.map((slot) => {
+						if (slot.id === slotId) {
+							const updatedSlot = {
+								...slot,
+								scheduledSlotTweets: slot.scheduledSlotTweets.map((tweet) => ({
+									...tweet,
+									scheduledSlotPhotos: tweet.scheduledSlotPhotos.filter(
+										(photo) => photo.photo.id !== photoId,
+									),
+								})),
+							};
 
-				return (
-					<div
-						key={tweet.id}
-						className="group relative cursor-pointer overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md"
-					>
-						{isImageLoading[photo.id] && (
-							<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
-								<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-							</div>
-						)}
-						<img
-							src={photo.url}
-							alt={photo.alt}
-							width={400}
-							height={400}
-							className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
-							onLoadStart={() => handleImageLoadStart(photo.id)}
-							onLoad={() => handleImageLoadWithLayout(photo.id)}
-						/>
-						<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-						<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
-							<div className="w-full p-3 text-white">
-								<div className="flex items-center justify-between">
-									<div>
-										<p className="font-medium text-sm drop-shadow-lg">
-											{tweet.artist}
-										</p>
-										{tweet.date && (
-											<p className="text-gray-200 text-xs drop-shadow-lg">
-												{formatTweetDate(
-													typeof tweet.date === "string"
-														? tweet.date
-														: tweet.date.toISOString(),
-												)}
-											</p>
-										)}
-									</div>
-									{status === "WAITING" && (
-										<div className="flex items-center gap-1">
-											{onShuffleTweet && (
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={(e) => {
-														e.stopPropagation();
-														onShuffleTweet(id, tweet.slotTweetId);
-													}}
-													className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-blue-300"
-												>
-													<Shuffle className="h-3 w-3" />
-												</Button>
-											)}
-											{onDeleteImage && (
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={(e) => {
-														e.stopPropagation();
-														onDeleteImage(id, photo.id);
-													}}
-													className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
-												>
-													<X className="h-3 w-3" />
-												</Button>
-											)}
-										</div>
-									)}
-								</div>
-							</div>
-						</div>
-					</div>
-				);
+							updatedSlot.scheduledSlotTweets =
+								updatedSlot.scheduledSlotTweets.filter(
+									(tweet) => tweet.scheduledSlotPhotos.length > 0,
+								);
+
+							return updatedSlot;
+						}
+						return slot;
+					})
+					.filter((slot) => slot.scheduledSlotTweets.length > 0);
+
+				queryClient.setQueryData(["scheduled-slots"], optimisticData);
 			}
 
-			// Multiple images layout with responsive grid
-			return (
-				<div
-					key={tweet.id}
-					className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md"
-				>
-					{/* Post header */}
-					<div className="mb-3 flex items-center justify-between">
-						<div>
-							<p className="font-medium text-gray-900 text-sm">
-								{tweet.artist}
-							</p>
-							<p className="text-gray-500 text-xs">
-								{tweet.date &&
-									formatTweetDate(
-										typeof tweet.date === "string"
-											? tweet.date
-											: tweet.date.toISOString(),
-									)}
-							</p>
-						</div>
-						<div className="flex items-center gap-2">
-							<span className="text-gray-500 text-xs">
-								{tweet.photoCount} images
-							</span>
-							{status === "WAITING" && onShuffleTweet && (
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={(e) => {
-										e.stopPropagation();
-										onShuffleTweet(id, tweet.slotTweetId);
-									}}
-									className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-gray-600 hover:bg-gray-100 hover:text-blue-600"
-								>
-									<Shuffle className="h-3 w-3" />
-								</Button>
-							)}
-						</div>
-					</div>
-
-					{/* Dynamic grid based on number of images */}
-					{photos.length === 2 && (
-						<div className="grid grid-cols-2 gap-2">
-							{photos.map((photo) => (
-								<div
-									key={photo.id}
-									className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
-								>
-									{isImageLoading[photo.id] && (
-										<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
-											<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-										</div>
-									)}
-									<img
-										src={photo.url}
-										alt={photo.alt}
-										width={400}
-										height={400}
-										className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
-										onLoadStart={() => handleImageLoadStart(photo.id)}
-										onLoad={() => handleImageLoadWithLayout(photo.id)}
-									/>
-									<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-									{status === "WAITING" && onDeleteImage && (
-										<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={(e) => {
-													e.stopPropagation();
-													onDeleteImage(id, photo.id);
-												}}
-												className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
-											>
-												<X className="h-3 w-3" />
-											</Button>
-										</div>
-									)}
-								</div>
-							))}
-						</div>
-					)}
-
-					{photos.length === 3 && (
-						<div className="grid grid-cols-2 gap-2">
-							{photos.map((photo, index) => (
-								<div
-									key={photo.id}
-									className={`group relative cursor-pointer overflow-hidden rounded bg-gray-100 ${
-										index === 0 ? "col-span-2" : ""
-									}`}
-								>
-									{isImageLoading[photo.id] && (
-										<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
-											<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-										</div>
-									)}
-									<img
-										src={photo.url}
-										alt={photo.alt}
-										width={400}
-										height={400}
-										className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
-										onLoadStart={() => handleImageLoadStart(photo.id)}
-										onLoad={() => handleImageLoadWithLayout(photo.id)}
-									/>
-									<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-									{status === "WAITING" && onDeleteImage && (
-										<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={(e) => {
-													e.stopPropagation();
-													onDeleteImage(id, photo.id);
-												}}
-												className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
-											>
-												<X className="h-3 w-3" />
-											</Button>
-										</div>
-									)}
-								</div>
-							))}
-						</div>
-					)}
-
-					{photos.length === 4 && (
-						<div className="grid grid-cols-2 gap-2">
-							{photos.map((photo) => (
-								<div
-									key={photo.id}
-									className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
-								>
-									{isImageLoading[photo.id] && (
-										<div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100">
-											<div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-										</div>
-									)}
-									<img
-										src={photo.url}
-										alt={photo.alt}
-										width={400}
-										height={400}
-										className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
-										onLoadStart={() => handleImageLoadStart(photo.id)}
-										onLoad={() => handleImageLoadWithLayout(photo.id)}
-									/>
-									<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-									{status === "WAITING" && onDeleteImage && (
-										<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={(e) => {
-													e.stopPropagation();
-													onDeleteImage(id, photo.id);
-												}}
-												className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
-											>
-												<X className="h-3 w-3" />
-											</Button>
-										</div>
-									)}
-								</div>
-							))}
-						</div>
-					)}
-				</div>
-			);
+			return { previousData };
 		},
-		[
-			formatTweetDate,
-			handleImageLoadStart,
-			isImageLoading,
-			handleImageLoadWithLayout,
-			status,
-			onShuffleTweet,
-			onDeleteImage,
-			id,
-		],
+		onError: (_err, _variables, context) => {
+			if (context?.previousData) {
+				queryClient.setQueryData(["scheduled-slots"], context.previousData);
+			}
+		},
+	});
+
+	const handleDeleteImage = (slotId: string, photoId: string) => {
+		deletePhotoMutation.mutate({ slotId, photoId });
+	};
+
+	const shuffleTweetMutation = useMutation({
+		mutationFn: async ({
+			slotId,
+			tweetId,
+		}: {
+			slotId: string;
+			tweetId: string;
+		}) => {
+			return await shuffleTweet({
+				headers: { Authorization: rawInitData ?? "" },
+				data: {
+					slotId,
+					tweetId,
+				},
+			});
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({
+				queryKey: ["scheduled-slots"],
+			});
+		},
+	});
+
+	const handleShuffleTweet = (slotId: string, tweetId: string) => {
+		shuffleTweetMutation.mutate({ slotId, tweetId });
+	};
+
+	const addTweetMutation = useMutation({
+		mutationFn: async ({ slotId }: { slotId: string }) => {
+			return await addTweetToSlot({
+				headers: { Authorization: rawInitData ?? "" },
+				data: {
+					slotId,
+				},
+			});
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({
+				queryKey: ["scheduled-slots"],
+			});
+		},
+	});
+
+	const handleAddTweet = () => {
+		addTweetMutation.mutate({ slotId: id });
+	};
+	// useWindowSize hook
+	const useWindowSize = () => {
+		const [windowSize, setWindowSize] = useState({
+			width: typeof window !== "undefined" ? window.innerWidth : 0,
+			height: typeof window !== "undefined" ? window.innerHeight : 0,
+		});
+
+		useEffect(() => {
+			const handleResize = () => {
+				setWindowSize({
+					width: window.innerWidth,
+					height: window.innerHeight,
+				});
+			};
+
+			window.addEventListener("resize", handleResize);
+			return () => window.removeEventListener("resize", handleResize);
+		}, []);
+
+		return [windowSize.width, windowSize.height] as const;
+	};
+
+	// Track length for positioner - only use positioner when collection gets smaller
+	const lengthRef = useRef<number>(0);
+	const containerRef = useRef(null);
+	const [windowWidth, windowHeight] = useWindowSize();
+
+	// Track current and previous length to detect when collection gets smaller
+	const currentLength = scheduledSlotTweets.length;
+	const prevLengthRef = useRef<number | undefined>(undefined);
+
+	const shouldRecalculate = useMemo(() => {
+		const prevLength = prevLengthRef.current;
+		prevLengthRef.current = currentLength;
+
+		// Only recalculate when collection gets smaller
+		return prevLength !== undefined && currentLength < prevLength;
+	}, [currentLength]);
+
+	// Set up masonry positioning - only recalculate when collection gets smaller
+	const { offset, width } = useContainerPosition(containerRef, [
+		windowWidth,
+		windowHeight,
+	]);
+
+	const positioner = usePositioner(
+		{
+			width,
+			columnWidth: 200, // Approximate column width
+			columnGutter: 16,
+		},
+		[shouldRecalculate],
 	);
+
+	// Update length ref after positioner setup
+	lengthRef.current = currentLength;
+
+	const resizeObserver = useResizeObserver(positioner);
+
+	const renderMasonryItem = ({
+		data,
+		width,
+	}: {
+		data: ScheduledSlotTweet;
+		width: number;
+	}) => {
+		return (
+			<div style={{ width }} className="mb-1">
+				<TweetImageGrid
+					id={id}
+					artist={data.tweet.tweetData?.username || "unknown"}
+					date={data.tweet.tweetData?.timeParsed || ""}
+					photos={data.scheduledSlotPhotos.map((photo) => ({
+						id: photo.photo.id,
+						url: photo.photo.s3Url || "",
+					}))}
+					showActions={status === "WAITING"}
+					onShuffleTweet={handleShuffleTweet}
+					onDeleteImage={handleDeleteImage}
+					slotTweetId={data.id}
+				/>
+			</div>
+		);
+	};
 
 	return (
 		<Card className={`overflow-hidden shadow-sm ${className}`}>
@@ -498,10 +278,6 @@ export function SlotCard({
 					<div className="flex flex-col gap-2">
 						{/* Date and Status */}
 						<div className="flex items-center gap-2">
-							<Badge variant="outline" className="gap-1 text-xs">
-								<Calendar className="h-3 w-3" />
-								{formatDate(scheduledFor)}
-							</Badge>
 							<Badge
 								variant={getStatusVariant(status)}
 								className="text-xs capitalize"
@@ -545,11 +321,8 @@ export function SlotCard({
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end" className="w-40">
-								{onAddTweet && canAddMoreTweets && (
-									<DropdownMenuItem
-										onClick={() => onAddTweet(id)}
-										className="gap-2"
-									>
+								{canAddMoreTweets && (
+									<DropdownMenuItem onClick={handleAddTweet} className="gap-2">
 										<Plus className="h-4 w-4" />
 										Add Tweet
 									</DropdownMenuItem>
@@ -570,11 +343,11 @@ export function SlotCard({
 
 					{/* Desktop controls */}
 					<div className="hidden items-center gap-1 md:flex">
-						{onAddTweet && canAddMoreTweets && (
+						{canAddMoreTweets && (
 							<Button
 								variant="outline"
 								size="sm"
-								onClick={() => onAddTweet(id)}
+								onClick={handleAddTweet}
 								className="gap-1 text-xs"
 							>
 								<Plus className="h-3 w-3" />
@@ -597,24 +370,21 @@ export function SlotCard({
 			</CardHeader>
 
 			<CardContent className="pt-0">
-				{/* Images Masonry Grid */}
-				<div
-					ref={masonryGridRef}
-					className={`masonry-grid w-full grid-cols-1 gap-4 overflow-hidden transition-opacity duration-200 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 ${
-						isMasonryReady ? "opacity-100" : "opacity-0"
-					}`}
-				>
-					{tweetsForDisplay.map((tweet, index) => (
-						<div
-							key={tweet.id}
-							data-tweet-index={index}
-							data-tweet-id={tweet.id}
-							className="will-change-auto"
-						>
-							{renderTweetImages(tweet)}
-						</div>
-					))}
-				</div>
+				{scheduledSlotTweets.length > 0 && (
+					<div ref={containerRef} style={{ position: "relative" }}>
+						<MasonryScroller
+							positioner={positioner}
+							resizeObserver={resizeObserver}
+							containerRef={containerRef}
+							items={scheduledSlotTweets}
+							height={windowHeight}
+							offset={offset}
+							overscanBy={3}
+							render={renderMasonryItem}
+							scrollFps={4}
+						/>
+					</div>
+				)}
 			</CardContent>
 		</Card>
 	);

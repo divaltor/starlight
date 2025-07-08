@@ -1,15 +1,15 @@
 import { getPrismaClient } from "@repo/utils";
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
+import { z } from "zod/v4";
 import { authMiddleware } from "@/middleware/auth";
 
 const deletePhotoSchema = z.object({
-	slotId: z.string().uuid(),
+	slotId: z.uuid(),
 	photoId: z.string(),
 });
 
 const addPhotoSchema = z.object({
-	slotId: z.string().uuid(),
+	slotId: z.uuid(),
 	photoId: z.string(),
 });
 
