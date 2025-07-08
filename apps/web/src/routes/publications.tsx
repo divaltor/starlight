@@ -100,10 +100,9 @@ function PublicationsPage() {
 	}, [createSlotMutation.mutate]);
 
 	useEffect(() => {
-		if (
-			!isPending &&
-			publications.filter((pub) => pub.status === "WAITING").length === 0
-		) {
+		const waitingPubs = publications.filter((pub) => pub.status === "WAITING");
+
+		if (!isPending && waitingPubs.length === 0) {
 			// No publications - show "Add slot" button
 			updateButtons({
 				mainButton: {
@@ -120,16 +119,13 @@ function PublicationsPage() {
 					state: "hidden",
 				},
 			});
-		} else {
-			// Has publications - show "Publish" and "Add slot" buttons
-			const hasWaitingPubs = publications.some(
-				(pub) => pub.status === "WAITING",
-			);
+		} else if (!isPending && waitingPubs.length > 0) {
+			// Has publications - show "Publish" and "Add tweet" buttons
 			updateButtons({
 				mainButton: {
 					text: "Publish",
 					state: "visible",
-					isEnabled: hasWaitingPubs,
+					isEnabled: waitingPubs.length > 0,
 					hasShineEffect: true,
 					action: {
 						type: "callback",
