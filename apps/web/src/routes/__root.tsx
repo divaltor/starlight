@@ -7,6 +7,7 @@ import {
 	Scripts,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import { StrictMode } from "react";
 import appCss from "@/index.css?url";
 import { TelegramButtonsProvider } from "@/providers/TelegramButtonsProvider";
 
@@ -56,11 +57,14 @@ function RootDocument() {
 	return (
 		<html lang="en" className="light">
 			<head>
+				<script src="https://unpkg.com/react-scan/dist/auto.global.js" />
 				<HeadContent />
 			</head>
 			<body>
 				<TelegramButtonsProvider>
-					<Outlet />
+					<StrictMode>
+						<Outlet />
+					</StrictMode>
 				</TelegramButtonsProvider>
 				<TanStackRouterDevtools position="bottom-left" />
 				<ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />{" "}

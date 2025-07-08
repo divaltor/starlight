@@ -68,8 +68,6 @@ BOT_TOKEN=your_telegram_bot_token_from_@BotFather
 DATABASE_URL=postgresql://starlight-admin:starlight@localhost:5432/starlight
 REDIS_URL=redis://localhost:6379
 
-# Security Keys (generate secure random strings)
-SECRET_KEY=your_32_character_minimum_secret_key_here
 COOKIE_ENCRYPTION_KEY=your_64_character_hex_key_for_cookie_encryption
 COOKIE_ENCRYPTION_SALT=your_16_character_salt_here
 
@@ -283,11 +281,8 @@ bun test --watch        # Run tests in watch mode
 
 ## Security Notes
 
-- Generate secure random strings for `SECRET_KEY` (32+ characters) and `COOKIE_ENCRYPTION_KEY` (64+ characters)
+- Generate secure random string `COOKIE_ENCRYPTION_KEY` (64+ characters)
   ```bash
-  # Generate SECRET_KEY (32 characters)
-  openssl rand -hex 16
-
   # Generate COOKIE_ENCRYPTION_KEY (64 characters)
   openssl rand -hex 32
   ```
