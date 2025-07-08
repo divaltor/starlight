@@ -100,6 +100,8 @@ function PublicationsPage() {
 	}, [createSlotMutation.mutate]);
 
 	useEffect(() => {
+		console.log("publications", publications);
+
 		if (publications.filter((pub) => pub.status === "WAITING").length === 0) {
 			// No publications - show "Add slot" button
 			updateButtons({
@@ -158,7 +160,13 @@ function PublicationsPage() {
 				secondaryButton: { state: "hidden" },
 			});
 		};
-	}, [publications, handleCreateSlot, handleAddTweet, rawInitData, updateButtons]);
+	}, [
+		publications,
+		handleCreateSlot,
+		handleAddTweet,
+		rawInitData,
+		updateButtons,
+	]);
 
 	const renderNoChannelsState = () => (
 		<div className="flex min-h-[50vh] items-center justify-center">
