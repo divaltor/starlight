@@ -57,7 +57,6 @@ function RootDocument() {
 	return (
 		<html lang="en" className="light">
 			<head>
-				<script src="https://unpkg.com/react-scan/dist/auto.global.js" />
 				<HeadContent />
 			</head>
 			<body>
