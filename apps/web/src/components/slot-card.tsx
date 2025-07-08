@@ -23,7 +23,7 @@ import type {
 	ScheduledSlotTweet,
 	ScheduledSlotWithTweets,
 } from "@/routes/api/scheduled-slots";
-import { addTweetToSlot, shuffleTweet } from "@/routes/api/scheduled-slots";
+import { shuffleTweet } from "@/routes/api/scheduled-slots";
 import { deletePhoto } from "@/routes/api/scheduled-slots/photos";
 
 interface SlotCardProps {
@@ -71,8 +71,6 @@ export function SlotCard({
 		),
 	];
 
-	const canAddMoreTweets =
-		scheduledSlotTweets.length < 10 && status === "WAITING";
 
 	const deletePhotoMutation = useMutation({
 		mutationFn: async ({
@@ -167,25 +165,6 @@ export function SlotCard({
 		shuffleTweetMutation.mutate({ slotId, tweetId });
 	};
 
-	const addTweetMutation = useMutation({
-		mutationFn: async ({ slotId }: { slotId: string }) => {
-			return await addTweetToSlot({
-				headers: { Authorization: rawInitData ?? "" },
-				data: {
-					slotId,
-				},
-			});
-		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({
-				queryKey: ["scheduled-slots"],
-			});
-		},
-	});
-
-	const handleAddTweet = () => {
-		addTweetMutation.mutate({ slotId: id });
-	};
 	// useWindowSize hook
 	const useWindowSize = () => {
 		const [windowSize, setWindowSize] = useState({
@@ -321,13 +300,6 @@ export function SlotCard({
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end" className="w-40">
-								{canAddMoreTweets && (
-									<DropdownMenuItem onClick={handleAddTweet} className="gap-2">
-										<Plus className="h-4 w-4" />
-										Add Tweet
-									</DropdownMenuItem>
-								)}
-
 								{onDelete && status === "WAITING" && (
 									<DropdownMenuItem
 										onClick={() => onDelete(id)}
@@ -343,17 +315,6 @@ export function SlotCard({
 
 					{/* Desktop controls */}
 					<div className="hidden items-center gap-1 md:flex">
-						{canAddMoreTweets && (
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={handleAddTweet}
-								className="gap-1 text-xs"
-							>
-								<Plus className="h-3 w-3" />
-								Add Tweet
-							</Button>
-						)}
 						{onDelete && status === "WAITING" && (
 							<Button
 								variant="outline"

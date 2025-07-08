@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
 import { respondToWebAppData } from "@/routes/api/bot";
 import {
+	addTweetToSlot,
 	createScheduledSlot,
 	deleteScheduledSlot,
 	getScheduledSlots,
@@ -68,9 +69,31 @@ function PublicationsPage() {
 		},
 	});
 
+	const addTweetMutation = useMutation({
+		mutationFn: async (slotId: string) => {
+			return await addTweetToSlot({
+				headers: { Authorization: rawInitData ?? "" },
+				data: {
+					slotId,
+				},
+			});
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({
+				queryKey: ["scheduled-slots"],
+			});
+		},
+	});
+
 	const handleDeleteSlot = (slotId: string) => {
 		deleteSlotMutation.mutate(slotId);
 	};
+
+	const handleAddTweet = useCallback(() => {
+		if (publications.length > 0) {
+			addTweetMutation.mutate(publications[0].id);
+		}
+	}, [addTweetMutation.mutate, publications]);
 
 	const handleCreateSlot = useCallback(() => {
 		createSlotMutation.mutate();
@@ -118,7 +141,13 @@ function PublicationsPage() {
 					},
 				},
 				secondaryButton: {
-					state: "hidden",
+					state: "visible",
+					text: "Add tweet",
+					isEnabled: true,
+					action: {
+						type: "callback",
+						payload: handleAddTweet,
+					},
 				},
 			});
 		}
@@ -129,7 +158,7 @@ function PublicationsPage() {
 				secondaryButton: { state: "hidden" },
 			});
 		};
-	}, [publications, handleCreateSlot, rawInitData, updateButtons]);
+	}, [publications, handleCreateSlot, handleAddTweet, rawInitData, updateButtons]);
 
 	const renderNoChannelsState = () => (
 		<div className="flex min-h-[50vh] items-center justify-center">
