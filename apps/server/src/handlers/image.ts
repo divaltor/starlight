@@ -311,7 +311,7 @@ privateChat.command("scrapper").filter(
 privateChat.command("scrapper").filter(
 	async (ctx) => ctx.session.cookies !== null,
 	async (ctx) => {
-		const scheduledJob = await imagesQueue.getJobScheduler(
+		const scheduledJob = await scrapperQueue.getJobScheduler(
 			`scrapper-${ctx.user?.id}`,
 		);
 
