@@ -1,7 +1,6 @@
 import { b, fmt } from "@grammyjs/parse-mode";
-import { env } from "@repo/utils";
-import { Composer, InlineKeyboard } from "grammy";
-import { bot } from "@/bot";
+import { Composer } from "grammy";
+import { bot, webAppKeyboard } from "@/bot";
 import { prisma } from "@/storage";
 import type { Context } from "@/types";
 
@@ -10,10 +9,7 @@ const composer = new Composer<Context>();
 const channelChat = composer.chatType("channel");
 const privateChat = composer.chatType("private");
 
-const keyboard = new InlineKeyboard().webApp(
-	"Manage publications",
-	`${env.BASE_FRONTEND_URL}/publications`,
-);
+const keyboard = webAppKeyboard("publications", "Manage publications");
 
 privateChat.command("connect", async (ctx) => {
 	const text = fmt`Please, to connect a channel add me as an administrator to a group or channel and write that command there.\n\n${b}Required permissions${b} - send and delete messages.`;
@@ -107,10 +103,8 @@ channelChat.command("connect", async (ctx) => {
 			const text = fmt`✅ Channel ${b}${chat.title}${b} was reconnected!\n\nYou can manage your publications using the web app.`;
 			await prisma.postingChannel.update({
 				where: {
-					userId_chatId: {
-						userId: user.id,
-						chatId: chat.id,
-					},
+					userId: user.id,
+					chatId: chat.id,
 				},
 				data: { isActive: true },
 			});

@@ -1,6 +1,7 @@
 import { b, fmt } from "@grammyjs/parse-mode";
 import { env, type Prisma } from "@repo/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
+import { RateLimiterRedis } from "rate-limiter-flexible";
 import { channelKeyboard, webAppKeyboard } from "@/bot";
 import { imagesQueue } from "@/queue/image-collector";
 import { publishingQueue } from "@/queue/publishing";
@@ -8,6 +9,13 @@ import { schedulerFlow } from "@/queue/scheduler";
 import { scrapperQueue } from "@/queue/scrapper";
 import { prisma, redis } from "@/storage";
 import type { Context } from "@/types";
+
+const scrapperRateLimiter = new RateLimiterRedis({
+	storeClient: redis,
+	points: 1, // 1 parsing schedule per 15 minutes
+	duration: 60 * 15, // per 15 minutes
+	keyPrefix: "scrapper",
+});
 
 const composer = new Composer<Context>();
 
@@ -54,7 +62,7 @@ privateChat.on(":text").filter(
 			await ctx.reply(
 				"Slot is already being published. While you waiting you can review your gallery ✨",
 				{
-					reply_markup: webAppKeyboard("app"),
+					reply_markup: webAppKeyboard("app", "View gallery"),
 				},
 			);
 			return;
@@ -62,7 +70,7 @@ privateChat.on(":text").filter(
 
 		if (slot.status === "PUBLISHED") {
 			await ctx.reply("Slot is already published, create new one here 🪶.", {
-				reply_markup: webAppKeyboard("publications"),
+				reply_markup: webAppKeyboard("publications", "Manage publications"),
 			});
 			return;
 		}
@@ -286,22 +294,7 @@ privateChat.command("queue").filter(
 	},
 );
 
-privateChat.command("queue").filter(
-	async (ctx) => {
-		const scheduledJob = await imagesQueue.getJobScheduler(
-			`scrapper-${ctx.user?.id}`,
-		);
-
-		return !scheduledJob;
-	},
-	async (ctx) => {
-		await ctx.reply(
-			"Your images are being collected, check back in a few minutes.",
-		);
-	},
-);
-
-privateChat.command("queue").filter(
+privateChat.command("scrapper").filter(
 	async (ctx) => ctx.session.cookies === null,
 	async (ctx) => {
 		const keyboard = new InlineKeyboard().webApp("Set cookies", {
@@ -318,6 +311,46 @@ privateChat.command("queue").filter(
 privateChat.command("scrapper").filter(
 	async (ctx) => ctx.session.cookies !== null,
 	async (ctx) => {
+		const scheduledJob = await imagesQueue.getJobScheduler(
+			`scrapper-${ctx.user?.id}`,
+		);
+
+		if (!scheduledJob) {
+			ctx.logger.debug("Upserting job scheduler for user %s", ctx.user?.id);
+
+			await scrapperQueue.upsertJobScheduler(
+				`scrapper-${ctx.user?.id}`,
+				{
+					every: 1000 * 60 * 60 * 6, // 6 hours
+				},
+				{
+					data: {
+						userId: ctx.user?.id as string,
+						count: 0,
+						limit: 300, // 1000 is too much for free users
+					},
+					name: `scrapper-${ctx.user?.id}`,
+				},
+			);
+
+			await ctx.reply(
+				"You placed in the queue (runs every 6 hours). You can check your images in a few minutes in your gallery.\n\nYou can start the job anytime by sending /scrapper command again.",
+				{
+					reply_markup: webAppKeyboard("app", "View gallery"),
+				},
+			);
+			return;
+		}
+
+		try {
+			await scrapperRateLimiter.consume(ctx.from.id);
+		} catch {
+			await ctx.reply(
+				"Sorry, but we already collected images for you. You can start a job each 15 minutes only for your convenience to not accidentally block your account.",
+			);
+			return;
+		}
+
 		await scrapperQueue.add(
 			"scrapper",
 			{

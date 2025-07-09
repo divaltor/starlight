@@ -22,8 +22,11 @@ bot.use(
 	}),
 );
 
-export const webAppKeyboard = (page: "app" | "publications" | "settings") =>
-	new InlineKeyboard().webApp("Create new slot", {
+export const webAppKeyboard = (
+	page: "app" | "publications" | "settings",
+	text: string,
+) =>
+	new InlineKeyboard().webApp(text, {
 		url: `${env.BASE_FRONTEND_URL}/${page}`,
 	});
 
