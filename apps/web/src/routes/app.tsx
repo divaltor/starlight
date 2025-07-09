@@ -222,7 +222,6 @@ function TwitterArtViewer() {
 						render={renderMasonryItem}
 						columnGutter={16}
 						onRender={infiniteLoader}
-						scrollFps={4}
 					/>
 				</div>
 			)}

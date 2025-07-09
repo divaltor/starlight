@@ -71,7 +71,6 @@ export function SlotCard({
 		),
 	];
 
-
 	const deletePhotoMutation = useMutation({
 		mutationFn: async ({
 			slotId,
@@ -342,7 +341,6 @@ export function SlotCard({
 							offset={offset}
 							overscanBy={3}
 							render={renderMasonryItem}
-							scrollFps={4}
 						/>
 					</div>
 				)}
