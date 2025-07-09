@@ -22,6 +22,8 @@ const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
 privateChat.on("message:photo", async (ctx) => {
+	ctx.logger.info({ photo: ctx.msg.photo }, "Photo message");
+
 	const publishedPhoto = await prisma.publishedPhoto.findFirst({
 		where: {
 			telegramFileUniqueId: ctx.msg.photo.at(-1)?.file_unique_id,
