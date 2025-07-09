@@ -99,65 +99,72 @@ function PublicationsPage() {
 		createSlotMutation.mutate();
 	}, [createSlotMutation.mutate]);
 
-	const waitingPubs = publications.filter((pub) => pub.status === "WAITING");
+	useEffect(() => {
+		const waitingPubs = publications.filter((pub) => pub.status === "WAITING");
 
-	if (isPending || waitingPubs.length === 0) {
-		// No publications - show "Add slot" button
-		updateButtons({
-			mainButton: {
-				state: "visible",
-				text: "Add slot",
-				hasShineEffect: true,
-				isEnabled: !isPending,
-				action: {
-					type: "callback",
-					payload: handleCreateSlot,
-				},
-			},
-			secondaryButton: {
-				state: "hidden",
-			},
-		});
-	} else if (!isPending && waitingPubs.length > 0) {
-		// Has publications - show "Publish" and "Add tweet" buttons
-		updateButtons({
-			mainButton: {
-				text: "Publish",
-				state: "visible",
-				isEnabled: waitingPubs.length > 0,
-				hasShineEffect: true,
-				action: {
-					type: "callback",
-					payload: () => {
-						respondToWebAppData({
-							headers: { Authorization: rawInitData ?? "" },
-							data: {
-								slotId: publications[0].id,
-							},
-						});
+		if (isPending || waitingPubs.length === 0) {
+			// No publications - show "Add slot" button
+			updateButtons({
+				mainButton: {
+					state: "visible",
+					text: "Add slot",
+					hasShineEffect: true,
+					isEnabled: !isPending,
+					action: {
+						type: "callback",
+						payload: handleCreateSlot,
 					},
 				},
-			},
-			secondaryButton: {
-				state: "visible",
-				text: "Add tweet",
-				isEnabled: true,
-				action: {
-					type: "callback",
-					payload: handleAddTweet,
+				secondaryButton: {
+					state: "hidden",
 				},
-			},
-		});
-	}
+			});
+		} else if (!isPending && waitingPubs.length > 0) {
+			// Has publications - show "Publish" and "Add tweet" buttons
+			updateButtons({
+				mainButton: {
+					text: "Publish",
+					state: "visible",
+					isEnabled: waitingPubs.length > 0,
+					hasShineEffect: true,
+					action: {
+						type: "callback",
+						payload: () => {
+							respondToWebAppData({
+								headers: { Authorization: rawInitData ?? "" },
+								data: {
+									slotId: publications[0].id,
+								},
+							});
+						},
+					},
+				},
+				secondaryButton: {
+					state: "visible",
+					text: "Add tweet",
+					isEnabled: true,
+					action: {
+						type: "callback",
+						payload: handleAddTweet,
+					},
+				},
+			});
+		}
 
-	useEffect(() => {
 		return () => {
 			updateButtons({
 				mainButton: { state: "hidden" },
 				secondaryButton: { state: "hidden" },
 			});
 		};
-	}, [updateButtons]);
+	}, [
+		publications,
+		handleCreateSlot,
+		handleAddTweet,
+		rawInitData,
+		updateButtons,
+		isPending,
+	]);
 
 	const renderNoChannelsState = () => (
 		<div className="flex min-h-[50vh] items-center justify-center">
