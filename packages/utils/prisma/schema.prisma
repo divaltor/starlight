@@ -57,8 +57,6 @@ model PostingChannel {
     userId String @unique @map("user_id") @db.Uuid
     chatId BigInt @map("chat_id")
 
-    isActive Boolean @default(true) @map("is_active")
-
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -69,7 +67,6 @@ model PostingChannel {
 
     @@index([userId])
     @@index([chatId])
-    @@index([isActive])
     @@map("posting_channels")
 }
 
@@ -164,7 +161,7 @@ model ScheduledSlot {
 
     // Relations
     user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
-    postingChannel      PostingChannel       @relation(fields: [userId], references: [userId], onDelete: Restrict, map: "posting_channel")
+    postingChannel      PostingChannel       @relation(fields: [userId], references: [userId], onDelete: Cascade, map: "posting_channel")
     publishedPhotos     PublishedPhoto[]
     scheduledSlotTweets ScheduledSlotTweet[]
 

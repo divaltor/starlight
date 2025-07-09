@@ -9,7 +9,10 @@ const composer = new Composer<Context>();
 const channelChat = composer.chatType("channel");
 const privateChat = composer.chatType("private");
 
-const keyboard = webAppKeyboard("publications", "Manage publications");
+const publicationsKeyboard = webAppKeyboard(
+	"publications",
+	"Manage publications",
+);
 
 privateChat.command("connect", async (ctx) => {
 	const text = fmt`Please, to connect a channel add me as an administrator to a group or channel and write that command there.\n\n${b}Required permissions${b} - send and delete messages.`;
@@ -20,7 +23,7 @@ privateChat.command("connect", async (ctx) => {
 
 privateChat.command("disconnect", async (ctx) => {
 	await ctx.reply("To disconnect a channel use web app interface.", {
-		reply_markup: keyboard,
+		reply_markup: webAppKeyboard("settings", "Settings"),
 	});
 });
 
@@ -93,27 +96,11 @@ channelChat.command("connect", async (ctx) => {
 	});
 
 	if (existingChannel) {
-		if (existingChannel.isActive) {
-			const text = fmt`✅ Channel ${b}${chat.title}${b} is already connected!\n\nYou can manage your publications using the web app.`;
-			await bot.api.sendMessage(creatorId, text.text, {
-				entities: text.entities,
-				reply_markup: keyboard,
-			});
-		} else {
-			const text = fmt`✅ Channel ${b}${chat.title}${b} was reconnected!\n\nYou can manage your publications using the web app.`;
-			await prisma.postingChannel.update({
-				where: {
-					userId: user.id,
-					chatId: chat.id,
-				},
-				data: { isActive: true },
-			});
-
-			await bot.api.sendMessage(creatorId, text.text, {
-				entities: text.entities,
-				reply_markup: keyboard,
-			});
-		}
+		const text = fmt`✅ Channel ${b}${chat.title}${b} is already connected!\n\nYou can manage your publications using the web app.`;
+		await bot.api.sendMessage(creatorId, text.text, {
+			entities: text.entities,
+			reply_markup: publicationsKeyboard,
+		});
 		return;
 	}
 
@@ -137,7 +124,7 @@ channelChat.command("connect", async (ctx) => {
 	const text = fmt`🎉 Channel ${b}${chat.title}${b} connected! Open the publications manager to start scheduling posts:`;
 	await bot.api.sendMessage(creatorId, text.text, {
 		entities: text.entities,
-		reply_markup: keyboard,
+		reply_markup: publicationsKeyboard,
 	});
 });
 
