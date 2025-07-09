@@ -26,9 +26,7 @@ privateChat.on("message:photo", async (ctx) => {
 	const photo = await ctx.getFile();
 	const file = await photo.download();
 
-	const arrayBuffer = await Bun.file(file).arrayBuffer();
-
-	const similarPhotos = await findDuplicatesByImageContent(arrayBuffer);
+	const similarPhotos = await findDuplicatesByImageContent(file);
 
 	ctx.logger.debug({ similarPhotos }, "Found similar photos");
 

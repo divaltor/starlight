@@ -91,7 +91,7 @@ export async function findSimilarPhotos(
 }
 
 export async function findDuplicatesByImageContent(
-	imageContent: ArrayBuffer,
+	imageContent: Parameters<typeof calculatePerceptualHash>[0],
 	maxDistance = 10,
 ): Promise<SimilarPhoto[]> {
 	const targetHash = await calculatePerceptualHash(imageContent);
