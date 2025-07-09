@@ -419,11 +419,8 @@ function RouteComponent() {
 			<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
 				<CardHeader className="pb-1">
 					<CardTitle className="font-medium text-gray-900 text-lg">
-						Posting Channel
+						Connected channel
 					</CardTitle>
-					<CardDescription className="text-gray-500">
-						Manage the channel where your content will be posted
-					</CardDescription>
 				</CardHeader>
 
 				<CardContent className="space-y-6">
