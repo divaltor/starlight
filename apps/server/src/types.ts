@@ -1,3 +1,4 @@
+import type { FileFlavor } from "@grammyjs/files";
 import type { HydrateFlavor } from "@grammyjs/hydrate";
 import type { Chat, User } from "@prisma/client";
 import type { Tweet } from "@the-convocation/twitter-scraper";
@@ -11,8 +12,8 @@ interface ExtendedContext {
 	userChat?: Chat;
 }
 
-export type Context = HydrateFlavor<
-	BaseContext & ExtendedContext & SessionFlavor<SessionData>
+export type Context = FileFlavor<
+	HydrateFlavor<BaseContext & ExtendedContext & SessionFlavor<SessionData>>
 >;
 
 declare global {

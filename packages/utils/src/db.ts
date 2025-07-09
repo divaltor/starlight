@@ -7,6 +7,10 @@ const sqids = new Sqids({
 	minLength: 12,
 });
 
+export const toUniqueId = (id: number) => {
+	return sqids.encode([Math.abs(id)]);
+};
+
 export function createPrismaClient() {
 	return new PrismaClient({
 		log:

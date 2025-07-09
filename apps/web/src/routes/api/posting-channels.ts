@@ -8,10 +8,9 @@ export const getPostingChannel = createServerFn({ method: "GET" })
 		const prisma = getPrismaClient();
 		const userId = context.databaseUserId;
 
-		const postingChannel = await prisma.postingChannel.findFirst({
+		const postingChannel = await prisma.postingChannel.findUnique({
 			where: {
 				userId,
-				isActive: true,
 			},
 			include: {
 				chat: true,

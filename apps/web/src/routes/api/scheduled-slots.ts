@@ -95,7 +95,7 @@ export const createScheduledSlot = createServerFn({ method: "POST" })
 		const userId = context.databaseUserId;
 
 		// Check if user exists and get posting channel
-		const postingChannel = await prisma.postingChannel.findFirst({
+		const postingChannel = await prisma.postingChannel.findUnique({
 			where: {
 				userId,
 			},
