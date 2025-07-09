@@ -24,7 +24,7 @@ const groupChat = composer.chatType(["group", "supergroup"]);
 privateChat.on("message:photo", async (ctx) => {
 	const publishedPhoto = await prisma.publishedPhoto.findFirst({
 		where: {
-			telegramFileUniqueId: ctx.msg.photo[-1]?.file_unique_id,
+			telegramFileUniqueId: ctx.msg.photo.at(-1)?.file_unique_id,
 		},
 		include: {
 			photo: {
