@@ -1,5 +1,6 @@
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
+import sharp from "sharp";
 import UserAgent from "user-agents";
 import { logger } from "@/logger";
 import { calculatePerceptualHash } from "@/services/image";
@@ -123,9 +124,12 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 
 			const imageBuffer = await response.arrayBuffer();
 
-			const [, hash] = await Promise.all([
+			const [, hash, metadata] = await Promise.all([
 				s3.write(`media/${photoName}`, imageBuffer),
 				calculatePerceptualHash(imageBuffer),
+				sharp(imageBuffer)
+					.metadata()
+					.catch(() => ({ height: null, width: null })),
 			]);
 
 			await prisma.photo.update({
@@ -133,6 +137,8 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 				data: {
 					perceptualHash: hash,
 					s3Path: `media/${photoName}`,
+					height: metadata.height,
+					width: metadata.width,
 				},
 			});
 

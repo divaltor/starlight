@@ -108,6 +108,9 @@ model Photo {
     originalUrl    String  @map("original_url")
     perceptualHash String? @map("perceptual_hash")
 
+    height Int? @map("height")
+    width  Int? @map("width")
+
     // Generated hash bucket columns for similarity search
     hashBucket4  String? @default(dbgenerated()) @map("hash_bucket_4")
     hashBucket8  String? @default(dbgenerated()) @map("hash_bucket_8")

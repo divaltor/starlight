@@ -181,6 +181,8 @@ composer.on("inline_query", async (ctx) => {
 		id: string;
 		s3Url: string | null;
 		tweetId: string;
+		height: number | null;
+		width: number | null;
 	}> = [];
 
 	let tweetSkip = 0;
@@ -234,6 +236,8 @@ composer.on("inline_query", async (ctx) => {
 					id: photo.id,
 					s3Url: photo.s3Url as string,
 					tweetId: tweet.id,
+					height: photo.height,
+					width: photo.width,
 				});
 				totalPhotosFound++;
 			}
@@ -274,6 +278,8 @@ composer.on("inline_query", async (ctx) => {
 		InlineQueryResultBuilder.photo(photo.id, photo.s3Url as string, {
 			caption: `https://x.com/i/status/${photo.tweetId}`,
 			thumbnail_url: photo.s3Url as string,
+			photo_height: photo.height ?? undefined,
+			photo_width: photo.width ?? undefined,
 		}),
 	);
 
