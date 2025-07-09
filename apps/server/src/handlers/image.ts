@@ -6,6 +6,7 @@ import { channelKeyboard, webAppKeyboard } from "@/bot";
 import { publishingQueue } from "@/queue/publishing";
 import { schedulerFlow } from "@/queue/scheduler";
 import { scrapperQueue } from "@/queue/scrapper";
+import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
 import { prisma, redis } from "@/storage";
 import type { Context } from "@/types";
 
@@ -22,27 +23,33 @@ const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
 privateChat.on("message:photo", async (ctx) => {
-	ctx.logger.info({ photo: ctx.msg.photo }, "Photo message");
+	const photo = await ctx.getFile();
+	const file = await photo.download();
 
-	const publishedPhoto = await prisma.publishedPhoto.findFirst({
-		where: {
-			telegramFileUniqueId: ctx.msg.photo.at(-1)?.file_unique_id,
-		},
-		include: {
-			photo: {
-				select: {
-					tweetId: true,
-				},
-			},
-		},
-	});
+	const arrayBuffer = await Bun.file(file).arrayBuffer();
 
-	if (!publishedPhoto) {
-		await ctx.reply("Can't find source of this photo, sorry 😔");
+	const similarPhotos = await findDuplicatesByImageContent(arrayBuffer);
+
+	ctx.logger.debug({ similarPhotos }, "Found similar photos");
+
+	if (similarPhotos.length === 0) {
+		await ctx.reply("No similar photos found, sorry 😔");
+		return;
+	}
+	if (similarPhotos.length === 1) {
+		await ctx.reply(`https://x.com/i/status/${similarPhotos[0]?.tweetId}`);
 		return;
 	}
 
-	await ctx.reply(`https://x.com/i/status/${publishedPhoto.photo.tweetId}`);
+	const topMatches = similarPhotos.slice(0, 3);
+
+	let message = "Found similar photos:\n\n";
+	for (const [index, photo] of topMatches.entries()) {
+		message += `${index + 1}. Similarity: ${photo.distance}\n`;
+		message += `https://x.com/i/status/${photo.tweetId}\n\n`;
+	}
+
+	await ctx.reply(message);
 });
 
 privateChat.on(":text").filter(

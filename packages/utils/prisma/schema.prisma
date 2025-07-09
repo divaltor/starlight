@@ -108,6 +108,11 @@ model Photo {
     originalUrl    String  @map("original_url")
     perceptualHash String? @map("perceptual_hash")
 
+    // Generated hash bucket columns for similarity search
+    hashBucket4  String? @default(dbgenerated()) @map("hash_bucket_4")
+    hashBucket8  String? @default(dbgenerated()) @map("hash_bucket_8")
+    hashBucket12 String? @default(dbgenerated()) @map("hash_bucket_12")
+
     createdAt DateTime  @default(now()) @map("created_at")
     updatedAt DateTime  @updatedAt @map("updated_at")
     deletedAt DateTime? @map("deleted_at")
@@ -121,6 +126,9 @@ model Photo {
     @@id(name: "photoId", [id, userId])
     @@index([tweetId])
     @@index([perceptualHash])
+    @@index([hashBucket4])
+    @@index([hashBucket8])
+    @@index([hashBucket12])
     @@index([s3Path])
     @@index([deletedAt])
     @@index([createdAt(sort: Desc)])
