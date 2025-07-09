@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,15 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { decodeCookies } from "@/lib/utils";
 import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
@@ -20,6 +30,10 @@ import {
 	saveCookies,
 	verifyCookies,
 } from "@/routes/api/cookies";
+import {
+	deletePostingChannel,
+	getPostingChannel,
+} from "@/routes/api/posting-channels";
 
 export const Route = createFileRoute("/settings")({
 	component: RouteComponent,
@@ -29,11 +43,11 @@ function RouteComponent() {
 	const [newCookies, setNewCookies] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [showCookieInput, setShowCookieInput] = useState(false);
+	const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
 
 	const { rawInitData } = useTelegramContext();
 	const queryClient = useQueryClient();
 
-	// Query for cookie status with caching and background validation
 	const {
 		data: cookieStatus,
 		isLoading,
@@ -47,21 +61,33 @@ function RouteComponent() {
 			});
 		},
 		enabled: !!rawInitData,
-		staleTime: 10 * 60 * 1000, // 10 minutes - consider data fresh
-		gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache
-		refetchOnWindowFocus: true, // Validate when user returns to page
-		refetchInterval: 5 * 60 * 1000, // Background validation every 5 minutes
+		staleTime: 10 * 60 * 1000,
+		gcTime: 30 * 60 * 1000,
+		refetchOnWindowFocus: true,
 		retry: 2,
 	});
+
+	// Query for posting channel
+	const { data: postingChannel, isLoading: isPostingChannelLoading } = useQuery(
+		{
+			queryKey: ["posting-channel"],
+			queryFn: async () => {
+				return await getPostingChannel({
+					headers: { Authorization: rawInitData ?? "" },
+				});
+			},
+			enabled: !!rawInitData,
+			staleTime: 5 * 60 * 1000,
+			gcTime: 30 * 60 * 1000,
+		},
+	);
 
 	// Derive state from query data
 	const cookiesStored = cookieStatus?.hasValidCookies ?? false;
 	const twitterId = cookieStatus?.twitterId ?? null;
 
-	// Show cookie input if no cookies stored or user explicitly wants to update
 	const shouldShowCookieInput = !cookiesStored || showCookieInput;
 
-	// Mutation for saving cookies with optimistic updates
 	const saveCookiesMutation = useMutation({
 		mutationFn: async (cookiesData: { cookies: string }) => {
 			return await saveCookies({
@@ -70,10 +96,8 @@ function RouteComponent() {
 			});
 		},
 		onMutate: async () => {
-			// Cancel any outgoing refetches
 			await queryClient.cancelQueries({ queryKey: ["cookie-status"] });
 
-			// Return context for rollback
 			const previousStatus = queryClient.getQueryData(["cookie-status"]);
 			return { previousStatus };
 		},
@@ -83,12 +107,10 @@ function RouteComponent() {
 				return;
 			}
 
-			// Verify the cookies were saved correctly
 			const verifyResult = await verifyCookies({
 				headers: { Authorization: rawInitData ?? "" },
 			});
 
-			// Update cache with fresh data
 			queryClient.setQueryData(["cookie-status"], verifyResult);
 
 			if (verifyResult.hasValidCookies) {
@@ -98,7 +120,6 @@ function RouteComponent() {
 			}
 		},
 		onError: (_error, _variables, context) => {
-			// Rollback on error
 			if (context?.previousStatus) {
 				queryClient.setQueryData(["cookie-status"], context.previousStatus);
 			}
@@ -107,12 +128,10 @@ function RouteComponent() {
 			);
 		},
 		onSettled: () => {
-			// Always refetch to ensure consistency
 			queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
 		},
 	});
 
-	// Mutation for deleting cookies with optimistic updates
 	const deleteCookiesMutation = useMutation({
 		mutationFn: async () => {
 			return await deleteCookies({
@@ -120,10 +139,8 @@ function RouteComponent() {
 			});
 		},
 		onMutate: async () => {
-			// Cancel any outgoing refetches
 			await queryClient.cancelQueries({ queryKey: ["cookie-status"] });
 
-			// Optimistically update to show no cookies
 			const previousStatus = queryClient.getQueryData(["cookie-status"]);
 			queryClient.setQueryData(["cookie-status"], {
 				hasValidCookies: false,
@@ -137,7 +154,6 @@ function RouteComponent() {
 				setShowCookieInput(true);
 				setError(null);
 			} else {
-				// Rollback on server error
 				if (context?.previousStatus) {
 					queryClient.setQueryData(["cookie-status"], context.previousStatus);
 				}
@@ -145,15 +161,33 @@ function RouteComponent() {
 			}
 		},
 		onError: (_error, _variables, context) => {
-			// Rollback on error
 			if (context?.previousStatus) {
 				queryClient.setQueryData(["cookie-status"], context.previousStatus);
 			}
 			setError("An error occurred while deleting cookies. Please try again.");
 		},
 		onSettled: () => {
-			// Always refetch to ensure consistency
 			queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
+		},
+	});
+
+	const disconnectChannelMutation = useMutation({
+		mutationFn: async () => {
+			return await deletePostingChannel({
+				headers: { Authorization: rawInitData ?? "" },
+			});
+		},
+		onSuccess: (result) => {
+			if (result.success) {
+				queryClient.invalidateQueries({ queryKey: ["posting-channel"] });
+				toast.success("Channel successfully disconnected");
+				setShowDisconnectDialog(false);
+			} else {
+				toast.error(result.error || "Failed to disconnect channel");
+			}
+		},
+		onError: () => {
+			toast.error("An error occurred while disconnecting the channel");
 		},
 	});
 
@@ -162,7 +196,6 @@ function RouteComponent() {
 		setError(null);
 
 		try {
-			// Validate cookies using the decodeCookies function from utils
 			const decodedCookies = decodeCookies(newCookies);
 
 			if (!decodedCookies || decodedCookies.length === 0) {
@@ -172,7 +205,6 @@ function RouteComponent() {
 				return;
 			}
 
-			// Check if we have the required cookies
 			const requiredCookies = ["auth_token", "ct0", "kdt", "twid"];
 			const cookieNames = decodedCookies.map((cookie) => cookie.key);
 			const missingCookies = requiredCookies.filter(
@@ -186,10 +218,8 @@ function RouteComponent() {
 				return;
 			}
 
-			// Convert cookies to base64 for transmission
 			const cookiesBase64 = btoa(newCookies);
 
-			// Execute mutation
 			saveCookiesMutation.mutate({ cookies: cookiesBase64 });
 		} catch {
 			setError(
@@ -202,7 +232,10 @@ function RouteComponent() {
 		deleteCookiesMutation.mutate();
 	};
 
-	// Show skeleton only on initial load, not on subsequent visits due to caching
+	const handleDisconnectChannel = () => {
+		disconnectChannelMutation.mutate();
+	};
+
 	if (isLoading && !cookieStatus) {
 		return (
 			<main className="container mx-auto max-w-2xl px-4 py-10">
@@ -235,7 +268,6 @@ function RouteComponent() {
 		);
 	}
 
-	// Show error state if query failed
 	if (cookieError && !cookieStatus) {
 		return (
 			<main className="container mx-auto max-w-2xl px-4 py-10">
@@ -264,7 +296,9 @@ function RouteComponent() {
 	}
 
 	const isSubmitting =
-		saveCookiesMutation.isPending || deleteCookiesMutation.isPending;
+		saveCookiesMutation.isPending ||
+		deleteCookiesMutation.isPending ||
+		disconnectChannelMutation.isPending;
 
 	return (
 		<main className="container mx-auto max-w-2xl px-4 py-10">
@@ -376,6 +410,110 @@ function RouteComponent() {
 							</div>
 						)}
 					</div>
+				</CardContent>
+			</Card>
+
+			<div className="mt-6" />
+
+			{/* Posting Channel Section */}
+			<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
+				<CardHeader className="pb-1">
+					<CardTitle className="font-medium text-gray-900 text-lg">
+						Posting Channel
+					</CardTitle>
+					<CardDescription className="text-gray-500">
+						Manage the channel where your content will be posted
+					</CardDescription>
+				</CardHeader>
+
+				<CardContent className="space-y-6">
+					{isPostingChannelLoading ? (
+						<div className="flex items-center justify-between">
+							<div className="flex items-center gap-3">
+								<Skeleton className="h-12 w-12 rounded-full" />
+								<div className="space-y-2">
+									<Skeleton className="h-4 w-24" />
+									<Skeleton className="h-3 w-32" />
+								</div>
+							</div>
+							<Skeleton className="h-9 w-24" />
+						</div>
+					) : postingChannel ? (
+						<div className="flex items-center justify-between">
+							<div className="flex items-center gap-3">
+								<div className="h-12 w-12 overflow-hidden rounded-full bg-gray-100">
+									{postingChannel.chat.thumbnailUrl ? (
+										<img
+											src={postingChannel.chat.thumbnailUrl}
+											alt={postingChannel.chat.title || "Channel"}
+											className="h-full w-full object-cover"
+										/>
+									) : (
+										<div className="flex h-full w-full items-center justify-center bg-gray-200 font-medium text-gray-500 text-sm">
+											{postingChannel.chat.title?.charAt(0) || "C"}
+										</div>
+									)}
+								</div>
+								<div>
+									<p className="font-medium text-gray-900 text-sm">
+										{postingChannel.chat.title || "Unknown Channel"}
+									</p>
+									<p className="text-gray-500 text-xs">
+										{postingChannel.chat.username
+											? `@${postingChannel.chat.username}`
+											: `ID: ${postingChannel.chat.id}`}
+									</p>
+								</div>
+							</div>
+							<Dialog
+								open={showDisconnectDialog}
+								onOpenChange={setShowDisconnectDialog}
+							>
+								<DialogTrigger asChild>
+									<Button
+										variant="destructive"
+										size="sm"
+										disabled={disconnectChannelMutation.isPending}
+									>
+										Disconnect
+									</Button>
+								</DialogTrigger>
+								<DialogContent>
+									<DialogHeader>
+										<DialogTitle>Disconnect Channel</DialogTitle>
+										<DialogDescription>
+											Are you sure? You won't be able to send publications into
+											this channel.
+										</DialogDescription>
+									</DialogHeader>
+									<DialogFooter>
+										<Button
+											variant="outline"
+											onClick={() => setShowDisconnectDialog(false)}
+											disabled={disconnectChannelMutation.isPending}
+										>
+											No
+										</Button>
+										<Button
+											variant="destructive"
+											onClick={handleDisconnectChannel}
+											disabled={disconnectChannelMutation.isPending}
+										>
+											{disconnectChannelMutation.isPending
+												? "Disconnecting..."
+												: "Sure"}
+										</Button>
+									</DialogFooter>
+								</DialogContent>
+							</Dialog>
+						</div>
+					) : (
+						<div className="py-8 text-center">
+							<p className="text-gray-500 text-sm">
+								No posting channel connected
+							</p>
+						</div>
+					)}
 				</CardContent>
 			</Card>
 		</main>

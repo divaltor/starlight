@@ -1,8 +1,8 @@
 import { b, fmt } from "@grammyjs/parse-mode";
-import { toUniqueId } from "@repo/utils";
 import { Composer } from "grammy";
 import { bot, webAppKeyboard } from "@/bot";
-import { prisma, s3 } from "@/storage";
+import { updateChannelPhoto } from "@/services/channel";
+import { prisma } from "@/storage";
 import type { Context } from "@/types";
 
 const composer = new Composer<Context>();
@@ -101,10 +101,13 @@ channelChat.command("connect", async (ctx) => {
 	if (existingChannel) {
 		if (Number(existingChannel.chatId) === chat.id) {
 			const text = fmt`✅ Channel ${b}${chat.title}${b} is already connected!\n\nYou can manage your publications using the web app.`;
-			await bot.api.sendMessage(creatorId, text.text, {
-				entities: text.entities,
-				reply_markup: publicationsKeyboard,
-			});
+			await Promise.all([
+				bot.api.sendMessage(creatorId, text.text, {
+					entities: text.entities,
+					reply_markup: publicationsKeyboard,
+				}),
+				updateChannelPhoto(ctx),
+			]);
 		} else {
 			const text = fmt`Unfortunatelly, I can't connect to multiple channels at once. Please disconnect the ${b}${existingChannel.chat.title ?? existingChannel.chat.username ?? "current"}${b} channel first.`;
 			await bot.api.sendMessage(creatorId, text.text, {
@@ -114,51 +117,15 @@ channelChat.command("connect", async (ctx) => {
 		return;
 	}
 
-	await prisma.postingChannel.create({
-		data: {
-			userId: user.id,
-			chatId: chat.id,
-		},
-	});
-
-	try {
-		const fullChatInfo = await ctx.getChat();
-
-		if (fullChatInfo.photo) {
-			const [thumbnail, big] = await Promise.all([
-				ctx.api.getFile(fullChatInfo.photo.small_file_id),
-				ctx.api.getFile(fullChatInfo.photo.big_file_id),
-			]);
-
-			const [bigFile, thumbnailFile] = await Promise.all([
-				big.download(),
-				thumbnail.download(),
-			]);
-
-			const bigPath = `channels/${toUniqueId(chat.id)}/big.jpg`;
-			const thumbnailPath = `channels/${toUniqueId(chat.id)}/thumbnail.jpg`;
-
-			await Promise.all([
-				s3.write(bigPath, Bun.file(bigFile)),
-				s3.write(thumbnailPath, Bun.file(thumbnailFile)),
-			]);
-
-			await prisma.chat.update({
-				where: {
-					id: chat.id,
-				},
-				data: {
-					photoThumbnail: thumbnailPath,
-					photoBig: bigPath,
-				},
-			});
-		}
-	} catch (error) {
-		ctx.logger.warn(
-			{ error: error instanceof Error ? error.message : "Unknown error" },
-			"Error getting chat info",
-		);
-	}
+	await Promise.all([
+		prisma.postingChannel.create({
+			data: {
+				userId: user.id,
+				chatId: chat.id,
+			},
+		}),
+		updateChannelPhoto(ctx),
+	]);
 
 	ctx.logger.info(
 		{

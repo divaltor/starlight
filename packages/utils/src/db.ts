@@ -46,11 +46,31 @@ export function createPrismaClient() {
 						s3Path: true,
 					},
 					compute(data: { s3Path: string }) {
-						if (!data.s3Path) return undefined;
+						if (!data.s3Path || !env.BASE_CDN_URL) return undefined;
 
-						return env.BASE_CDN_URL
-							? `${env.BASE_CDN_URL}/${data.s3Path}`
-							: undefined;
+						return `${env.BASE_CDN_URL}/${data.s3Path}`;
+					},
+				},
+			},
+			chat: {
+				thumbnailUrl: {
+					needs: {
+						photoThumbnail: true,
+					},
+					compute(data: { photoThumbnail: string }) {
+						if (!data.photoThumbnail) return undefined;
+
+						return `${env.BASE_CDN_URL}/${data.photoThumbnail}`;
+					},
+				},
+				bigUrl: {
+					needs: {
+						photoBig: true,
+					},
+					compute(data: { photoBig: string }) {
+						if (!data.photoBig || !env.BASE_CDN_URL) return undefined;
+
+						return `${env.BASE_CDN_URL}/${data.photoBig}`;
 					},
 				},
 			},

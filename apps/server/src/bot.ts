@@ -1,4 +1,5 @@
 import { autoRetry } from "@grammyjs/auto-retry";
+import { hydrateFiles } from "@grammyjs/files";
 import { env } from "@repo/utils";
 import { autoQuote } from "@roziscoding/grammy-autoquote";
 import { Bot, InlineKeyboard, session } from "grammy";
@@ -46,6 +47,7 @@ bot.api.config.use(
 		maxDelaySeconds: 5,
 	}),
 );
+bot.api.config.use(hydrateFiles(bot.token));
 bot.use(attachUser);
 bot.use(attachChat);
 bot.use(logUpdates);
