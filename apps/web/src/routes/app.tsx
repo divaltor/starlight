@@ -24,19 +24,19 @@ function TwitterArtViewer() {
 
 	const { updateButtons } = useTelegramContext();
 
-	useEffect(() => {
-		// TODO: Add condition when we don't have any posts available to parse or even didn't setup a bot yet.
-		updateButtons({
-			mainButton: {
-				state: "visible",
-				text: "Publications",
-				action: {
-					type: "navigate",
-					payload: "/publications",
-				},
+	// TODO: Add condition when we don't have any posts available to parse or even didn't setup a bot yet.
+	updateButtons({
+		mainButton: {
+			state: "visible",
+			text: "Publications",
+			action: {
+				type: "navigate",
+				payload: "/publications",
 			},
-		});
+		},
+	});
 
+	useEffect(() => {
 		return () => {
 			updateButtons({
 				mainButton: {
