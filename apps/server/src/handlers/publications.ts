@@ -16,6 +16,22 @@ const publicationsKeyboard = webAppKeyboard(
 );
 
 privateChat.command("connect", async (ctx) => {
+	const connectedChannel = await prisma.postingChannel.findUnique({
+		where: {
+			userId: ctx.user?.id,
+		},
+	});
+
+	if (connectedChannel) {
+		await ctx.reply(
+			"You already have a connected channel, want to remove it before connecting new one?",
+			{
+				reply_markup: webAppKeyboard("settings", "Remove channel"),
+			},
+		);
+		return;
+	}
+
 	const text = fmt`Please, to connect a channel add me as an administrator to a group or channel and write that command there.\n\n${b}Required permissions${b} - send and delete messages.`;
 	await ctx.reply(text.text, {
 		entities: text.entities,
