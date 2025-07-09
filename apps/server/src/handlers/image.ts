@@ -21,6 +21,28 @@ const composer = new Composer<Context>();
 const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
+privateChat.on("message:photo", async (ctx) => {
+	const publishedPhoto = await prisma.publishedPhoto.findFirst({
+		where: {
+			telegramFileUniqueId: ctx.msg.photo[-1]?.file_unique_id,
+		},
+		include: {
+			photo: {
+				select: {
+					tweetId: true,
+				},
+			},
+		},
+	});
+
+	if (!publishedPhoto) {
+		await ctx.reply("Can't find source of this photo, sorry 😔");
+		return;
+	}
+
+	await ctx.reply(`https://x.com/i/status/${publishedPhoto.photo.tweetId}`);
+});
+
 privateChat.on(":text").filter(
 	(ctx) => ctx.msg.via_bot !== undefined && ctx.msg.text.startsWith("🪶"),
 	async (ctx) => {
