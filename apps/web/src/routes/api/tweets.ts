@@ -87,6 +87,9 @@ const getUserTweets = createServerFn({ method: "GET" })
 
 				if (cursorData) {
 					createdAt.lte = new Date(cursorData.createdAt);
+					whereClause.id = {
+						lt: cursorData.lastTweetId,
+					};
 				}
 
 				const prisma = getPrismaClient();
@@ -142,6 +145,7 @@ const getUserTweets = createServerFn({ method: "GET" })
 					// biome-ignore lint/style/noNonNullAssertion: We know there's at least one tweet
 					const lastTweet = tweets.at(-1)!;
 					nextCursor = CursorPagination.createCursor({
+						lastTweetId: lastTweet.id,
 						createdAt: lastTweet.createdAt.toISOString(),
 					});
 				}
