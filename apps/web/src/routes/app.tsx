@@ -113,7 +113,7 @@ function TwitterArtViewer() {
 	}
 
 	return (
-		<div className="bg-gray-50 p-4">
+		<div className="min-h-screen bg-gray-50 p-4">
 			{/* Header with Filters */}
 			<div className="mx-auto mb-8 max-w-7xl">
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

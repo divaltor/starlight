@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, MoreVertical, Plus, Trash2 } from "lucide-react";
+import { MessageSquare, MoreVertical, Trash2 } from "lucide-react";
 import {
 	MasonryScroller,
 	useContainerPosition,

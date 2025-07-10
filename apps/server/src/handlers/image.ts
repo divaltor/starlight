@@ -296,38 +296,6 @@ composer.on("inline_query", async (ctx) => {
 	});
 });
 
-privateChat.command("queue").filter(
-	async (ctx) => {
-		const scheduledJob = await scrapperQueue.getJobScheduler(
-			`scrapper-${ctx.user?.id}`,
-		);
-
-		return !scheduledJob && ctx.session.cookies !== null;
-	},
-	async (ctx) => {
-		ctx.logger.debug("Upserting job scheduler for user %s", ctx.user?.id);
-
-		await scrapperQueue.upsertJobScheduler(
-			`scrapper-${ctx.user?.id}`,
-			{
-				every: 1000 * 60 * 60 * 6, // 6 hours
-			},
-			{
-				data: {
-					userId: ctx.user?.id as string,
-					count: 0,
-					limit: 300, // 1000 is too much for free users
-				},
-				name: `scrapper-${ctx.user?.id}`,
-			},
-		);
-
-		await ctx.reply("Starting to collect images, check back in a few minutes.");
-
-		ctx.logger.debug("Job scheduler upserted for user %s", ctx.user?.id);
-	},
-);
-
 privateChat.command("scrapper").filter(
 	async (ctx) => ctx.session.cookies === null,
 	async (ctx) => {

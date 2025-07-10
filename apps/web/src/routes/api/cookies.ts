@@ -25,10 +25,9 @@ export const saveCookies = createServerFn({ method: "POST" })
 
 		await redis.set(`user:cookies:${context.user.id}`, encryptedCookies);
 
-		// TODO: Add inline keyboard
 		await bot.api.sendMessage(
 			context.user.id,
-			"Beep boop, cookies are saved. You can now enable daily parsing using /queue command",
+			"Beep boop, cookies are saved. You can now enable daily parsing using /scrapper command.",
 		);
 
 		return { success: true };

@@ -37,6 +37,7 @@ function PublicationsPage() {
 			});
 		},
 		enabled: !!rawInitData,
+		retry: false,
 	});
 
 	const createSlotMutation = useMutation({
@@ -222,26 +223,24 @@ function PublicationsPage() {
 										<Plus className="mr-2 h-4 w-4" />
 										{createSlotMutation.isPending ? "Creating..." : "Add Slot"}
 									</Button>
-									{publications.length > 0 && (
-										<Button
-											variant="outline"
-											size="sm"
-											onClick={() => {
-												respondToWebAppData({
-													headers: { Authorization: rawInitData ?? "" },
-													data: {
-														slotId: publications[0].id,
-													},
-												});
-											}}
-											disabled={
-												!publications.some((pub) => pub.status === "WAITING")
-											}
-											className="border-green-300 bg-white hover:bg-green-50"
-										>
-											Publish First Slot
-										</Button>
-									)}
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => {
+											respondToWebAppData({
+												headers: { Authorization: rawInitData ?? "" },
+												data: {
+													slotId: publications[0].id,
+												},
+											});
+										}}
+										disabled={
+											!publications.some((pub) => pub.status === "WAITING")
+										}
+										className="border-green-300 bg-white hover:bg-green-50"
+									>
+										Publish First Slot
+									</Button>
 								</div>
 							</CardContent>
 						</Card>
@@ -250,6 +249,7 @@ function PublicationsPage() {
 
 				{/* No Channels State */}
 				{isError && renderNoChannelsState()}
+
 				{/* Create Slot Error State */}
 				{(createSlotMutation.isError ||
 					(createSlotMutation.isSuccess && createSlotMutation.data?.error)) && (
@@ -272,6 +272,7 @@ function PublicationsPage() {
 
 				{/* Empty State */}
 				{!isPending &&
+					!isError &&
 					publications.length === 0 &&
 					renderEmptyState(createSlotMutation.data?.error)}
 
