@@ -11,7 +11,7 @@ Telegram bot system for collecting and managing Twitter content.
 
 - **PostgreSQL**: Database storage
 - **Redis**: Session management and job queues
-- **S3 Compatible Storage**: Media storage (optional)
+- **S3 Compatible Storage**: Media storage
 
 ## Quick Deployment
 
@@ -36,7 +36,7 @@ REDIS_URL=redis://localhost:6379
 COOKIE_ENCRYPTION_KEY=your_64_character_hex_key_for_cookie_encryption
 COOKIE_ENCRYPTION_SALT=your_16_character_salt_here
 
-# S3 Storage (optional)
+# S3 Storage
 AWS_ENDPOINT=https://your-r2-endpoint.com
 AWS_ACCESS_KEY_ID=your_access_key
 AWS_SECRET_ACCESS_KEY=your_secret_key
@@ -61,16 +61,14 @@ docker-compose logs -f
 
 ## Deployment Options
 
-### Recommended: Self-Hosted PaaS
+### Self-Hosted PaaS
 
-- **[Coolify](https://coolify.io/)** - One-click Docker deployments
 - **[Dokploy](https://dokploy.com/)** - Simple deployment platform
 
 ### Cloud Platforms
 
 - **[Fly.io](https://fly.io/)** - Global application platform
 - **[Railway](https://railway.app/)** - Simple cloud deployment
-- **[Render](https://render.com/)** - Managed cloud services
 
 ### Manual Docker Deployment
 
@@ -100,9 +98,6 @@ bun db:studio           # Open Prisma Studio
 # Code quality
 bun check               # Lint and format
 bun check-types         # Type check
-
-# Security
-cd apps/server && bun run migrate-cookies  # Encrypt existing cookies
 ```
 
 ## Security
