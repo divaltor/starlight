@@ -1,5 +1,4 @@
 export interface CursorData {
-	lastTweetId: string;
 	createdAt: string;
 }
 
