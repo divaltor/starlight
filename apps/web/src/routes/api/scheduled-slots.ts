@@ -474,7 +474,7 @@ export async function addRandomTweetToSlot(slotId: string, userId: string) {
 			},
 		},
 		orderBy: { createdAt: "desc" },
-		take: 50, // Get multiple options for random selection
+		take: 100, // Get multiple options for random selection
 	});
 
 	if (availableTweets.length === 0) {
