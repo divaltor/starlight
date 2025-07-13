@@ -30,7 +30,7 @@ feature.on(":text").filter(
 		} catch (error) {
 			ctx.logger.error(error, "Error downloading video");
 
-			await ctx.reply(`${ctx.from?.username} fuck off.`);
+			await ctx.reply("Can't download video, sorry.");
 			return;
 		}
 
