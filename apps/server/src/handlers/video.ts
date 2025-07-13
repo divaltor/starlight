@@ -1,4 +1,4 @@
-import AbortController from "abort-controller";
+import { env } from "@repo/utils";
 import { Composer, GrammyError, InputFile } from "grammy";
 import tmp from "tmp";
 import { downloadVideo } from "@/services/video";
@@ -12,21 +12,23 @@ feature.on(":text").filter(
 	(ctx) =>
 		ctx.msg.text.startsWith("https://x.com") ||
 		ctx.msg.text.startsWith("https://www.instagram.com") ||
-		ctx.msg.text.startsWith("https://instagram.com") ||
-		ctx.msg.text.startsWith("https://coub.com"),
+		ctx.msg.text.startsWith("https://instagram.com"),
 	async (ctx) => {
-		const abortController = new AbortController();
-
-		await ctx.replyWithChatAction("upload_video", {}, abortController.signal);
-
-		let videos = [];
+		await ctx.replyWithChatAction("upload_video");
 
 		const tempDir = tmp.dirSync({ unsafeCleanup: true });
+
+		let videos = [];
+		let cookies: string | undefined;
+
+		if (ctx.msg.text.includes("instagram.com")) {
+			cookies = env.INSTAGRAM_COOKIES;
+		}
+
 		try {
-			videos = await downloadVideo(ctx.msg.text, tempDir.name);
+			videos = await downloadVideo(ctx.msg.text, tempDir.name, cookies);
 		} catch (error) {
 			ctx.logger.error(error, "Error downloading video");
-			abortController.abort();
 
 			await ctx.reply(`${ctx.from?.username} fuck off.`);
 			return;
@@ -45,8 +47,6 @@ feature.on(":text").filter(
 					ctx.chatId,
 				);
 			} catch (error) {
-				abortController.abort();
-
 				if (error instanceof GrammyError) {
 					ctx.logger.error(error, "Error sending video");
 					if (error.error_code === 413) {

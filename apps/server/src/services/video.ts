@@ -47,6 +47,7 @@ const youtubedl = create(env.YOUTUBE_DL_PATH);
 export async function downloadVideo(
 	url: string,
 	folder: string,
+	cookies?: string,
 ): Promise<VideoInformation[]> {
 	logger.debug("Downloading video from %s to %s", url, folder);
 
@@ -59,6 +60,7 @@ export async function downloadVideo(
 		format: "mp4",
 		writeInfoJson: true,
 		noCheckCertificates: true,
+		cookies,
 	});
 
 	const mp4Files = filesGlob.scan({ cwd: folder });

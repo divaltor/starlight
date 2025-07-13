@@ -53,6 +53,8 @@ const env = createEnv({
 			.optional()
 			.default(""),
 		DEFAULT_MEDIA_PATH: z.string().default("media/"),
+
+		INSTAGRAM_COOKIES: z.string().optional(),
 	},
 	skipValidation: false,
 	runtimeEnv: process.env,
