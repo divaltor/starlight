@@ -61,6 +61,7 @@ export async function downloadVideo(
 		writeInfoJson: true,
 		noCheckCertificates: true,
 		cookies,
+		trimFilenames: 256,
 	});
 
 	const mp4Files = filesGlob.scan({ cwd: folder });
