@@ -3,6 +3,7 @@ import { Queue, QueueEvents, Worker } from "bullmq";
 import sharp from "sharp";
 import UserAgent from "user-agents";
 import { logger } from "@/logger";
+import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
 import { calculatePerceptualHash } from "@/services/image";
 import { prisma, redis, s3 } from "@/storage";
 
@@ -118,11 +119,26 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 				throw new Error(`Failed to fetch photo ${photo.originalUrl}`);
 			}
 
+			const imageBuffer = await response.arrayBuffer();
+
+			const similarPhotos = await findDuplicatesByImageContent(imageBuffer);
+
+			if (similarPhotos.length > 0) {
+				logger.info(
+					{
+						tweetId: tweet.id,
+						photoId: photo.id,
+						userId,
+						similarPhotos,
+					},
+					"Found similar photos, skipping saving photo",
+				);
+				continue;
+			}
+
 			const extension = photo.originalUrl.split(".").pop() ?? "jpg";
 
 			const photoName = `${photo.externalId}.${extension}`;
-
-			const imageBuffer = await response.arrayBuffer();
 
 			const [, hash, metadata] = await Promise.all([
 				s3.write(`media/${photoName}`, imageBuffer),
