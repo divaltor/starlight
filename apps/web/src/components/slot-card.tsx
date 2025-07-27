@@ -244,6 +244,7 @@ export function SlotCard({
 					onShuffleTweet={handleShuffleTweet}
 					onDeleteImage={handleDeleteImage}
 					slotTweetId={data.id}
+					sourceUrl={`https://x.com/i/status/${data.tweet.id}`}
 				/>
 			</div>
 		);

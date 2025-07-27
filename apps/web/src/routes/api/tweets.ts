@@ -16,6 +16,7 @@ interface TweetData {
 	date: string;
 	photos: PhotoData[];
 	hasMultipleImages: boolean;
+	sourceUrl?: string;
 }
 
 const getUserTweets = createServerFn({ method: "GET" })
@@ -137,6 +138,7 @@ const getUserTweets = createServerFn({ method: "GET" })
 						date: tweet.createdAt.toISOString(),
 						photos,
 						hasMultipleImages: photos.length > 1,
+						sourceUrl: `https://x.com/i/status/${tweet.id}`,
 					};
 				});
 

@@ -17,6 +17,7 @@ interface TweetImageGridProps {
 	onShuffleTweet?: (id: string, tweetId: string) => void;
 	onDeleteImage?: (id: string, photoId: string) => void;
 	slotTweetId?: string;
+	sourceUrl?: string;
 }
 
 export function TweetImageGrid({
@@ -28,6 +29,7 @@ export function TweetImageGrid({
 	onShuffleTweet,
 	onDeleteImage,
 	slotTweetId,
+	sourceUrl,
 }: TweetImageGridProps) {
 	const [isImageLoading, setIsImageLoading] = useState<{
 		[key: string]: boolean;
@@ -46,6 +48,13 @@ export function TweetImageGrid({
 			typeof dateInput === "string" ? new Date(dateInput) : dateInput;
 		return format(dateObj, "MMM d, yyyy");
 	}, []);
+
+	const handleArtistClick = useCallback((e: React.MouseEvent) => {
+		e.stopPropagation();
+		if (sourceUrl) {
+			window.open(sourceUrl, "_blank", "noopener,noreferrer");
+		}
+	}, [sourceUrl]);
 
 	if (photos.length === 1) {
 		const photo = photos[0];
@@ -71,7 +80,17 @@ export function TweetImageGrid({
 					<div className="w-full p-3 text-white">
 						<div className="flex items-center justify-between">
 							<div>
-								<p className="font-medium text-sm drop-shadow-lg">{artist}</p>
+								{sourceUrl ? (
+									<button
+										type="button"
+										onClick={handleArtistClick}
+										className="font-medium text-sm drop-shadow-lg text-white hover:text-blue-300 transition-colors duration-200 cursor-pointer text-left"
+									>
+										{artist}
+									</button>
+								) : (
+									<p className="font-medium text-sm drop-shadow-lg">{artist}</p>
+								)}
 								{date && (
 									<p className="text-gray-200 text-xs drop-shadow-lg">
 										{formatTweetDate(date)}
@@ -121,7 +140,17 @@ export function TweetImageGrid({
 			{/* Post header */}
 			<div className="mb-3 flex items-center justify-between">
 				<div>
-					<p className="font-medium text-gray-900 text-sm">{artist}</p>
+					{sourceUrl ? (
+						<button
+							type="button"
+							onClick={handleArtistClick}
+							className="font-medium text-gray-900 text-sm hover:text-blue-600 transition-colors duration-200 cursor-pointer text-left"
+						>
+							{artist}
+						</button>
+					) : (
+						<p className="font-medium text-gray-900 text-sm">{artist}</p>
+					)}
 					<p className="text-gray-500 text-xs">
 						{date && formatTweetDate(date)}
 					</p>

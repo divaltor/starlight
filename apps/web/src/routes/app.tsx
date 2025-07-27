@@ -89,6 +89,7 @@ function TwitterArtViewer() {
 						photos={data.photos}
 						showActions={false}
 						slotTweetId={data.id}
+						sourceUrl={data.sourceUrl}
 					/>
 				</div>
 			);

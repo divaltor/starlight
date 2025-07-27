@@ -16,6 +16,7 @@ interface ImageCardProps {
 	index: number;
 	canDelete: boolean;
 	onDelete: (index: number) => void;
+	sourceUrl?: string;
 }
 
 export function ImageCard({
@@ -24,6 +25,7 @@ export function ImageCard({
 	index,
 	canDelete,
 	onDelete,
+	sourceUrl,
 }: ImageCardProps) {
 	const [isPressed, setIsPressed] = useState(false);
 
@@ -38,6 +40,11 @@ export function ImageCard({
 			onMouseLeave={() => setIsPressed(false)}
 			onTouchStart={() => setIsPressed(true)}
 			onTouchEnd={() => setIsPressed(false)}
+			onClick={() => {
+				if (sourceUrl) {
+					window.open(sourceUrl, "_blank", "noopener,noreferrer");
+				}
+			}}
 		>
 			<img
 				src={src || "/placeholder.svg"}
@@ -52,7 +59,10 @@ export function ImageCard({
 					<Button
 						variant="secondary"
 						size="sm"
-						onClick={() => onDelete(index)}
+						onClick={(e) => {
+							e.stopPropagation();
+							onDelete(index);
+						}}
 						className="bg-white/90 text-red-600 hover:bg-white hover:text-red-700"
 					>
 						<Trash2 className="h-4 w-4" />
@@ -75,7 +85,10 @@ export function ImageCard({
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end" className="w-40">
 							<DropdownMenuItem
-								onClick={() => onDelete(index)}
+								onClick={(e) => {
+									e.stopPropagation();
+									onDelete(index);
+								}}
 								className="gap-2 text-red-600 focus:text-red-600"
 							>
 								<Trash2 className="h-4 w-4" />
