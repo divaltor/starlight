@@ -148,9 +148,9 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 					photo.s3Url as string,
 					{
 						caption: scheduledTweet.tweet.tweetData.username
-							? `[@${scheduledTweet.tweet.tweetData.username}](https://x.com/i/status/${scheduledTweet.tweetId})`
+							? `<a href="https://x.com/i/status/${scheduledTweet.tweetId}">@${scheduledTweet.tweet.tweetData.username}</a>`
 							: `https://x.com/i/status/${scheduledTweet.tweetId}`,
-						parse_mode: "MarkdownV2",
+						parse_mode: "HTML",
 					},
 				),
 			];
@@ -160,10 +160,10 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 					InputMediaBuilder.photo(scheduledPhoto.photo.s3Url as string, {
 						...(index === 0 && {
 							caption: scheduledTweet.tweet.tweetData.username
-								? `[@${scheduledTweet.tweet.tweetData.username}](https://x.com/i/status/${scheduledTweet.tweetId})`
+								? `<a href="https://x.com/i/status/${scheduledTweet.tweetId}">@${scheduledTweet.tweet.tweetData.username}</a>`
 								: `https://x.com/i/status/${scheduledTweet.tweetId}`,
 						}),
-						parse_mode: "MarkdownV2",
+						parse_mode: "HTML",
 					}),
 			);
 

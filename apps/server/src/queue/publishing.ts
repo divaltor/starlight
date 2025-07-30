@@ -108,13 +108,13 @@ export const publishingWorker = new Worker<PublishingJobData>(
 			const caption =
 				index === 0
 					? photo.tweet.tweetData.username
-						? `[@${photo.tweet.tweetData.username}](https://x.com/i/status/${photo.tweetId})`
+						? `<a href="https://x.com/i/status/${photo.tweetId}">@${photo.tweet.tweetData.username}</a>`
 						: `https://x.com/i/status/${photo.tweetId}`
 					: undefined;
 
 			return InputMediaBuilder.photo(photo.s3Url as string, {
 				caption,
-				parse_mode: "MarkdownV2",
+				parse_mode: "HTML",
 			});
 		});
 
