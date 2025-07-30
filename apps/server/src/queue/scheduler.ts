@@ -150,6 +150,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 						caption: scheduledTweet.tweet.tweetData.username
 							? `[@${scheduledTweet.tweet.tweetData.username}](https://x.com/i/status/${scheduledTweet.tweetId})`
 							: `https://x.com/i/status/${scheduledTweet.tweetId}`,
+						parse_mode: "MarkdownV2",
 					},
 				),
 			];
@@ -162,6 +163,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 								? `[@${scheduledTweet.tweet.tweetData.username}](https://x.com/i/status/${scheduledTweet.tweetId})`
 								: `https://x.com/i/status/${scheduledTweet.tweetId}`,
 						}),
+						parse_mode: "MarkdownV2",
 					}),
 			);
 
