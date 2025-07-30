@@ -75,6 +75,13 @@ export const publishingWorker = new Worker<PublishingJobData>(
 					not: null,
 				},
 			},
+			include: {
+				tweet: {
+					select: {
+						tweetData: true,
+					},
+				},
+			},
 			orderBy: [
 				{
 					tweetId: "desc",
@@ -97,9 +104,19 @@ export const publishingWorker = new Worker<PublishingJobData>(
 			photos.length,
 		);
 
-		const photoUrls = photos.map((photo) =>
-			InputMediaBuilder.photo(photo.s3Url as string),
-		);
+		const photoUrls = photos.map((photo, index) => {
+			const caption =
+				index === 0
+					? photo.tweet.tweetData.username
+						? `[@${photo.tweet.tweetData.username}](https://x.com/i/status/${photo.tweetId})`
+						: `https://x.com/i/status/${photo.tweetId}`
+					: undefined;
+
+			return InputMediaBuilder.photo(photo.s3Url as string, {
+				caption,
+				parse_mode: "MarkdownV2",
+			});
+		});
 
 		let messages: Message.PhotoMessage[] | undefined;
 
