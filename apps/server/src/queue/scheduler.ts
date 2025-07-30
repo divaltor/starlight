@@ -90,6 +90,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 					},
 				},
 				scheduledSlot: true,
+				tweet: true,
 			},
 		});
 
@@ -146,7 +147,9 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 					scheduledTweet.scheduledSlot.chatId.toString(),
 					photo.s3Url as string,
 					{
-						caption: `https://x.com/i/status/${scheduledTweet.tweetId}`,
+						caption: scheduledTweet.tweet.tweetData.username
+							? `[@${scheduledTweet.tweet.tweetData.username}](https://x.com/i/status/${scheduledTweet.tweetId})`
+							: `https://x.com/i/status/${scheduledTweet.tweetId}`,
 					},
 				),
 			];
@@ -155,7 +158,9 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 				(scheduledPhoto, index) =>
 					InputMediaBuilder.photo(scheduledPhoto.photo.s3Url as string, {
 						...(index === 0 && {
-							caption: `https://x.com/i/status/${scheduledTweet.tweetId}`,
+							caption: scheduledTweet.tweet.tweetData.username
+								? `[@${scheduledTweet.tweet.tweetData.username}](https://x.com/i/status/${scheduledTweet.tweetId})`
+								: `https://x.com/i/status/${scheduledTweet.tweetId}`,
 						}),
 					}),
 			);
