@@ -183,6 +183,7 @@ composer.on("inline_query", async (ctx) => {
 		tweetId: string;
 		height: number | null;
 		width: number | null;
+		username?: string;
 	}> = [];
 
 	let tweetSkip = 0;
@@ -238,6 +239,7 @@ composer.on("inline_query", async (ctx) => {
 					tweetId: tweet.id,
 					height: photo.height,
 					width: photo.width,
+					username: tweet.tweetData.username,
 				});
 				totalPhotosFound++;
 			}
@@ -276,10 +278,13 @@ composer.on("inline_query", async (ctx) => {
 
 	const results = photosForThisPage.map((photo) =>
 		InlineQueryResultBuilder.photo(photo.id, photo.s3Url as string, {
-			caption: `https://x.com/i/status/${photo.tweetId}`,
+			caption: photo.username
+				? `<a href="https://x.com/i/status/${photo.tweetId}">@${photo.username}</a>`
+				: `https://x.com/i/status/${photo.tweetId}`,
 			thumbnail_url: photo.s3Url as string,
 			photo_height: photo.height ?? undefined,
 			photo_width: photo.width ?? undefined,
+			parse_mode: "HTML",
 		}),
 	);
 
