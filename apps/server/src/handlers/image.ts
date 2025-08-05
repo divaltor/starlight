@@ -194,7 +194,27 @@ composer.on("inline_query", async (ctx) => {
 		const whereClause: Prisma.TweetWhereInput = {};
 
 		if (query) {
-			whereClause.tweetText = { contains: query, mode: "insensitive" };
+			// Extract author names from query (starting with @)
+			const authorMatches = query.match(/@(\w+)/g);
+			const authors = authorMatches?.map((match) => match.substring(1)) || [];
+
+			// Remove author mentions from query for text search
+			const textQuery = query.replace(/@\w+/g, "").trim();
+
+			// Build where clause
+			if (authors.length > 0 && textQuery) {
+				// Both author filter and text search
+				whereClause.AND = [
+					{ username: { in: authors } },
+					{ tweetText: { contains: textQuery, mode: "insensitive" } },
+				];
+			} else if (authors.length > 0) {
+				// Only author filter
+				whereClause.username = { in: authors };
+			} else if (textQuery) {
+				// Only text search
+				whereClause.tweetText = { contains: textQuery, mode: "insensitive" };
+			}
 		}
 
 		const tweets = await prisma.tweet.findMany({
