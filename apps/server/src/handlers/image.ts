@@ -205,12 +205,18 @@ composer.on("inline_query", async (ctx) => {
 			if (authors.length > 0 && textQuery) {
 				// Both author filter and text search
 				whereClause.AND = [
-					{ username: { in: authors } },
+					{
+						OR: authors.map((author) => ({
+							username: { contains: author, mode: "insensitive" },
+						})),
+					},
 					{ tweetText: { contains: textQuery, mode: "insensitive" } },
 				];
 			} else if (authors.length > 0) {
 				// Only author filter
-				whereClause.username = { in: authors };
+				whereClause.OR = authors.map((author) => ({
+					username: { contains: author, mode: "insensitive" },
+				}));
 			} else if (textQuery) {
 				// Only text search
 				whereClause.tweetText = { contains: textQuery, mode: "insensitive" };
