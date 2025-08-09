@@ -22,6 +22,7 @@ export const logger = pino({
 								timestampKey: "time",
 								ignore: "pid,hostname",
 							},
+							level: "debug",
 						},
 					]
 				: [
