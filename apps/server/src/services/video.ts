@@ -26,6 +26,8 @@ async function createVideoInformation(
 		`${parsedPath.name}.info.json`,
 	);
 
+	logger.debug("Creating video information for %s", infoJsonPath);
+
 	let metadata: VideoMetadata = {};
 
 	try {
@@ -33,8 +35,6 @@ async function createVideoInformation(
 	} catch (error) {
 		logger.error(error, "Error creating video information for %s", filePath);
 	}
-
-	logger.debug("Video information for %s: %o", filePath, metadata);
 
 	return {
 		filePath,
