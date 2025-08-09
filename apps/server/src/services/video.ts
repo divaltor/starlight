@@ -51,6 +51,8 @@ export async function downloadVideo(
 ): Promise<VideoInformation[]> {
 	logger.debug("Downloading video from %s to %s", url, folder);
 
+	const uuid = Bun.randomUUIDv7();
+
 	await youtubedl(url, {
 		paths: folder,
 		quiet: true,
@@ -61,7 +63,7 @@ export async function downloadVideo(
 		writeInfoJson: true,
 		noCheckCertificates: true,
 		cookies,
-		trimFilenames: 64,
+		output: `${uuid}.%(ext)s`,
 	});
 
 	const mp4Files = filesGlob.scan({ cwd: folder });
