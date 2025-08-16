@@ -179,6 +179,7 @@ composer.on("inline_query", async (ctx) => {
 	// We'll fetch in batches and keep going until we have enough photos
 	const allPhotos: Array<{
 		id: string;
+		externalId?: string;
 		s3Url: string | null;
 		tweetId: string;
 		height: number | null;
@@ -261,6 +262,7 @@ composer.on("inline_query", async (ctx) => {
 			for (const photo of tweet.photos) {
 				allPhotos.push({
 					id: photo.id,
+					externalId: photo.externalId,
 					s3Url: photo.s3Url as string,
 					tweetId: tweet.id,
 					height: photo.height,
@@ -303,7 +305,7 @@ composer.on("inline_query", async (ctx) => {
 	}
 
 	const results = photosForThisPage.map((photo) =>
-		InlineQueryResultBuilder.photo(photo.id, photo.s3Url as string, {
+		InlineQueryResultBuilder.photo(photo.externalId ?? photo.id, photo.s3Url as string, {
 			caption: photo.username
 				? `<a href="https://x.com/i/status/${photo.tweetId}">@${photo.username}</a>`
 				: `https://x.com/i/status/${photo.tweetId}`,
