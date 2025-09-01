@@ -6,7 +6,6 @@ import publicationsHandler from "@/handlers/publications";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
 import { imagesWorker } from "@/queue/image-collector";
-import { publishingWorker } from "@/queue/publishing";
 import { scheduledSlotWorker, scheduledTweetWorker } from "@/queue/scheduler";
 import { scrapperWorker } from "@/queue/scrapper";
 
@@ -32,7 +31,6 @@ const runner = run(bot);
 process.on("SIGINT", async () => {
 	await imagesWorker.close();
 	await scrapperWorker.close();
-	await publishingWorker.close();
 	await scheduledTweetWorker.close();
 	await scheduledSlotWorker.close();
 	if (runner.isRunning()) await runner.stop();
@@ -41,7 +39,6 @@ process.on("SIGINT", async () => {
 process.on("SIGTERM", async () => {
 	await imagesWorker.close();
 	await scrapperWorker.close();
-	await publishingWorker.close();
 	await scheduledTweetWorker.close();
 	await scheduledSlotWorker.close();
 	if (runner.isRunning()) await runner.stop();
@@ -49,6 +46,5 @@ process.on("SIGTERM", async () => {
 
 imagesWorker.run();
 scrapperWorker.run();
-publishingWorker.run();
 scheduledTweetWorker.run();
 scheduledSlotWorker.run();
