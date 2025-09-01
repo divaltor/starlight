@@ -3,7 +3,6 @@ import { env, type Prisma } from "@repo/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { RateLimiterRedis } from "rate-limiter-flexible";
 import { channelKeyboard, webAppKeyboard } from "@/bot";
-import { publishingQueue } from "@/queue/publishing";
 import { schedulerFlow } from "@/queue/scheduler";
 import { scrapperQueue } from "@/queue/scrapper";
 import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
@@ -404,11 +403,6 @@ privateChat.command("scrapper").filter(
 	},
 );
 
-privateChat.command("publish", async (ctx) => {
-	await ctx.reply(
-		"Please, add me to a group and publish images there.\n\nI should have permissions to delete message to be able to delete your command for cleaner UX.",
-	);
-});
 
 groupChat.command("source").filter(
 	async (ctx) =>
@@ -445,139 +439,5 @@ groupChat.command("source").filter(
 	},
 );
 
-groupChat.command("publish", async (ctx) => {
-	const numberOfTweets = ctx.match
-		? Math.min(Number(ctx.match) || 100, 100)
-		: 100;
-
-	const tweetsWithUnpublishedPhotos = await prisma.tweet.findMany({
-		where: {
-			userId: ctx.user?.id as string,
-			photos: {
-				some: {
-					deletedAt: null,
-					s3Path: { not: null },
-					publishedPhotos: {
-						none: {
-							chatId: ctx.chat?.id,
-						},
-					},
-				},
-			},
-		},
-		include: {
-			photos: {
-				where: {
-					deletedAt: null,
-					s3Path: { not: null },
-					publishedPhotos: {
-						none: {
-							chatId: ctx.chat?.id,
-						},
-					},
-				},
-			},
-		},
-		orderBy: {
-			createdAt: "desc",
-		},
-		take: numberOfTweets,
-	});
-
-	if (tweetsWithUnpublishedPhotos.length === 0) {
-		await ctx.reply("No photos to publish, check back later.");
-		return;
-	}
-
-	// Convert tweets to items with photo counts for bin-packing
-	const tweetItems = tweetsWithUnpublishedPhotos.map((tweet, index) => ({
-		index,
-		photoCount: tweet.photos.length,
-		photos: tweet.photos.map((photo) => ({
-			id: photo.id,
-			s3Path: photo.s3Path as string,
-		})),
-	}));
-
-	const usedTweets = new Set<number>();
-	let jobIndex = 0;
-
-	while (usedTweets.size < tweetItems.length) {
-		const photosBuffer: { id: string; s3Path: string }[] = [];
-		let remainingCapacity = 10;
-
-		// First-fit decreasing: try to fit tweets starting with larger ones
-		const availableTweets = tweetItems
-			.filter((item) => !usedTweets.has(item.index))
-			.sort((a, b) => b.photoCount - a.photoCount);
-
-		// Greedy bin-packing: keep adding tweets that fit
-		let addedAny = true;
-		while (addedAny && remainingCapacity > 0) {
-			addedAny = false;
-
-			for (const tweet of availableTweets) {
-				if (usedTweets.has(tweet.index)) continue;
-
-				if (tweet.photoCount <= remainingCapacity) {
-					photosBuffer.push(...tweet.photos);
-					remainingCapacity -= tweet.photoCount;
-					usedTweets.add(tweet.index);
-					addedAny = true;
-					break; // Start over to maintain first-fit approach
-				}
-			}
-		}
-
-		// If no tweets could fit (edge case), force add the smallest available tweet
-		if (photosBuffer.length === 0) {
-			const smallestTweet = availableTweets
-				.filter((item) => !usedTweets.has(item.index))
-				.sort((a, b) => a.photoCount - b.photoCount)[0];
-
-			if (smallestTweet) {
-				photosBuffer.push(...smallestTweet.photos.slice(0, 10));
-				usedTweets.add(smallestTweet.index);
-			}
-		}
-
-		// Add to publishing queue instead of sending directly
-		if (photosBuffer.length > 0) {
-			await publishingQueue.add("publish-photos", {
-				chatId: ctx.chat?.id as number,
-				userId: ctx.user?.id as string,
-				photoIds: photosBuffer.map((p) => p.id),
-				topicId: ctx.message?.message_thread_id,
-			});
-
-			ctx.logger.debug(
-				{
-					chatId: ctx.chat?.id,
-					userId: ctx.user?.id,
-					chatType: ctx.chat?.type,
-					photosBufferLength: photosBuffer.length,
-					jobIndex,
-				},
-				"Queued media group %s to chat %s from %s user (job %s)",
-				photosBuffer.length,
-				ctx.chat?.id,
-				ctx.user?.id,
-				jobIndex,
-			);
-
-			jobIndex++;
-		}
-	}
-
-	ctx.logger.debug(
-		{
-			chatId: ctx.chat?.id,
-			userId: ctx.user?.id,
-			queuedGroups: jobIndex,
-		},
-		"Queued %s photo groups for publishing. They will be sent at a rate of 10 photos per minute to respect Telegram limits.",
-		jobIndex,
-	);
-});
 
 export default composer;

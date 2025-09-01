@@ -1,10 +1,9 @@
 import { FlowProducer, QueueEvents, Worker } from "bullmq";
 import { InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
-import type { RateLimiterRes } from "rate-limiter-flexible";
+import { RateLimiterRedis, type RateLimiterRes } from "rate-limiter-flexible";
 import { bot } from "@/bot";
 import { logger } from "@/logger";
-import { rateLimiter } from "@/queue/publishing";
 import { prisma, redis } from "@/storage";
 
 export const schedulerFlow = new FlowProducer({ connection: redis });
@@ -15,11 +14,20 @@ interface ScheduledTweetJobData {
 	tweetId: string;
 }
 
+
 interface ScheduledSlotJobData {
 	userId: string;
 	slotId: string;
 	status: "PUBLISHING" | "PUBLISHED";
 }
+
+export const rateLimiter = new RateLimiterRedis({
+	storeClient: redis,
+	points: 15, // 15 photos
+	duration: 60, // per 60 seconds
+	keyPrefix: "chat-publishing",
+	blockDuration: 60, // block for 60 seconds when limit exceeded
+});
 
 export const scheduledSlotWorker = new Worker<ScheduledSlotJobData>(
 	"scheduled-slots",
