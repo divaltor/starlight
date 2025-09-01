@@ -53,7 +53,7 @@ export async function downloadVideo(
 
 	const uuid = Bun.randomUUIDv7();
 
-	await youtubedl(url, {
+	const subprocess = await youtubedl.exec(url, {
 		paths: folder,
 		quiet: true,
 		noWarnings: true,
@@ -65,6 +65,11 @@ export async function downloadVideo(
 		cookies,
 		output: `${uuid}.%(ext)s`,
 	});
+
+	if (subprocess.error) {
+		logger.error(subprocess.stdout, "Error downloading video from %s", url);
+		throw subprocess.error;
+	}
 
 	const mp4Files = filesGlob.scan({ cwd: folder });
 
