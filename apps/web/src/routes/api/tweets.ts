@@ -87,10 +87,11 @@ const getUserTweets = createServerFn({ method: "GET" })
 				}
 
 				if (cursorData) {
-					createdAt.lte = new Date(cursorData.createdAt);
-					whereClause.id = {
-						lt: cursorData.lastTweetId,
-					};
+					const cursorDate = new Date(cursorData.createdAt);
+					whereClause.OR = [
+						{ createdAt: { lt: cursorDate } },
+						{ createdAt: cursorDate, id: { lt: cursorData.lastTweetId } },
+					];
 				}
 
 				const prisma = getPrismaClient();
