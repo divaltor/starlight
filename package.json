@@ -29,5 +29,5 @@
 		"turbo": "^2.4.2",
 		"@biomejs/biome": "2.0.6"
 	},
-	"packageManager": "bun@1.2.14"
+	"packageManager": "bun@1.2.21"
 }
