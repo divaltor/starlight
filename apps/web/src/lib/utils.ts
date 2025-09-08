@@ -1,4 +1,5 @@
 import { type ClassValue, clsx } from "clsx";
+import { customAlphabet } from "nanoid";
 import { twMerge } from "tailwind-merge";
 import { z } from "zod/v4";
 
@@ -145,4 +146,10 @@ export function decodeCookies(
 
 export function cookiesToRfcString(cookies: Cookie[]): string {
 	return cookies.map((cookie) => `${cookie.key}=${cookie.value}`).join("; ");
+}
+
+const slugNanoId = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 10);
+
+export function generateSlug(length = 10): string {
+	return slugNanoId(length);
 }
