@@ -99,23 +99,25 @@ export function ProfileShareSection({ rawInitData }: ProfileShareSectionProps) {
 					</div>
 				) : isActive ? (
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-						<div className="relative flex-1 min-w-0">
-							<button
-								type="button"
-								onClick={copyLink}
-								className="flex h-8 w-full select-none items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-gray-200 bg-white px-3 pr-20 text-left font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 sm:text-sm"
-								aria-label="Copy share link"
-							>
-								{`${window.location.origin}/share/profile/${profileShare.slug}`}
-							</button>
-							<button
-								type="button"
-								onClick={copyLink}
-								className="-translate-y-1/2 absolute top-1/2 right-2 inline-flex h-7 w-7 items-center justify-center text-gray-500 hover:text-gray-900 focus:outline-none"
-								aria-label="Copy link"
-							>
-								<Copy className="h-4 w-4" />
-							</button>
+						<div className="flex-1 min-w-0">
+							<div className="flex h-8 w-full items-stretch overflow-hidden rounded-md border border-gray-200 bg-white">
+								<button
+									type="button"
+									onClick={copyLink}
+									className="flex-1 min-w-0 select-none overflow-hidden text-ellipsis whitespace-nowrap px-3 text-left font-mono text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 sm:text-sm"
+									aria-label="Copy share link"
+								>
+									{`${window.location.origin}/share/profile/${profileShare.slug}`}
+								</button>
+								<button
+									type="button"
+									onClick={copyLink}
+									className="px-2 inline-flex items-center justify-center border-l border-gray-200 text-gray-500 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+									aria-label="Copy link"
+								>
+									<Copy className="h-4 w-4" />
+								</button>
+							</div>
 						</div>
 						<Button
 							variant="destructive"
