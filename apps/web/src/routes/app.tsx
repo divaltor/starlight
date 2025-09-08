@@ -91,17 +91,6 @@ function TwitterArtViewer() {
 
 	return (
 		<div className="min-h-screen bg-gray-50 p-4">
-			{/* Header with Filters */}
-			<div className="mx-auto mb-8 max-w-7xl">
-				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<h1 className="font-bold text-3xl text-gray-900">
-							Twitter Art Gallery
-						</h1>
-					</div>
-				</div>
-			</div>
-
 			{/* Loading Skeleton */}
 			{isLoading && (
 				<div className="mx-auto max-w-7xl">
