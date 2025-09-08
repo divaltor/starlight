@@ -14,7 +14,6 @@ interface ScheduledTweetJobData {
 	tweetId: string;
 }
 
-
 interface ScheduledSlotJobData {
 	userId: string;
 	slotId: string;

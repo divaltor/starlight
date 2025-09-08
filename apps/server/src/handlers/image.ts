@@ -304,15 +304,19 @@ composer.on("inline_query", async (ctx) => {
 	}
 
 	const results = photosForThisPage.map((photo) =>
-		InlineQueryResultBuilder.photo(photo.externalId ?? photo.id, photo.s3Url as string, {
-			caption: photo.username
-				? `<a href="https://x.com/i/status/${photo.tweetId}">@${photo.username}</a>`
-				: `https://x.com/i/status/${photo.tweetId}`,
-			thumbnail_url: photo.s3Url as string,
-			photo_height: photo.height ?? undefined,
-			photo_width: photo.width ?? undefined,
-			parse_mode: "HTML",
-		}),
+		InlineQueryResultBuilder.photo(
+			photo.externalId ?? photo.id,
+			photo.s3Url as string,
+			{
+				caption: photo.username
+					? `<a href="https://x.com/i/status/${photo.tweetId}">@${photo.username}</a>`
+					: `https://x.com/i/status/${photo.tweetId}`,
+				thumbnail_url: photo.s3Url as string,
+				photo_height: photo.height ?? undefined,
+				photo_width: photo.width ?? undefined,
+				parse_mode: "HTML",
+			},
+		),
 	);
 
 	// Calculate next offset for pagination
@@ -403,7 +407,6 @@ privateChat.command("scrapper").filter(
 	},
 );
 
-
 groupChat.command("source").filter(
 	async (ctx) =>
 		ctx.message.reply_to_message === undefined ||
@@ -438,6 +441,5 @@ groupChat.command("source").filter(
 		await ctx.reply(`https://x.com/i/status/${tweet.photo.tweetId}`);
 	},
 );
-
 
 export default composer;
