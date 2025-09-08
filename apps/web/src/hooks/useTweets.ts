@@ -1,14 +1,8 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
 import { getUserTweets } from "@/routes/api/tweets";
-import type { DateFilter } from "@/types/dates";
 
-type UseTweetsOptions = {
-	dateFilter?: DateFilter;
-};
-
-export function useTweets(options: UseTweetsOptions = {}) {
-	const { dateFilter } = options;
+export function useTweets() {
 	const { rawInitData } = useTelegramContext();
 
 	const {
@@ -20,13 +14,12 @@ export function useTweets(options: UseTweetsOptions = {}) {
 		isFetchingNextPage,
 		status,
 	} = useInfiniteQuery({
-		queryKey: ["tweets", dateFilter],
+		queryKey: ["tweets"],
 		queryFn: async ({ pageParam }) => {
 			const result = await getUserTweets({
 				headers: { Authorization: rawInitData ?? "" },
 				data: {
 					cursor: pageParam,
-					dateFilter,
 				},
 			});
 

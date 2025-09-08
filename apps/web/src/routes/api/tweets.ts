@@ -25,9 +25,6 @@ const getUserTweets = createServerFn({ method: "GET" })
 		z.object({
 			cursor: z.string().optional(),
 			limit: z.number().min(1).max(100).default(30),
-			dateFilter: z
-				.enum(["all", "today", "yesterday", "3 days", "week"])
-				.optional(),
 		}),
 	)
 	.handler(
@@ -38,7 +35,7 @@ const getUserTweets = createServerFn({ method: "GET" })
 			tweets: TweetData[];
 			nextCursor: string | null;
 		}> => {
-			const { cursor, limit, dateFilter } = data;
+			const { cursor, limit } = data;
 
 			try {
 				// Parse cursor if provided
@@ -61,31 +58,6 @@ const getUserTweets = createServerFn({ method: "GET" })
 					userId: context.databaseUserId,
 				};
 
-				const createdAt: Prisma.TweetWhereInput["createdAt"] = {};
-
-				// Apply date filter
-				if (dateFilter && dateFilter !== "all") {
-					const now = new Date();
-					const cutoffDate = new Date();
-
-					switch (dateFilter) {
-						case "today":
-							cutoffDate.setHours(0, 0, 0, 0);
-							break;
-						case "week":
-							cutoffDate.setDate(now.getDate() - 7);
-							break;
-						case "yesterday":
-							cutoffDate.setDate(now.getDate() - 1);
-							break;
-						case "3 days":
-							cutoffDate.setDate(now.getDate() - 3);
-							break;
-					}
-
-					createdAt.gte = cutoffDate;
-				}
-
 				if (cursorData) {
 					const cursorDate = new Date(cursorData.createdAt);
 					whereClause.OR = [
@@ -101,7 +73,6 @@ const getUserTweets = createServerFn({ method: "GET" })
 					where: {
 						...whereClause,
 						...prisma.tweet.available(),
-						createdAt,
 					},
 					include: {
 						photos: {

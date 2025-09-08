@@ -1,27 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Calendar, Check, Filter, RefreshCw } from "lucide-react";
+import { Filter } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
-import { Button } from "@/components/ui/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuGroup,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTweets } from "@/hooks/useTweets";
 import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
-import type { DateFilter } from "@/types/dates";
 
 function TwitterArtViewer() {
-	const [dateFilter, setDateFilter] = useState<DateFilter>("all");
-	const [isFilterActive, setIsFilterActive] = useState(false);
-
 	const { updateButtons } = useTelegramContext();
 
 	useEffect(() => {
@@ -53,7 +39,7 @@ function TwitterArtViewer() {
 		hasNextPage,
 		error,
 		fetchNextPage,
-	} = useTweets({ dateFilter });
+	} = useTweets();
 
 	const infiniteLoader = useInfiniteLoader(
 		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
@@ -67,16 +53,6 @@ function TwitterArtViewer() {
 			threshold: 5,
 		},
 	);
-
-	// Update filter active state
-	useEffect(() => {
-		setIsFilterActive(dateFilter !== "all");
-	}, [dateFilter]);
-
-	// Reset filters
-	const resetFilters = useCallback(() => {
-		setDateFilter("all");
-	}, []);
 
 	const renderMasonryItem = useCallback(
 		({ data, width }: { data: (typeof tweets)[0]; width: number }) => {
@@ -123,62 +99,6 @@ function TwitterArtViewer() {
 							Twitter Art Gallery
 						</h1>
 					</div>
-
-					<div className="flex gap-2">
-						{/* Date Filter */}
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" className="gap-2">
-									<Calendar className="h-4 w-4" />
-									{dateFilter === "all"
-										? "All Time"
-										: dateFilter === "today"
-											? "Today"
-											: dateFilter === "week"
-												? "This Week"
-												: "This Year"}
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent className="w-56">
-								<DropdownMenuLabel>Filter by Date</DropdownMenuLabel>
-								<DropdownMenuSeparator />
-								<DropdownMenuGroup>
-									{[
-										{ value: "all", label: "All Time" },
-										{ value: "today", label: "Today" },
-										{ value: "week", label: "This Week" },
-										{ value: "year", label: "This Year" },
-									].map((option) => (
-										<DropdownMenuItem
-											key={option.value}
-											onClick={() => setDateFilter(option.value as DateFilter)}
-										>
-											<Check
-												className={`mr-2 h-4 w-4 ${
-													dateFilter === option.value
-														? "opacity-100"
-														: "opacity-0"
-												}`}
-											/>
-											{option.label}
-										</DropdownMenuItem>
-									))}
-								</DropdownMenuGroup>
-							</DropdownMenuContent>
-						</DropdownMenu>
-
-						{/* Reset Filters */}
-						{isFilterActive && (
-							<Button
-								variant="outline"
-								onClick={resetFilters}
-								className="gap-2"
-							>
-								<RefreshCw className="h-4 w-4" />
-								Reset
-							</Button>
-						)}
-					</div>
 				</div>
 			</div>
 
@@ -209,9 +129,6 @@ function TwitterArtViewer() {
 					<p className="max-w-md text-center text-gray-600">
 						Try adjusting your filters or reset them to see all posts.
 					</p>
-					<Button variant="outline" className="mt-6" onClick={resetFilters}>
-						Reset Filters
-					</Button>
 				</div>
 			)}
 
