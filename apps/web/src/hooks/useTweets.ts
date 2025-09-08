@@ -10,10 +10,11 @@ interface UseTweetsOptions {
 	// Required when source = "shared-profile"
 	slug?: string;
 	limit?: number;
+	retry?: boolean | number;
 }
 
 export function useTweets(options: UseTweetsOptions = {}) {
-	const { source = "user", slug, limit = 30 } = options;
+	const { source = "user", slug, limit = 30, retry = 3 } = options;
 	const { rawInitData } = useTelegramContext();
 
 	const queryKey = [
@@ -46,6 +47,7 @@ export function useTweets(options: UseTweetsOptions = {}) {
 			if (source === "shared-profile") {
 				if (!slug)
 					throw new Error("Slug is required for shared-profile tweets");
+
 				return await getPublicProfileShare({
 					data: { slug, cursor: pageParam as string | undefined, limit },
 				});
@@ -57,6 +59,7 @@ export function useTweets(options: UseTweetsOptions = {}) {
 		getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
 		staleTime: 5 * 60 * 1000,
 		gcTime: 10 * 60 * 1000,
+		retry,
 	});
 
 	return {

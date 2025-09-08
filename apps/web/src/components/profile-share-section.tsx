@@ -98,8 +98,8 @@ export function ProfileShareSection({ rawInitData }: ProfileShareSectionProps) {
 						<Skeleton className="h-8 w-full" />
 					</div>
 				) : isActive ? (
-					<div className="flex items-center gap-2">
-						<div className="relative w-full">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+						<div className="relative flex-1 min-w-0">
 							<button
 								type="button"
 								onClick={copyLink}
@@ -122,6 +122,7 @@ export function ProfileShareSection({ rawInitData }: ProfileShareSectionProps) {
 							size="sm"
 							onClick={() => revokeMutation.mutate()}
 							disabled={revokeMutation.isPending}
+							className="w-full sm:w-auto"
 						>
 							Disable
 						</Button>
