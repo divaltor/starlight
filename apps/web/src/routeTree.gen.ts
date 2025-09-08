@@ -14,6 +14,7 @@ import { Route as rootRoute } from './routes/__root'
 import { Route as SettingsImport } from './routes/settings'
 import { Route as PublicationsImport } from './routes/publications'
 import { Route as AppImport } from './routes/app'
+import { Route as ShareProfileSlugImport } from './routes/share/profile/$slug'
 
 // Create/Update Routes
 
@@ -32,6 +33,12 @@ const PublicationsRoute = PublicationsImport.update({
 const AppRoute = AppImport.update({
   id: '/app',
   path: '/app',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const ShareProfileSlugRoute = ShareProfileSlugImport.update({
+  id: '/share/profile/$slug',
+  path: '/share/profile/$slug',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -60,6 +67,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsImport
       parentRoute: typeof rootRoute
     }
+    '/share/profile/$slug': {
+      id: '/share/profile/$slug'
+      path: '/share/profile/$slug'
+      fullPath: '/share/profile/$slug'
+      preLoaderRoute: typeof ShareProfileSlugImport
+      parentRoute: typeof rootRoute
+    }
   }
 }
 
@@ -69,12 +83,14 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRoute
   '/publications': typeof PublicationsRoute
   '/settings': typeof SettingsRoute
+  '/share/profile/$slug': typeof ShareProfileSlugRoute
 }
 
 export interface FileRoutesByTo {
   '/app': typeof AppRoute
   '/publications': typeof PublicationsRoute
   '/settings': typeof SettingsRoute
+  '/share/profile/$slug': typeof ShareProfileSlugRoute
 }
 
 export interface FileRoutesById {
@@ -82,14 +98,20 @@ export interface FileRoutesById {
   '/app': typeof AppRoute
   '/publications': typeof PublicationsRoute
   '/settings': typeof SettingsRoute
+  '/share/profile/$slug': typeof ShareProfileSlugRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/app' | '/publications' | '/settings'
+  fullPaths: '/app' | '/publications' | '/settings' | '/share/profile/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/app' | '/publications' | '/settings'
-  id: '__root__' | '/app' | '/publications' | '/settings'
+  to: '/app' | '/publications' | '/settings' | '/share/profile/$slug'
+  id:
+    | '__root__'
+    | '/app'
+    | '/publications'
+    | '/settings'
+    | '/share/profile/$slug'
   fileRoutesById: FileRoutesById
 }
 
@@ -97,12 +119,14 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRoute
   PublicationsRoute: typeof PublicationsRoute
   SettingsRoute: typeof SettingsRoute
+  ShareProfileSlugRoute: typeof ShareProfileSlugRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRoute,
   PublicationsRoute: PublicationsRoute,
   SettingsRoute: SettingsRoute,
+  ShareProfileSlugRoute: ShareProfileSlugRoute,
 }
 
 export const routeTree = rootRoute
@@ -117,7 +141,8 @@ export const routeTree = rootRoute
       "children": [
         "/app",
         "/publications",
-        "/settings"
+        "/settings",
+        "/share/profile/$slug"
       ]
     },
     "/app": {
@@ -128,6 +153,9 @@ export const routeTree = rootRoute
     },
     "/settings": {
       "filePath": "settings.tsx"
+    },
+    "/share/profile/$slug": {
+      "filePath": "share/profile/$slug.tsx"
     }
   }
 }

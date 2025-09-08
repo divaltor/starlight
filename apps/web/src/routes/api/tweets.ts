@@ -4,20 +4,7 @@ import type { Tweet } from "@the-convocation/twitter-scraper";
 import { z } from "zod/v4";
 import { type CursorData, CursorPagination } from "@/lib/pagination";
 import { authMiddleware } from "@/middleware/auth";
-
-interface PhotoData {
-	id: string;
-	url: string;
-}
-
-interface TweetData {
-	id: string;
-	artist: string;
-	date: string;
-	photos: PhotoData[];
-	hasMultipleImages: boolean;
-	sourceUrl?: string;
-}
+import type { TweetData } from "@/types/tweets";
 
 const getUserTweets = createServerFn({ method: "GET" })
 	.middleware([authMiddleware])

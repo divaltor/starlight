@@ -3,8 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ProfileShareSection } from "@/components/profile-share-section";
 import { Alert, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -183,7 +183,7 @@ function RouteComponent() {
 				toast.success("Channel successfully disconnected");
 				setShowDisconnectDialog(false);
 			} else {
-				toast.error(result.error || "Failed to disconnect channel");
+				toast.error("Failed to disconnect channel");
 			}
 		},
 		onError: () => {
@@ -323,7 +323,11 @@ function RouteComponent() {
 							<span className="font-medium text-gray-700 text-sm">
 								Twitter ID
 							</span>
-							{twitterId && <Badge variant="secondary">Connected</Badge>}
+							{twitterId && (
+								<span className="rounded bg-green-100 px-2 py-0.5 font-medium text-green-700 text-xs">
+									Connected
+								</span>
+							)}
 						</div>
 						<div className="rounded-lg border-0 bg-gray-50 px-3 py-2">
 							<p className="font-mono text-gray-900 text-sm">
@@ -513,6 +517,11 @@ function RouteComponent() {
 					)}
 				</CardContent>
 			</Card>
+
+			<div className="mt-6" />
+
+			{/* Profile Share Section */}
+			<ProfileShareSection rawInitData={rawInitData} />
 		</main>
 	);
 }

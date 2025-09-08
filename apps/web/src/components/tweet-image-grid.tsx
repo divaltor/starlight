@@ -49,12 +49,15 @@ export function TweetImageGrid({
 		return format(dateObj, "MMM d, yyyy");
 	}, []);
 
-	const handleArtistClick = useCallback((e: React.MouseEvent) => {
-		e.stopPropagation();
-		if (sourceUrl) {
-			window.open(sourceUrl, "_blank", "noopener,noreferrer");
-		}
-	}, [sourceUrl]);
+	const handleArtistClick = useCallback(
+		(e: React.MouseEvent) => {
+			e.stopPropagation();
+			if (sourceUrl) {
+				window.open(sourceUrl, "_blank", "noopener,noreferrer");
+			}
+		},
+		[sourceUrl],
+	);
 
 	if (photos.length === 1) {
 		const photo = photos[0];
@@ -84,7 +87,7 @@ export function TweetImageGrid({
 									<button
 										type="button"
 										onClick={handleArtistClick}
-										className="font-medium text-sm drop-shadow-lg text-white hover:text-blue-300 transition-colors duration-200 cursor-pointer text-left"
+										className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-blue-300"
 									>
 										{artist}
 									</button>
@@ -144,7 +147,7 @@ export function TweetImageGrid({
 						<button
 							type="button"
 							onClick={handleArtistClick}
-							className="font-medium text-gray-900 text-sm hover:text-blue-600 transition-colors duration-200 cursor-pointer text-left"
+							className="cursor-pointer text-left font-medium text-gray-900 text-sm transition-colors duration-200 hover:text-blue-600"
 						>
 							{artist}
 						</button>
