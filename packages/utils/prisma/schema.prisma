@@ -28,11 +28,13 @@ model User {
     updatedAt DateTime @updatedAt @map("updated_at")
 
     // Relations
-    tweets          Tweet[]
-    photos          Photo[]
-    publishedPhotos PublishedPhoto[]
-    scheduledSlots  ScheduledSlot[]
-    postingChannels PostingChannel?
+    tweets           Tweet[]
+    photos           Photo[]
+    publishedPhotos  PublishedPhoto[]
+    scheduledSlots   ScheduledSlot[]
+    postingChannels  PostingChannel?
+    profileShare     ProfileShare?
+    collectionShares CollectionShare[]
 
     @@map("users")
 }
@@ -88,9 +90,10 @@ model Tweet {
     updatedAt DateTime @updatedAt @map("updated_at")
 
     // Relations
-    photos              Photo[]
-    user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
-    scheduledSlotTweets ScheduledSlotTweet[]
+    photos                Photo[]
+    user                  User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+    scheduledSlotTweets   ScheduledSlotTweet[]
+    collectionShareTweets CollectionShareTweet[]
 
     @@id(name: "tweetId", [id, userId])
     @@index([userId, createdAt(sort: Desc)])
@@ -227,4 +230,79 @@ model ScheduledSlotPhoto {
     @@index([scheduledSlotTweetId])
     @@index([photoId, userId])
     @@map("scheduled_slot_photos")
+}
+
+model ProfileShare {
+    id     String @id @default(uuid(7)) @db.Uuid
+    slug   String @unique @map("slug")
+    userId String @unique @map("user_id") @db.Uuid
+
+    createdAt DateTime  @default(now()) @map("created_at")
+    revokedAt DateTime? @map("revoked_at")
+
+    // Relations
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([slug])
+    @@index([userId])
+    @@map("profile_shares")
+}
+
+enum CollectionShareVisibility {
+    PUBLIC
+    PRIVATE
+}
+
+model CollectionShare {
+    id     String  @id @default(uuid(7)) @db.Uuid
+    slug   String  @unique @map("slug")
+    userId String  @map("user_id") @db.Uuid
+    name   String? @map("name")
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    visibility CollectionShareVisibility @default(PUBLIC)
+
+    // Relations
+    user                   User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    collectionShareTweets  CollectionShareTweet[]
+    collectionShareAuthors CollectionShareAuthor[]
+
+    @@index([slug])
+    @@index([userId])
+    @@map("collection_shares")
+}
+
+model CollectionShareTweet {
+    id                String @id @default(uuid(7)) @db.Uuid
+    collectionShareId String @map("collection_share_id") @db.Uuid
+    tweetId           String @map("tweet_id")
+    tweetUserId       String @map("tweet_user_id") @db.Uuid
+
+    createdAt DateTime @default(now()) @map("created_at")
+
+    // Relations
+    collectionShare CollectionShare @relation(fields: [collectionShareId], references: [id], onDelete: Cascade)
+    tweet           Tweet           @relation(fields: [tweetId, tweetUserId], references: [id, userId], onDelete: Restrict)
+
+    @@unique([collectionShareId, tweetId, tweetUserId])
+    @@index([collectionShareId])
+    @@index([tweetId, tweetUserId])
+    @@map("collection_share_tweets")
+}
+
+model CollectionShareAuthor {
+    id                String @id @default(uuid(7)) @db.Uuid
+    collectionShareId String @map("collection_share_id") @db.Uuid
+    username          String @map("username")
+
+    createdAt DateTime @default(now()) @map("created_at")
+
+    // Relations
+    collectionShare CollectionShare @relation(fields: [collectionShareId], references: [id], onDelete: Cascade)
+
+    @@unique([collectionShareId, username])
+    @@index([collectionShareId])
+    @@map("collection_share_authors")
 }
