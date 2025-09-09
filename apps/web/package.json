@@ -17,6 +17,8 @@
 		"@repo/crypto": "workspace:*",
 		"@repo/utils": "workspace:*",
 		"@tailwindcss/vite": "^4.1.10",
+		"@takumi-rs/core": "^0.29.8",
+		"@takumi-rs/helpers": "^0.29.8",
 		"@tanstack/react-form": "^1.12.3",
 		"@tanstack/react-query": "^5.80.7",
 		"@tanstack/react-router": "^1.120.15",

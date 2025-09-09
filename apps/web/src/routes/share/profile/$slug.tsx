@@ -6,6 +6,7 @@ import { NotFound } from "@/components/not-found";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTweets } from "@/hooks/useTweets";
+import { generateProfileOg } from "@/lib/og/profile";
 
 function SharedProfileViewer() {
 	const { slug } = useParams({ from: "/share/profile/$slug" });
@@ -135,4 +136,40 @@ function SharedProfileViewer() {
 
 export const Route = createFileRoute("/share/profile/$slug")({
 	component: SharedProfileViewer,
+	loader: async ({ params }) => {
+		if (typeof window !== "undefined") {
+			return { slug: params.slug, ogImage: null };
+		}
+		try {
+			const ogImage = await generateProfileOg(params.slug);
+			return { slug: params.slug, ogImage };
+		} catch {
+			return { slug: params.slug, ogImage: null };
+		}
+	},
+	head: ({ loaderData }) => {
+		if (!loaderData) return { meta: [] };
+		const title = `@${loaderData.slug} • Shared Profile`;
+		const description = "Curated images shared via Starlight";
+		const meta: any[] = [
+			{ title },
+			{ name: "description", content: description },
+		];
+		if (loaderData?.ogImage) {
+			meta.push(
+				{ property: "og:title", content: title },
+				{ property: "og:description", content: description },
+				{ property: "og:image", content: loaderData.ogImage },
+				{ property: "og:image:width", content: "1200" },
+				{ property: "og:image:height", content: "630" },
+				{ name: "twitter:card", content: "summary_large_image" },
+				{ name: "twitter:title", content: title },
+				{ name: "twitter:description", content: description },
+				{ name: "twitter:image", content: loaderData.ogImage },
+			);
+		}
+		return { meta };
+	},
 });
+
+// (OG image generation moved to @/lib/og/profile)
