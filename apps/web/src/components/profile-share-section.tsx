@@ -20,9 +20,13 @@ import {
 
 interface ProfileShareSectionProps {
 	rawInitData: string | undefined;
+	embedded?: boolean;
 }
 
-export function ProfileShareSection({ rawInitData }: ProfileShareSectionProps) {
+export function ProfileShareSection({
+	rawInitData,
+	embedded = false,
+}: ProfileShareSectionProps) {
 	const queryClient = useQueryClient();
 	const { data: profileShare, isLoading } = useQuery({
 		queryKey: ["profile-share"],
@@ -81,7 +85,73 @@ export function ProfileShareSection({ rawInitData }: ProfileShareSectionProps) {
 
 	const isActive = !!profileShare?.slug && !profileShare?.revokedAt;
 
-	return (
+	return embedded ? (
+		<div className="space-y-4">
+			<div>
+				<h2 className="flex items-center gap-2 font-medium text-gray-900 text-sm uppercase tracking-wide">
+					<Share2 className="h-4 w-4" /> Profile Sharing
+				</h2>
+				<p className="mt-1 text-gray-500 text-sm">
+					Allow others to view your gallery via a shareable link
+				</p>
+			</div>
+			<div className="space-y-4">
+				{isLoading ? (
+					<div className="space-y-2">
+						<Skeleton className="h-4 w-40" />
+						<Skeleton className="h-8 w-full" />
+					</div>
+				) : isActive ? (
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+						<div className="flex-1 min-w-0">
+							<div className="flex h-8 w-full items-stretch overflow-hidden rounded-md border border-gray-200 bg-white">
+								<button
+									type="button"
+									onClick={copyLink}
+									className="flex-1 min-w-0 select-none overflow-hidden text-ellipsis whitespace-nowrap px-3 text-left font-mono text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 sm:text-sm"
+									aria-label="Copy share link"
+								>
+									{`${window.location.origin}/share/profile/${profileShare.slug}`}
+								</button>
+								<button
+									type="button"
+									onClick={copyLink}
+									className="px-2 inline-flex items-center justify-center border-l border-gray-200 text-gray-500 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+									aria-label="Copy link"
+								>
+									<Copy className="h-4 w-4" />
+								</button>
+							</div>
+						</div>
+						<Button
+							variant="destructive"
+							size="sm"
+							onClick={() => revokeMutation.mutate()}
+							disabled={revokeMutation.isPending}
+							className="w-full sm:w-auto"
+						>
+							Disable
+						</Button>
+					</div>
+				) : (
+					<div className="flex flex-col gap-4">
+						<p className="text-gray-600 text-sm">
+							Your gallery is currently private. Enable sharing to generate a
+							privacy-friendly link you can revoke at any time.
+						</p>
+						<Button
+							variant="default"
+							onClick={() => createMutation.mutate()}
+							disabled={createMutation.isPending}
+							className="flex items-center gap-2"
+						>
+							<Share2 className="h-4 w-4" /> Enable Sharing
+						</Button>
+					</div>
+				)}
+			</div>
+		</div>
+	) : (
 		<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
 			<CardHeader className="pb-1">
 				<CardTitle className="flex items-center gap-2 font-medium text-gray-900 text-lg">

@@ -309,37 +309,46 @@ function RouteComponent() {
 			<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
 				<CardHeader className="pb-1">
 					<CardTitle className="font-medium text-gray-900 text-lg">
-						Account
+						Account Settings
 					</CardTitle>
 					<CardDescription className="text-gray-500">
-						Manage your Twitter authentication and account information
+						Manage your account authentication, posting channel and sharing
+						options
 					</CardDescription>
 				</CardHeader>
 
-				<CardContent className="space-y-6">
+				<CardContent className="space-y-10">
 					{/* User Information Section */}
-					<div className="space-y-3">
-						<div className="flex items-center justify-between">
-							<span className="font-medium text-gray-700 text-sm">
-								Twitter ID
-							</span>
-							{twitterId && (
-								<span className="rounded bg-green-100 px-2 py-0.5 font-medium text-green-700 text-xs">
-									Connected
+					<section className="space-y-3">
+						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+							Account
+						</h2>
+						<div className="space-y-3">
+							<div className="flex items-center justify-between">
+								<span className="font-medium text-gray-700 text-sm">
+									Twitter ID
 								</span>
-							)}
-						</div>
-						<div className="rounded-lg border-0 bg-gray-50 px-3 py-2">
-							<p className="font-mono text-gray-900 text-sm">
-								{twitterId || (
-									<span className="text-gray-400 italic">Not connected</span>
+								{twitterId && (
+									<span className="rounded bg-green-100 px-2 py-0.5 font-medium text-green-700 text-xs">
+										Connected
+									</span>
 								)}
-							</p>
+							</div>
+							<div className="rounded-lg border-0 bg-gray-50 px-3 py-2">
+								<p className="font-mono text-gray-900 text-sm">
+									{twitterId || (
+										<span className="text-gray-400 italic">Not connected</span>
+									)}
+								</p>
+							</div>
 						</div>
-					</div>
+					</section>
 
 					{/* Cookie Management Section */}
-					<div className="space-y-4">
+					<section className="space-y-4">
+						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+							Authentication Cookies
+						</h2>
 						{cookiesStored && !shouldShowCookieInput ? (
 							<Alert>
 								<AlertTitle className="flex w-full items-center justify-between">
@@ -379,11 +388,7 @@ function RouteComponent() {
 												setNewCookies(e.target.value);
 												if (error) setError(null);
 											}}
-											className={`min-h-[100px] w-full rounded-lg border bg-white p-3 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-												error
-													? "border-red-300 focus:border-red-400 focus:ring-red-500/20"
-													: "border-gray-200"
-											}`}
+											className={`min-h-[100px] w-full rounded-lg border bg-white p-3 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${error ? "border-red-300 focus:border-red-400 focus:ring-red-500/20" : "border-gray-200"}`}
 											placeholder="Required format: auth_token=xxx; ct0=xxx; ..."
 											disabled={isSubmitting}
 										/>
@@ -413,115 +418,106 @@ function RouteComponent() {
 								</form>
 							</div>
 						)}
-					</div>
-				</CardContent>
-			</Card>
+					</section>
 
-			<div className="mt-6" />
-
-			{/* Posting Channel Section */}
-			<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
-				<CardHeader className="pb-1">
-					<CardTitle className="font-medium text-gray-900 text-lg">
-						Connected channel
-					</CardTitle>
-				</CardHeader>
-
-				<CardContent className="space-y-6">
-					{isPostingChannelLoading ? (
-						<div className="flex items-center justify-between">
-							<div className="flex items-center gap-3">
-								<Skeleton className="h-12 w-12 rounded-full" />
-								<div className="space-y-2">
-									<Skeleton className="h-4 w-24" />
-									<Skeleton className="h-3 w-32" />
+					{/* Posting Channel Section */}
+					<section className="space-y-4">
+						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+							Connected Channel
+						</h2>
+						{isPostingChannelLoading ? (
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-3">
+									<Skeleton className="h-12 w-12 rounded-full" />
+									<div className="space-y-2">
+										<Skeleton className="h-4 w-24" />
+										<Skeleton className="h-3 w-32" />
+									</div>
 								</div>
+								<Skeleton className="h-9 w-24" />
 							</div>
-							<Skeleton className="h-9 w-24" />
-						</div>
-					) : postingChannel ? (
-						<div className="flex items-center justify-between">
-							<div className="flex items-center gap-3">
-								<div className="h-12 w-12 overflow-hidden rounded-full bg-gray-100">
-									{postingChannel.chat.thumbnailUrl ? (
-										<img
-											src={postingChannel.chat.thumbnailUrl}
-											alt={postingChannel.chat.title || "Channel"}
-											className="h-full w-full object-cover"
-										/>
-									) : (
-										<div className="flex h-full w-full items-center justify-center bg-gray-200 font-medium text-gray-500 text-sm">
-											{postingChannel.chat.title?.charAt(0) || "C"}
-										</div>
-									)}
+						) : postingChannel ? (
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-3">
+									<div className="h-12 w-12 overflow-hidden rounded-full bg-gray-100">
+										{postingChannel.chat.thumbnailUrl ? (
+											<img
+												src={postingChannel.chat.thumbnailUrl}
+												alt={postingChannel.chat.title || "Channel"}
+												className="h-full w-full object-cover"
+											/>
+										) : (
+											<div className="flex h-full w-full items-center justify-center bg-gray-200 font-medium text-gray-500 text-sm">
+												{postingChannel.chat.title?.charAt(0) || "C"}
+											</div>
+										)}
+									</div>
+									<div>
+										<p className="font-medium text-gray-900 text-sm">
+											{postingChannel.chat.title || "Unknown Channel"}
+										</p>
+										<p className="text-gray-500 text-xs">
+											{postingChannel.chat.username
+												? `@${postingChannel.chat.username}`
+												: `ID: ${postingChannel.chat.id}`}
+										</p>
+									</div>
 								</div>
-								<div>
-									<p className="font-medium text-gray-900 text-sm">
-										{postingChannel.chat.title || "Unknown Channel"}
-									</p>
-									<p className="text-gray-500 text-xs">
-										{postingChannel.chat.username
-											? `@${postingChannel.chat.username}`
-											: `ID: ${postingChannel.chat.id}`}
-									</p>
-								</div>
-							</div>
-							<Dialog
-								open={showDisconnectDialog}
-								onOpenChange={setShowDisconnectDialog}
-							>
-								<DialogTrigger asChild>
-									<Button
-										variant="destructive"
-										size="sm"
-										disabled={disconnectChannelMutation.isPending}
-									>
-										Disconnect
-									</Button>
-								</DialogTrigger>
-								<DialogContent>
-									<DialogHeader>
-										<DialogTitle>Disconnect Channel</DialogTitle>
-										<DialogDescription>
-											Are you sure? You won't be able to send publications into
-											this channel.
-										</DialogDescription>
-									</DialogHeader>
-									<DialogFooter>
-										<Button
-											variant="outline"
-											onClick={() => setShowDisconnectDialog(false)}
-											disabled={disconnectChannelMutation.isPending}
-										>
-											No
-										</Button>
+								<Dialog
+									open={showDisconnectDialog}
+									onOpenChange={setShowDisconnectDialog}
+								>
+									<DialogTrigger asChild>
 										<Button
 											variant="destructive"
-											onClick={handleDisconnectChannel}
+											size="sm"
 											disabled={disconnectChannelMutation.isPending}
 										>
-											{disconnectChannelMutation.isPending
-												? "Disconnecting..."
-												: "Sure"}
+											Disconnect
 										</Button>
-									</DialogFooter>
-								</DialogContent>
-							</Dialog>
-						</div>
-					) : (
-						<div className="py-8 text-center">
-							<p className="text-gray-500 text-sm">
+									</DialogTrigger>
+									<DialogContent>
+										<DialogHeader>
+											<DialogTitle>Disconnect Channel</DialogTitle>
+											<DialogDescription>
+												Are you sure? You won't be able to send publications
+												into this channel.
+											</DialogDescription>
+										</DialogHeader>
+										<DialogFooter>
+											<Button
+												variant="outline"
+												onClick={() => setShowDisconnectDialog(false)}
+												disabled={disconnectChannelMutation.isPending}
+											>
+												No
+											</Button>
+											<Button
+												variant="destructive"
+												onClick={handleDisconnectChannel}
+												disabled={disconnectChannelMutation.isPending}
+											>
+												{disconnectChannelMutation.isPending
+													? "Disconnecting..."
+													: "Sure"}
+											</Button>
+										</DialogFooter>
+									</DialogContent>
+								</Dialog>
+							</div>
+						) : (
+							<div className="py-4 text-sm text-gray-500">
 								No posting channel connected
-							</p>
-						</div>
-					)}
+							</div>
+						)}
+					</section>
+
+					{/* Profile Share Section */}
+					<section>
+						<ProfileShareSection rawInitData={rawInitData} embedded />
+					</section>
 				</CardContent>
 			</Card>
-
-			<div className="mt-6" />
-
-			{/* Profile Share Section */}
-			<ProfileShareSection rawInitData={rawInitData} />
 		</main>
 	);
 }
