@@ -1,3 +1,5 @@
+"use server";
+
 import { getPrismaClient } from "@repo/utils";
 import { Renderer } from "@takumi-rs/core";
 import { container, image, text } from "@takumi-rs/helpers";
