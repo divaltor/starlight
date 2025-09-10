@@ -48,6 +48,17 @@ export function useTelegramButtons(
 					case "external":
 						window.open(action.payload as string, "_blank");
 						break;
+					case "custom":
+						try {
+							window.dispatchEvent(
+								new CustomEvent("telegram-button-custom", {
+									detail: action.payload,
+								}),
+							);
+						} catch (e) {
+							console.error("Error dispatching custom button event", e);
+						}
+						break;
 				}
 			} catch (error) {
 				console.error(`Error executing ${buttonType} action:`, error);

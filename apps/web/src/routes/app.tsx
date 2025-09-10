@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Filter } from "lucide-react";
+import { BookmarkPlus, Filter } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback, useEffect } from "react";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCollectionMutations } from "@/hooks/useCollectionMutations";
+import { useCollections } from "@/hooks/useCollections";
 import { useTweets } from "@/hooks/useTweets";
 import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
 
@@ -21,16 +24,26 @@ function TwitterArtViewer() {
 					payload: "/publications",
 				},
 			},
+			secondaryButton: {
+				state: "visible",
+				text: "Collections",
+				action: {
+					type: "navigate",
+					payload: "/collections",
+				},
+			},
 		});
 
 		return () => {
 			updateButtons({
-				mainButton: {
-					state: "hidden",
-				},
+				mainButton: { state: "hidden" },
+				secondaryButton: { state: "hidden" },
 			});
 		};
-	}, [updateButtons]);
+	}, [
+		// TODO: Add condition when we don't have any posts available to parse or even didn't setup a bot yet.
+		updateButtons,
+	]);
 
 	const {
 		tweets,
@@ -40,6 +53,8 @@ function TwitterArtViewer() {
 		error,
 		fetchNextPage,
 	} = useTweets();
+	const { collections } = useCollections();
+	const { addTweet, adding } = useCollectionMutations();
 
 	const infiniteLoader = useInfiniteLoader(
 		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
@@ -56,8 +71,18 @@ function TwitterArtViewer() {
 
 	const renderMasonryItem = useCallback(
 		({ data, width }: { data: (typeof tweets)[0]; width: number }) => {
+			const handleSave = () => {
+				addTweet({
+					tweetId: data.id,
+					// If multiple collections exist, for now just use first; future: dropdown
+					collectionId:
+						collections.length === 1 ? collections[0].id : undefined,
+					nameIfCreate: "Favorites",
+				});
+			};
+
 			return (
-				<div style={{ width }} className="mb-1">
+				<div style={{ width }} className="group relative mb-1">
 					<TweetImageGrid
 						id={data.id}
 						artist={data.artist}
@@ -67,10 +92,24 @@ function TwitterArtViewer() {
 						slotTweetId={data.id}
 						sourceUrl={data.sourceUrl}
 					/>
+					<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={(e) => {
+								e.stopPropagation();
+								handleSave();
+							}}
+							disabled={adding}
+							className="h-7 w-7 bg-white/80 p-0 text-gray-800 shadow-sm hover:bg-white"
+						>
+							<BookmarkPlus className="h-4 w-4" />
+						</Button>
+					</div>
 				</div>
 			);
 		},
-		[],
+		[addTweet, adding, collections],
 	);
 
 	// Show error state
