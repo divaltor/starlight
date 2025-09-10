@@ -1,6 +1,6 @@
 import { Ghost } from "lucide-react";
+import type { ComponentProps, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import type { ReactNode, ComponentProps } from "react";
 
 interface ActionConfig {
 	label: string;
@@ -34,15 +34,15 @@ export function NotFound({
 				<div className="mb-6 inline-flex size-20 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
 					{icon ?? <Ghost className="size-10 text-gray-400" />}
 				</div>
-				<h1 className="font-semibold text-gray-900 text-3xl">{title}</h1>
+				<h1 className="font-semibold text-3xl text-gray-900">{title}</h1>
 				{description && <p className="mt-3 text-gray-600">{description}</p>}
 				{(primaryAction || secondaryAction) && (
 					<div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
 						{primaryAction && (
 							<Button
-								variant={primaryAction.variant}
-								onClick={primaryAction.onClick}
 								asChild={!!primaryAction.href}
+								onClick={primaryAction.onClick}
+								variant={primaryAction.variant}
 							>
 								{primaryAction.href ? (
 									<a href={primaryAction.href}>{primaryAction.label}</a>
@@ -53,9 +53,9 @@ export function NotFound({
 						)}
 						{secondaryAction && (
 							<Button
-								variant={secondaryAction.variant ?? "outline"}
-								onClick={secondaryAction.onClick}
 								asChild={!!secondaryAction.href}
+								onClick={secondaryAction.onClick}
+								variant={secondaryAction.variant ?? "outline"}
 							>
 								{secondaryAction.href ? (
 									<a href={secondaryAction.href}>{secondaryAction.label}</a>

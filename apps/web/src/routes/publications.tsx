@@ -214,18 +214,20 @@ function PublicationsPage() {
 								</div>
 								<div className="flex flex-wrap gap-2">
 									<Button
-										variant="outline"
-										size="sm"
-										onClick={handleCreateSlot}
-										disabled={createSlotMutation.isPending}
 										className="border-blue-300 bg-white hover:bg-blue-50"
+										disabled={createSlotMutation.isPending}
+										onClick={handleCreateSlot}
+										size="sm"
+										variant="outline"
 									>
 										<Plus className="mr-2 h-4 w-4" />
 										{createSlotMutation.isPending ? "Creating..." : "Add Slot"}
 									</Button>
 									<Button
-										variant="outline"
-										size="sm"
+										className="border-green-300 bg-white hover:bg-green-50"
+										disabled={
+											!publications.some((pub) => pub.status === "WAITING")
+										}
 										onClick={() => {
 											respondToWebAppData({
 												headers: { Authorization: rawInitData ?? "" },
@@ -234,10 +236,8 @@ function PublicationsPage() {
 												},
 											});
 										}}
-										disabled={
-											!publications.some((pub) => pub.status === "WAITING")
-										}
-										className="border-green-300 bg-white hover:bg-green-50"
+										size="sm"
+										variant="outline"
 									>
 										Publish First Slot
 									</Button>
@@ -271,8 +271,7 @@ function PublicationsPage() {
 				)}
 
 				{/* Empty State */}
-				{!isPending &&
-					!isError &&
+				{!(isPending || isError) &&
 					publications.length === 0 &&
 					renderEmptyState(createSlotMutation.data?.error)}
 
@@ -280,12 +279,12 @@ function PublicationsPage() {
 				{!isPending && publications.length > 0 && (
 					<div className="mx-auto max-w-4xl space-y-6">
 						{publications.map((data) => (
-							<div key={data.id} className="space-y-4">
+							<div className="space-y-4" key={data.id}>
 								<SlotCard
 									id={data.id}
-									status={data.status}
-									scheduledSlotTweets={data.scheduledSlotTweets}
 									onDelete={handleDeleteSlot}
+									scheduledSlotTweets={data.scheduledSlotTweets}
+									status={data.status}
 								/>
 							</div>
 						))}

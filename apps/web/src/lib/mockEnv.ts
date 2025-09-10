@@ -72,7 +72,10 @@ export async function mockEnv(): Promise<void> {
 									["signature", "some-signature"],
 									[
 										"user",
-										JSON.stringify({ id: 210860903, first_name: "Vladislav" }),
+										JSON.stringify({
+											id: 210_860_903,
+											first_name: "Vladislav",
+										}),
 									],
 								]).toString(),
 							],
@@ -82,7 +85,7 @@ export async function mockEnv(): Promise<void> {
 					});
 
 					console.info(
-						"⚠️ As long as the current environment was not considered as the Telegram-based one, it was mocked. Take a note, that you should not do it in production and current behavior is only specific to the development process. Environment mocking is also applied only in development mode. So, after building the application, you will not see this behavior and related warning, leading to crashing the application outside Telegram.",
+						"⚠️ As long as the current environment was not considered as the Telegram-based one, it was mocked. Take a note, that you should not do it in production and current behavior is only specific to the development process. Environment mocking is also applied only in development mode. So, after building the application, you will not see this behavior and related warning, leading to crashing the application outside Telegram."
 					);
 				}
 			});

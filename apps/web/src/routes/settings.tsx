@@ -79,7 +79,7 @@ function RouteComponent() {
 			enabled: !!rawInitData,
 			staleTime: 5 * 60 * 1000,
 			gcTime: 30 * 60 * 1000,
-		},
+		}
 	);
 
 	// Derive state from query data
@@ -124,7 +124,7 @@ function RouteComponent() {
 				queryClient.setQueryData(["cookie-status"], context.previousStatus);
 			}
 			setError(
-				"An error occurred while saving your cookies. Please try again.",
+				"An error occurred while saving your cookies. Please try again."
 			);
 		},
 		onSettled: () => {
@@ -200,7 +200,7 @@ function RouteComponent() {
 
 			if (!decodedCookies || decodedCookies.length === 0) {
 				setError(
-					"Invalid cookies format. Please check your cookies and try again.",
+					"Invalid cookies format. Please check your cookies and try again."
 				);
 				return;
 			}
@@ -208,12 +208,12 @@ function RouteComponent() {
 			const requiredCookies = ["auth_token", "ct0", "kdt", "twid"];
 			const cookieNames = decodedCookies.map((cookie) => cookie.key);
 			const missingCookies = requiredCookies.filter(
-				(name) => !cookieNames.includes(name),
+				(name) => !cookieNames.includes(name)
 			);
 
 			if (missingCookies.length > 0) {
 				setError(
-					`Missing required cookies: ${missingCookies.join(", ")}. Please ensure you have all necessary Twitter authentication cookies.`,
+					`Missing required cookies: ${missingCookies.join(", ")}. Please ensure you have all necessary Twitter authentication cookies.`
 				);
 				return;
 			}
@@ -223,7 +223,7 @@ function RouteComponent() {
 			saveCookiesMutation.mutate({ cookies: cookiesBase64 });
 		} catch {
 			setError(
-				"An error occurred while processing your cookies. Please try again.",
+				"An error occurred while processing your cookies. Please try again."
 			);
 		}
 	};
@@ -281,9 +281,9 @@ function RouteComponent() {
 							<AlertTitle>Failed to load settings</AlertTitle>
 							<div className="mt-2">
 								<Button
-									variant="outline"
-									size="sm"
 									onClick={() => refetchCookieStatus()}
+									size="sm"
+									variant="outline"
 								>
 									Retry
 								</Button>
@@ -357,11 +357,11 @@ function RouteComponent() {
 										Authentication cookies are saved.
 									</span>
 									<Button
-										variant="ghost"
-										size="sm"
-										onClick={handleDeleteCookies}
-										disabled={isSubmitting}
 										className="text-red-600 hover:bg-red-50 hover:text-red-700"
+										disabled={isSubmitting}
+										onClick={handleDeleteCookies}
+										size="sm"
+										variant="ghost"
 									>
 										<Trash2 className="h-4 w-4" /> Remove
 									</Button>
@@ -379,18 +379,18 @@ function RouteComponent() {
 									</Alert>
 								)}
 
-								<form onSubmit={handleSaveCookies} className="space-y-4">
+								<form className="space-y-4" onSubmit={handleSaveCookies}>
 									<div className="space-y-2">
 										<textarea
+											className={`min-h-[100px] w-full rounded-lg border bg-white p-3 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${error ? "border-red-300 focus:border-red-400 focus:ring-red-500/20" : "border-gray-200"}`}
+											disabled={isSubmitting}
 											id="new-cookies"
-											value={newCookies}
 											onChange={(e) => {
 												setNewCookies(e.target.value);
 												if (error) setError(null);
 											}}
-											className={`min-h-[100px] w-full rounded-lg border bg-white p-3 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${error ? "border-red-300 focus:border-red-400 focus:ring-red-500/20" : "border-gray-200"}`}
 											placeholder="Required format: auth_token=xxx; ct0=xxx; ..."
-											disabled={isSubmitting}
+											value={newCookies}
 										/>
 										{error && (
 											<p className="mt-1 text-red-500 text-xs">{error}</p>
@@ -398,18 +398,18 @@ function RouteComponent() {
 									</div>
 
 									<div className="flex gap-2">
-										<Button type="submit" size="sm" disabled={isSubmitting}>
+										<Button disabled={isSubmitting} size="sm" type="submit">
 											{saveCookiesMutation.isPending
 												? "Connecting..."
 												: "Connect Account"}
 										</Button>
 										{cookiesStored && (
 											<Button
+												disabled={isSubmitting}
+												onClick={() => setShowCookieInput(false)}
+												size="sm"
 												type="button"
 												variant="outline"
-												size="sm"
-												onClick={() => setShowCookieInput(false)}
-												disabled={isSubmitting}
 											>
 												Cancel
 											</Button>
@@ -442,9 +442,9 @@ function RouteComponent() {
 									<div className="h-12 w-12 overflow-hidden rounded-full bg-gray-100">
 										{postingChannel.chat.thumbnailUrl ? (
 											<img
-												src={postingChannel.chat.thumbnailUrl}
 												alt={postingChannel.chat.title || "Channel"}
 												className="h-full w-full object-cover"
+												src={postingChannel.chat.thumbnailUrl}
 											/>
 										) : (
 											<div className="flex h-full w-full items-center justify-center bg-gray-200 font-medium text-gray-500 text-sm">
@@ -464,14 +464,14 @@ function RouteComponent() {
 									</div>
 								</div>
 								<Dialog
-									open={showDisconnectDialog}
 									onOpenChange={setShowDisconnectDialog}
+									open={showDisconnectDialog}
 								>
 									<DialogTrigger asChild>
 										<Button
-											variant="destructive"
-											size="sm"
 											disabled={disconnectChannelMutation.isPending}
+											size="sm"
+											variant="destructive"
 										>
 											Disconnect
 										</Button>
@@ -486,16 +486,16 @@ function RouteComponent() {
 										</DialogHeader>
 										<DialogFooter>
 											<Button
-												variant="outline"
-												onClick={() => setShowDisconnectDialog(false)}
 												disabled={disconnectChannelMutation.isPending}
+												onClick={() => setShowDisconnectDialog(false)}
+												variant="outline"
 											>
 												No
 											</Button>
 											<Button
-												variant="destructive"
-												onClick={handleDisconnectChannel}
 												disabled={disconnectChannelMutation.isPending}
+												onClick={handleDisconnectChannel}
+												variant="destructive"
 											>
 												{disconnectChannelMutation.isPending
 													? "Disconnecting..."
@@ -506,7 +506,7 @@ function RouteComponent() {
 								</Dialog>
 							</div>
 						) : (
-							<div className="py-4 text-sm text-gray-500">
+							<div className="py-4 text-gray-500 text-sm">
 								No posting channel connected
 							</div>
 						)}
@@ -514,7 +514,7 @@ function RouteComponent() {
 
 					{/* Profile Share Section */}
 					<section>
-						<ProfileShareSection rawInitData={rawInitData} embedded />
+						<ProfileShareSection embedded rawInitData={rawInitData} />
 					</section>
 				</CardContent>
 			</Card>

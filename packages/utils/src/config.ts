@@ -12,7 +12,7 @@ const env = createEnv({
 			.string()
 			.min(
 				64,
-				"Cookie encryption key must be at least 64 characters (32 bytes hex)",
+				"Cookie encryption key must be at least 64 characters (32 bytes hex)"
 			),
 		COOKIE_ENCRYPTION_SALT: z.string().min(16),
 
@@ -42,7 +42,7 @@ const env = createEnv({
 					const url = new URL(
 						frontendUrl.startsWith("http")
 							? frontendUrl
-							: `https://${frontendUrl}`,
+							: `https://${frontendUrl}`
 					);
 					url.hostname = `cdn.${url.hostname}`;
 					return url.toString();

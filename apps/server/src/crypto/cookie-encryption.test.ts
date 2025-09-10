@@ -28,7 +28,7 @@ describe("CookieEncryption", () => {
 
 		test("should create instance with custom string salt", () => {
 			expect(
-				() => new CookieEncryption(masterKey, "custom-salt"),
+				() => new CookieEncryption(masterKey, "custom-salt")
 			).not.toThrow();
 		});
 
@@ -182,7 +182,7 @@ describe("CookieEncryption", () => {
 		});
 
 		test("should handle large data", () => {
-			const largeData = "x".repeat(10000);
+			const largeData = "x".repeat(10_000);
 			const encrypted = encryption.encrypt(largeData, testUserId);
 			const decrypted = encryption.decrypt(encrypted, testUserId);
 			expect(decrypted).toBe(largeData);
@@ -273,7 +273,7 @@ describe("CookieEncryption", () => {
 					const encrypted = encryption.encrypt(data, userId);
 					const decrypted = encryption.decrypt(encrypted, userId);
 					return { original: data, decrypted, userId };
-				}),
+				})
 			);
 
 			const results = await Promise.all(operations);

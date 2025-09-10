@@ -20,14 +20,14 @@ export const saveCookies = createServerFn({ method: "POST" })
 
 		const encryptedCookies = cookieEncryption.encrypt(
 			JSON.stringify(decodedCookies),
-			context.user.id.toString(),
+			context.user.id.toString()
 		);
 
 		await redis.set(`user:cookies:${context.user.id}`, encryptedCookies);
 
 		await bot.api.sendMessage(
 			context.user.id,
-			"Beep boop, cookies are saved. You can now enable daily parsing using /scrapper command.",
+			"Beep boop, cookies are saved. You can now enable daily parsing using /scrapper command."
 		);
 
 		return { success: true };

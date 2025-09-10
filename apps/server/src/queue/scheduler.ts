@@ -50,7 +50,7 @@ export const scheduledSlotWorker = new Worker<ScheduledSlotJobData>(
 				{ userId, slotId },
 				"Scheduled slot %s not found for user %s",
 				slotId,
-				userId,
+				userId
 			);
 			return;
 		}
@@ -66,14 +66,14 @@ export const scheduledSlotWorker = new Worker<ScheduledSlotJobData>(
 			{ userId, slotId },
 			"Scheduled slot %s marked as %s",
 			slotId,
-			status,
+			status
 		);
 	},
 	{
 		connection: redis,
 		concurrency: 10,
 		autorun: false,
-	},
+	}
 );
 
 export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
@@ -85,7 +85,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 			{ userId, slotId, tweetId },
 			"Processing scheduled tweet %s for user %s in slot %s",
 			tweetId,
-			userId,
+			userId
 		);
 
 		const scheduledTweet = await prisma.scheduledSlotTweet.findUnique({
@@ -106,7 +106,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 				{ userId, tweetId },
 				"Scheduled tweet %s not found for user %s",
 				tweetId,
-				userId,
+				userId
 			);
 			return;
 		}
@@ -114,13 +114,13 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 		try {
 			await rateLimiter.consume(
 				scheduledTweet.scheduledSlot.chatId.toString(),
-				scheduledTweet.scheduledSlotPhotos.length,
+				scheduledTweet.scheduledSlotPhotos.length
 			);
 		} catch (error) {
 			logger.warn(
 				{ userId, tweetId },
 				"Rate limit exceeded for scheduled tweet %s",
-				tweetId,
+				tweetId
 			);
 
 			const delay = (error as RateLimiterRes).msBeforeNext + 1000;
@@ -129,7 +129,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 				{ userId, tweetId },
 				"Rate limit exceeded for scheduled tweet %s, rescheduling after %sms",
 				tweetId,
-				delay,
+				delay
 			);
 
 			return await job.moveToDelayed(Date.now() + delay);
@@ -144,7 +144,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 				logger.warn(
 					{ userId, tweetId },
 					"Photo not found for scheduled tweet %s",
-					tweetId,
+					tweetId
 				);
 				return;
 			}
@@ -158,7 +158,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 							? `<a href="https://x.com/i/status/${scheduledTweet.tweetId}">@${scheduledTweet.tweet.tweetData.username}</a>`
 							: `https://x.com/i/status/${scheduledTweet.tweetId}`,
 						parse_mode: "HTML",
-					},
+					}
 				),
 			];
 		} else {
@@ -171,12 +171,12 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 								: `https://x.com/i/status/${scheduledTweet.tweetId}`,
 						}),
 						parse_mode: "HTML",
-					}),
+					})
 			);
 
 			messages = (await bot.api.sendMediaGroup(
 				scheduledTweet.scheduledSlot.chatId.toString(),
-				photoUrls,
+				photoUrls
 			)) as Message.PhotoMessage[];
 		}
 
@@ -199,7 +199,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 			"Scheduled tweet %s for user %s in slot %s published",
 			tweetId,
 			userId,
-			slotId,
+			slotId
 		);
 	},
 	{
@@ -207,7 +207,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 		concurrency: 1,
 		lockDuration: 1000 * 60 * 5, // 5 minutes
 		autorun: false,
-	},
+	}
 );
 
 scheduledTweetWorker.on("failed", async (job, _err) => {
@@ -220,7 +220,7 @@ scheduledTweetWorker.on("failed", async (job, _err) => {
 		},
 		"Scheduled tweet %s failed for user %s",
 		job?.data?.tweetId,
-		job?.data?.userId,
+		job?.data?.userId
 	);
 });
 

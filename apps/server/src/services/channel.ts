@@ -13,7 +13,7 @@ export const updateChannelPhoto = async (ctx: Context) => {
 		ctx.logger.debug(
 			{ fullChatInfo },
 			"Full chat info for %s channel",
-			ctx.chat.title,
+			ctx.chat.title
 		);
 
 		if (fullChatInfo.photo) {
@@ -48,7 +48,7 @@ export const updateChannelPhoto = async (ctx: Context) => {
 	} catch (error) {
 		ctx.logger.warn(
 			{ error: error instanceof Error ? error.message : "Unknown error" },
-			"Error getting chat info",
+			"Error getting chat info"
 		);
 	}
 };

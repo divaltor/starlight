@@ -292,7 +292,7 @@ export const addTweetToSlot = createServerFn({ method: "POST" })
 export async function shuffleSlotTweet(
 	slotId: string,
 	tweetId: string,
-	userId: string,
+	userId: string
 ) {
 	"use server";
 

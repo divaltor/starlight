@@ -28,7 +28,7 @@ export type AuthVerificationResponse =
 	| AuthVerificationError;
 
 export async function verifyAuth(
-	initData?: string,
+	initData?: string
 ): Promise<AuthVerificationResponse> {
 	if (!initData) {
 		return {
@@ -70,7 +70,7 @@ export async function verifyAuth(
 }
 
 export async function verifyOptionalAuth(
-	initData?: string,
+	initData?: string
 ): Promise<AuthContext | null> {
 	if (!initData) {
 		return null;

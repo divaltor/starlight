@@ -20,12 +20,12 @@ bot.use(
 			prefix: "user:cookies:",
 			storage: new RedisAdapter({ instance: redis, parseJSON: false }),
 		},
-	}),
+	})
 );
 
 export const webAppKeyboard = (
 	page: "app" | "publications" | "settings",
-	text: string,
+	text: string
 ) =>
 	new InlineKeyboard().webApp(text, {
 		url: `${env.BASE_FRONTEND_URL}/${page}`,
@@ -45,7 +45,7 @@ bot.api.config.use(
 	autoRetry({
 		maxRetryAttempts: 3,
 		maxDelaySeconds: 5,
-	}),
+	})
 );
 bot.api.config.use(hydrateFiles(bot.token));
 bot.use(attachUser);

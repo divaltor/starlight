@@ -20,7 +20,7 @@ export function useTelegramContext() {
 
 	if (!context) {
 		throw new Error(
-			"useTelegramContext must be used within TelegramButtonsProvider",
+			"useTelegramContext must be used within TelegramButtonsProvider"
 		);
 	}
 

@@ -60,14 +60,14 @@ export function SlotCard({
 
 	const totalPhotos = scheduledSlotTweets.reduce(
 		(sum, tweet) => sum + tweet.scheduledSlotPhotos.length,
-		0,
+		0
 	);
 
 	const uniqueAuthors = [
 		...new Set(
 			scheduledSlotTweets.map(
-				(tweet) => tweet.tweet.tweetData?.username || "unknown",
-			),
+				(tweet) => tweet.tweet.tweetData?.username || "unknown"
+			)
 		),
 	];
 
@@ -105,14 +105,14 @@ export function SlotCard({
 								scheduledSlotTweets: slot.scheduledSlotTweets.map((tweet) => ({
 									...tweet,
 									scheduledSlotPhotos: tweet.scheduledSlotPhotos.filter(
-										(photo) => photo.photo.id !== photoId,
+										(photo) => photo.photo.id !== photoId
 									),
 								})),
 							};
 
 							updatedSlot.scheduledSlotTweets =
 								updatedSlot.scheduledSlotTweets.filter(
-									(tweet) => tweet.scheduledSlotPhotos.length > 0,
+									(tweet) => tweet.scheduledSlotPhotos.length > 0
 								);
 
 							return updatedSlot;
@@ -215,7 +215,7 @@ export function SlotCard({
 			columnWidth: 200, // Approximate column width
 			columnGutter: 16,
 		},
-		[shouldRecalculate],
+		[shouldRecalculate]
 	);
 
 	// Update length ref after positioner setup
@@ -231,18 +231,18 @@ export function SlotCard({
 		width: number;
 	}) => {
 		return (
-			<div style={{ width }} className="mb-1">
+			<div className="mb-1" style={{ width }}>
 				<TweetImageGrid
-					id={id}
 					artist={data.tweet.tweetData?.username || "unknown"}
 					date={data.tweet.tweetData?.timeParsed || ""}
+					id={id}
+					onDeleteImage={handleDeleteImage}
+					onShuffleTweet={handleShuffleTweet}
 					photos={data.scheduledSlotPhotos.map((photo) => ({
 						id: photo.photo.id,
 						url: photo.photo.s3Url || "",
 					}))}
 					showActions={status === "WAITING"}
-					onShuffleTweet={handleShuffleTweet}
-					onDeleteImage={handleDeleteImage}
 					slotTweetId={data.id}
 					sourceUrl={`https://x.com/i/status/${data.tweet.id}`}
 				/>
@@ -258,8 +258,8 @@ export function SlotCard({
 						{/* Date and Status */}
 						<div className="flex items-center gap-2">
 							<Badge
-								variant={getStatusVariant(status)}
 								className="text-xs capitalize"
+								variant={getStatusVariant(status)}
 							>
 								{status}
 							</Badge>
@@ -268,7 +268,7 @@ export function SlotCard({
 						{/* Summary */}
 						<div className="flex flex-wrap items-center gap-2">
 							{channelName && (
-								<Badge variant="outline" className="text-xs">
+								<Badge className="text-xs" variant="outline">
 									📢 {channelName}
 								</Badge>
 							)}
@@ -295,15 +295,15 @@ export function SlotCard({
 					<div className="md:hidden">
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
-								<Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+								<Button className="h-8 w-8 p-0" size="sm" variant="ghost">
 									<MoreVertical className="h-4 w-4" />
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end" className="w-40">
 								{onDelete && status === "WAITING" && (
 									<DropdownMenuItem
-										onClick={() => onDelete(id)}
 										className="gap-2 text-red-600 focus:text-red-600"
+										onClick={() => onDelete(id)}
 									>
 										<Trash2 className="h-4 w-4" />
 										Delete
@@ -317,10 +317,10 @@ export function SlotCard({
 					<div className="hidden items-center gap-1 md:flex">
 						{onDelete && status === "WAITING" && (
 							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => onDelete(id)}
 								className="gap-1 text-red-600 text-xs hover:bg-red-50 hover:text-red-700"
+								onClick={() => onDelete(id)}
+								size="sm"
+								variant="outline"
 							>
 								<Trash2 className="h-3 w-3" />
 								Delete
@@ -334,14 +334,14 @@ export function SlotCard({
 				{scheduledSlotTweets.length > 0 && (
 					<div ref={containerRef} style={{ position: "relative" }}>
 						<MasonryScroller
-							positioner={positioner}
-							resizeObserver={resizeObserver}
 							containerRef={containerRef}
-							items={scheduledSlotTweets}
 							height={windowHeight}
+							items={scheduledSlotTweets}
 							offset={offset}
 							overscanBy={3}
+							positioner={positioner}
 							render={renderMasonryItem}
+							resizeObserver={resizeObserver}
 						/>
 					</div>
 				)}

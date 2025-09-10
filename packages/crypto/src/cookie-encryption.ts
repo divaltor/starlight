@@ -81,7 +81,7 @@ export class CookieEncryption {
 			return this.decrypt(data, userId);
 		} catch (error) {
 			throw new Error(
-				`Failed to decrypt cookie data: ${error instanceof Error ? error.message : "Unknown error"}`,
+				`Failed to decrypt cookie data: ${error instanceof Error ? error.message : "Unknown error"}`
 			);
 		}
 	}

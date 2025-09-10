@@ -31,25 +31,25 @@ export function ImageCard({
 
 	return (
 		<button
-			type="button"
 			className={`group relative aspect-square overflow-hidden rounded-lg bg-gray-100 transition-transform duration-150 ${
 				isPressed ? "scale-95" : "scale-100"
 			}`}
-			onMouseDown={() => setIsPressed(true)}
-			onMouseUp={() => setIsPressed(false)}
-			onMouseLeave={() => setIsPressed(false)}
-			onTouchStart={() => setIsPressed(true)}
-			onTouchEnd={() => setIsPressed(false)}
 			onClick={() => {
 				if (sourceUrl) {
 					window.open(sourceUrl, "_blank", "noopener,noreferrer");
 				}
 			}}
+			onMouseDown={() => setIsPressed(true)}
+			onMouseLeave={() => setIsPressed(false)}
+			onMouseUp={() => setIsPressed(false)}
+			onTouchEnd={() => setIsPressed(false)}
+			onTouchStart={() => setIsPressed(true)}
+			type="button"
 		>
 			<img
-				src={src || "/placeholder.svg"}
 				alt={alt}
 				className="object-cover"
+				src={src || "/placeholder.svg"}
 				style={{ width: "100%", height: "100%" }}
 			/>
 
@@ -57,13 +57,13 @@ export function ImageCard({
 			{canDelete && (
 				<div className="absolute inset-0 hidden items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity duration-200 group-hover:opacity-100 md:flex">
 					<Button
-						variant="secondary"
-						size="sm"
+						className="bg-white/90 text-red-600 hover:bg-white hover:text-red-700"
 						onClick={(e) => {
 							e.stopPropagation();
 							onDelete(index);
 						}}
-						className="bg-white/90 text-red-600 hover:bg-white hover:text-red-700"
+						size="sm"
+						variant="secondary"
 					>
 						<Trash2 className="h-4 w-4" />
 					</Button>
@@ -76,20 +76,20 @@ export function ImageCard({
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<Button
-								variant="secondary"
-								size="sm"
 								className="h-8 w-8 border-0 bg-black/70 p-0 text-white hover:bg-black/80"
+								size="sm"
+								variant="secondary"
 							>
 								<MoreVertical className="h-4 w-4" />
 							</Button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end" className="w-40">
 							<DropdownMenuItem
+								className="gap-2 text-red-600 focus:text-red-600"
 								onClick={(e) => {
 									e.stopPropagation();
 									onDelete(index);
 								}}
-								className="gap-2 text-red-600 focus:text-red-600"
 							>
 								<Trash2 className="h-4 w-4" />
 								Delete

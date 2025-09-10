@@ -13,7 +13,7 @@ const CookieQuickManagerSchema = z.array(
 		"Host raw": z.string(),
 		"Name raw": z.string(),
 		"Content raw": z.string(),
-	}),
+	})
 );
 
 const Base64StringSchema = z.string().refine(
@@ -25,7 +25,7 @@ const Base64StringSchema = z.string().refine(
 			return false;
 		}
 	},
-	{ message: "Invalid base64 string" },
+	{ message: "Invalid base64 string" }
 );
 
 type Cookie = {
@@ -43,9 +43,9 @@ type Cookie = {
  */
 export function decodeCookies(
 	value: string | null,
-	cookieNames?: string[],
+	cookieNames?: string[]
 ): Cookie[] | null {
-	if (!value || !value.trim()) {
+	if (!(value && value.trim())) {
 		return null;
 	}
 
@@ -98,7 +98,7 @@ export function decodeCookies(
 						} catch (error) {
 							console.warn(
 								"Failed to create cookie from Quick Manager format:",
-								error,
+								error
 							);
 						}
 					}

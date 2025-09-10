@@ -64,7 +64,7 @@ export function ProfileShareSection({
 		},
 		onSuccess: () => {
 			queryClient.setQueryData(["profile-share"], (old: any) =>
-				old ? { ...old, revokedAt: new Date().toISOString() } : old,
+				old ? { ...old, revokedAt: new Date().toISOString() } : old
 			);
 		},
 	});
@@ -103,32 +103,32 @@ export function ProfileShareSection({
 					</div>
 				) : isActive ? (
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-						<div className="flex-1 min-w-0">
+						<div className="min-w-0 flex-1">
 							<div className="flex h-8 w-full items-stretch overflow-hidden rounded-md border border-gray-200 bg-white">
 								<button
-									type="button"
-									onClick={copyLink}
-									className="flex-1 min-w-0 select-none overflow-hidden text-ellipsis whitespace-nowrap px-3 text-left font-mono text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 sm:text-sm"
 									aria-label="Copy share link"
+									className="min-w-0 flex-1 select-none overflow-hidden text-ellipsis whitespace-nowrap px-3 text-left font-mono text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 sm:text-sm"
+									onClick={copyLink}
+									type="button"
 								>
 									{`${window.location.origin}/share/profile/${profileShare.slug}`}
 								</button>
 								<button
-									type="button"
-									onClick={copyLink}
-									className="px-2 inline-flex items-center justify-center border-l border-gray-200 text-gray-500 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
 									aria-label="Copy link"
+									className="inline-flex items-center justify-center border-gray-200 border-l px-2 text-gray-500 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+									onClick={copyLink}
+									type="button"
 								>
 									<Copy className="h-4 w-4" />
 								</button>
 							</div>
 						</div>
 						<Button
-							variant="destructive"
-							size="sm"
-							onClick={() => revokeMutation.mutate()}
-							disabled={revokeMutation.isPending}
 							className="w-full sm:w-auto"
+							disabled={revokeMutation.isPending}
+							onClick={() => revokeMutation.mutate()}
+							size="sm"
+							variant="destructive"
 						>
 							Disable
 						</Button>
@@ -140,10 +140,10 @@ export function ProfileShareSection({
 							privacy-friendly link you can revoke at any time.
 						</p>
 						<Button
-							variant="default"
-							onClick={() => createMutation.mutate()}
-							disabled={createMutation.isPending}
 							className="flex items-center gap-2"
+							disabled={createMutation.isPending}
+							onClick={() => createMutation.mutate()}
+							variant="default"
 						>
 							<Share2 className="h-4 w-4" /> Enable Sharing
 						</Button>
@@ -169,32 +169,32 @@ export function ProfileShareSection({
 					</div>
 				) : isActive ? (
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-						<div className="flex-1 min-w-0">
+						<div className="min-w-0 flex-1">
 							<div className="flex h-8 w-full items-stretch overflow-hidden rounded-md border border-gray-200 bg-white">
 								<button
-									type="button"
-									onClick={copyLink}
-									className="flex-1 min-w-0 select-none overflow-hidden text-ellipsis whitespace-nowrap px-3 text-left font-mono text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 sm:text-sm"
 									aria-label="Copy share link"
+									className="min-w-0 flex-1 select-none overflow-hidden text-ellipsis whitespace-nowrap px-3 text-left font-mono text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 sm:text-sm"
+									onClick={copyLink}
+									type="button"
 								>
 									{`${window.location.origin}/share/profile/${profileShare.slug}`}
 								</button>
 								<button
-									type="button"
-									onClick={copyLink}
-									className="px-2 inline-flex items-center justify-center border-l border-gray-200 text-gray-500 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
 									aria-label="Copy link"
+									className="inline-flex items-center justify-center border-gray-200 border-l px-2 text-gray-500 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+									onClick={copyLink}
+									type="button"
 								>
 									<Copy className="h-4 w-4" />
 								</button>
 							</div>
 						</div>
 						<Button
-							variant="destructive"
-							size="sm"
-							onClick={() => revokeMutation.mutate()}
-							disabled={revokeMutation.isPending}
 							className="w-full sm:w-auto"
+							disabled={revokeMutation.isPending}
+							onClick={() => revokeMutation.mutate()}
+							size="sm"
+							variant="destructive"
 						>
 							Disable
 						</Button>
@@ -206,10 +206,10 @@ export function ProfileShareSection({
 							privacy-friendly link you can revoke at any time.
 						</p>
 						<Button
-							variant="default"
-							onClick={() => createMutation.mutate()}
-							disabled={createMutation.isPending}
 							className="flex items-center gap-2"
+							disabled={createMutation.isPending}
+							onClick={() => createMutation.mutate()}
+							variant="default"
 						>
 							<Share2 className="h-4 w-4" /> Enable Sharing
 						</Button>

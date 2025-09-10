@@ -42,7 +42,7 @@ export class RedisAdapter<T> implements StorageAdapter<T> {
 		const session = await this.redis.get(key);
 
 		if (session === null || session === undefined) {
-			return undefined;
+			return;
 		}
 
 		if (this.parseJSON) {
@@ -90,16 +90,16 @@ export class Cookies {
 		const parsed = JSON.parse(data);
 
 		return new Cookies(
-			parsed.map((cookie: RFC6265Cookie) => new Cookie(cookie)),
+			parsed.map((cookie: RFC6265Cookie) => new Cookie(cookie))
 		);
 	}
 
 	userId() {
 		const twidValue = this.cookies.find(
-			(cookie) => cookie.key === "twid",
+			(cookie) => cookie.key === "twid"
 		)?.value;
 
-		if (!twidValue) return undefined;
+		if (!twidValue) return;
 
 		const decoded = decodeURIComponent(twidValue);
 		const match = decoded.match(/u=(\d+)/);

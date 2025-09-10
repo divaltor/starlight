@@ -12,7 +12,7 @@ const getUserTweets = createServerFn({ method: "GET" })
 		z.object({
 			cursor: z.string().optional(),
 			limit: z.number().min(1).max(100).default(30),
-		}),
+		})
 	)
 	.handler(
 		async ({
@@ -122,7 +122,7 @@ const getUserTweets = createServerFn({ method: "GET" })
 					nextCursor: null,
 				};
 			}
-		},
+		}
 	);
 
 export { getUserTweets };

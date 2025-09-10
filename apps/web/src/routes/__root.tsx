@@ -61,7 +61,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 
 function RootDocument() {
 	return (
-		<html lang="en" className="light">
+		<html className="light" lang="en">
 			<head>
 				<HeadContent />
 			</head>
@@ -72,7 +72,7 @@ function RootDocument() {
 					</StrictMode>
 				</TelegramButtonsProvider>
 				<TanStackRouterDevtools position="bottom-left" />
-				<ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
+				<ReactQueryDevtools buttonPosition="bottom-right" position="bottom" />
 				<Toaster />
 				<Scripts />
 			</body>

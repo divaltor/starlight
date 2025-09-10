@@ -34,7 +34,7 @@ export function createPrismaClient() {
 							id.slice(0, chunkSize),
 							id.slice(chunkSize, chunkSize * 2),
 							id.slice(chunkSize * 2),
-						].map((part) => Number.parseInt(part || "0"));
+						].map((part) => Number.parseInt(part || "0", 10));
 
 						const userId = uuidParse(data.userId);
 
@@ -46,7 +46,9 @@ export function createPrismaClient() {
 						s3Path: true,
 					},
 					compute(data: { s3Path: string }) {
-						if (!data.s3Path || !env.BASE_CDN_URL) return undefined;
+						if (!(data.s3Path && env.BASE_CDN_URL)) {
+							return;
+						}
 
 						return `${env.BASE_CDN_URL}/${data.s3Path}`;
 					},
@@ -58,7 +60,9 @@ export function createPrismaClient() {
 						photoThumbnail: true,
 					},
 					compute(data: { photoThumbnail: string }) {
-						if (!data.photoThumbnail) return undefined;
+						if (!data.photoThumbnail) {
+							return;
+						}
 
 						return `${env.BASE_CDN_URL}/${data.photoThumbnail}`;
 					},
@@ -68,7 +72,9 @@ export function createPrismaClient() {
 						photoBig: true,
 					},
 					compute(data: { photoBig: string }) {
-						if (!data.photoBig || !env.BASE_CDN_URL) return undefined;
+						if (!(data.photoBig && env.BASE_CDN_URL)) {
+							return;
+						}
 
 						return `${env.BASE_CDN_URL}/${data.photoBig}`;
 					},

@@ -17,13 +17,13 @@ type VideoInformation = {
 };
 
 async function createVideoInformation(
-	filePath: string,
+	filePath: string
 ): Promise<VideoInformation> {
 	const parsedPath = path.parse(filePath);
 
 	const infoJsonPath = path.join(
 		parsedPath.dir,
-		`${parsedPath.name}.info.json`,
+		`${parsedPath.name}.info.json`
 	);
 
 	logger.debug("Creating video information for %s", infoJsonPath);
@@ -47,7 +47,7 @@ const youtubedl = create(env.YOUTUBE_DL_PATH);
 export async function downloadVideo(
 	url: string,
 	folder: string,
-	cookies?: string,
+	cookies?: string
 ): Promise<VideoInformation[]> {
 	logger.debug("Downloading video from %s to %s", url, folder);
 
@@ -77,7 +77,7 @@ export async function downloadVideo(
 
 	for await (const filePath of mp4Files) {
 		videoInformations.push(
-			await createVideoInformation(path.join(folder, filePath)),
+			await createVideoInformation(path.join(folder, filePath))
 		);
 	}
 

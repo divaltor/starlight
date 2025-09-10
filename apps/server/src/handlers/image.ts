@@ -90,7 +90,7 @@ privateChat.on(":text").filter(
 				"Slot is already being published. While you waiting you can review your gallery ✨",
 				{
 					reply_markup: webAppKeyboard("app", "View gallery"),
-				},
+				}
 			);
 			return;
 		}
@@ -166,7 +166,7 @@ privateChat.on(":text").filter(
 				entities: title.entities,
 			});
 		}
-	},
+	}
 );
 
 composer.on("inline_query", async (ctx) => {
@@ -278,29 +278,27 @@ composer.on("inline_query", async (ctx) => {
 	// Get the slice of photos for this page
 	const photosForThisPage = allPhotos.slice(photoOffset, photoOffset + 50);
 
-	if (photosForThisPage.length === 0) {
-		if (ctx.session.cookies === null) {
-			// User didn't setup the bot yet
-			await ctx.answerInlineQuery(
-				[
-					InlineQueryResultBuilder.article(
-						`id:no-photos:${ctx.from?.id}`,
-						"Oops, no photos...",
-						{
-							reply_markup: new InlineKeyboard().url(
-								"Set cookies",
-								`${env.BASE_FRONTEND_URL}/settings`,
-							),
-						},
-					).text("No photos found, did you setup the bot?"),
-				],
-				{
-					is_personal: true,
-				},
-			);
+	if (photosForThisPage.length === 0 && ctx.session.cookies === null) {
+		// User didn't setup the bot yet
+		await ctx.answerInlineQuery(
+			[
+				InlineQueryResultBuilder.article(
+					`id:no-photos:${ctx.from?.id}`,
+					"Oops, no photos...",
+					{
+						reply_markup: new InlineKeyboard().url(
+							"Set cookies",
+							`${env.BASE_FRONTEND_URL}/settings`
+						),
+					}
+				).text("No photos found, did you setup the bot?"),
+			],
+			{
+				is_personal: true,
+			}
+		);
 
-			return;
-		}
+		return;
 	}
 
 	const results = photosForThisPage.map((photo) =>
@@ -315,8 +313,8 @@ composer.on("inline_query", async (ctx) => {
 				photo_height: photo.height ?? undefined,
 				photo_width: photo.width ?? undefined,
 				parse_mode: "HTML",
-			},
-		),
+			}
+		)
 	);
 
 	// Calculate next offset for pagination
@@ -341,16 +339,16 @@ privateChat.command("scrapper").filter(
 
 		await ctx.reply(
 			"Beep boop, you need to give me your cookies before I can send you daily images.",
-			{ reply_markup: keyboard },
+			{ reply_markup: keyboard }
 		);
-	},
+	}
 );
 
 privateChat.command("scrapper").filter(
 	async (ctx) => ctx.session.cookies !== null,
 	async (ctx) => {
 		const scheduledJob = await scrapperQueue.getJobScheduler(
-			`scrapper-${ctx.user?.id}`,
+			`scrapper-${ctx.user?.id}`
 		);
 
 		if (!scheduledJob) {
@@ -368,14 +366,14 @@ privateChat.command("scrapper").filter(
 						limit: 300, // 1000 is too much for free users
 					},
 					name: `scrapper-${ctx.user?.id}`,
-				},
+				}
 			);
 
 			await ctx.reply(
 				"You placed in the queue (runs every 6 hours). You can check your images in a few minutes in your gallery.\n\nYou can start the job anytime by sending /scrapper command again.",
 				{
 					reply_markup: webAppKeyboard("app", "View gallery"),
-				},
+				}
 			);
 			return;
 		}
@@ -384,7 +382,7 @@ privateChat.command("scrapper").filter(
 			await scrapperRateLimiter.consume(ctx.from.id);
 		} catch {
 			await ctx.reply(
-				"Sorry, but we already collected images for you. You can start a job each 15 minutes only for your convenience to not accidentally block your account.",
+				"Sorry, but we already collected images for you. You can start a job each 15 minutes only for your convenience to not accidentally block your account."
 			);
 			return;
 		}
@@ -400,11 +398,11 @@ privateChat.command("scrapper").filter(
 				deduplication: {
 					id: `scrapper-${ctx.user?.id}`,
 				},
-			},
+			}
 		);
 
 		await ctx.reply("Starting to collect images, check back in a few minutes.");
-	},
+	}
 );
 
 groupChat.command("source").filter(
@@ -413,7 +411,7 @@ groupChat.command("source").filter(
 		ctx.message.reply_to_message?.photo?.length === 0,
 	async (ctx) => {
 		await ctx.reply("Please, reply to a message with a photo.");
-	},
+	}
 );
 
 groupChat.command("source").filter(
@@ -439,7 +437,7 @@ groupChat.command("source").filter(
 		}
 
 		await ctx.reply(`https://x.com/i/status/${tweet.photo.tweetId}`);
-	},
+	}
 );
 
 export default composer;

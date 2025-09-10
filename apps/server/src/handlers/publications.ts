@@ -12,7 +12,7 @@ const privateChat = composer.chatType("private");
 
 const publicationsKeyboard = webAppKeyboard(
 	"publications",
-	"Manage publications",
+	"Manage publications"
 );
 
 privateChat.command("connect", async (ctx) => {
@@ -27,7 +27,7 @@ privateChat.command("connect", async (ctx) => {
 			"You already have a connected channel, want to remove it before connecting new one?",
 			{
 				reply_markup: webAppKeyboard("settings", "Remove channel"),
-			},
+			}
 		);
 		return;
 	}
@@ -50,7 +50,7 @@ channelChat.command("connect", async (ctx) => {
 	} catch (error) {
 		ctx.logger.warn(
 			{ error: error instanceof Error ? error.message : "Unknown error" },
-			"Error deleting message",
+			"Error deleting message"
 		);
 	}
 
@@ -68,7 +68,7 @@ channelChat.command("connect", async (ctx) => {
 				chatTitle: chat.title,
 			},
 			"Can't find creator in channel %s",
-			chat.title,
+			chat.title
 		);
 		return;
 	}
@@ -85,7 +85,7 @@ channelChat.command("connect", async (ctx) => {
 				chatId: chat.id,
 				chatTitle: chat.title,
 			},
-			"Can't find user in database",
+			"Can't find user in database"
 		);
 		return;
 	}
@@ -150,7 +150,7 @@ channelChat.command("connect", async (ctx) => {
 		},
 		"Created new posting channel connection for user %s in chat %s",
 		user.id,
-		chat.title,
+		chat.title
 	);
 
 	const text = fmt`🎉 Channel ${b}${chat.title}${b} connected! Open the publications manager to start scheduling posts:`;

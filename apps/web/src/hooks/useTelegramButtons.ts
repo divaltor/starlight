@@ -25,7 +25,7 @@ interface UseTelegramButtonsOptions {
 
 export function useTelegramButtons(
 	initialConfig?: RouteButtonConfig,
-	options?: UseTelegramButtonsOptions,
+	options?: UseTelegramButtonsOptions
 ): ButtonManager {
 	const router = useRouter();
 	const configRef = useRef<RouteButtonConfig>(initialConfig || {});
@@ -48,12 +48,23 @@ export function useTelegramButtons(
 					case "external":
 						window.open(action.payload as string, "_blank");
 						break;
+					case "custom":
+						try {
+							window.dispatchEvent(
+								new CustomEvent("telegram-button-custom", {
+									detail: action.payload,
+								})
+							);
+						} catch (e) {
+							console.error("Error dispatching custom button event", e);
+						}
+						break;
 				}
 			} catch (error) {
 				console.error(`Error executing ${buttonType} action:`, error);
 			}
 		},
-		[router],
+		[router]
 	);
 
 	// Core button update logic
@@ -75,8 +86,8 @@ export function useTelegramButtons(
 						text,
 						isVisible: true,
 						isEnabled: state !== "disabled",
-						isLoaderVisible: isLoading || false,
-						hasShineEffect: hasShineEffect || false,
+						isLoaderVisible: isLoading,
+						hasShineEffect,
 					});
 
 					if (action && mainButton.onClick.isAvailable()) {
@@ -101,8 +112,8 @@ export function useTelegramButtons(
 						text,
 						isVisible: true,
 						isEnabled: state !== "disabled",
-						isLoaderVisible: isLoading || false,
-						hasShineEffect: hasShineEffect || false,
+						isLoaderVisible: isLoading,
+						hasShineEffect,
 					});
 
 					if (action && secondaryButton.onClick.isAvailable()) {
@@ -151,7 +162,7 @@ export function useTelegramButtons(
 				backButton.hide.ifAvailable();
 			}
 		},
-		[executeButtonAction],
+		[executeButtonAction]
 	);
 
 	// Debounced config updates
@@ -165,7 +176,7 @@ export function useTelegramButtons(
 				updateButtonsInternal(config);
 			}, options?.debounceMs || 100);
 		},
-		[options?.debounceMs, updateButtonsInternal],
+		[options?.debounceMs, updateButtonsInternal]
 	);
 
 	// Public API
@@ -174,7 +185,7 @@ export function useTelegramButtons(
 			configRef.current = { ...configRef.current, ...newConfig };
 			debouncedUpdateButtons(configRef.current);
 		},
-		[debouncedUpdateButtons],
+		[debouncedUpdateButtons]
 	);
 
 	const resetToDefaults = useCallback(() => {
@@ -187,7 +198,7 @@ export function useTelegramButtons(
 			const buttonConfig = configRef.current[buttonType];
 			return buttonConfig?.state || "hidden";
 		},
-		[],
+		[]
 	);
 
 	// Initialize on mount

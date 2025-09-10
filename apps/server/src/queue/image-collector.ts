@@ -15,10 +15,10 @@ export const imagesQueue = new Queue<ImageCollectorJobData>(
 			attempts: 3,
 			backoff: {
 				type: "exponential",
-				delay: 10000, // 10 seconds
+				delay: 10_000, // 10 seconds
 			},
 		},
-	},
+	}
 );
 
 interface ImageCollectorJobData {
@@ -36,13 +36,13 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 			{ tweetId: tweet.id, userId },
 			"Processing tweet %s for user %s",
 			tweet.id,
-			userId,
+			userId
 		);
 
 		if (!tweet.id) {
 			logger.error(
 				{ tweetId: tweet.id, userId },
-				"Tweet ID is required, skipping job",
+				"Tweet ID is required, skipping job"
 			);
 			return;
 		}
@@ -50,7 +50,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 		if (tweet.photos.length === 0) {
 			logger.debug(
 				{ tweetId: tweet.id, userId },
-				"Tweet has no photos, skipping job",
+				"Tweet has no photos, skipping job"
 			);
 			return;
 		}
@@ -83,7 +83,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 			"Tweet %s for user %s upserted with %s photos",
 			tweet.id,
 			userId,
-			tweetRecord.photos.length,
+			tweetRecord.photos.length
 		);
 
 		for (const photo of tweetRecord.photos) {
@@ -95,7 +95,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 						userId,
 					},
 					"Photo %s already downloaded, skipping",
-					photo.id,
+					photo.id
 				);
 				continue;
 			}
@@ -114,7 +114,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 						status: response.status,
 						userId,
 					},
-					"Failed to fetch photo %s for tweet %s",
+					"Failed to fetch photo %s for tweet %s"
 				);
 				throw new Error(`Failed to fetch photo ${photo.originalUrl}`);
 			}
@@ -131,7 +131,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 						userId,
 						similarPhotos,
 					},
-					"Found similar photos, skipping saving photo",
+					"Found similar photos, skipping saving photo"
 				);
 				continue;
 			}
@@ -166,7 +166,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 				},
 				"Tweet %s photos are saved to S3 for user %s",
 				tweet.id,
-				userId,
+				userId
 			);
 		}
 	},
@@ -176,13 +176,13 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 		removeOnComplete: { age: 60 * 60, count: 1000 },
 		removeOnFail: { age: 60 * 60 * 24, count: 5000 },
 		autorun: false,
-	},
+	}
 );
 
 imagesWorker.on("failed", (job) => {
 	logger.error(
 		{ jobId: job?.id, error: job?.failedReason, stack: job?.stacktrace },
-		"Image collector job failed",
+		"Image collector job failed"
 	);
 });
 

@@ -1,33 +1,35 @@
 {
-	"name": "starlight",
-	"private": true,
-	"workspaces": {
-		"packages": [
-			"apps/*",
-			"packages/*"
-		],
-		"catalog": {
-			"grammy": "^1.36.3",
-			"@the-convocation/twitter-scraper": "^0.17.1"
-		}
-	},
-	"scripts": {
-		"start": "turbo -F web start",
-		"check": "biome check --write .",
-		"dev": "turbo dev",
-		"build": "turbo build",
-		"check-types": "turbo check-types",
-		"dev:web": "turbo -F web dev",
-		"dev:server": "turbo -F server dev",
-		"server": "turbo server",
-		"db:push": "turbo -F @repo/utils db:push",
-		"db:generate": "turbo -F @repo/utils db:generate",
-		"db:migrate": "turbo -F @repo/utils db:migrate"
-	},
-	"dependencies": {},
-	"devDependencies": {
-		"turbo": "^2.4.2",
-		"@biomejs/biome": "2.0.6"
-	},
-	"packageManager": "bun@1.2.21"
+  "name": "starlight",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "grammy": "^1.36.3",
+      "@the-convocation/twitter-scraper": "^0.17.1"
+    }
+  },
+  "scripts": {
+    "start": "turbo -F web start",
+    "check": "biome check --write .",
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "dev:web": "turbo -F web dev",
+    "dev:server": "turbo -F server dev",
+    "server": "turbo server",
+    "db:push": "turbo -F @repo/utils db:push",
+    "db:generate": "turbo -F @repo/utils db:generate",
+    "db:migrate": "turbo -F @repo/utils db:migrate"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@biomejs/biome": "2.2.2",
+    "oxlint-tsgolint": "^0.2.0",
+    "turbo": "^2.4.2",
+    "ultracite": "5.3.3"
+  },
+  "packageManager": "bun@1.2.21"
 }

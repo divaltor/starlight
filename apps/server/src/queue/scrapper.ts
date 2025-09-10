@@ -15,7 +15,7 @@ import { Cookies, prisma, redis } from "@/storage";
 
 const cookieEncryption = new CookieEncryption(
 	env.COOKIE_ENCRYPTION_KEY,
-	env.COOKIE_ENCRYPTION_SALT,
+	env.COOKIE_ENCRYPTION_SALT
 );
 
 export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
@@ -25,7 +25,7 @@ export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
 		// It will be retried in 2.5 minutes, 7.5 minutes, 22.5 minutes
 		backoff: {
 			type: "exponential",
-			delay: 150000, // 2.5 minutes
+			delay: 150_000, // 2.5 minutes
 		},
 	},
 });
@@ -46,7 +46,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			{ userId, jobData: job.data },
 			"Scraping timeline for user %s, page %s",
 			userId,
-			job.data.cursor,
+			job.data.cursor
 		);
 
 		let user: User;
@@ -74,7 +74,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		try {
 			cookiesJson = cookieEncryption.safeDecrypt(
 				user_cookies,
-				user.telegramId.toString(),
+				user.telegramId.toString()
 			);
 		} catch (error) {
 			logger.error({ userId, error }, "Failed to decrypt user cookies");
@@ -112,7 +112,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 								: error,
 				},
 				"Unable to fetch timeline for user %s",
-				userId,
+				userId
 			);
 
 			throw error;
@@ -126,7 +126,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			},
 			"Scraped timeline for user %s, page %s",
 			userId,
-			job.data.cursor,
+			job.data.cursor
 		);
 
 		const CONSECUTIVE_THRESHOLD = 15;
@@ -146,7 +146,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 					},
 					select: { id: true, createdAt: true },
 				})
-			).map((tweet) => [tweet.id, tweet.createdAt]),
+			).map((tweet) => [tweet.id, tweet.createdAt])
 		);
 
 		// Step 2: Process tweets and build batch operations
@@ -206,7 +206,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 						totalProcessed: timeline.tweets.indexOf(tweet) + 1,
 					},
 					"Stopping scrape: found %d consecutive known tweets",
-					consecutiveKnownTweets,
+					consecutiveKnownTweets
 				);
 				break;
 			}
@@ -229,8 +229,8 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 						tx.tweet.update({
 							where: { tweetId: { userId, id: tweet.id } },
 							data: { tweetData: tweet.tweetData },
-						}),
-					),
+						})
+					)
 				);
 			}
 		});
@@ -262,7 +262,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 								? "count_limit"
 								: "no_next_cursor",
 				},
-				"Stopping scrape job",
+				"Stopping scrape job"
 			);
 			return;
 		}
@@ -280,12 +280,12 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 				deduplication: {
 					id: `scrapper-${userId}-${timeline.next}`,
 				},
-			},
+			}
 		);
 
 		logger.info(
 			{ userId, count: job.data.count, limit: job.data.limit },
-			"Scraping next page",
+			"Scraping next page"
 		);
 	},
 	{
@@ -294,7 +294,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		autorun: false,
 		removeOnComplete: { age: 60 * 60 * 24, count: 100 },
 		removeOnFail: { age: 60 * 60 * 24 * 7, count: 50 },
-	},
+	}
 );
 
 const scrapperEvents = new QueueEvents("feed-scrapper", {

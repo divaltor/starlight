@@ -44,7 +44,7 @@ feature.on(":text").filter(
 				ctx.logger.info(
 					"Video %s sent successfully to %s",
 					video.filePath,
-					ctx.chatId,
+					ctx.chatId
 				);
 			} catch (error) {
 				if (error instanceof GrammyError) {
@@ -60,7 +60,7 @@ feature.on(":text").filter(
 		}
 
 		tempDir.removeCallback();
-	},
+	}
 );
 
 export default composer;

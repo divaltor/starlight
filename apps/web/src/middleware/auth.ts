@@ -85,7 +85,7 @@ export const optionalAuthMiddleware = createMiddleware().server(
 		}
 
 		return next({ context: { user: authContext?.user } });
-	},
+	}
 );
 
 export function createAuthError(message: string) {

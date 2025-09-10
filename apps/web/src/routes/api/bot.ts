@@ -50,8 +50,8 @@ export const respondToWebAppData = createServerFn({ method: "GET" })
 			context.queryId,
 			InlineQueryResultBuilder.article(
 				`${data.slotId}`,
-				`Publish slot ${postingChannel.chat.title}`,
-			).text(`🪶 ${postingChannel.chat.title}`),
+				`Publish slot ${postingChannel.chat.title}`
+			).text(`🪶 ${postingChannel.chat.title}`)
 		);
 
 		return { success: true };
