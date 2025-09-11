@@ -52,13 +52,14 @@
     "@tanstack/react-router-devtools": "^1.120.15",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.2.0",
+    "@the-convocation/twitter-scraper": "catalog:",
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "daisyui": "^5.1.10",
     "jsdom": "^26.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.3.5",
-    "web-vitals": "^4.2.4",
-    "@the-convocation/twitter-scraper": "catalog:"
+    "web-vitals": "^4.2.4"
   }
 }
