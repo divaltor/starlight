@@ -40,6 +40,9 @@
       "correctness": {
         "useExhaustiveDependencies": "info"
       },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off"
+      },
       "nursery": {
         "useSortedClasses": {
           "level": "warn",
@@ -48,6 +51,9 @@
             "functions": ["clsx", "cva", "cn"]
           }
         }
+      },
+      "performance": {
+        "noImgElement": "off"
       },
       "style": {
         "noParameterAssign": "error",
@@ -59,7 +65,8 @@
         "noUnusedTemplateLiteral": "error",
         "useNumberNamespace": "error",
         "noInferrableTypes": "error",
-        "noUselessElse": "error"
+        "noUselessElse": "error",
+        "noMagicNumbers": "off"
       }
     }
   },

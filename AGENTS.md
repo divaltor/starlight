@@ -100,6 +100,12 @@ Ultracite enforces strict type safety, accessibility standards, and consistent c
 
 ## Rules
 
+### Style guide
+- Use Uber design system for creating friendly UI
+- Use DaisyUI for designing a components
+- Use React Aria components for headless UI
+
+
 ### Accessibility (a11y)
 - Don't use `accessKey` attribute on any HTML element.
 - Don't set `aria-hidden="true"` on focusable elements.

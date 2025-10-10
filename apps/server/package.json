@@ -30,14 +30,14 @@
     "sharp": "^0.34.2",
     "tmp": "^0.2.3",
     "tough-cookie": "^5.1.2",
-    "user-agents": "^1.1.551",
+    "user-agents": "^1.1.668",
     "uuid": "^11.1.0",
-    "youtube-dl-exec": "^3.0.21",
+    "youtube-dl-exec": "^3.0.25",
     "zod": "^3.25.56"
   },
   "devDependencies": {
     "typescript": "^5.8.2",
-    "@types/bun": "latest",
+    "@types/bun": "1.2.23",
     "@types/tmp": "^0.2.6",
     "@types/user-agents": "^1.0.4"
   },
