@@ -1,0 +1,166 @@
+[project]
+name = "classification"
+version = "1.0.0"
+description = "Image classification API for Starlight"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "aiohttp[speedups]>=3.13.0",
+    "dghs-imgutils>=0.19.0",
+    "fake-useragent>=2.2.0",
+    "fastapi>=0.119.0",
+    "granian[reload,uvloop]>=2.5.5",
+    "onnxruntime>=1.23.1",
+    "pillow>=11.3.0",
+    "pydantic>=2.12.0",
+    "pydantic-settings>=2.11.0",
+    "structlog>=25.4.0",
+    "transformers[torch]>=4.57.0",
+]
+
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+src = ["app"]
+output-format = "grouped"
+show-fixes = true
+
+[tool.ruff.lint]
+extend-select = ["ALL"]
+extend-ignore = [
+    "D10",     # Missing docstrings everywhere,
+    "DOC",     # docstrings
+    "D401",    # First line should be in imperative mood
+    "ANN401",  # Dynamically typed expressions are disallowed
+    "A003",    # Class attribute shadowing built-in
+    "E501",    # Line too long
+    "D212",    # Multi-line docstring summary should start at the first line
+    "TRY003",  # Avoid specifying long messages outside the exception class
+    "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
+    "RUF001",  # String contains ambiguous {}. Did you mean {}?
+    "RUF002",  # Docstring contains ambiguous {}. Did you mean {}?
+    "RUF003",  # Comment contains ambiguous {}. Did you mean {}?
+    "UP040",   # Type alias {name} uses TypeAlias annotation instead of the type keyword
+    "ISC001",  # Implicit string concatenation
+    "TD002",   # TODO author
+    "TD003",   # TODO link
+    "FIX002",  # FIXME lines
+    "CPY",     # Copyright
+    "ERA",     # Commented out code
+    "FBT",     # Boolean-position argument
+    "PLC0415", # Import should be on top-level
+    "EM",      # Exception must not use string literal
+    "PLR091",  # Too many arguments
+    "D205",    # 1 blank line required between summary line and description
+    "TRY300",  # "return" block in "else" statement
+    "BLE001",  # Blind exception
+    "PLR6301", # Function can be static
+    "PLR2004", # Magic number
+    "S101",    # Use of `assert` for flow control
+    "C901",    # Complexity (don't care)
+    "TRY301",
+]
+unfixable = ["F841"] # Unused variable
+preview = true
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = ["pydantic.BaseModel", "pydantic.RootModel"]
+runtime-evaluated-decorators = [
+    "dataclasses.dataclass",
+    "pydantic.validate_call",
+]
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "single"
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
+"**/tests/*.py" = ["S10", "D1", "ANN", "ARG001", "DTZ005"]
+"**/*.pyi" = ["E3"]
+"**/workflow/dags/**" = ["DTZ001"]
+
+[tool.ruff.lint.flake8-annotations]
+allow-star-arg-any = true
+mypy-init-return = true
+suppress-dummy-args = true
+
+[tool.ruff.lint.flake8-pytest-style]
+mark-parentheses = false
+fixture-parentheses = false
+
+[tool.ruff.lint.flake8-unused-arguments]
+ignore-variadic-names = true
+
+[tool.ruff.lint.pep8-naming]
+# Allow Pydantic's `@validator` decorator to trigger class method treatment.
+classmethod-decorators = ["classmethod", "pydantic.field_validator"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+reportAny = false
+reportExplicitAny = false
+reportUnusedParameter = false
+reportUnannotatedClassAttribute = false
+reportUnknownMemberType = false
+reportUntypedClassDecorator = false
+reportUnusedExpression = false
+reportUnusedCallResult = false
+reportUnknownVariableType = false
+reportMissingTypeStubs = false
+reportUnusedVariable = false            # Ruff detects this (F841)
+
+# Set warnings from `basedpyright` to reduce `alarm fatigue`.
+reportPropertyTypeMismatch = "warning"
+reportUnusedImport = "warning"
+reportUnusedClass = "warning"
+reportUnusedFunction = "warning"
+reportDuplicateImport = "warning"
+reportWildcardImportFromLibrary = "warning"
+reportRedeclaration = "warning"
+reportUntypedFunctionDecorator = "warning"
+reportUntypedBaseClass = "warning"
+reportUntypedNamedTuple = "warning"
+reportPrivateUsage = "warning"
+reportTypeCommentUsage = "warning"
+reportPrivateImportUsage = "warning"
+reportDeprecated = "warning"
+reportUnknownParameterType = "warning"
+reportUnknownArgumentType = "warning"
+reportUnknownLambdaType = "warning"
+reportMissingParameterType = "warning"
+reportInvalidTypeVarUse = "warning"
+reportCallInDefaultInitializer = "warning"
+reportUnnecessaryCast = "warning"
+reportUnnecessaryComparison = "warning"
+reportUnnecessaryContains = "warning"
+reportImplicitStringConcatenation = "warning"
+reportUnnecessaryIsInstance = "warning"
+reportInvalidStubStatement = "warning"
+reportIncompleteStub = "warning"
+reportUnsupportedDunderAll = "warning"
+reportUnusedCoroutine = "warning"
+reportUnnecessaryTypeIgnoreComment = "warning"
+reportMatchNotExhaustive = "warning"
+reportShadowedImports = "warning"
+reportImplicitOverride = "warning"
+reportUnreachable = "warning"
+reportIgnoreCommentWithoutRule = "warning"
+reportPrivateLocalImportUsage = "warning"
+reportImplicitAbstractClass = "warning"
+
+[dependency-groups]
+dev = ["ruff>=0.14.0"]
