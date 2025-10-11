@@ -1,7 +1,7 @@
 import { env } from "@repo/utils";
 import { Composer, GrammyError, InputFile } from "grammy";
 import tmp from "tmp";
-import { downloadVideo } from "@/services/video";
+import { downloadVideo, type VideoInformation } from "@/services/video";
 import type { Context } from "@/types";
 
 const composer = new Composer<Context>();
@@ -18,7 +18,7 @@ feature.on(":text").filter(
 
 		const tempDir = tmp.dirSync({ unsafeCleanup: true });
 
-		let videos = [];
+		let videos: VideoInformation[] = [];
 		let cookies: string | undefined;
 
 		if (ctx.msg.text.includes("instagram.com")) {

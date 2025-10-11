@@ -33,7 +33,9 @@ process.on("SIGINT", async () => {
 	await scrapperWorker.close();
 	await scheduledTweetWorker.close();
 	await scheduledSlotWorker.close();
-	if (runner.isRunning()) await runner.stop();
+	if (runner.isRunning()) {
+		await runner.stop();
+	}
 });
 
 process.on("SIGTERM", async () => {
@@ -41,7 +43,9 @@ process.on("SIGTERM", async () => {
 	await scrapperWorker.close();
 	await scheduledTweetWorker.close();
 	await scheduledSlotWorker.close();
-	if (runner.isRunning()) await runner.stop();
+	if (runner.isRunning()) {
+		await runner.stop();
+	}
 });
 
 imagesWorker.run();

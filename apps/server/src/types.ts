@@ -6,18 +6,33 @@ import type { Context as BaseContext, SessionFlavor } from "grammy";
 import type { Logger } from "@/logger";
 import type { SessionData } from "@/storage";
 
-interface ExtendedContext {
+type ExtendedContext = {
 	logger: Logger;
 	user?: User;
 	userChat?: Chat;
-}
+};
+
+type Classification = {
+	aesthetic: number;
+	style: {
+		anime: number;
+		other: number;
+		third_dimension: number;
+		real_life: number;
+		manga_like: number;
+	};
+	nsfw: number;
+	tags: string[];
+};
 
 export type Context = FileFlavor<
 	HydrateFlavor<BaseContext & ExtendedContext & SessionFlavor<SessionData>>
 >;
 
 declare global {
+	// biome-ignore lint/style/noNamespace: Prisma
 	namespace PrismaJson {
 		type TweetType = Tweet;
+		type ClassificationType = Classification;
 	}
 }

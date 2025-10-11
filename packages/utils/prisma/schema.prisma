@@ -111,6 +111,9 @@ model Photo {
     originalUrl    String  @map("original_url")
     perceptualHash String? @map("perceptual_hash")
 
+    /// [ClassificationType]
+    classification Json? @map("classification")
+
     height Int? @map("height")
     width  Int? @map("width")
 

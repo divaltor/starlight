@@ -11,7 +11,7 @@ type VideoMetadata = {
 	width?: number;
 };
 
-type VideoInformation = {
+export type VideoInformation = {
 	filePath: string;
 	metadata: VideoMetadata;
 };

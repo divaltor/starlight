@@ -14,11 +14,11 @@ interface ScheduledTweetJobData {
 	tweetId: string;
 }
 
-interface ScheduledSlotJobData {
+type ScheduledSlotJobData = {
 	userId: string;
 	slotId: string;
 	status: "PUBLISHING" | "PUBLISHED";
-}
+};
 
 export const rateLimiter = new RateLimiterRedis({
 	storeClient: redis,
