@@ -22,7 +22,8 @@
     "server": "turbo server",
     "db:push": "turbo -F @repo/utils db:push",
     "db:generate": "turbo -F @repo/utils db:generate",
-    "db:migrate": "turbo -F @repo/utils db:migrate"
+    "db:migrate": "turbo -F @repo/utils db:migrate",
+    "enqueue:classifications": "turbo -F server enqueue:classifications"
   },
   "dependencies": {},
   "devDependencies": {
