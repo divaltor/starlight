@@ -69,7 +69,7 @@ class StyleScore(ResponseModel):
 
     anime: float
     other: float
-    third_dimension: float = Field(alias='3d')
+    third_dimension: float = Field(validation_alias='3d')
     real_life: float
     manga_like: float
 
