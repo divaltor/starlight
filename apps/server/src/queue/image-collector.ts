@@ -164,7 +164,10 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 				await classificationQueue.add(
 					`classify-${photo.id}`,
 					{ photoId: photo.id, userId },
-					{ jobId: `classify-${photo.id}-${userId}` }
+					{
+						jobId: `classify-${photo.id}-${userId}`,
+						deduplication: { id: `classify-${photo.id}-${userId}` },
+					}
 				);
 			} catch (error) {
 				logger.error(
