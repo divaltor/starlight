@@ -12,7 +12,7 @@ type ExtendedContext = {
 	userChat?: Chat;
 };
 
-type Classification = {
+export type Classification = {
 	aesthetic: number;
 	style: {
 		anime: number;

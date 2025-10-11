@@ -3,6 +3,7 @@ import { Queue, QueueEvents, Worker } from "bullmq";
 import sharp from "sharp";
 import UserAgent from "user-agents";
 import { logger } from "@/logger";
+import { classificationQueue } from "@/queue/classification";
 import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
 import { calculatePerceptualHash } from "@/services/image";
 import { prisma, redis, s3 } from "@/storage";
@@ -157,6 +158,20 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 					width: metadata.width,
 				},
 			});
+
+			// Enqueue classification job
+			try {
+				await classificationQueue.add(
+					`classify-${photo.id}`,
+					{ photoId: photo.id, userId },
+					{ jobId: `classify-${photo.id}-${userId}` }
+				);
+			} catch (error) {
+				logger.error(
+					{ error, photoId: photo.id, userId },
+					"Failed to enqueue classification job"
+				);
+			}
 
 			logger.info(
 				{
