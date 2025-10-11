@@ -1,4 +1,4 @@
-FROM oven/bun:1 AS base
+FROM oven/bun:1.2 AS base
 
 WORKDIR /code
 
