@@ -27,7 +27,13 @@ from app.models import (
 
 configure_logger()
 
-app = FastAPI(title='Image Classification API', version='1.0.0')
+app = FastAPI(
+    title='Image Classification API',
+    version='1.0.0',
+    openapi_url=None if config.DISABLE_OPENAPI else '/openapi.json',
+    docs_url=None if config.DISABLE_OPENAPI else '/docs',
+    redoc_url=None if config.DISABLE_OPENAPI else '/redoc',
+)
 
 logger = structlog.get_logger()
 

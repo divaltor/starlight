@@ -7,6 +7,7 @@ class Config(BaseSettings):
     API_TOKEN: str
 
     LOG_LEVEL: str = 'DEBUG'
+    DISABLE_OPENAPI: bool = False
 
     class Config:
         env_file = '.env'
