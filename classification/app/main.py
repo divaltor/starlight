@@ -6,11 +6,19 @@ from typing import Annotated
 import aiohttp
 import structlog
 from fake_useragent import UserAgent
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+)
 from imgutils.tagging import get_pixai_tags
 from PIL import Image
 from transformers import pipeline
 
+from app.config import config
 from app.logger import configure_logger
 from app.models import (
     ClassificationResult,
@@ -22,6 +30,16 @@ configure_logger()
 app = FastAPI(title='Image Classification API', version='1.0.0')
 
 logger = structlog.get_logger()
+
+
+def verify_api_token(
+    x_api_token: str = Header(..., alias='X-API-Token'),  # pyright: ignore[reportCallInDefaultInitializer]
+) -> None:  # pragma: no cover - simple guard
+    if x_api_token != config.API_TOKEN:
+        raise HTTPException(status_code=401, detail='Invalid API token')
+
+
+protected_router = APIRouter(dependencies=[Depends(verify_api_token)])
 
 # Pipelines are instantiated at startup; adjust if lazy loading becomes necessary.
 nsfw_pipe = pipeline('image-classification', model='Falconsai/nsfw_image_detection')
@@ -40,7 +58,7 @@ def health() -> dict[str, str]:
     return {'status': 'ok'}
 
 
-@app.post('/classify')
+@protected_router.post('/classify')
 async def classify(
     image: Annotated[
         ImageRequest,
@@ -128,3 +146,6 @@ async def classify(
     except Exception as e:  # pragma: no cover
         logger.exception('Model inference failed', error=e)
         raise HTTPException(status_code=500, detail=f'Model inference failed: {e}') from e
+
+
+app.include_router(protected_router)

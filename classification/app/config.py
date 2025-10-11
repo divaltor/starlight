@@ -4,6 +4,8 @@ from pydantic_settings import BaseSettings
 
 
 class Config(BaseSettings):
+    API_TOKEN: str
+
     LOG_LEVEL: str = 'DEBUG'
 
     class Config:
