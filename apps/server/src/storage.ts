@@ -99,7 +99,9 @@ export class Cookies {
 			(cookie) => cookie.key === "twid"
 		)?.value;
 
-		if (!twidValue) return;
+		if (!twidValue) {
+			return;
+		}
 
 		const decoded = decodeURIComponent(twidValue);
 		const match = decoded.match(/u=(\d+)/);
@@ -107,9 +109,9 @@ export class Cookies {
 	}
 }
 
-interface SessionData {
+type SessionData = {
 	cookies: RFC6265Cookie[] | null;
-}
+};
 
 export const s3 = new S3Client({
 	accessKeyId: env.AWS_ACCESS_KEY_ID,

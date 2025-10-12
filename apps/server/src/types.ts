@@ -21,7 +21,15 @@ export type Classification = {
 		real_life: number;
 		manga_like: number;
 	};
-	nsfw: number;
+	nsfw: {
+		is_nsfw: boolean;
+		scores: {
+			neutral: number;
+			low: number;
+			medium: number;
+			high: number;
+		};
+	};
 	tags: string[];
 };
 
