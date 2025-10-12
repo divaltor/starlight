@@ -43,7 +43,7 @@ def verify_api_token(
 protected_router = APIRouter(dependencies=[Depends(verify_api_token)])
 
 # Pipelines are instantiated at startup; adjust if lazy loading becomes necessary.
-nsfw_pipe = pipeline('image-classification', model='Falconsai/nsfw_image_detection')
+nsfw_pipe = pipeline('image-classification', model='Freepik/nsfw_image_detector')
 aesthetic_pipe = pipeline(
     'image-classification',
     model='cafeai/cafe_aesthetic',
@@ -86,6 +86,7 @@ async def classify(
             },
         )
 
+        logger.debug('NSFW model output', output=nsfw_outputs)
         logger.debug('Aesthetic model output', output=aestetic_outputs)
         logger.debug('Style model output', output=style_outputs)
         logger.debug('Tags model output', general=general, character=character)
