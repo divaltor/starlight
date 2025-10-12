@@ -27,10 +27,10 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@biomejs/biome": "2.2.2",
+    "@biomejs/biome": "2.2.5",
     "oxlint-tsgolint": "^0.2.0",
-    "turbo": "^2.4.2",
-    "ultracite": "5.3.3"
+    "turbo": "^2.5.8",
+    "ultracite": "5.6.2"
   },
   "packageManager": "bun@1.2.21"
 }
