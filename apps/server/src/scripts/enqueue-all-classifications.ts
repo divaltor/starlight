@@ -6,15 +6,34 @@ import { env } from "@repo/utils";
 // Manual script: enqueue classification jobs for ALL available photos (no batching)
 // Usage: bun run apps/server/src/scripts/enqueue-all-classifications.ts
 // Optional env vars:
-//   DRY_RUN=1  (only log, do not enqueue)
+//   DRY_RUN=1       (only log, do not enqueue)
+//   CLEAR_QUEUE=1   (drain waiting & delayed jobs before enqueueing)
+//   FORCE=1         (enqueue even if jobs existed previously; bypass dedupe)
+// Notes:
+//   FORCE only bypasses queue job de-duplication. The worker still skips
+//   photos that already have a classification saved.
 
 const DRY_RUN = process.env.DRY_RUN === "1";
+const CLEAR_QUEUE =
+	process.env.CLEAR_QUEUE === "1" || process.env.CLEAR === "1";
+const FORCE = process.env.FORCE === "1";
 
 async function main() {
 	logger.info(
-		{ dryRun: DRY_RUN },
+		{ dryRun: DRY_RUN, clear: CLEAR_QUEUE, force: FORCE },
 		"Starting enqueue of all photos for classification"
 	);
+
+	if (CLEAR_QUEUE && !DRY_RUN) {
+		try {
+			await classificationQueue.drain(true);
+			logger.info(
+				"Classification queue drained (waiting & delayed jobs removed)"
+			);
+		} catch (error) {
+			logger.error({ error }, "Failed to drain classification queue");
+		}
+	}
 
 	const photos = await prisma.photo.findMany({
 		where: { deletedAt: null, s3Path: { not: null } },
@@ -24,21 +43,25 @@ async function main() {
 
 	logger.info({ count: photos.length }, "Fetched all photos to enqueue");
 
+	let enqueued = 0;
 	if (!DRY_RUN && photos.length > 0) {
 		await classificationQueue.addBulk(
-			photos.map((p) => ({
-				name: `classify-${p.id}`,
-				data: { photoId: p.id, userId: p.userId },
-				opts: {
-					jobId: `classify-${p.id}-${p.userId}`,
-					deduplication: { id: `classify-${p.id}-${p.userId}` },
-				},
-			}))
+			photos.map((p) => {
+				const base = `classify-${p.id}-${p.userId}`;
+				const jobId = FORCE ? `${base}-${Date.now()}` : base;
+				return {
+					name: `classify-${p.id}`,
+					data: { photoId: p.id, userId: p.userId },
+					// Only enable deduplication when not forcing
+					opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
+				};
+			})
 		);
+		enqueued = photos.length;
 	}
 
 	logger.info(
-		{ enqueued: DRY_RUN ? 0 : photos.length, dryRun: DRY_RUN },
+		{ enqueued, dryRun: DRY_RUN, force: FORCE, clearQueue: CLEAR_QUEUE },
 		"Finished enqueue script"
 	);
 }

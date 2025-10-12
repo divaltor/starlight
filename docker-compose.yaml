@@ -7,7 +7,7 @@ services:
       - redis_data:/data
 
   postgresql:
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg17-trixie
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-starlight-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-starlight}
