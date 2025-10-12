@@ -21,14 +21,24 @@ class ImageRequest(BaseModel):
 # NSFW scores -> {"normal": <score>, "nsfw": <score>}
 
 
+class NSFWScores(BaseModel):
+    neutral: float
+    low: float
+    medium: float
+    high: float
+
+
 class NSFWResult(ResponseModel):
     model: Literal['nsfw'] = Field(default='nsfw', exclude=True)
-    normal: float = 0.0
-    nsfw: float = 0.0
+    scores: NSFWScores
 
     @model_serializer(mode='plain')
-    def ser(self) -> float:
-        return self.nsfw
+    def ser(self) -> dict[str, NSFWScores | bool]:
+        return {'scores': self.scores, 'is_nsfw': self.is_nsfw}
+
+    @property
+    def is_nsfw(self) -> bool:
+        return self.scores.high + self.scores.medium >= 0.5
 
     @override
     @classmethod
@@ -38,8 +48,7 @@ class NSFWResult(ResponseModel):
 
         return cls.model_validate(
             {
-                'normal': score_map['normal'],
-                'nsfw': score_map['nsfw'],
+                'scores': NSFWScores.model_validate(score_map),
             },
         )
 
