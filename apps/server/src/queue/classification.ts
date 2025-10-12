@@ -69,12 +69,8 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			throw new Error("Photo has no URL for classification");
 		}
 
-		if (photo.classification) {
-			logger.debug({ photoId, userId }, "Photo %s already classified", photoId);
-			return;
-		}
-
 		let response: Response;
+
 		try {
 			response = await fetch(
 				new URL("/classify", env.CLASSIFICATION_API_URL).toString(),
