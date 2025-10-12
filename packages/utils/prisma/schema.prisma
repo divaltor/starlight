@@ -112,7 +112,11 @@ model Photo {
     perceptualHash String? @map("perceptual_hash")
 
     /// [ClassificationType]
-    classification Json? @map("classification")
+    classification Json?                       @map("classification")
+    image_vec      Unsupported("vector(512)")? @map("image_vec")
+    tag_vec        Unsupported("vector(512)")? @map("tag_vec")
+    caption_text   String?                     @map("caption_text")
+    caption_vec    Unsupported("vector(512)")? @map("caption_vec")
 
     height Int? @map("height")
     width  Int? @map("width")
