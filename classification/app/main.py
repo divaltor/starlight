@@ -1,6 +1,6 @@
 from collections.abc import Callable, Coroutine
+from time import perf_counter
 from typing import Annotated, Any
-from uuid import uuid4
 
 import structlog
 from fastapi import (
@@ -12,13 +12,13 @@ from fastapi import (
     HTTPException,
     Request,
 )
-from imgutils.tagging import get_pixai_tags
-from opentelemetry import baggage, trace
-from opentelemetry.context import attach, detach
+from optimum.onnxruntime.modeling_ort import ORTModelForImageClassification
 from starlette.responses import Response
 from transformers import pipeline
+from transformers.models.auto.image_processing_auto import AutoImageProcessor
 
 from app.config import config
+from app.imgutils.camie import get_camie_tags
 from app.logger import configure_logger
 from app.models import (
     ClassificationResult,
@@ -42,25 +42,23 @@ logger = structlog.get_logger()
 
 
 @app.middleware('http')
-async def attach_request_header_span(
+async def log_request_duration(
     request: Request,
     call_next: Callable[[Request], Coroutine[Any, Any, Response]],
 ) -> Response:
-    span = trace.get_current_span()
-    detach_token: object | None = None
+    start = perf_counter()
+    response = await call_next(request)
+    duration_ms = (perf_counter() - start) * 1000
 
-    if span and span.is_recording():
-        request_token = request.headers.get('X-Request-Id') or str(uuid4())
-        if request_token:
-            span.set_attribute('http.request.header.x_request', request_token)
-            context = baggage.set_baggage('x-request', request_token)
-            detach_token = attach(context)
+    logger.debug(
+        'Request completed',
+        method=request.method,
+        path=str(request.url.path),
+        status_code=response.status_code,
+        duration_ms=duration_ms,
+    )
 
-    try:
-        return await call_next(request)
-    finally:
-        if detach_token is not None:
-            detach(detach_token)
+    return response
 
 
 def verify_api_token(
@@ -73,9 +71,18 @@ def verify_api_token(
 protected_router = APIRouter(dependencies=[Depends(verify_api_token)])
 
 # Pipelines are instantiated at startup; adjust if lazy loading becomes necessary.
+
+processor = AutoImageProcessor.from_pretrained('spiele/nsfw_image_detector-ONNX')
+
+model = ORTModelForImageClassification.from_pretrained(
+    'spiele/nsfw_image_detector-ONNX',
+    file_name='model_quantized.onnx',
+)
+
 nsfw_pipe = pipeline(
     'image-classification',
-    model='Freepik/nsfw_image_detector',
+    model=model,
+    image_processor=processor,
 )
 aesthetic_pipe = pipeline(
     'image-classification',
@@ -117,20 +124,14 @@ async def classify(
         with pipeline_span('style_classification', 'cafeai/cafe_style'):
             style_outputs = style_pipe(img)
 
-        with pipeline_span('tag_generation', 'imgutils/pixai_tags'):
-            general, character = get_pixai_tags(  # pyright: ignore[reportGeneralTypeIssues]
-                img,
-                thresholds={
-                    'general': 0.5,
-                    'character': 0.75,
-                },
-            )
+        with pipeline_span('tag_generation', 'Camais03/camie-tagger-v2'):
+            tags = get_camie_tags(img)
 
         return ClassificationResult.from_response(
             model_response={
                 'cafe': {'aesthetic': aestetic_outputs, 'style': style_outputs},
                 'nsfw': nsfw_outputs,
-                'tags': {'general': general, 'character': character},
+                'tags': tags,
             },
         )
     except Exception as e:  # pragma: no cover

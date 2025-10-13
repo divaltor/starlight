@@ -125,12 +125,12 @@ class AestheticResult(ResponseModel):
         )
 
 
-# Tags scores -> {"<tag>": <score>, ...}
+# Camie tag scores schema -> mapping of category -> list[(tag, score)]
 
 
-class TagsResult(ResponseModel):
+class CamieTags(ResponseModel):
     model: Literal['tags'] = Field(default='tags', exclude=True)
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
 
     @model_serializer(mode='plain')
     def ser(self) -> list[str]:
@@ -141,18 +141,21 @@ class TagsResult(ResponseModel):
     def from_response(
         cls,
         model_response: Any,
-    ) -> Self:  # Accept list[{'label','score'}] or mapping
-        character = model_response['character']
-        general = model_response['general']
+    ) -> Self:  # Accept mapping category -> list[(tag, score)]
+        general_pairs = model_response.get('general', [])
+        character_pairs = model_response.get('character', [])
 
-        return cls.model_validate({'tags': [*list(character), *list(general)]})
+        general = [tag for tag, _ in general_pairs]
+        character = [tag for tag, _ in character_pairs]
+
+        return cls.model_validate({'tags': [*character, *general]})
 
 
 class ClassificationResult(ResponseModel):
     aesthetic: float
     style: StyleScore
     nsfw: NSFWResult
-    tags: TagsResult
+    tags: CamieTags
 
     @override
     @classmethod
@@ -161,9 +164,9 @@ class ClassificationResult(ResponseModel):
 
         return cls.model_validate(
             {
-                'aesthetic': aesthetic.aesthetic.aesthetic,  # Don't comment that bullshit
+                'aesthetic': aesthetic.aesthetic.aesthetic,
                 'style': aesthetic.style,
                 'nsfw': NSFWResult.from_response(model_response['nsfw']),
-                'tags': TagsResult.from_response(model_response['tags']),
+                'tags': CamieTags.from_response(model_response['tags']),
             },
         )

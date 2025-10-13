@@ -8,7 +8,6 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.threading import ThreadingInstrumentor
 from opentelemetry.instrumentation.transformers import TransformersInstrumentor
-from opentelemetry.instrumentation.urllib import URLLibInstrumentor
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -42,7 +41,6 @@ def setup_otel(app: FastAPI) -> None:
     FastAPIInstrumentor().instrument_app(app)
     ThreadingInstrumentor().instrument()
     TransformersInstrumentor().instrument()
-    URLLibInstrumentor().instrument()
     trace.set_tracer_provider(provider)
 
 
