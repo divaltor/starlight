@@ -17,8 +17,8 @@ export const classificationQueue = new Queue<ClassificationJobData>(
 		defaultJobOptions: {
 			attempts: 3,
 			backoff: { type: "exponential", delay: 30_000 }, // 30s, 90s, 270s
-			removeOnComplete: { age: 60 * 60 * 24, count: 5000 },
-			removeOnFail: { age: 60 * 60 * 24 * 7, count: 10_000 },
+			removeOnComplete: true,
+			removeOnFail: true,
 		},
 	}
 );

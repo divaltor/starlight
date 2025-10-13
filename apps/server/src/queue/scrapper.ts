@@ -292,8 +292,6 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		connection: redis,
 		concurrency: 1,
 		autorun: false,
-		removeOnComplete: { age: 60 * 60 * 24, count: 100 },
-		removeOnFail: { age: 60 * 60 * 24 * 7, count: 50 },
 	}
 );
 
