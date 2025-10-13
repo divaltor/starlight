@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "aiohttp[speedups]>=3.13.0",
+    "axiom-py>=0.9.1",
     "dghs-imgutils>=0.19.0",
     "fake-useragent>=2.2.0",
     "fastapi>=0.119.0",
@@ -165,3 +166,12 @@ reportImplicitAbstractClass = "warning"
 
 [dependency-groups]
 dev = ["ruff>=0.14.0"]
+otel = [
+    "opentelemetry-api>=1.37.0",
+    "opentelemetry-exporter-otlp>=1.37.0",
+    "opentelemetry-instrumentation-fastapi>=0.58b0",
+    "opentelemetry-instrumentation-threading>=0.58b0",
+    "opentelemetry-instrumentation-transformers>=0.47.3",
+    "opentelemetry-instrumentation-urllib>=0.58b0",
+    "opentelemetry-sdk>=1.37.0",
+]

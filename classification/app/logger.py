@@ -2,6 +2,8 @@ import logging.config
 from typing import Any
 
 import structlog
+from axiom_py.client import Client
+from axiom_py.structlog import AxiomProcessor
 
 from app.config import config
 
@@ -73,6 +75,12 @@ logging.config.dictConfig(
 
 
 def configure_logger() -> None:
+    processors = []
+
+    if config.AXIOM_API_TOKEN:
+        client = Client(config.AXIOM_API_TOKEN)
+        processors.append(AxiomProcessor(client, config.AXIOM_DATASET))
+
     structlog.configure(
         processors=[
             structlog.stdlib.add_log_level,
@@ -81,6 +89,7 @@ def configure_logger() -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+            *processors,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
