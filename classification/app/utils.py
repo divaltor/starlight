@@ -6,12 +6,15 @@ import io
 from typing import TYPE_CHECKING
 
 import aiohttp
+import structlog
 from fake_useragent import UserAgent
 from fastapi import HTTPException
 from PIL import Image
 
 if TYPE_CHECKING:
     from PIL.Image import Image as PILImage
+
+logger = structlog.get_logger()
 
 
 async def preprocess_image(image: str) -> PILImage:
@@ -43,6 +46,7 @@ async def preprocess_image(image: str) -> PILImage:
             except HTTPException:
                 raise
             except Exception as e:
+                logger.exception('Failed to download image %s', image)
                 raise HTTPException(status_code=400, detail=f'Failed to download image: {e}') from e
         case False:
             try:

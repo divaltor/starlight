@@ -1,7 +1,6 @@
 from collections.abc import Generator
 from contextlib import contextmanager
 from socket import gethostname
-from uuid import uuid4
 
 from fastapi import FastAPI
 from opentelemetry import trace
@@ -16,14 +15,11 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from app.config import config
 
-container_id = uuid4()
-
 resource = Resource(
     attributes={
         SERVICE_NAME: 'starlight',
         'deployment.service.name': 'starlight',
         'host.name': gethostname(),
-        'container.id': container_id,
     },
 )
 
