@@ -1,6 +1,7 @@
 from collections.abc import Callable, Coroutine
 from time import perf_counter
 from typing import Annotated, Any
+from uuid import uuid4
 
 import structlog
 from fastapi import (
@@ -12,6 +13,8 @@ from fastapi import (
     HTTPException,
     Request,
 )
+from opentelemetry import baggage, trace
+from opentelemetry.context import attach, detach
 from optimum.onnxruntime.modeling_ort import ORTModelForImageClassification
 from starlette.responses import Response
 from transformers import pipeline
@@ -46,9 +49,27 @@ async def log_request_duration(
     request: Request,
     call_next: Callable[[Request], Coroutine[Any, Any, Response]],
 ) -> Response:
+    # Obtain or generate a request id
+    request_id = request.headers.get('X-Request-Id') or str(uuid4())
+
+    # Attach request id to OTEL baggage & current span
+    ctx = baggage.set_baggage('request.id', request_id)
+    token = attach(ctx)
+    span = trace.get_current_span()
+
+    span.set_attribute('request.id', request_id)
+    span.set_attribute('http.request_id', request_id)
+
     start = perf_counter()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    finally:
+        detach(token)
+
     duration_ms = (perf_counter() - start) * 1000
+
+    # Echo back request id so clients can correlate
+    response.headers['X-Request-Id'] = request_id
 
     logger.debug(
         'Request completed',
@@ -56,6 +77,7 @@ async def log_request_duration(
         path=str(request.url.path),
         status_code=response.status_code,
         duration_ms=duration_ms,
+        request_id=request_id,
     )
 
     return response
