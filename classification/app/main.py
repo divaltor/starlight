@@ -22,7 +22,6 @@ from app.otel import setup_otel
 from app.utils import preprocess_image
 
 configure_logger()
-setup_otel()
 
 app = FastAPI(
     title='Image Classification API',
@@ -31,6 +30,7 @@ app = FastAPI(
     docs_url=None if config.DISABLE_OPENAPI else '/docs',
     redoc_url=None if config.DISABLE_OPENAPI else '/redoc',
 )
+setup_otel(app)
 
 logger = structlog.get_logger()
 
