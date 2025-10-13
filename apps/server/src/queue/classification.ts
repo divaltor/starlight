@@ -1,5 +1,6 @@
 import { env } from "@repo/utils";
 import { Queue, QueueEvents, Worker } from "bullmq";
+import Bun from "bun";
 import { logger } from "@/logger";
 import { prisma, redis } from "@/storage";
 import type { Classification } from "@/types";
@@ -74,11 +75,8 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
 			"X-API-Token": env.CLASSIFICATION_API_TOKEN,
+			"X-Request-Id": Bun.randomUUIDv7(),
 		};
-
-		if (job.id) {
-			headers["X-Request-Id"] = job.id;
-		}
 
 		try {
 			response = await fetch(
