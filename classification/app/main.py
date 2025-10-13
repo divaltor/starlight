@@ -18,7 +18,7 @@ from app.models import (
     ClassificationResult,
     ImageRequest,
 )
-from app.otel import setup_otel
+from app.otel import pipeline_span, setup_otel
 from app.utils import preprocess_image
 
 configure_logger()
@@ -80,16 +80,23 @@ async def classify(
     img = await preprocess_image(image.image.strip())
 
     try:
-        nsfw_outputs = nsfw_pipe(img)
-        aestetic_outputs = aesthetic_pipe(img)
-        style_outputs = style_pipe(img)
-        general, character = get_pixai_tags(  # pyright: ignore[reportGeneralTypeIssues]
-            img,
-            thresholds={
-                'general': 0.5,
-                'character': 0.75,
-            },
-        )
+        with pipeline_span('nsfw_classification', 'Freepik/nsfw_image_detector'):
+            nsfw_outputs = nsfw_pipe(img)
+
+        with pipeline_span('aesthetic_classification', 'cafeai/cafe_aesthetic'):
+            aestetic_outputs = aesthetic_pipe(img)
+
+        with pipeline_span('style_classification', 'cafeai/cafe_style'):
+            style_outputs = style_pipe(img)
+
+        with pipeline_span('tag_generation', 'imgutils/pixai_tags'):
+            general, character = get_pixai_tags(  # pyright: ignore[reportGeneralTypeIssues]
+                img,
+                thresholds={
+                    'general': 0.5,
+                    'character': 0.75,
+                },
+            )
 
         return ClassificationResult.from_response(
             model_response={

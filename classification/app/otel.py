@@ -1,3 +1,6 @@
+from collections.abc import Generator
+from contextlib import contextmanager
+
 from fastapi import FastAPI
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -38,3 +41,13 @@ def setup_otel(app: FastAPI) -> None:
     TransformersInstrumentor().instrument()
     URLLibInstrumentor().instrument()
     trace.set_tracer_provider(provider)
+
+
+@contextmanager
+def pipeline_span(operation_name: str, model_id: str | None = None) -> Generator[None]:
+    tracer = trace.get_tracer('starlight-classification.pipeline')
+    with tracer.start_as_current_span(operation_name) as span:
+        if model_id:
+            span.set_attribute('model.id', model_id)
+        span.set_attribute('pipeline.operation', operation_name)
+        yield
