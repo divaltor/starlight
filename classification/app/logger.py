@@ -33,14 +33,6 @@ logging.config.dictConfig(
         'version': 1,
         'disable_existing_loggers': False,
         'formatters': {
-            'plain': {
-                '()': structlog.stdlib.ProcessorFormatter,
-                'processors': [
-                    structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                    structlog.dev.ConsoleRenderer(colors=False),
-                ],
-                'foreign_pre_chain': pre_chain,
-            },
             'colored': {
                 '()': structlog.stdlib.ProcessorFormatter,
                 'processors': [
