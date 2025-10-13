@@ -9,7 +9,7 @@ WORKDIR /code
 
 COPY uv.lock pyproject.toml /code/
 
-RUN uv sync
+RUN uv sync --all-groups
 
 COPY . /code
 
