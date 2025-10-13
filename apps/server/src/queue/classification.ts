@@ -71,15 +71,21 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 
 		let response: Response;
 
+		const headers: Record<string, string> = {
+			"Content-Type": "application/json",
+			"X-API-Token": env.CLASSIFICATION_API_TOKEN,
+		};
+
+		if (job.id) {
+			headers["X-Request-Id"] = job.id;
+		}
+
 		try {
 			response = await fetch(
 				new URL("/classify", env.CLASSIFICATION_API_URL).toString(),
 				{
 					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						"X-API-Token": env.CLASSIFICATION_API_TOKEN,
-					},
+					headers,
 					body: JSON.stringify({ image: photo.s3Url }),
 				}
 			);

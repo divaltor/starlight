@@ -1,4 +1,6 @@
-from typing import Annotated
+from collections.abc import Callable, Coroutine
+from typing import Annotated, Any
+from uuid import uuid4
 
 import structlog
 from fastapi import (
@@ -8,8 +10,12 @@ from fastapi import (
     FastAPI,
     Header,
     HTTPException,
+    Request,
 )
 from imgutils.tagging import get_pixai_tags
+from opentelemetry import baggage, trace
+from opentelemetry.context import attach, detach
+from starlette.responses import Response
 from transformers import pipeline
 
 from app.config import config
@@ -33,6 +39,28 @@ app = FastAPI(
 setup_otel(app)
 
 logger = structlog.get_logger()
+
+
+@app.middleware('http')
+async def attach_request_header_span(
+    request: Request,
+    call_next: Callable[[Request], Coroutine[Any, Any, Response]],
+) -> Response:
+    span = trace.get_current_span()
+    detach_token: object | None = None
+
+    if span and span.is_recording():
+        request_token = request.headers.get('X-Request-Id') or str(uuid4())
+        if request_token:
+            span.set_attribute('http.request.header.x_request', request_token)
+            context = baggage.set_baggage('x-request', request_token)
+            detach_token = attach(context)
+
+    try:
+        return await call_next(request)
+    finally:
+        if detach_token is not None:
+            detach(detach_token)
 
 
 def verify_api_token(

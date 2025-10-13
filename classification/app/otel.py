@@ -1,5 +1,7 @@
 from collections.abc import Generator
 from contextlib import contextmanager
+from socket import gethostname
+from uuid import uuid4
 
 from fastapi import FastAPI
 from opentelemetry import trace
@@ -14,9 +16,14 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from app.config import config
 
+container_id = uuid4()
+
 resource = Resource(
     attributes={
-        SERVICE_NAME: 'starlight-classification',
+        SERVICE_NAME: 'starlight',
+        'deployment.service.name': 'starlight',
+        'host.name': gethostname(),
+        'container.id': container_id,
     },
 )
 
@@ -45,7 +52,7 @@ def setup_otel(app: FastAPI) -> None:
 
 @contextmanager
 def pipeline_span(operation_name: str, model_id: str | None = None) -> Generator[None]:
-    tracer = trace.get_tracer('starlight-classification.pipeline')
+    tracer = trace.get_tracer('starlight.pipeline')
     with tracer.start_as_current_span(operation_name) as span:
         if model_id:
             span.set_attribute('model.id', model_id)
