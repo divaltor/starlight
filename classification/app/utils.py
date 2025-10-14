@@ -14,6 +14,7 @@ from PIL import Image
 from app.otel import pipeline_span
 
 if TYPE_CHECKING:
+    import torch
     from PIL.Image import Image as PILImage
 
 logger = structlog.get_logger()
@@ -72,3 +73,7 @@ async def preprocess_image(image: str) -> PILImage:
             raise HTTPException(status_code=400, detail=f'Invalid image data: {e}') from e
 
         return img
+
+
+def l2norm(x: torch.Tensor) -> torch.Tensor:
+    return x / (x.norm(dim=-1, keepdim=True) + 1e-12)
