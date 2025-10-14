@@ -19,8 +19,10 @@
       "!**/src-tauri",
       "!**/.nuxt",
       "!**/generated",
-      "!**/node_modules"
-    ]
+      "!**/node_modules",
+      "!**/.git"
+    ],
+    "experimentalScannerIgnores": ["node_modules"]
   },
   "formatter": {
     "enabled": true,
