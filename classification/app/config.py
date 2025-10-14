@@ -4,6 +4,8 @@ from pydantic_settings import BaseSettings
 
 
 class Config(BaseSettings):
+    DEBUG: bool = False
+
     API_TOKEN: str
 
     AXIOM_API_TOKEN: str | None = None

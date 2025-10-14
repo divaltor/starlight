@@ -53,24 +53,15 @@ class NSFWResult(ResponseModel):
         )
 
 
-# Aesthetic scores -> list or mapping with 'aesthetic' / 'not_aesthetic'
-
-
 class AestheticScore(ResponseModel):
     aesthetic: float
     not_aesthetic: float
 
-    @override
-    @classmethod
-    def from_response(cls, model_response: Any) -> Self:
-        score_map: dict[str, float] = transform_response(model_response)
 
-        return cls.model_validate(
-            {
-                'aesthetic': score_map['aesthetic'],
-                'not_aesthetic': score_map['not_aesthetic'],
-            },
-        )
+class EmbeddingResult(BaseModel):
+    type: Literal['image', 'text']
+    model: str
+    embedding: list[float]
 
 
 class StyleScore(ResponseModel):
@@ -97,6 +88,17 @@ class StyleScore(ResponseModel):
             },
         )
 
+    @property
+    def danboru_style(self) -> str | None:
+        if self.anime > 0.8:
+            return 'anime'
+        if self.third_dimension > 0.8 or self.real_life > 0.8:
+            return '3d'
+        if self.manga_like > 0.8:
+            return 'manga'
+
+        return None
+
 
 class AestheticResult(ResponseModel):
     model: Literal['aesthetic'] = Field(default='aesthetic', exclude=True)
@@ -113,14 +115,14 @@ class AestheticResult(ResponseModel):
     @override
     @classmethod
     def from_response(cls, model_response: dict[str, Any]) -> Self:
-        aesthetic_raw = model_response['aesthetic']
+        aesthetic_raw = transform_response(model_response['aesthetic'])
 
-        style_raw = model_response['style']
+        style_raw = transform_response(model_response['style'])
 
         return cls.model_validate(
             {
-                'aesthetic': AestheticScore.from_response(aesthetic_raw),
-                'style': StyleScore.from_response(style_raw),
+                'aesthetic': AestheticScore.model_validate(aesthetic_raw),
+                'style': StyleScore.model_validate(style_raw),
             },
         )
 
@@ -160,6 +162,7 @@ class ClassificationResult(ResponseModel):
     @override
     @classmethod
     def from_response(cls, model_response: Any) -> Self:
+        print(model_response)
         aesthetic = AestheticResult.from_response(model_response['cafe'])
 
         return cls.model_validate(
@@ -170,3 +173,45 @@ class ClassificationResult(ResponseModel):
                 'tags': CamieTags.from_response(model_response['tags']),
             },
         )
+
+
+class EmbeddingPayload(BaseModel):
+    image: str
+
+    tags: list[str] = []
+    style: StyleScore
+
+    @property
+    def text(self) -> str:
+        concat_tags = ', '.join(self.tags)
+
+        if style := self.style.danboru_style:
+            concat_tags += f'. style: {style}'
+
+        return concat_tags
+
+
+class EmbeddingResponse(BaseModel):
+    image: list[list[float]]
+    text: list[list[float]]
+
+
+class CaptionizePayload(BaseModel):
+    tags: list[str] = []
+    style: StyleScore
+
+    @property
+    def prompt(self) -> str:
+        # Build a concise prompt using tags and (optional) dominant style.
+        tags_part = ', '.join(self.tags)  # safeguard length
+
+        return (
+            'Generate a single, vivid, natural English caption (<=64 tokens) describing an image.'
+            '\nConstraints: one concise sentence, no hashtags, no quotes, no leading phrases like "An image of"., include character name if presented in tags.'
+            f'\nTags: {tags_part}.{self.style.model_dump_json(by_alias=True)}'
+            '\nReturn only the caption.'
+        )
+
+
+class CaptionResponse(BaseModel):
+    caption: str
