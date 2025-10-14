@@ -7,7 +7,8 @@ from uuid import uuid4
 import structlog
 import torch
 from fastapi import APIRouter, Body, Depends, FastAPI, Header, HTTPException, Request
-from llama_cpp import Llama
+
+# from llama_cpp import Llama
 from opentelemetry import baggage, trace
 from opentelemetry.context import attach, detach
 from optimum.onnxruntime.modeling_ort import ORTModelForImageClassification
@@ -19,8 +20,6 @@ from app.config import config
 from app.imgutils.camie import get_camie_tags
 from app.logger import configure_logger
 from app.models import (
-    CaptionizePayload,
-    CaptionResponse,
     ClassificationResult,
     EmbeddingPayload,
     EmbeddingResponse,
@@ -126,13 +125,13 @@ if hasattr(embedding_model, 'set_processor'):
 
 embedding_model.eval()
 
-caption_model = Llama.from_pretrained(
-    'unsloth/Qwen3-4B-Instruct-2507-GGUF',
-    filename='Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
-    n_ctx=4096,
-    n_gpu_layers=-1,  # auto-offload all layers to GPU if available
-    logits_all=False,
-)
+# caption_model = Llama.from_pretrained(
+#     'unsloth/Qwen3-4B-Instruct-2507-GGUF',
+#     filename='Qwen3-4B-Instruct-2507-Q4_K_M.gguf',
+#     n_ctx=4096,
+#     n_gpu_layers=-1,  # auto-offload all layers to GPU if available
+#     logits_all=False,
+# )
 
 
 @app.get('/health')
@@ -228,44 +227,44 @@ async def embeddings(
         raise HTTPException(status_code=500, detail=f'Embedding generation failed: {e}') from e
 
 
-@protected_router.post('/captionize')
-async def captionize(
-    payload: Annotated[
-        CaptionizePayload,
-        Body(
-            description='Generate a short natural caption (<=64 tokens) from tags and style scores.',
-            examples=[
-                {
-                    'tags': ['mountain', 'sunrise', 'mist', 'valley'],
-                    'style': {
-                        'anime': 0.9,
-                        'other': 0.05,
-                        '3d': 0.01,
-                        'real_life': 0.02,
-                        'manga_like': 0.02,
-                    },
-                },
-            ],
-        ),
-    ],
-) -> CaptionResponse:
-    try:
-        with pipeline_span('caption_generation', 'unsloth/Qwen3-4B-Instruct-2507-GGUF'):
-            result = caption_model.create_chat_completion(
-                messages=[{'role': 'user', 'content': payload.prompt}],
-                max_tokens=77,
-                temperature=0.0,
-                top_p=0.8,
-                min_p=0,
-                top_k=20,
-                presence_penalty=1,
-            )
-        return CaptionResponse(caption=result['choices'][0]['message']['content'])
-    except HTTPException:
-        raise
-    except Exception as e:  # pragma: no cover
-        logger.exception('Caption generation failed')
-        raise HTTPException(status_code=500, detail=f'Caption generation failed: {e}') from e
+# @protected_router.post('/captionize')
+# async def captionize(
+#     payload: Annotated[
+#         CaptionizePayload,
+#         Body(
+#             description='Generate a short natural caption (<=64 tokens) from tags and style scores.',
+#             examples=[
+#                 {
+#                     'tags': ['mountain', 'sunrise', 'mist', 'valley'],
+#                     'style': {
+#                         'anime': 0.9,
+#                         'other': 0.05,
+#                         '3d': 0.01,
+#                         'real_life': 0.02,
+#                         'manga_like': 0.02,
+#                     },
+#                 },
+#             ],
+#         ),
+#     ],
+# ) -> CaptionResponse:
+#     try:
+#         with pipeline_span('caption_generation', 'unsloth/Qwen3-4B-Instruct-2507-GGUF'):
+#             result = caption_model.create_chat_completion(
+#                 messages=[{'role': 'user', 'content': payload.prompt}],
+#                 max_tokens=77,
+#                 temperature=0.0,
+#                 top_p=0.8,
+#                 min_p=0,
+#                 top_k=20,
+#                 presence_penalty=1,
+#             )
+#         return CaptionResponse(caption=result['choices'][0]['message']['content'])
+#     except HTTPException:
+#         raise
+#     except Exception as e:  # pragma: no cover
+#         logger.exception('Caption generation failed')
+#         raise HTTPException(status_code=500, detail=f'Caption generation failed: {e}') from e
 
 
 app.include_router(protected_router)
