@@ -80,7 +80,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 
 		try {
 			response = await fetch(
-				new URL("/classify", env.CLASSIFICATION_API_URL).toString(),
+				new URL("/v1/classify", env.CLASSIFICATION_API_URL).toString(),
 				{
 					method: "POST",
 					headers,
