@@ -179,39 +179,8 @@ class EmbeddingPayload(BaseModel):
     image: str
 
     tags: list[str] = []
-    style: StyleScore
-
-    @property
-    def text(self) -> str:
-        concat_tags = ', '.join(self.tags)
-
-        if style := self.style.danboru_style:
-            concat_tags += f'. style: {style}'
-
-        return concat_tags
 
 
 class EmbeddingResponse(BaseModel):
-    image: list[list[float]]
-    text: list[list[float]]
-
-
-class CaptionizePayload(BaseModel):
-    tags: list[str] = []
-    style: StyleScore
-
-    @property
-    def prompt(self) -> str:
-        # Build a concise prompt using tags and (optional) dominant style.
-        tags_part = ', '.join(self.tags)  # safeguard length
-
-        return (
-            'Generate a single, vivid, natural English caption (<=64 tokens) describing an image.'
-            '\nConstraints: one concise sentence, no hashtags, no quotes, no leading phrases like "An image of"., include character name if presented in tags.'
-            f'\nTags: {tags_part}.{self.style.model_dump_json(by_alias=True)}'
-            '\nReturn only the caption.'
-        )
-
-
-class CaptionResponse(BaseModel):
-    caption: str
+    image: list[float]
+    text: list[float]

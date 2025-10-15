@@ -4,8 +4,28 @@ from typing import Any
 import structlog
 from axiom_py.client import Client
 from axiom_py.structlog import AxiomProcessor
+from opentelemetry import trace
 
 from app.config import config
+
+
+def add_open_telemetry_spans(_, __, event_dict: dict[str, Any]) -> dict[str, Any]:  # pyright: ignore[reportUnknownParameterType, reportMissingParameterType]
+    span = trace.get_current_span()
+    if not span.is_recording():
+        event_dict['span'] = None
+        return event_dict
+
+    ctx = span.get_span_context()
+    parent = getattr(span, 'parent', None)
+
+    event_dict['span'] = {
+        'span_id': format(ctx.span_id, '016x'),
+        'trace_id': format(ctx.trace_id, '032x'),
+        'parent_span_id': None if not parent else format(parent.span_id, '016x'),
+    }
+
+    return event_dict
+
 
 timestamper = structlog.processors.TimeStamper(fmt='%Y-%m-%d %H:%M:%S')
 pre_chain = [
@@ -17,6 +37,7 @@ pre_chain = [
     # through to log output.
     structlog.stdlib.ExtraAdder(),
     timestamper,
+    add_open_telemetry_spans,
 ]
 
 

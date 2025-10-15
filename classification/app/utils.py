@@ -76,4 +76,5 @@ async def preprocess_image(image: str) -> PILImage:
 
 
 def l2norm(x: torch.Tensor) -> torch.Tensor:
+    # TODO: Replace with torch.linalg.norm
     return x / (x.norm(dim=-1, keepdim=True) + 1e-12)
