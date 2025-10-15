@@ -8,6 +8,9 @@ class Config(BaseSettings):
 
     API_TOKEN: str
 
+    ENABLE_EMBEDDINGS: bool = False
+    ENABLE_CLASSIFICATION: bool = False
+
     AXIOM_API_TOKEN: str | None = None
     AXIOM_DATASET: str = 'starlight'
     AXIOM_BASE_URL: str = 'https://api.axiom.co'
