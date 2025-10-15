@@ -180,6 +180,10 @@ class EmbeddingPayload(BaseModel):
 
     tags: list[str] = []
 
+    @property
+    def text(self) -> str:
+        return ', '.join(self.tags)
+
 
 class EmbeddingResponse(BaseModel):
     image: list[float]

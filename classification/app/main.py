@@ -193,7 +193,7 @@ async def embeddings(
 
             with pipeline_span('text_embedding', 'jinaai/jina-clip-v2'):
                 emb_text_vec: ndarray = embedding_model.encode(
-                    payload.tags,
+                    [payload.text],
                     normalize_embeddings=True,
                 )
 
