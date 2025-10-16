@@ -29,8 +29,8 @@
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
     "@telegram-apps/init-data-node": "^2.0.10",
-    "elysia": "catalog:",
     "grammy": "catalog:",
+    "hono": "catalog:",
     "zod": "catalog:"
   }
 }

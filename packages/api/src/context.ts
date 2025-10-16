@@ -1,13 +1,13 @@
-import type { Context as ElysiaContext } from "elysia";
+import type { Context as HonoContext } from "hono";
 
 export type CreateContextOptions = {
-	context: ElysiaContext;
+	context: HonoContext;
 };
 
 // biome-ignore lint/suspicious/useAwait: We don't need to await this function
 export async function createContext({ context }: CreateContextOptions) {
 	return {
-		request: context,
+		request: context.req,
 	};
 }
 
