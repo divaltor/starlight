@@ -1,7 +1,6 @@
+import { env, logger, prisma } from "@starlight/utils";
 import { classificationQueue } from "@/queue/classification";
-import { prisma, redis } from "@/storage";
-import { logger } from "@/logger";
-import { env } from "@repo/utils";
+import { redis } from "@/storage";
 
 // Manual script: enqueue classification jobs for ALL available photos (no batching)
 // Usage: bun run apps/server/src/scripts/enqueue-all-classifications.ts
@@ -99,9 +98,15 @@ main()
 		process.exitCode = 1;
 	})
 	.finally(async () => {
-		await classificationQueue.close().catch(() => {});
-		await prisma.$disconnect().catch(() => {});
-		await redis.quit().catch(() => {});
+		await classificationQueue.close().catch((error) => {
+			logger.error({ error }, "Failed to close classification queue");
+		});
+		await prisma.$disconnect().catch((error) => {
+			logger.error({ error }, "Failed to disconnect from database");
+		});
+		await redis.quit().catch((error) => {
+			logger.error({ error }, "Failed to quit Redis");
+		});
 		if (env.ENVIRONMENT !== "prod") {
 			setTimeout(() => process.exit(), 100).unref();
 		}

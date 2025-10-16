@@ -21,8 +21,7 @@
       "!**/generated",
       "!**/node_modules",
       "!**/.git"
-    ],
-    "experimentalScannerIgnores": ["node_modules"]
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -52,7 +51,8 @@
           "options": {
             "functions": ["clsx", "cva", "cn"]
           }
-        }
+        },
+        "noShadow": "warn"
       },
       "performance": {
         "noImgElement": "off"
@@ -69,6 +69,10 @@
         "noInferrableTypes": "error",
         "noUselessElse": "error",
         "noMagicNumbers": "off"
+      },
+      "suspicious": {
+        "noConsole": "off",
+        "noExplicitAny": "off"
       }
     }
   },

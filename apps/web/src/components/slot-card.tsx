@@ -17,152 +17,82 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
-import type {
-	ScheduledSlot,
-	ScheduledSlotTweet,
-	ScheduledSlotWithTweets,
-} from "@/routes/api/scheduled-slots";
-import { shuffleTweet } from "@/routes/api/scheduled-slots";
-import { deletePhoto } from "@/routes/api/scheduled-slots/photos";
+import type { ScheduledSlotWithTweets, TweetWithPhotos } from "@/types/api";
+import { orpc } from "@/utils/orpc";
 
-interface SlotCardProps {
-	id: string;
-	status: "WAITING" | "PUBLISHED" | "PUBLISHING";
-	scheduledSlotTweets: ScheduledSlotWithTweets;
-	channelName?: string;
+type SlotCardProps = {
+	slot: ScheduledSlotWithTweets;
 	onDelete?: (id: string) => void;
 	className?: string;
-}
+};
 
-export function SlotCard({
-	id,
-	status,
-	scheduledSlotTweets,
-	channelName,
-	onDelete,
-	className = "",
-}: SlotCardProps) {
+export function SlotCard({ slot, onDelete, className = "" }: SlotCardProps) {
 	const queryClient = useQueryClient();
-	const { rawInitData } = useTelegramContext();
-	const getStatusVariant = (status: string) => {
-		switch (status.toLowerCase()) {
-			case "waiting":
-				return "waiting" as const;
-			case "published":
-				return "published" as const;
-			case "done":
-				return "done" as const;
-			default:
-				return "outline" as const;
-		}
-	};
 
-	const totalPhotos = scheduledSlotTweets.reduce(
+	const totalPhotos = slot.scheduledSlotTweets.reduce(
 		(sum, tweet) => sum + tweet.scheduledSlotPhotos.length,
 		0
 	);
 
 	const uniqueAuthors = [
 		...new Set(
-			scheduledSlotTweets.map(
-				(tweet) => tweet.tweet.tweetData?.username || "unknown"
+			slot.scheduledSlotTweets.map(
+				(tweet) => tweet.tweet.tweetData?.username ?? "unknown"
 			)
 		),
 	];
 
-	const deletePhotoMutation = useMutation({
-		mutationFn: async ({
-			slotId,
-			photoId,
-		}: {
-			slotId: string;
-			photoId: string;
-		}) => {
-			return await deletePhoto({
-				headers: { Authorization: rawInitData ?? "" },
-				data: {
-					slotId,
-					photoId,
-				},
-			});
-		},
-		onMutate: async ({ slotId, photoId }) => {
-			await queryClient.cancelQueries({
-				queryKey: ["scheduled-slots"],
-			});
+	const deletePhotoMutation = useMutation(
+		orpc.scheduling.photos.remove.mutationOptions({
+			onSuccess: () => {
+				queryClient.invalidateQueries({
+					queryKey: ["scheduled-slots"],
+				});
+			},
+			onMutate: async (newData) => {
+				await queryClient.cancelQueries({
+					queryKey: ["scheduled-slots"],
+				});
 
-			const previousData = queryClient.getQueryData<ScheduledSlot[]>([
-				"scheduled-slots",
-			]);
+				const previousSlot = queryClient.getQueryData<ScheduledSlotWithTweets>([
+					"scheduled-slots",
+				]);
 
-			if (previousData) {
-				const optimisticData = previousData
-					.map((slot) => {
-						if (slot.id === slotId) {
-							const updatedSlot = {
-								...slot,
-								scheduledSlotTweets: slot.scheduledSlotTweets.map((tweet) => ({
-									...tweet,
-									scheduledSlotPhotos: tweet.scheduledSlotPhotos.filter(
-										(photo) => photo.photo.id !== photoId
-									),
-								})),
-							};
+				if (previousSlot) {
+					const updatedSlot = {
+						...previousSlot,
+						scheduledSlotTweets: previousSlot.scheduledSlotTweets.map(
+							(tweet) => ({
+								...tweet,
+								scheduledSlotPhotos: tweet.scheduledSlotPhotos.filter(
+									(photo) => photo.photo.id !== newData.photoId
+								),
+							})
+						),
+					};
 
-							updatedSlot.scheduledSlotTweets =
-								updatedSlot.scheduledSlotTweets.filter(
-									(tweet) => tweet.scheduledSlotPhotos.length > 0
-								);
+					queryClient.setQueryData(["scheduled-slots"], updatedSlot);
+				}
 
-							return updatedSlot;
-						}
-						return slot;
-					})
-					.filter((slot) => slot.scheduledSlotTweets.length > 0);
+				return { previousSlot };
+			},
+			onError: (_err, _variables, context) => {
+				if (context?.previousSlot) {
+					queryClient.setQueryData(["scheduled-slots"], context.previousSlot);
+				}
+			},
+		})
+	);
 
-				queryClient.setQueryData(["scheduled-slots"], optimisticData);
-			}
-
-			return { previousData };
-		},
-		onError: (_err, _variables, context) => {
-			if (context?.previousData) {
-				queryClient.setQueryData(["scheduled-slots"], context.previousData);
-			}
-		},
-	});
-
-	const handleDeleteImage = (slotId: string, photoId: string) => {
-		deletePhotoMutation.mutate({ slotId, photoId });
-	};
-
-	const shuffleTweetMutation = useMutation({
-		mutationFn: async ({
-			slotId,
-			tweetId,
-		}: {
-			slotId: string;
-			tweetId: string;
-		}) => {
-			return await shuffleTweet({
-				headers: { Authorization: rawInitData ?? "" },
-				data: {
-					slotId,
-					tweetId,
-				},
-			});
-		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({
-				queryKey: ["scheduled-slots"],
-			});
-		},
-	});
-
-	const handleShuffleTweet = (slotId: string, tweetId: string) => {
-		shuffleTweetMutation.mutate({ slotId, tweetId });
-	};
+	const shuffleTweetMutation = useMutation(
+		orpc.scheduling.tweets.shuffle.mutationOptions({
+			onSuccess: () => {
+				queryClient.invalidateQueries({
+					queryKey: ["scheduled-slots"],
+				});
+			},
+		})
+	);
 
 	// useWindowSize hook
 	const useWindowSize = () => {
@@ -192,7 +122,7 @@ export function SlotCard({
 	const [windowWidth, windowHeight] = useWindowSize();
 
 	// Track current and previous length to detect when collection gets smaller
-	const currentLength = scheduledSlotTweets.length;
+	const currentLength = slot.scheduledSlotTweets.length;
 	const prevLengthRef = useRef<number | undefined>(undefined);
 
 	const shouldRecalculate = useMemo(() => {
@@ -227,56 +157,40 @@ export function SlotCard({
 		data,
 		width,
 	}: {
-		data: ScheduledSlotTweet;
+		data: TweetWithPhotos;
 		width: number;
-	}) => {
-		return (
-			<div className="mb-1" style={{ width }}>
-				<TweetImageGrid
-					artist={data.tweet.tweetData?.username || "unknown"}
-					date={data.tweet.tweetData?.timeParsed || ""}
-					id={id}
-					onDeleteImage={handleDeleteImage}
-					onShuffleTweet={handleShuffleTweet}
-					photos={data.scheduledSlotPhotos.map((photo) => ({
-						id: photo.photo.id,
-						url: photo.photo.s3Url || "",
-					}))}
-					showActions={status === "WAITING"}
-					slotTweetId={data.id}
-					sourceUrl={`https://x.com/i/status/${data.tweet.id}`}
-				/>
-			</div>
-		);
-	};
+	}) => (
+		<div className="mb-1" style={{ width }}>
+			<TweetImageGrid
+				onDeleteImage={(photoId) =>
+					deletePhotoMutation.mutate({ slotId: slot.id, photoId })
+				}
+				onShuffleTweet={(tweetId) =>
+					shuffleTweetMutation.mutate({ slotId: slot.id, tweetId })
+				}
+				scheduledTweet={data}
+				showActions={slot.status === "WAITING"}
+			/>
+		</div>
+	);
 
 	return (
 		<Card className={`overflow-hidden shadow-sm ${className}`}>
 			<CardHeader className="pb-3">
 				<div className="flex items-start justify-between gap-3">
 					<div className="flex flex-col gap-2">
-						{/* Date and Status */}
-						<div className="flex items-center gap-2">
-							<Badge
-								className="text-xs capitalize"
-								variant={getStatusVariant(status)}
-							>
-								{status}
-							</Badge>
-						</div>
-
 						{/* Summary */}
 						<div className="flex flex-wrap items-center gap-2">
-							{channelName && (
+							{slot.postingChannel.chat.title && (
 								<Badge className="text-xs" variant="outline">
-									📢 {channelName}
+									📢 {slot.postingChannel.chat.title}
 								</Badge>
 							)}
 							<div className="flex items-center gap-1">
 								<MessageSquare className="h-3 w-3 text-gray-500" />
 								<span className="text-gray-500 text-xs">
-									{scheduledSlotTweets.length} tweet
-									{scheduledSlotTweets.length !== 1 ? "s" : ""}
+									{slot.scheduledSlotTweets.length} tweet
+									{slot.scheduledSlotTweets.length !== 1 ? "s" : ""}
 								</span>
 							</div>
 							<span className="text-gray-500 text-xs">
@@ -300,10 +214,10 @@ export function SlotCard({
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end" className="w-40">
-								{onDelete && status === "WAITING" && (
+								{onDelete && slot.status === "WAITING" && (
 									<DropdownMenuItem
 										className="gap-2 text-red-600 focus:text-red-600"
-										onClick={() => onDelete(id)}
+										onClick={() => onDelete(slot.id)}
 									>
 										<Trash2 className="h-4 w-4" />
 										Delete
@@ -315,10 +229,10 @@ export function SlotCard({
 
 					{/* Desktop controls */}
 					<div className="hidden items-center gap-1 md:flex">
-						{onDelete && status === "WAITING" && (
+						{onDelete && slot.status === "WAITING" && (
 							<Button
 								className="gap-1 text-red-600 text-xs hover:bg-red-50 hover:text-red-700"
-								onClick={() => onDelete(id)}
+								onClick={() => onDelete(slot.id)}
 								size="sm"
 								variant="outline"
 							>
@@ -331,12 +245,12 @@ export function SlotCard({
 			</CardHeader>
 
 			<CardContent className="pt-0">
-				{scheduledSlotTweets.length > 0 && (
+				{slot.scheduledSlotTweets.length > 0 && (
 					<div ref={containerRef} style={{ position: "relative" }}>
 						<MasonryScroller
 							containerRef={containerRef}
 							height={windowHeight}
-							items={scheduledSlotTweets}
+							items={slot.scheduledSlotTweets}
 							offset={offset}
 							overscanBy={3}
 							positioner={positioner}

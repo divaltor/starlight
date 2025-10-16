@@ -1,11 +1,10 @@
 {
-  "extends": "../tsconfig.base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"],
-      "@/prisma/*": ["prisma/*"]
-    }
-  },
-  "include": ["src/**/*", "prisma/**/*"]
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "composite": true
+  }
 }

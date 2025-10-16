@@ -4,13 +4,13 @@ import { createContext, useContext, useEffect, useMemo } from "react";
 import { useTelegramButtons } from "@/hooks/useTelegramButtons";
 import type { ButtonState, RouteButtonConfig } from "@/types/telegram-buttons";
 
-interface TelegramButtonsContextValue {
+type TelegramButtonsContextValue = {
 	updateButtons: (config: Partial<RouteButtonConfig>) => void;
 	resetButtons: () => void;
 	getButtonState: (buttonType: keyof RouteButtonConfig) => ButtonState;
 	setMainButton: (text: string, visible?: boolean, action?: () => void) => void;
 	rawInitData: string | undefined;
-}
+};
 
 const TelegramButtonsContext =
 	createContext<TelegramButtonsContextValue | null>(null);
@@ -79,6 +79,7 @@ export function TelegramButtonsProvider({
 	try {
 		// biome-ignore lint/correctness/useHookAtTopLevel: We can't use it in SSR because `window` is not presented and we fail
 		rawInitData = useRawInitData();
+		// biome-ignore lint/suspicious/noEmptyBlockStatements: We can't use it in SSR because `window` is not presented and we fail
 	} catch {}
 
 	// Helper function for main button

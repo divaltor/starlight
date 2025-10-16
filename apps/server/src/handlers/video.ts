@@ -1,4 +1,4 @@
-import { env } from "@repo/utils";
+import { env } from "@starlight/utils";
 import { Composer, GrammyError, InputFile } from "grammy";
 import tmp from "tmp";
 import { downloadVideo, type VideoInformation } from "@/services/video";

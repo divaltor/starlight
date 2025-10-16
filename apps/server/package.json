@@ -5,45 +5,53 @@
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "server": "bun run src/index.ts",
+    "build": "bun run -b tsdown",
+    "start": "bun run dist/index.js",
+    "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
     "test": "bun test",
-    "test:watch": "bun test --watch",
-    "enqueue:classifications": "bun run src/scripts/enqueue-all-classifications.ts"
+    "queue:classify": "bun run src/scripts/enqueue-all-classifications.ts",
+    "queue:embeddings": "bun run src/scripts/enqueue-all-embeddings.ts"
   },
   "dependencies": {
     "@axiomhq/pino": "^1.3.1",
+    "@elysiajs/cors": "^1.4.0",
+    "@elysiajs/opentelemetry": "^1.4.1",
     "@grammyjs/auto-retry": "^2.0.2",
-    "@grammyjs/files": "^1.1.1",
-    "@grammyjs/hydrate": "^1.4.1",
+    "@grammyjs/files": "^1.2.0",
+    "@grammyjs/hydrate": "^1.6.0",
     "@grammyjs/parse-mode": "^2.2.0",
     "@grammyjs/router": "^2.0.0",
     "@grammyjs/runner": "^2.0.3",
-    "@repo/crypto": "workspace:*",
-    "@repo/utils": "workspace:*",
+    "@starlight/crypto": "workspace:*",
+    "@starlight/utils": "workspace:*",
+    "@starlight/api": "workspace:*",
     "@roziscoding/grammy-autoquote": "^2.0.9",
-    "@the-convocation/twitter-scraper": "catalog:",
-    "bullmq": "^5.53.0",
+    "bullmq": "^5.61.0",
     "cycletls": "^2.0.5",
-    "dotenv": "^16.5.0",
+    "elysia": "^1.4.12",
     "grammy": "catalog:",
-    "ioredis": "^5.6.1",
-    "pino": "^9.7.0",
-    "pino-pretty": "^13.0.0",
-    "rate-limiter-flexible": "^7.1.1",
-    "sharp": "^0.34.2",
-    "tmp": "^0.2.3",
-    "tough-cookie": "^5.1.2",
-    "user-agents": "^1.1.668",
-    "uuid": "^11.1.0",
-    "youtube-dl-exec": "^3.0.25",
-    "zod": "^3.25.56"
+    "@the-convocation/twitter-scraper": "^0.19.0",
+    "ioredis": "^5.8.1",
+    "rate-limiter-flexible": "^8.1.0",
+    "sharp": "^0.34.4",
+    "tmp": "^0.2.5",
+    "tough-cookie": "^6.0.0",
+    "user-agents": "^1.1.669",
+    "uuid": "^13.0.0",
+    "youtube-dl-exec": "^3.0.26",
+    "zod": "^4.1.12",
+    "@orpc/server": "catalog:",
+    "@orpc/openapi": "catalog:",
+    "@orpc/zod": "catalog:"
   },
   "devDependencies": {
-    "typescript": "^5.8.2",
-    "@types/bun": "1.2.23",
+    "typescript": "^5.9.3",
+    "@types/bun": "1.3.0",
     "@types/tmp": "^0.2.6",
-    "@types/user-agents": "^1.0.4"
+    "@types/user-agents": "^1.0.4",
+    "tsdown": "catalog:"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^5.9.3"
   }
 }

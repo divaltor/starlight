@@ -31,12 +31,16 @@ const env = createEnv({
 		BASE_CDN_URL: z
 			.string()
 			.transform((val) => {
-				if (val) return val;
+				if (val) {
+					return val;
+				}
 
 				const frontendUrl =
 					process.env.VERCEL_URL || process.env.BASE_FRONTEND_URL || "";
 
-				if (!frontendUrl) return "";
+				if (!frontendUrl) {
+					return "";
+				}
 
 				try {
 					const url = new URL(
@@ -56,8 +60,11 @@ const env = createEnv({
 
 		INSTAGRAM_COOKIES: z.string().optional(),
 
-		CLASSIFICATION_API_URL: z.string().url().optional(),
-		CLASSIFICATION_API_TOKEN: z.string().optional(),
+		ML_BASE_URL: z.url().optional(),
+		ML_API_TOKEN: z.string().optional(),
+
+		ENABLE_CLASSIFICATION: z.boolean().optional().default(false),
+		ENABLE_EMBEDDINGS: z.boolean().optional().default(false),
 	},
 	skipValidation: false,
 	runtimeEnv: process.env,

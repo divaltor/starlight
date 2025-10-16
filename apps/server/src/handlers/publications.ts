@@ -1,8 +1,8 @@
 import { b, fmt } from "@grammyjs/parse-mode";
+import { prisma } from "@starlight/utils";
 import { Composer } from "grammy";
 import { bot, webAppKeyboard } from "@/bot";
 import { updateChannelPhoto } from "@/services/channel";
-import { prisma } from "@/storage";
 import type { Context } from "@/types";
 
 const composer = new Composer<Context>();

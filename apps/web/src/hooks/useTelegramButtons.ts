@@ -12,16 +12,16 @@ import type {
 	RouteButtonConfig,
 } from "@/types/telegram-buttons";
 
-interface ButtonManager {
+type ButtonManager = {
 	updateConfig: (config: Partial<RouteButtonConfig>) => void;
 	resetToDefaults: () => void;
 	getButtonState: (buttonType: keyof RouteButtonConfig) => ButtonState;
-}
+};
 
-interface UseTelegramButtonsOptions {
+type UseTelegramButtonsOptions = {
 	autoCleanup?: boolean;
 	debounceMs?: number;
-}
+};
 
 export function useTelegramButtons(
 	initialConfig?: RouteButtonConfig,
@@ -48,17 +48,8 @@ export function useTelegramButtons(
 					case "external":
 						window.open(action.payload as string, "_blank");
 						break;
-					case "custom":
-						try {
-							window.dispatchEvent(
-								new CustomEvent("telegram-button-custom", {
-									detail: action.payload,
-								})
-							);
-						} catch (e) {
-							console.error("Error dispatching custom button event", e);
-						}
-						break;
+					default:
+						throw new Error(`Invalid action type: ${action.type}`);
 				}
 			} catch (error) {
 				console.error(`Error executing ${buttonType} action:`, error);
@@ -71,7 +62,10 @@ export function useTelegramButtons(
 	const updateButtonsInternal = useCallback(
 		(config: RouteButtonConfig) => {
 			// Cleanup previous handlers
-			cleanupFunctions.current.forEach((cleanup) => cleanup());
+			for (const cleanup of cleanupFunctions.current) {
+				cleanup();
+			}
+
 			cleanupFunctions.current = [];
 
 			// Main Button Logic
@@ -210,7 +204,10 @@ export function useTelegramButtons(
 		// Cleanup on unmount
 		return () => {
 			if (options?.autoCleanup !== false) {
-				cleanupFunctions.current.forEach((cleanup) => cleanup());
+				for (const cleanup of cleanupFunctions.current) {
+					cleanup();
+				}
+
 				if (updateTimeoutRef.current) {
 					clearTimeout(updateTimeoutRef.current);
 				}

@@ -1,12 +1,10 @@
-FROM oven/bun:1.2-slim AS base
+FROM oven/bun:1.3 AS base
 
 WORKDIR /code
 
 ENV NODE_ENV=production
 ENV YOUTUBE_DL_SKIP_DOWNLOAD=true
 ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=true
-ENV HOME=/root
-ENV PATH="$HOME/.local/bin:$PATH"
 
 # To disable Prisma warnings
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
@@ -20,6 +18,7 @@ RUN uv tool install yt-dlp
 
 COPY package.json bun.lock ./
 COPY apps/server/package.json ./apps/server/package.json
+COPY packages/api/package.json ./packages/api/package.json
 COPY packages/utils/package.json ./packages/utils/package.json
 COPY packages/crypto/package.json ./packages/crypto/package.json
 
@@ -27,7 +26,4 @@ RUN bun install
 
 COPY . .
 
-# We depends on runtime generated code and types
-RUN bun run db:generate
-
-CMD ["bun", "server"]
+CMD ["bun",  "server"]

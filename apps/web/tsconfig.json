@@ -20,16 +20,12 @@
 		"noUnusedParameters": true,
 		"noFallthroughCasesInSwitch": true,
 		"noUncheckedSideEffectImports": true,
-
 		"baseUrl": ".",
 		"paths": {
-			"@/*": ["./src/*"],
-			"@repo/utils": ["../../packages/utils/src"]
-		}
+			"@/*": ["./src/*"]
+		},
 	},
-	"references": [
-		{
-			"path": "../../packages/utils"
-		}
-	]
+  "references": [
+    { "path": "../../packages/api" }
+  ]
 }

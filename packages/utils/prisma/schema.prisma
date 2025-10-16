@@ -1,14 +1,15 @@
 datasource db {
-    provider  = "postgresql"
-    url       = env("DATABASE_URL")
-    directUrl = env("DIRECT_DATABASE_URL")
+    provider   = "postgresql"
+    url        = env("DATABASE_URL")
+    extensions = [pgvector(map: "vector")]
 }
 
 generator client {
-    provider        = "prisma-client-js"
-    moduleFormat    = "esm"
-    previewFeatures = ["relationJoins"]
-    binaryTargets   = ["native", "rhel-openssl-3.0.x"]
+    provider        = "prisma-client"
+    output          = "../src/generated/prisma"
+    engineType      = "client"
+    previewFeatures = ["relationJoins", "postgresqlExtensions"]
+    runtime         = "bun"
 }
 
 generator json {
@@ -23,6 +24,7 @@ model User {
     lastName   String? @map("last_name")
     isActive   Boolean @default(true) @map("is_active")
     isBot      Boolean @default(false) @map("is_bot")
+    isPublic   Boolean @default(false) @map("is_public")
 
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
@@ -33,7 +35,6 @@ model User {
     publishedPhotos  PublishedPhoto[]
     scheduledSlots   ScheduledSlot[]
     postingChannels  PostingChannel?
-    profileShare     ProfileShare?
     collectionShares CollectionShare[]
 
     @@map("users")
@@ -112,11 +113,10 @@ model Photo {
     perceptualHash String? @map("perceptual_hash")
 
     /// [ClassificationType]
-    classification Json?                       @map("classification")
-    image_vec      Unsupported("vector(512)")? @map("image_vec")
-    tag_vec        Unsupported("vector(512)")? @map("tag_vec")
-    caption_text   String?                     @map("caption_text")
-    caption_vec    Unsupported("vector(512)")? @map("caption_vec")
+    classification Json? @map("classification")
+
+    imageVec Unsupported("vector(1024)")? @map("image_vec")
+    tagVec   Unsupported("vector(1024)")? @map("tag_vec")
 
     height Int? @map("height")
     width  Int? @map("width")
@@ -237,22 +237,6 @@ model ScheduledSlotPhoto {
     @@index([scheduledSlotTweetId])
     @@index([photoId, userId])
     @@map("scheduled_slot_photos")
-}
-
-model ProfileShare {
-    id     String @id @default(uuid(7)) @db.Uuid
-    slug   String @unique @map("slug")
-    userId String @unique @map("user_id") @db.Uuid
-
-    createdAt DateTime  @default(now()) @map("created_at")
-    revokedAt DateTime? @map("revoked_at")
-
-    // Relations
-    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-    @@index([slug])
-    @@index([userId])
-    @@map("profile_shares")
 }
 
 enum CollectionShareVisibility {

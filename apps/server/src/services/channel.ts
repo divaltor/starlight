@@ -1,5 +1,5 @@
-import { toUniqueId } from "@repo/utils";
-import { prisma, s3 } from "@/storage";
+import { prisma, toUniqueId } from "@starlight/utils";
+import { s3 } from "@/storage";
 import type { Context } from "@/types";
 
 export const updateChannelPhoto = async (ctx: Context) => {
@@ -31,7 +31,9 @@ export const updateChannelPhoto = async (ctx: Context) => {
 			const thumbnailPath = `channels/${toUniqueId(ctx.chat.id)}/thumbnail.jpg`;
 
 			await Promise.all([
+				// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 				s3.write(bigPath, Bun.file(bigFile)),
+				// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 				s3.write(thumbnailPath, Bun.file(thumbnailFile)),
 			]);
 

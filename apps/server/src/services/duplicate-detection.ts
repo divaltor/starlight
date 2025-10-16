@@ -1,8 +1,7 @@
-import { logger } from "@/logger.js";
-import { prisma } from "../storage.js";
-import { calculateHashDistance, calculatePerceptualHash } from "./image.js";
+import { logger, prisma } from "@starlight/utils";
+import { calculateHashDistance, calculatePerceptualHash } from "./image";
 
-interface SimilarPhoto {
+type SimilarPhoto = {
 	id: string;
 	userId: string;
 	perceptualHash: string;
@@ -10,7 +9,7 @@ interface SimilarPhoto {
 	s3Path?: string;
 	originalUrl: string;
 	tweetId: string;
-}
+};
 
 export async function findSimilarPhotos(
 	targetHash: string,
@@ -55,14 +54,18 @@ export async function findSimilarPhotos(
 			take: maxCandidates,
 		});
 
-		if (candidates.length === 0) continue;
+		if (candidates.length === 0) {
+			continue;
+		}
 
 		// If we got results and didn't hit the limit, process them
 		if (candidates.length < maxCandidates) {
 			const similarPhotos: SimilarPhoto[] = [];
 
 			for (const candidate of candidates) {
-				if (!candidate.perceptualHash) continue;
+				if (!candidate.perceptualHash) {
+					continue;
+				}
 
 				const distance = calculateHashDistance(
 					targetHash,

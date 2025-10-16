@@ -1,18 +1,18 @@
+import { logger, prisma } from "@starlight/utils";
 import { FlowProducer, QueueEvents, Worker } from "bullmq";
 import { InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
 import { RateLimiterRedis, type RateLimiterRes } from "rate-limiter-flexible";
 import { bot } from "@/bot";
-import { logger } from "@/logger";
-import { prisma, redis } from "@/storage";
+import { redis } from "@/storage";
 
-export const schedulerFlow = new FlowProducer({ connection: redis });
+export const schedulerFlow = new FlowProducer({ connection: redis.options });
 
-interface ScheduledTweetJobData {
+type ScheduledTweetJobData = {
 	userId: string;
 	slotId: string;
 	tweetId: string;
-}
+};
 
 type ScheduledSlotJobData = {
 	userId: string;
@@ -70,7 +70,7 @@ export const scheduledSlotWorker = new Worker<ScheduledSlotJobData>(
 		);
 	},
 	{
-		connection: redis,
+		connection: redis.options,
 		concurrency: 10,
 		autorun: false,
 	}
@@ -85,7 +85,8 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 			{ userId, slotId, tweetId },
 			"Processing scheduled tweet %s for user %s in slot %s",
 			tweetId,
-			userId
+			userId,
+			slotId
 		);
 
 		const scheduledTweet = await prisma.scheduledSlotTweet.findUnique({
@@ -203,14 +204,14 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 		);
 	},
 	{
-		connection: redis,
+		connection: redis.options,
 		concurrency: 1,
 		lockDuration: 1000 * 60 * 5, // 5 minutes
 		autorun: false,
 	}
 );
 
-scheduledTweetWorker.on("failed", async (job, _err) => {
+scheduledTweetWorker.on("failed", (job, _err) => {
 	logger.error(
 		{
 			jobId: job?.id,
@@ -225,7 +226,7 @@ scheduledTweetWorker.on("failed", async (job, _err) => {
 });
 
 const scheduledTweetEvents = new QueueEvents("scheduled-tweet", {
-	connection: redis,
+	connection: redis.options,
 });
 
 scheduledTweetEvents.on("completed", ({ jobId }) => {

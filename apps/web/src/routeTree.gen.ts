@@ -8,228 +8,115 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-// Import Routes
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as PublicationsRouteImport } from './routes/publications'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as ProfileSlugRouteImport } from './routes/profile/$slug'
 
-import { Route as rootRoute } from './routes/__root'
-import { Route as SettingsImport } from './routes/settings'
-import { Route as PublicationsImport } from './routes/publications'
-import { Route as CollectionsImport } from './routes/collections'
-import { Route as AppImport } from './routes/app'
-import { Route as CollectionsIdImport } from './routes/collections/$id'
-import { Route as ShareProfileSlugImport } from './routes/profile/$slug'
-
-// Create/Update Routes
-
-const SettingsRoute = SettingsImport.update({
+const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const PublicationsRoute = PublicationsImport.update({
+const PublicationsRoute = PublicationsRouteImport.update({
   id: '/publications',
   path: '/publications',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const CollectionsRoute = CollectionsImport.update({
-  id: '/collections',
-  path: '/collections',
-  getParentRoute: () => rootRoute,
-} as any)
-
-const AppRoute = AppImport.update({
+const AppRoute = AppRouteImport.update({
   id: '/app',
   path: '/app',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileSlugRoute = ProfileSlugRouteImport.update({
+  id: '/profile/$slug',
+  path: '/profile/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
-const CollectionsIdRoute = CollectionsIdImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => CollectionsRoute,
-} as any)
-
-const ShareProfileSlugRoute = ShareProfileSlugImport.update({
-  id: '/share/profile/$slug',
-  path: '/share/profile/$slug',
-  getParentRoute: () => rootRoute,
-} as any)
-
-// Populate the FileRoutesByPath interface
+export interface FileRoutesByFullPath {
+  '/app': typeof AppRoute
+  '/publications': typeof PublicationsRoute
+  '/settings': typeof SettingsRoute
+  '/profile/$slug': typeof ProfileSlugRoute
+}
+export interface FileRoutesByTo {
+  '/app': typeof AppRoute
+  '/publications': typeof PublicationsRoute
+  '/settings': typeof SettingsRoute
+  '/profile/$slug': typeof ProfileSlugRoute
+}
+export interface FileRoutesById {
+  __root__: typeof rootRouteImport
+  '/app': typeof AppRoute
+  '/publications': typeof PublicationsRoute
+  '/settings': typeof SettingsRoute
+  '/profile/$slug': typeof ProfileSlugRoute
+}
+export interface FileRouteTypes {
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths: '/app' | '/publications' | '/settings' | '/profile/$slug'
+  fileRoutesByTo: FileRoutesByTo
+  to: '/app' | '/publications' | '/settings' | '/profile/$slug'
+  id: '__root__' | '/app' | '/publications' | '/settings' | '/profile/$slug'
+  fileRoutesById: FileRoutesById
+}
+export interface RootRouteChildren {
+  AppRoute: typeof AppRoute
+  PublicationsRoute: typeof PublicationsRoute
+  SettingsRoute: typeof SettingsRoute
+  ProfileSlugRoute: typeof ProfileSlugRoute
+}
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/app': {
-      id: '/app'
-      path: '/app'
-      fullPath: '/app'
-      preLoaderRoute: typeof AppImport
-      parentRoute: typeof rootRoute
-    }
-    '/collections': {
-      id: '/collections'
-      path: '/collections'
-      fullPath: '/collections'
-      preLoaderRoute: typeof CollectionsImport
-      parentRoute: typeof rootRoute
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/publications': {
       id: '/publications'
       path: '/publications'
       fullPath: '/publications'
-      preLoaderRoute: typeof PublicationsImport
-      parentRoute: typeof rootRoute
+      preLoaderRoute: typeof PublicationsRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsImport
-      parentRoute: typeof rootRoute
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/collections/$id': {
-      id: '/collections/$id'
-      path: '/$id'
-      fullPath: '/collections/$id'
-      preLoaderRoute: typeof CollectionsIdImport
-      parentRoute: typeof CollectionsImport
-    }
-    '/share/profile/$slug': {
-      id: '/share/profile/$slug'
-      path: '/share/profile/$slug'
-      fullPath: '/share/profile/$slug'
-      preLoaderRoute: typeof ShareProfileSlugImport
-      parentRoute: typeof rootRoute
+    '/profile/$slug': {
+      id: '/profile/$slug'
+      path: '/profile/$slug'
+      fullPath: '/profile/$slug'
+      preLoaderRoute: typeof ProfileSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
-}
-
-// Create and export the route tree
-
-interface CollectionsRouteChildren {
-  CollectionsIdRoute: typeof CollectionsIdRoute
-}
-
-const CollectionsRouteChildren: CollectionsRouteChildren = {
-  CollectionsIdRoute: CollectionsIdRoute,
-}
-
-const CollectionsRouteWithChildren = CollectionsRoute._addFileChildren(
-  CollectionsRouteChildren,
-)
-
-export interface FileRoutesByFullPath {
-  '/app': typeof AppRoute
-  '/collections': typeof CollectionsRouteWithChildren
-  '/publications': typeof PublicationsRoute
-  '/settings': typeof SettingsRoute
-  '/collections/$id': typeof CollectionsIdRoute
-  '/share/profile/$slug': typeof ShareProfileSlugRoute
-}
-
-export interface FileRoutesByTo {
-  '/app': typeof AppRoute
-  '/collections': typeof CollectionsRouteWithChildren
-  '/publications': typeof PublicationsRoute
-  '/settings': typeof SettingsRoute
-  '/collections/$id': typeof CollectionsIdRoute
-  '/share/profile/$slug': typeof ShareProfileSlugRoute
-}
-
-export interface FileRoutesById {
-  __root__: typeof rootRoute
-  '/app': typeof AppRoute
-  '/collections': typeof CollectionsRouteWithChildren
-  '/publications': typeof PublicationsRoute
-  '/settings': typeof SettingsRoute
-  '/collections/$id': typeof CollectionsIdRoute
-  '/share/profile/$slug': typeof ShareProfileSlugRoute
-}
-
-export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/app'
-    | '/collections'
-    | '/publications'
-    | '/settings'
-    | '/collections/$id'
-    | '/share/profile/$slug'
-  fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/app'
-    | '/collections'
-    | '/publications'
-    | '/settings'
-    | '/collections/$id'
-    | '/share/profile/$slug'
-  id:
-    | '__root__'
-    | '/app'
-    | '/collections'
-    | '/publications'
-    | '/settings'
-    | '/collections/$id'
-    | '/share/profile/$slug'
-  fileRoutesById: FileRoutesById
-}
-
-export interface RootRouteChildren {
-  AppRoute: typeof AppRoute
-  CollectionsRoute: typeof CollectionsRouteWithChildren
-  PublicationsRoute: typeof PublicationsRoute
-  SettingsRoute: typeof SettingsRoute
-  ShareProfileSlugRoute: typeof ShareProfileSlugRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRoute,
-  CollectionsRoute: CollectionsRouteWithChildren,
   PublicationsRoute: PublicationsRoute,
   SettingsRoute: SettingsRoute,
-  ShareProfileSlugRoute: ShareProfileSlugRoute,
+  ProfileSlugRoute: ProfileSlugRoute,
 }
-
-export const routeTree = rootRoute
+export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
-/* ROUTE_MANIFEST_START
-{
-  "routes": {
-    "__root__": {
-      "filePath": "__root.tsx",
-      "children": [
-        "/app",
-        "/collections",
-        "/publications",
-        "/settings",
-        "/share/profile/$slug"
-      ]
-    },
-    "/app": {
-      "filePath": "app.tsx"
-    },
-    "/collections": {
-      "filePath": "collections.tsx",
-      "children": [
-        "/collections/$id"
-      ]
-    },
-    "/publications": {
-      "filePath": "publications.tsx"
-    },
-    "/settings": {
-      "filePath": "settings.tsx"
-    },
-    "/collections/$id": {
-      "filePath": "collections/$id.tsx",
-      "parent": "/collections"
-    },
-    "/share/profile/$slug": {
-      "filePath": "share/profile/$slug.tsx"
-    }
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
   }
 }
-ROUTE_MANIFEST_END */

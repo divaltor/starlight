@@ -2,45 +2,42 @@ import { format } from "date-fns";
 import { Shuffle, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import type { TweetWithPhotos } from "@/types/api";
 
-interface TweetPhoto {
-	id: string;
-	url: string;
-}
-
-interface TweetImageGridProps {
-	id: string;
-	artist: string;
-	date?: string | Date;
-	photos: TweetPhoto[];
+type TweetImageGridProps = {
+	scheduledTweet: TweetWithPhotos;
 	showActions?: boolean;
-	onShuffleTweet?: (id: string, tweetId: string) => void;
-	onDeleteImage?: (id: string, photoId: string) => void;
-	slotTweetId?: string;
-	sourceUrl?: string;
-}
+	onShuffleTweet?: (tweetId: string) => void;
+	onDeleteImage?: (photoId: string) => void;
+};
 
 export function TweetImageGrid({
-	id,
-	artist,
-	date,
-	photos,
+	scheduledTweet,
 	showActions = false,
 	onShuffleTweet,
 	onDeleteImage,
-	slotTweetId,
-	sourceUrl,
 }: TweetImageGridProps) {
+	const tweet = scheduledTweet.tweet;
+	const artistUsername = tweet.tweetData?.username;
+
+	const sourceUrl = `https://x.com/i/status/${tweet.id}`;
+
+	const photos = scheduledTweet.scheduledSlotPhotos.map((photo) => photo.photo);
+	const artist = tweet.tweetData?.username
+		? `@${tweet.tweetData.username}`
+		: "@good_artist";
+
+	const date =
+		tweet.tweetData?.timeParsed?.toISOString() ??
+		scheduledTweet.createdAt?.toISOString() ??
+		"";
+
 	const [isImageLoading, setIsImageLoading] = useState<{
 		[key: string]: boolean;
 	}>({});
 
-	const handleImageLoad = useCallback((imageId: string) => {
-		setIsImageLoading((prev) => ({ ...prev, [imageId]: false }));
-	}, []);
-
-	const handleImageLoadStart = useCallback((imageId: string) => {
-		setIsImageLoading((prev) => ({ ...prev, [imageId]: true }));
+	const handleImageLoad = useCallback((imageId: string, isLoading: boolean) => {
+		setIsImageLoading((prev) => ({ ...prev, [imageId]: isLoading }));
 	}, []);
 
 	const formatTweetDate = useCallback((dateInput: string | Date) => {
@@ -49,15 +46,11 @@ export function TweetImageGrid({
 		return format(dateObj, "MMM d, yyyy");
 	}, []);
 
-	const handleArtistClick = useCallback(
-		(e: React.MouseEvent) => {
-			e.stopPropagation();
-			if (sourceUrl) {
-				window.open(sourceUrl, "_blank", "noopener,noreferrer");
-			}
-		},
-		[sourceUrl]
-	);
+	const handleArtistClick = (e: React.MouseEvent) => {
+		e.stopPropagation();
+
+		window.open(sourceUrl, "_blank", "noopener,noreferrer");
+	};
 
 	if (photos.length === 1) {
 		const photo = photos[0];
@@ -70,12 +63,13 @@ export function TweetImageGrid({
 					</div>
 				)}
 				{/** biome-ignore lint/a11y/useAltText: Fuck off */}
+				{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 				<img
 					className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 					height={400}
-					onLoad={() => handleImageLoad(photo.id)}
-					onLoadStart={() => handleImageLoadStart(photo.id)}
-					src={photo.url}
+					onLoad={() => handleImageLoad(photo.id, false)}
+					onLoadStart={() => handleImageLoad(photo.id, true)}
+					src={photo.s3Url || photo.originalUrl}
 					width={400}
 				/>
 				<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
@@ -83,10 +77,10 @@ export function TweetImageGrid({
 					<div className="w-full p-3 text-white">
 						<div className="flex items-center justify-between">
 							<div>
-								{sourceUrl ? (
+								{artistUsername ? (
 									<button
 										className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-blue-300"
-										onClick={handleArtistClick}
+										onClick={(e) => handleArtistClick(e)}
 										type="button"
 									>
 										{artist}
@@ -100,14 +94,14 @@ export function TweetImageGrid({
 									</p>
 								)}
 							</div>
-							{showActions && slotTweetId && (
+							{showActions && scheduledTweet.id && (
 								<div className="flex items-center gap-1">
 									{onShuffleTweet && (
 										<Button
 											className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-blue-300"
 											onClick={(e) => {
 												e.stopPropagation();
-												onShuffleTweet(id, slotTweetId);
+												onShuffleTweet(scheduledTweet.id);
 											}}
 											size="sm"
 											variant="ghost"
@@ -120,7 +114,7 @@ export function TweetImageGrid({
 											className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 											onClick={(e) => {
 												e.stopPropagation();
-												onDeleteImage(id, photo.id);
+												onDeleteImage(photo.id);
 											}}
 											size="sm"
 											variant="ghost"
@@ -143,10 +137,10 @@ export function TweetImageGrid({
 			{/* Post header */}
 			<div className="mb-3 flex items-center justify-between">
 				<div>
-					{sourceUrl ? (
+					{tweet.tweetData?.username ? (
 						<button
 							className="cursor-pointer text-left font-medium text-gray-900 text-sm transition-colors duration-200 hover:text-blue-600"
-							onClick={handleArtistClick}
+							onClick={(e) => handleArtistClick(e)}
 							type="button"
 						>
 							{artist}
@@ -160,12 +154,12 @@ export function TweetImageGrid({
 				</div>
 				<div className="flex items-center gap-2">
 					<span className="text-gray-500 text-xs">{photos.length} images</span>
-					{showActions && onShuffleTweet && slotTweetId && (
+					{showActions && onShuffleTweet && scheduledTweet.id && (
 						<Button
 							className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-gray-600 hover:bg-gray-100 hover:text-blue-600"
 							onClick={(e) => {
 								e.stopPropagation();
-								onShuffleTweet(id, slotTweetId);
+								onShuffleTweet(scheduledTweet.id);
 							}}
 							size="sm"
 							variant="ghost"
@@ -190,22 +184,23 @@ export function TweetImageGrid({
 								</div>
 							)}
 							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
+							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 							<img
 								className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 								height={400}
-								onLoad={() => handleImageLoad(photo.id)}
-								onLoadStart={() => handleImageLoadStart(photo.id)}
-								src={photo.url}
+								onLoad={() => handleImageLoad(photo.id, false)}
+								onLoadStart={() => handleImageLoad(photo.id, true)}
+								src={photo.s3Url || photo.originalUrl}
 								width={400}
 							/>
 							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							{showActions && onDeleteImage && slotTweetId && (
+							{showActions && onDeleteImage && scheduledTweet.id && (
 								<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
 									<Button
 										className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 										onClick={(e) => {
 											e.stopPropagation();
-											onDeleteImage(id, photo.id);
+											onDeleteImage(photo.id);
 										}}
 										size="sm"
 										variant="ghost"
@@ -234,22 +229,23 @@ export function TweetImageGrid({
 								</div>
 							)}
 							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
+							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 							<img
 								className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 								height={400}
-								onLoad={() => handleImageLoad(photo.id)}
-								onLoadStart={() => handleImageLoadStart(photo.id)}
-								src={photo.url}
+								onLoad={() => handleImageLoad(photo.id, false)}
+								onLoadStart={() => handleImageLoad(photo.id, true)}
+								src={photo.s3Url || photo.originalUrl}
 								width={400}
 							/>
 							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							{showActions && onDeleteImage && slotTweetId && (
+							{showActions && onDeleteImage && scheduledTweet.id && (
 								<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
 									<Button
 										className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 										onClick={(e) => {
 											e.stopPropagation();
-											onDeleteImage(id, photo.id);
+											onDeleteImage(photo.id);
 										}}
 										size="sm"
 										variant="ghost"
@@ -276,22 +272,23 @@ export function TweetImageGrid({
 								</div>
 							)}
 							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
+							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 							<img
 								className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
 								height={400}
-								onLoad={() => handleImageLoad(photo.id)}
-								onLoadStart={() => handleImageLoadStart(photo.id)}
-								src={photo.url}
+								onLoad={() => handleImageLoad(photo.id, false)}
+								onLoadStart={() => handleImageLoad(photo.id, true)}
+								src={photo.s3Url || photo.originalUrl}
 								width={400}
 							/>
 							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							{showActions && onDeleteImage && slotTweetId && (
+							{showActions && onDeleteImage && scheduledTweet.id && (
 								<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
 									<Button
 										className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 										onClick={(e) => {
 											e.stopPropagation();
-											onDeleteImage(id, photo.id);
+											onDeleteImage(photo.id);
 										}}
 										size="sm"
 										variant="ghost"

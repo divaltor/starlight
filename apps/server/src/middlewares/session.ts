@@ -1,5 +1,5 @@
+import { prisma } from "@starlight/utils";
 import type { NextFunction } from "grammy";
-import { prisma } from "@/storage";
 import type { Context } from "@/types";
 
 export async function attachUser(ctx: Context, next: NextFunction) {

@@ -6,11 +6,18 @@
     "build": {
       "dependsOn": ["^build", "^db:generate"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".vercel/output/**"],
-      "env": ["DATABASE_URL", "DIRECT_DATABASE_URL"]
+      "outputs": ["dist/**"],
+      "env": ["DATABASE_URL"]
     },
     "lint": {
       "dependsOn": ["^lint"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "dev:server": {
+      "dependsOn": ["^dev:server"]
     },
     "start": {
       "dependsOn": ["^build"]
@@ -18,26 +25,14 @@
     "check-types": {
       "dependsOn": ["^check-types"]
     },
-    "server": {
-      "dependsOn": ["^db:push"],
-      "cache": false,
-      "persistent": true,
-      "env": ["DATABASE_URL", "DIRECT_DATABASE_URL"]
-    },
-    "dev": {
-      "dependsOn": ["^db:push"],
-      "cache": false,
-      "persistent": true,
-      "env": ["DATABASE_URL", "DIRECT_DATABASE_URL"]
-    },
     "db:push": {
       "cache": false,
-      "env": ["DATABASE_URL", "DIRECT_DATABASE_URL"]
+      "env": ["DATABASE_URL"]
     },
     "db:migrate": {
       "cache": false,
       "persistent": true,
-      "env": ["DATABASE_URL", "DIRECT_DATABASE_URL"]
+      "env": ["DATABASE_URL"]
     },
     "db:generate": {
       "cache": false

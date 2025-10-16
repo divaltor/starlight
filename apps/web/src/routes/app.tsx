@@ -1,15 +1,11 @@
+import type { TweetData } from "@starlight/api/types/tweets";
 import { createFileRoute } from "@tanstack/react-router";
-import { BookmarkPlus, Filter } from "lucide-react";
+import { Filter, Loader2 } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback, useEffect } from "react";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useCollectionMutations } from "@/hooks/useCollectionMutations";
-import { useCollections } from "@/hooks/useCollections";
 import { useTweets } from "@/hooks/useTweets";
 import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
-import type { TweetData } from "@/types/tweets";
 
 function TwitterArtViewer() {
 	const { updateButtons } = useTelegramContext();
@@ -54,9 +50,6 @@ function TwitterArtViewer() {
 		error,
 		fetchNextPage,
 	} = useTweets();
-	const { collections } = useCollections();
-	const { addTweet, adding } = useCollectionMutations();
-
 	const infiniteLoader = useInfiniteLoader(
 		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
 			if (hasNextPage && !isFetchingNextPage) {
@@ -71,46 +64,20 @@ function TwitterArtViewer() {
 	);
 
 	const renderMasonryItem = useCallback(
-		({ data, width }: { data: TweetData; width: number }) => {
-			const handleSave = () => {
-				addTweet({
-					tweetId: data.id,
-					// If multiple collections exist, for now just use first; future: dropdown
-					collectionId:
-						collections.length === 1 ? collections[0].id : undefined,
-					nameIfCreate: "Favorites",
-				});
-			};
-
-			return (
-				<div className="group relative mb-1" style={{ width }}>
-					<TweetImageGrid
-						artist={data.artist}
-						date={data.date}
-						id={data.id}
-						photos={data.photos}
-						showActions={false}
-						slotTweetId={data.id}
-						sourceUrl={data.sourceUrl}
-					/>
-					<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
-						<Button
-							className="h-7 w-7 bg-white/80 p-0 text-gray-800 shadow-sm hover:bg-white"
-							disabled={adding}
-							onClick={(e) => {
-								e.stopPropagation();
-								handleSave();
-							}}
-							size="sm"
-							variant="ghost"
-						>
-							<BookmarkPlus className="h-4 w-4" />
-						</Button>
-					</div>
-				</div>
-			);
-		},
-		[addTweet, adding, collections]
+		({ data, width }: { data: TweetData; width: number }) => (
+			<div className="group relative mb-1" style={{ width }}>
+				<TweetImageGrid
+					artist={data.artist}
+					date={data.date}
+					id={data.id}
+					photos={data.photos}
+					showActions={false}
+					slotTweetId={data.id}
+					sourceUrl={data.sourceUrl}
+				/>
+			</div>
+		),
+		[]
 	);
 
 	// Show error state
@@ -131,23 +98,8 @@ function TwitterArtViewer() {
 
 	return (
 		<div className="min-h-screen bg-gray-50 p-4">
-			{/* Loading Skeleton */}
-			{isLoading && (
-				<div className="mx-auto max-w-7xl">
-					<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-						{Array.from({ length: 12 }).map((_, i) => (
-							<Skeleton
-								className={`rounded-lg ${
-									i % 3 === 0 ? "h-80" : i % 3 === 1 ? "h-60" : "h-96"
-								}`}
-								key={i}
-							/>
-						))}
-					</div>
-				</div>
-			)}
+			{isLoading && <Loader2 className="animate-spin" />}
 
-			{/* No Results */}
 			{!isLoading && tweets.length === 0 && (
 				<div className="flex flex-col items-center justify-center py-16">
 					<Filter className="mb-4 h-16 w-16 text-gray-400" />

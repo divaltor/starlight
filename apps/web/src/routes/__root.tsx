@@ -11,10 +11,12 @@ import { StrictMode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import appCss from "@/index.css?url";
 import { TelegramButtonsProvider } from "@/providers/TelegramButtonsProvider";
+import type { orpc } from "@/utils/orpc";
 
-export interface RouterAppContext {
+export type RouterAppContext = {
+	orpc: typeof orpc;
 	queryClient: QueryClient;
-}
+};
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
 	head: () => ({
@@ -62,6 +64,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 function RootDocument() {
 	return (
 		<html className="light" lang="en">
+			{/** biome-ignore lint/style/noHeadElement: Not needed in Tanstack */}
 			<head>
 				<HeadContent />
 			</head>

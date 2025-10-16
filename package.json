@@ -7,30 +7,43 @@
       "packages/*"
     ],
     "catalog": {
-      "grammy": "^1.36.3",
-      "@the-convocation/twitter-scraper": "^0.19.0"
+      "@prisma/client": "^6.17.1",
+      "prisma-json-types-generator": "^3.6.2",
+      "@prisma/adapter-pg": "^6.17.1",
+      "tsdown": "^0.15.5",
+      "elysia": "^1.3.21",
+      "@orpc/server": "^1.9.0",
+      "@orpc/openapi": "^1.9.0",
+      "@orpc/client": "^1.9.0",
+      "@orpc/zod": "^1.9.0",
+      "zod": "^4.1.12",
+      "prisma": "^6.17.1",
+      "grammy": "^1.38.3"
     }
   },
   "scripts": {
-    "start": "turbo -F web start",
-    "check": "biome check --write .",
-    "dev": "turbo dev",
-    "build": "turbo build",
+    "lint": "biome check --write .",
     "check-types": "turbo check-types",
+    "build": "turbo build",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
-    "server": "turbo server",
-    "db:push": "turbo -F @repo/utils db:push",
-    "db:generate": "turbo -F @repo/utils db:generate",
-    "db:migrate": "turbo -F @repo/utils db:migrate",
-    "enqueue:classifications": "turbo -F server enqueue:classifications"
+    "db:push": "turbo -F @starlight/utils db:push",
+    "db:generate": "turbo -F @starlight/utils db:generate",
+    "db:migrate": "turbo -F @starlight/utils db:migrate",
+    "queue:classify": "turbo -F server queue:classify",
+    "queue:embeddings": "turbo -F server queue:embeddings"
   },
   "dependencies": {},
   "devDependencies": {
     "@biomejs/biome": "2.2.6",
     "oxlint-tsgolint": "^0.2.0",
     "turbo": "^2.5.8",
-    "ultracite": "5.6.4"
+    "ultracite": "5.6.4",
+    "tsdown": "^0.15.5",
+    "@types/bun": "latest"
   },
-  "packageManager": "bun@1.2.21"
+  "packageManager": "bun@1.3.0",
+  "engines": {
+    "bun": ">=1.3.0"
+  }
 }

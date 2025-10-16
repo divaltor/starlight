@@ -1,9 +1,8 @@
 import type { FileFlavor } from "@grammyjs/files";
 import type { HydrateFlavor } from "@grammyjs/hydrate";
-import type { Chat, User } from "@prisma/client";
+import type { Chat, Logger, User } from "@starlight/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import type { Context as BaseContext, SessionFlavor } from "grammy";
-import type { Logger } from "@/logger";
 import type { SessionData } from "@/storage";
 
 type ExtendedContext = {

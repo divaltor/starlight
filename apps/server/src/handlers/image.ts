@@ -1,12 +1,12 @@
 import { b, fmt } from "@grammyjs/parse-mode";
-import { env, type Prisma } from "@repo/utils";
+import { env, type Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { RateLimiterRedis } from "rate-limiter-flexible";
 import { channelKeyboard, webAppKeyboard } from "@/bot";
 import { schedulerFlow } from "@/queue/scheduler";
 import { scrapperQueue } from "@/queue/scrapper";
 import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
-import { prisma, redis } from "@/storage";
+import { redis } from "@/storage";
 import type { Context } from "@/types";
 
 const scrapperRateLimiter = new RateLimiterRedis({
@@ -22,8 +22,8 @@ const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
 privateChat.on("message:photo", async (ctx) => {
-	const photo = await ctx.getFile();
-	const file = await photo.download();
+	const telegramPhoto = await ctx.getFile();
+	const file = await telegramPhoto.download();
 
 	const similarPhotos = await findDuplicatesByImageContent(file);
 
