@@ -299,27 +299,15 @@ export const deleteScheduledSlot = protectedProcedure
 		await prisma.scheduledSlot.delete({ where: { id: slotId } });
 	});
 
-async function shuffleSlotTweetInternal({
-	slotId,
-	tweetId,
-	userId,
-}: {
-	slotId: string;
-	tweetId?: string;
-	userId: string;
-}) {
+async function getSlotWithTweets(slotId: string, userId: string) {
 	const slot = await prisma.scheduledSlot.findFirst({
 		where: { id: slotId, userId },
 		include: {
 			scheduledSlotTweets: {
 				include: {
-					scheduledSlotPhotos: {
-						include: { photo: true },
-						orderBy: { createdAt: "asc" },
-					},
 					tweet: true,
+					scheduledSlotPhotos: { include: { photo: true } },
 				},
-				orderBy: { createdAt: "asc" },
 			},
 		},
 	});
@@ -331,20 +319,14 @@ async function shuffleSlotTweetInternal({
 		});
 	}
 
-	const slotTweet = slot.scheduledSlotTweets.find((st) => st.id === tweetId);
+	return slot;
+}
 
-	if (!slotTweet) {
-		throw new ORPCError("NOT_FOUND", {
-			message: "Tweet not found in slot",
-			status: 404,
-		});
-	}
-	const currentTweetIds = slot.scheduledSlotTweets.map((st) => st.tweet.id);
-
-	const availableTweets = await prisma.tweet.findMany({
+async function getAvailableTweets(userId: string, excludeTweetIds: string[]) {
+	return await prisma.tweet.findMany({
 		where: {
 			userId,
-			id: { notIn: currentTweetIds },
+			id: { notIn: excludeTweetIds },
 			photos: {
 				some: {
 					deletedAt: null,
@@ -365,8 +347,37 @@ async function shuffleSlotTweetInternal({
 			},
 		},
 		orderBy: { createdAt: "desc" },
-		take: 20,
+		take: 50,
 	});
+}
+
+function pickRandom<T>(items: T[]): T {
+	// biome-ignore lint/style/noNonNullAssertion: Guaranteed to be non-null
+	return items[Math.floor(Math.random() * items.length)]!;
+}
+
+async function shuffleSlotTweet({
+	slotId,
+	tweetId,
+	userId,
+}: {
+	slotId: string;
+	tweetId: string;
+	userId: string;
+}) {
+	const slot = await getSlotWithTweets(slotId, userId);
+
+	const slotTweet = slot.scheduledSlotTweets.find((st) => st.id === tweetId);
+
+	if (!slotTweet) {
+		throw new ORPCError("NOT_FOUND", {
+			message: "Tweet not found in slot",
+			status: 404,
+		});
+	}
+
+	const currentTweetIds = slot.scheduledSlotTweets.map((st) => st.tweet.id);
+	const availableTweets = await getAvailableTweets(userId, currentTweetIds);
 
 	if (availableTweets.length === 0) {
 		throw new ORPCError("BAD_REQUEST", {
@@ -374,31 +385,73 @@ async function shuffleSlotTweetInternal({
 			status: 400,
 		});
 	}
+	const newTweet = pickRandom(availableTweets);
 
-	const newTweet =
-		availableTweets[Math.floor(Math.random() * availableTweets.length)];
+	await prisma.$transaction(async (tx) => {
+		await tx.scheduledSlotPhoto.deleteMany({
+			where: { scheduledSlotTweetId: tweetId },
+		});
+		await tx.scheduledSlotTweet.update({
+			where: { id: tweetId },
+			data: { tweetId: newTweet.id },
+		});
+		await tx.scheduledSlotPhoto.createMany({
+			data: newTweet.photos.map((photo) => ({
+				scheduledSlotTweetId: tweetId,
+				photoId: photo.id,
+				userId,
+			})),
+		});
+	});
+	return prisma.scheduledSlot.findUnique({
+		where: { id: slotId },
+		include: {
+			scheduledSlotTweets: {
+				include: {
+					tweet: true,
+					scheduledSlotPhotos: { include: { photo: true } },
+				},
+			},
+		},
+	});
+}
 
-	if (tweetId) {
-		await prisma.$transaction(async (tx) => {
-			await tx.scheduledSlotPhoto.deleteMany({
-				where: { scheduledSlotTweetId: tweetId },
-			});
-			await tx.scheduledSlotTweet.update({
-				where: { id: tweetId },
-				// biome-ignore lint/style/noNonNullAssertion: New tweet is guaranteed to exist
-				data: { tweetId: newTweet!.id },
-			});
+async function addRandomTweetToSlot({
+	slotId,
+	userId,
+}: {
+	slotId: string;
+	userId: string;
+}) {
+	const slot = await getSlotWithTweets(slotId, userId);
 
-			await tx.scheduledSlotPhoto.createMany({
-				// biome-ignore lint/style/noNonNullAssertion: New tweet is guaranteed to exist
-				data: newTweet!.photos.map((photo) => ({
-					scheduledSlotTweetId: tweetId,
-					photoId: photo.id,
-					userId,
-				})),
-			});
+	const currentTweetIds = slot.scheduledSlotTweets.map((st) => st.tweet.id);
+	const availableTweets = await getAvailableTweets(userId, currentTweetIds);
+
+	if (availableTweets.length === 0) {
+		throw new ORPCError("BAD_REQUEST", {
+			message: "No available tweets to add",
+			status: 400,
 		});
 	}
+	const newTweet = pickRandom(availableTweets);
+
+	await prisma.$transaction(async (tx) => {
+		const scheduledSlotTweet = await tx.scheduledSlotTweet.create({
+			data: {
+				scheduledSlotId: slotId,
+				tweetId: newTweet.id,
+				userId,
+			},
+		});
+		await tx.scheduledSlotPhoto.createMany({
+			data: newTweet.photos.map((photo) => ({
+				scheduledSlotTweetId: scheduledSlotTweet.id,
+				photoId: photo.id,
+				userId,
+			})),
+		});
+	});
 
 	return prisma.scheduledSlot.findUnique({
 		where: { id: slotId },
@@ -406,12 +459,8 @@ async function shuffleSlotTweetInternal({
 			scheduledSlotTweets: {
 				include: {
 					tweet: true,
-					scheduledSlotPhotos: {
-						include: { photo: true },
-						orderBy: { createdAt: "asc" },
-					},
+					scheduledSlotPhotos: { include: { photo: true } },
 				},
-				orderBy: { createdAt: "asc" },
 			},
 		},
 	});
@@ -426,14 +475,8 @@ export const shuffleTweet = protectedProcedure
 	.input(shuffleTweetSchema)
 	.handler(async ({ input, context }) => {
 		const { slotId, tweetId } = input;
-
 		const userId = context.databaseUserId;
-
-		return await shuffleSlotTweetInternal({
-			slotId,
-			tweetId,
-			userId,
-		});
+		return await shuffleSlotTweet({ slotId, tweetId, userId });
 	});
 
 export const addTweetToSlot = protectedProcedure
@@ -441,5 +484,5 @@ export const addTweetToSlot = protectedProcedure
 	.handler(async ({ input, context }) => {
 		const { slotId } = input;
 		const userId = context.databaseUserId;
-		return await shuffleSlotTweetInternal({ slotId, userId });
+		return await addRandomTweetToSlot({ slotId, userId });
 	});
