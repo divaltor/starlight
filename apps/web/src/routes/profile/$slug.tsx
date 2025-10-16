@@ -4,7 +4,7 @@ import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback } from "react";
 import { NotFound } from "@/components/not-found";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
-import { useTweets } from "@/hooks/useTweets";
+import { useTweets } from "@/hooks/use-tweets";
 
 function SharedProfileViewer() {
 	const { slug } = useParams({ from: "/profile/$slug" });

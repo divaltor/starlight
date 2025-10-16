@@ -1,3 +1,4 @@
+// biome-ignore lint/performance/noNamespaceImport: Vite can handle this
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 import type * as React from "react";

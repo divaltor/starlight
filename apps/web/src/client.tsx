@@ -1,7 +1,7 @@
 import { StartClient } from "@tanstack/react-start/client";
 import { hydrateRoot } from "react-dom/client";
 import { initTMA } from "@/lib/init";
-import { mockEnv } from "@/lib/mockEnv";
+import { mockEnv } from "@/lib/mock-env";
 
 // One-time TMA initialization on client hydration
 async function initializeClient() {
@@ -10,7 +10,7 @@ async function initializeClient() {
 		await mockEnv();
 
 		// Initialize TMA with all components
-		await initTMA();
+		initTMA();
 
 		console.log("✅ TMA client initialization completed");
 	} catch (error) {

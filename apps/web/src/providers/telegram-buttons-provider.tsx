@@ -1,7 +1,7 @@
 import { useCanGoBack, useRouter } from "@tanstack/react-router";
 import { useRawInitData } from "@telegram-apps/sdk-react";
 import { createContext, useContext, useEffect, useMemo } from "react";
-import { useTelegramButtons } from "@/hooks/useTelegramButtons";
+import { useTelegramButtons } from "@/hooks/use-telegram-buttons";
 import type { ButtonState, RouteButtonConfig } from "@/types/telegram-buttons";
 
 type TelegramButtonsContextValue = {

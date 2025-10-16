@@ -20,7 +20,8 @@
       "!**/.nuxt",
       "!**/generated",
       "!**/node_modules",
-      "!**/.git"
+      "!**/.git",
+      "!**/*.css"
     ]
   },
   "formatter": {
@@ -52,7 +53,7 @@
             "functions": ["clsx", "cva", "cn"]
           }
         },
-        "noShadow": "warn"
+        "noShadow": "off"
       },
       "performance": {
         "noImgElement": "off"

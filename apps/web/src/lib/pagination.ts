@@ -1,7 +1,7 @@
-export interface CursorData {
+export type CursorData = {
 	lastTweetId: string;
 	createdAt: string;
-}
+};
 
 export const CursorPagination = {
 	createCursor(data: CursorData): string {

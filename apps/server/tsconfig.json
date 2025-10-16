@@ -1,37 +1,35 @@
 {
-	"compilerOptions": {
-		"target": "ESNext",
-		"module": "ESNext",
-		"moduleResolution": "bundler",
-		"verbatimModuleSyntax": true,
-		"skipLibCheck": true,
-		"jsx": "react-jsx",
-		"incremental": true,
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "incremental": true,
 
-		/* Strictness */
-		"strict": true,
-		"noUncheckedIndexedAccess": true,
-		"noImplicitOverride": true,
-		"noFallthroughCasesInSwitch": true,
-		"checkJs": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "checkJs": true,
 
-		/* Some stricter flags (disabled by default) */
-		"noUnusedLocals": false,
-		"noUnusedParameters": false,
-		"noPropertyAccessFromIndexSignature": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noPropertyAccessFromIndexSignature": false,
 
-		"baseUrl": ".",
-		"paths": {
-			"@/*": ["./src/*"],
-			"@repo/utils": ["../../packages/utils/src/index"],
-			"@repo/crypto": ["../../packages/crypto/src/index"]
-		},
-		"types": ["bun"],
-		"composite": true
-	},
-	"include": ["src/**/*"],
-	"references": [
-		{ "path": "../../packages/utils" },
-		{ "path": "../../packages/crypto" }
-	]
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@repo/utils": ["../../packages/utils/src/index"],
+      "@repo/crypto": ["../../packages/crypto/src/index"]
+    },
+    "types": ["bun"],
+    "composite": true
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../../packages/utils" },
+    { "path": "../../packages/crypto" }
+  ]
 }

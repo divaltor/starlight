@@ -1,15 +1,15 @@
 export type ButtonState = "hidden" | "visible" | "disabled";
 
-export interface ButtonAction {
+export type ButtonAction = {
 	type: "navigate" | "callback" | "external";
 	payload: string | (() => void) | (() => Promise<void>);
-}
+};
 
-export interface BaseButtonConfig {
+export type BaseButtonConfig = {
 	state: ButtonState;
 	action?: ButtonAction;
 	condition?: () => boolean; // Dynamic visibility condition
-}
+};
 
 export interface MainButtonConfig extends BaseButtonConfig {
 	text?: string;
@@ -32,9 +32,9 @@ export interface SecondaryButtonConfig extends MainButtonConfig {
 	// Secondary button has fixed appearance
 }
 
-export interface RouteButtonConfig {
+export type RouteButtonConfig = {
 	mainButton?: MainButtonConfig;
 	settingsButton?: SettingsButtonConfig;
 	backButton?: BackButtonConfig;
 	secondaryButton?: SecondaryButtonConfig;
-}
+};

@@ -4,7 +4,7 @@ import { AlertTriangle, Calendar } from "lucide-react";
 import { useEffect } from "react";
 import { SlotCard } from "@/components/slot-card";
 import { Card, CardContent } from "@/components/ui/card";
-import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
+import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
 
 function PublicationsPage() {
@@ -141,8 +141,7 @@ function PublicationsPage() {
 				{isError && renderNoChannelsState()}
 
 				{/* Create Slot Error State */}
-				{(createSlotMutation.isError ||
-					(createSlotMutation.isSuccess && createSlotMutation.data?.error)) && (
+				{createSlotMutation.isError && (
 					<div className="mb-6">
 						<Card className="border-red-200 bg-red-50">
 							<CardContent className="py-4">
@@ -162,7 +161,7 @@ function PublicationsPage() {
 
 				{/* Empty State */}
 				{!(isPending || isError || publicationSlot) &&
-					renderEmptyState(createSlotMutation.data?.error)}
+					renderEmptyState(createSlotMutation.error?.message)}
 
 				{/* Publications List */}
 				{!isPending && publicationSlot && (

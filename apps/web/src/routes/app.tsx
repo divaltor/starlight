@@ -4,8 +4,8 @@ import { Filter, Loader2 } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback, useEffect } from "react";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
-import { useTweets } from "@/hooks/useTweets";
-import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
+import { useTweets } from "@/hooks/use-tweets";
+import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 
 function TwitterArtViewer() {
 	const { updateButtons } = useTelegramContext();

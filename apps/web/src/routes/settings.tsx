@@ -23,7 +23,7 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
+import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/settings")({
