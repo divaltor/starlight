@@ -16,4 +16,6 @@ COPY . .
 
 RUN bun run build
 
+bun run db:generate
+
 CMD ["bun", "start"]
