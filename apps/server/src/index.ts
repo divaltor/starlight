@@ -4,7 +4,7 @@ import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { createContext } from "@starlight/api/context";
 import { appRouter } from "@starlight/api/routers/index";
-import { logger } from "@starlight/utils";
+import { env, logger } from "@starlight/utils";
 import Elysia from "elysia";
 import { bot } from "@/bot";
 import imageHandler from "@/handlers/image";
@@ -71,7 +71,7 @@ const rpcHandler = new RPCHandler(appRouter, {
 const _ = new Elysia()
 	.use(
 		cors({
-			origin: process.env.CORS_ORIGIN || "",
+			origin: env.CORS_ORIGIN,
 			methods: ["GET", "POST", "OPTIONS"],
 		})
 	)
