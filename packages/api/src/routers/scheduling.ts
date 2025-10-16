@@ -379,22 +379,24 @@ async function shuffleSlotTweetInternal({
 		availableTweets[Math.floor(Math.random() * availableTweets.length)];
 
 	if (tweetId) {
-		await prisma.scheduledSlotPhoto.deleteMany({
-			where: { scheduledSlotTweetId: tweetId },
-		});
-		await prisma.scheduledSlotTweet.update({
-			where: { id: tweetId },
-			// biome-ignore lint/style/noNonNullAssertion: New tweet is guaranteed to exist
-			data: { tweetId: newTweet!.id },
-		});
+		await prisma.$transaction(async (tx) => {
+			await tx.scheduledSlotPhoto.deleteMany({
+				where: { scheduledSlotTweetId: tweetId },
+			});
+			await tx.scheduledSlotTweet.update({
+				where: { id: tweetId },
+				// biome-ignore lint/style/noNonNullAssertion: New tweet is guaranteed to exist
+				data: { tweetId: newTweet!.id },
+			});
 
-		await prisma.scheduledSlotPhoto.createMany({
-			// biome-ignore lint/style/noNonNullAssertion: New tweet is guaranteed to exist
-			data: newTweet!.photos.map((photo) => ({
-				scheduledSlotTweetId: tweetId,
-				photoId: photo.id,
-				userId,
-			})),
+			await tx.scheduledSlotPhoto.createMany({
+				// biome-ignore lint/style/noNonNullAssertion: New tweet is guaranteed to exist
+				data: newTweet!.photos.map((photo) => ({
+					scheduledSlotTweetId: tweetId,
+					photoId: photo.id,
+					userId,
+				})),
+			});
 		});
 	}
 
