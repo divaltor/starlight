@@ -19,6 +19,6 @@ async function initializeClient() {
 }
 
 // Initialize TMA before hydrating
-initializeClient();
+await initializeClient();
 
 hydrateRoot(document, <StartClient />);

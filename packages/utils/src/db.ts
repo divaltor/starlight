@@ -13,13 +13,13 @@ const sqids = new Sqids({
 
 export const toUniqueId = (id: number) => sqids.encode([Math.abs(id)]);
 
-const adapter = new PrismaPg(env.DATABASE_URL);
+const adapter = new PrismaPg({
+	connectionString: env.DATABASE_URL,
+});
 
 export const prisma = new PrismaClient({
 	log:
-		env.ENVIRONMENT === "prod"
-			? ["info", "warn", "error"]
-			: ["query", "info", "warn", "error"],
+		env.ENVIRONMENT === "prod" ? ["warn", "error"] : ["info", "warn", "error"],
 	adapter,
 }).$extends({
 	result: {
