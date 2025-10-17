@@ -14,7 +14,7 @@
   "scripts": {
     "build": "bun run db:generate && bun run -b tsdown",
     "db:push": "prisma --config prisma.config.ts migrate deploy",
-    "db:generate": "prisma --config prisma.config.ts generate",
+    "db:generate": "prisma --config prisma.config.ts generate --sql",
     "db:migrate": "prisma --config prisma.config.ts migrate dev"
   },
   "dependencies": {

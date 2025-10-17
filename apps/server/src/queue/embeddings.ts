@@ -1,4 +1,4 @@
-import { DbNull, env, prisma } from "@starlight/utils";
+import { DbNull, env, prisma, updatePhotoEmbeddings } from "@starlight/utils";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import { logger } from "@/logger";
 import { redis } from "@/storage";
@@ -9,7 +9,7 @@ type ClassificationJobData = {
 };
 
 type EmbeddingResponse = {
-	image: number[];
+	image: number[] | null;
 	text: number[];
 };
 
@@ -55,12 +55,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 				classification: { not: DbNull },
 			},
 			select: {
-				id: true,
-				userId: true,
-				imageVec: true,
-				tagVec: true,
 				s3Url: true,
-				s3Path: true,
 				classification: true,
 			},
 		});
@@ -128,10 +123,9 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 			throw error;
 		}
 
-		await prisma.photo.update({
-			where: { photoId: { id: photoId, userId } },
-			data: { imageVec: data.image, tagVec: data.text },
-		});
+		await prisma.$queryRawTyped(
+			updatePhotoEmbeddings(photoId, userId, data.text, data.image ?? [])
+		);
 
 		logger.info({ photoId, userId }, "Photo %s embeddings generated", photoId);
 	},

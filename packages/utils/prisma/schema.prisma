@@ -8,7 +8,7 @@ generator client {
     provider        = "prisma-client"
     output          = "../src/generated/prisma"
     engineType      = "client"
-    previewFeatures = ["relationJoins", "postgresqlExtensions"]
+    previewFeatures = ["relationJoins", "postgresqlExtensions", "typedSql"]
     runtime         = "bun"
 }
 
