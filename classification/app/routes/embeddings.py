@@ -1,4 +1,3 @@
-import asyncio
 from typing import TYPE_CHECKING, Annotated
 
 import structlog
@@ -30,7 +29,7 @@ async def embeddings(
     payload: Annotated[
         EmbeddingPayload,
         Body(
-            description='Create embedding for text or image. JSON {"type": "image|text", "data": "<url-or-base64>|<text>"}',
+            description='Create embedding for text or image. JSON {"image": "<url-or-base64>", "tags": ["tag1", "tag2"]}',
             examples=[
                 {
                     'image': 'https://example.com/image.png',
@@ -41,22 +40,26 @@ async def embeddings(
     ],
 ) -> EmbeddingResponse:
     try:
-        with torch.no_grad():
-            # Kick off image preprocessing early while encoding text
-            img_task = asyncio.create_task(preprocess_image(payload.image.strip()))
+        # Always encode text
+        with pipeline_span('text_embedding', 'jinaai/jina-clip-v2'):
+            emb_text_vec: ndarray = embedding_model.encode(
+                [payload.text],
+                normalize_embeddings=True,
+            )
 
-            with pipeline_span('text_embedding', 'jinaai/jina-clip-v2'):
-                emb_text_vec: ndarray = embedding_model.encode(
-                    [payload.text],
-                    normalize_embeddings=True,
-                )
+        emb_image: ndarray | None = None
 
-            img = await img_task
+        if payload.image:
+            with torch.no_grad():
+                img = await preprocess_image(payload.image.strip())
 
-            with pipeline_span('image_embedding', 'jinaai/jina-clip-v2'):
-                emb_image: ndarray = embedding_model.encode([img], normalize_embeddings=True)  # pyright: ignore[reportCallIssue, reportArgumentType]
+                with pipeline_span('image_embedding', 'jinaai/jina-clip-v2'):
+                    emb_image: ndarray = embedding_model.encode([img], normalize_embeddings=True)  # pyright: ignore[reportCallIssue, reportArgumentType]
 
-        return EmbeddingResponse(image=emb_image[0].tolist(), text=emb_text_vec[0].tolist())
+        return EmbeddingResponse(
+            image=emb_image[0].tolist() if emb_image is not None else None,
+            text=emb_text_vec[0].tolist(),
+        )
     except HTTPException:
         raise
     except Exception as e:  # pragma: no cover
