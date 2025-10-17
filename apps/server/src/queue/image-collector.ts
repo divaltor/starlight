@@ -1,8 +1,9 @@
-import { logger, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import sharp from "sharp";
 import UserAgent from "user-agents";
+import { logger } from "@/logger";
 import { classificationQueue } from "@/queue/classification";
 import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
 import { calculatePerceptualHash } from "@/services/image";

@@ -1,4 +1,5 @@
-import { env, logger, prisma } from "@starlight/utils";
+import { env, prisma } from "@starlight/utils";
+import { logger } from "@/logger";
 import { classificationQueue } from "@/queue/classification";
 import { redis } from "@/storage";
 

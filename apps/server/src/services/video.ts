@@ -1,6 +1,7 @@
 import path from "node:path";
-import { env, logger } from "@starlight/utils";
+import { env } from "@starlight/utils";
 import { create } from "youtube-dl-exec";
+import { logger } from "@/logger";
 
 // biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 const filesGlob = new Bun.Glob("*.mp4");

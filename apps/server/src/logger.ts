@@ -1,4 +1,4 @@
-import { env } from "@starlight/utils";
+import env from "@starlight/utils/src/config";
 import pino from "pino";
 
 export const logger = pino({

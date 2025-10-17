@@ -1,6 +1,6 @@
 import { CookieEncryption } from "@starlight/crypto";
 import type { User } from "@starlight/utils";
-import { env, logger, prisma } from "@starlight/utils";
+import { env, prisma } from "@starlight/utils";
 import {
 	ApiError,
 	AuthenticationError,
@@ -9,6 +9,7 @@ import {
 	type Tweet,
 } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
+import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";
 import { Cookies, redis } from "@/storage";
 

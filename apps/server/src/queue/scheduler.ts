@@ -1,9 +1,10 @@
-import { logger, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
 import { FlowProducer, QueueEvents, Worker } from "bullmq";
 import { InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
 import { RateLimiterRedis, type RateLimiterRes } from "rate-limiter-flexible";
 import { bot } from "@/bot";
+import { logger } from "@/logger";
 import { redis } from "@/storage";
 
 export const schedulerFlow = new FlowProducer({ connection: redis.options });

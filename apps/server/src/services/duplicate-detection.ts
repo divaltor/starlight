@@ -1,4 +1,5 @@
-import { logger, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
+import { logger } from "@/logger";
 import { calculateHashDistance, calculatePerceptualHash } from "./image";
 
 type SimilarPhoto = {

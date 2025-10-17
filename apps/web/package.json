@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "vite serve --host",
+    "start": "bun run .output/server/index.mjs",
     "build": "vite build",
     "dev": "vite dev --port=3001"
   },
@@ -53,6 +53,7 @@
   },
   "devDependencies": {
     "@rollup/plugin-alias": "^5.1.1",
+    "@tanstack/nitro-v2-vite-plugin": "^1.133.3",
     "@tanstack/react-query-devtools": "5.90.2",
     "@tanstack/react-router-devtools": "^1.133.3",
     "@testing-library/dom": "^10.4.1",

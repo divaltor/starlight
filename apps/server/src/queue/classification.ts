@@ -1,5 +1,6 @@
-import { env, logger, prisma } from "@starlight/utils";
+import { env, prisma } from "@starlight/utils";
 import { Queue, QueueEvents, Worker } from "bullmq";
+import { logger } from "@/logger";
 import { redis } from "@/storage";
 import type { Classification } from "@/types";
 

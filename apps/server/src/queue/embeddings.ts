@@ -1,5 +1,6 @@
-import { DbNull, env, logger, prisma } from "@starlight/utils";
+import { DbNull, env, prisma } from "@starlight/utils";
 import { Queue, QueueEvents, Worker } from "bullmq";
+import { logger } from "@/logger";
 import { redis } from "@/storage";
 
 type ClassificationJobData = {

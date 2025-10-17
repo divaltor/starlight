@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/client";
-import { logger, type Prisma, prisma, type User } from "@starlight/utils";
+import { type Prisma, prisma, type User } from "@starlight/utils";
 import { z } from "zod";
 import { no } from "..";
 import { maybeAuthProcedure } from "../middlewares/auth";
@@ -167,8 +167,7 @@ export const retrieveUserTweets = no
 				tweets: transformedTweets,
 				nextCursor,
 			};
-		} catch (error) {
-			logger.error({ error }, "Failed to fetch user tweets");
+		} catch {
 			return {
 				tweets: [],
 				nextCursor: null,
