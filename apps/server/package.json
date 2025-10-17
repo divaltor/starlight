@@ -30,7 +30,6 @@
     "grammy": "catalog:",
     "hono": "catalog:",
     "ioredis": "^5.8.1",
-    "msgpackr": "^1.11.5",
     "rate-limiter-flexible": "^8.1.0",
     "sharp": "^0.34.4",
     "tmp": "^0.2.5",

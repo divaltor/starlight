@@ -21,10 +21,9 @@ COPY packages/api/package.json ./packages/api/package.json
 COPY packages/utils/package.json ./packages/utils/package.json
 COPY packages/crypto/package.json ./packages/crypto/package.json
 
+# Ignore scripts to prevent installation of msgpackr-extract, can't compile it in docker somehow
 RUN bun install --ignore-scripts
 
 COPY . .
-
-RUN bun run db:generate
 
 CMD ["bun", "start:server"]

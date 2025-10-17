@@ -12,18 +12,15 @@
     "lint": {
       "dependsOn": ["^lint"]
     },
-    "dev:server": {
-      "cache": false,
-      "persistent": true
-    },
-    "start:server": {
+    "start": {
       "dependsOn": ["^db:push"],
       "cache": false,
       "persistent": true,
       "env": ["DATABASE_URL"]
     },
-    "start": {
-      "dependsOn": ["^build"]
+    "dev": {
+      "dependsOn": ["^build"],
+      "persistent": true
     },
     "check-types": {
       "dependsOn": ["^check-types"]

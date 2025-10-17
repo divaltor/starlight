@@ -2,6 +2,8 @@
 
 This file provides guidance for agentic coding agents working in this repository.
 
+Answer shortly ALWAYS.
+
 # Project Context
 Ultracite enforces strict type safety, accessibility standards, and consistent code quality for JavaScript/TypeScript projects using Biome's lightning-fast formatter and linter.
 
