@@ -98,7 +98,6 @@ const getScheduledSlotsSchema = z.object({
 			ScheduledSlotStatus.PUBLISHING,
 		])
 		.optional(),
-	limit: z.number().min(1).max(30).default(10),
 });
 
 const createSlotSchema = z.object({
@@ -125,7 +124,7 @@ export const getScheduledSlot = protectedProcedure
 	.input(getScheduledSlotsSchema)
 	.handler(async ({ input, context }) => {
 		const userId = context.databaseUserId;
-		const { status, limit } = input;
+		const { status } = input;
 
 		const whereClause: Prisma.ScheduledSlotWhereInput = { userId };
 
@@ -149,7 +148,6 @@ export const getScheduledSlot = protectedProcedure
 				},
 			},
 			orderBy: [{ scheduledFor: "asc" }, { createdAt: "desc" }],
-			take: limit,
 		});
 
 		return slot;
