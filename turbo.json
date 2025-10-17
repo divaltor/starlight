@@ -13,6 +13,7 @@
       "dependsOn": ["^lint"]
     },
     "start": {
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true,
       "env": ["DATABASE_URL"]
