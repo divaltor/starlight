@@ -6,6 +6,7 @@ ENV NODE_ENV=production
 ENV YOUTUBE_DL_SKIP_DOWNLOAD=true
 ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=true
 
+# For Prisma
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 
 COPY --from=linuxserver/ffmpeg /usr/local/bin/ffprobe /usr/bin/ffprobe
