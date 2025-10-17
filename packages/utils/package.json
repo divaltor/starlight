@@ -13,9 +13,9 @@
   },
   "scripts": {
     "build": "bun run -b tsdown",
-    "db:push": "prisma migrate deploy",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev"
+    "db:push": "prisma --config prisma.config.ts migrate deploy",
+    "db:generate": "prisma --config prisma.config.ts generate",
+    "db:migrate": "prisma --config prisma.config.ts migrate dev"
   },
   "dependencies": {
     "@prisma/client": "catalog:",
