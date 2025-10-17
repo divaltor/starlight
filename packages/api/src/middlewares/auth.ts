@@ -28,7 +28,7 @@ export const authMiddleware = o.middleware(async ({ next, context }) => {
 		});
 	}
 
-	if (env.ENVIRONMENT === "prod") {
+	if (env.NODE_ENV === "production") {
 		try {
 			validate(auth, env.BOT_TOKEN);
 		} catch {
@@ -77,7 +77,7 @@ export const optionalAuthMiddleware = o.middleware(({ next, context }) => {
 
 	if (auth) {
 		try {
-			if (env.ENVIRONMENT === "prod") {
+			if (env.NODE_ENV === "production") {
 				validate(auth, env.BOT_TOKEN);
 			}
 

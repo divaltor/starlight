@@ -44,7 +44,7 @@ const getORPCClient = createIsomorphicFn()
 			new RPCLink({
 				url: `${import.meta.env.VITE_SERVER_URL}/rpc`,
 				headers: {
-					Authorization: `Bearer ${rawInitData}`,
+					Authorization: rawInitData,
 				},
 			})
 		);

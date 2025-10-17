@@ -91,7 +91,10 @@ app.use(
 		credentials: true,
 	})
 );
-app.use(webhookCallback(bot, "hono", { secretToken: env.BOT_TOKEN }));
+
+if (env.USE_WEBHOOK && env.BASE_WEBHOOK_URL) {
+	app.use("/webhook*", webhookCallback(bot, "hono"));
+}
 
 app.all("/rpc*", async (ctx) => {
 	const context = await createContext({ context: ctx });

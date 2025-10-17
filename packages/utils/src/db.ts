@@ -19,7 +19,9 @@ const adapter = new PrismaPg({
 
 export const prisma = new PrismaClient({
 	log:
-		env.ENVIRONMENT === "prod" ? ["warn", "error"] : ["info", "warn", "error"],
+		env.NODE_ENV === "production"
+			? ["warn", "error"]
+			: ["info", "warn", "error"],
 	adapter,
 }).$extends({
 	result: {

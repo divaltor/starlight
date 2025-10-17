@@ -107,7 +107,7 @@ main()
 		await redis.quit().catch((error) => {
 			logger.error({ error }, "Failed to quit Redis");
 		});
-		if (env.ENVIRONMENT !== "prod") {
+		if (env.NODE_ENV !== "production") {
 			setTimeout(() => process.exit(), 100).unref();
 		}
 	});

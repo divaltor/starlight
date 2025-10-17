@@ -231,9 +231,10 @@ function RouteComponent() {
 
 								<form
 									className="space-y-4"
-									onSubmit={() =>
-										saveCookiesMutation.mutate({ cookies: newCookies })
-									}
+									onSubmit={(e) => {
+										e.preventDefault();
+										saveCookiesMutation.mutate({ cookies: newCookies });
+									}}
 								>
 									<div className="space-y-2">
 										<textarea

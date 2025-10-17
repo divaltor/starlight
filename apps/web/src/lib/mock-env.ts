@@ -9,7 +9,7 @@ export async function mockEnv(): Promise<void> {
 
 	const isTma = await isTMA("complete");
 
-	if (isTma) {
+	if (!isTma) {
 		const themeParams = {
 			accent_text_color: "#6ab2f2",
 			bg_color: "#17212b",

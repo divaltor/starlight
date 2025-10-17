@@ -2,7 +2,7 @@ import { env } from "@starlight/utils";
 import pino from "pino";
 
 export const logger = pino({
-	level: env.ENVIRONMENT === "dev" ? "debug" : "info",
+	level: env.NODE_ENV === "development" ? "debug" : "info",
 	transport: {
 		targets:
 			env.AXIOM_DATASET && env.AXIOM_TOKEN

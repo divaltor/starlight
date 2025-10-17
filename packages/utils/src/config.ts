@@ -31,7 +31,10 @@ const env = createEnv({
 		AXIOM_DATASET: z.string().default("starlight"),
 		AXIOM_TOKEN: z.string().optional(),
 
-		ENVIRONMENT: z.enum(["dev", "prod"]).optional().default("dev"),
+		NODE_ENV: z
+			.enum(["development", "production"])
+			.optional()
+			.default("development"),
 
 		BASE_FRONTEND_URL: z.string().default(process.env.VERCEL_URL || ""),
 		BASE_CDN_URL: z
