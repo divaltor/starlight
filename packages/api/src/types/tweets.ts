@@ -22,6 +22,12 @@ export type ScheduledSlotData = {
 		username?: string;
 	};
 };
+
+export type ScheduledSlotResult = {
+	slot: ScheduledSlotData | null;
+	tweets: TweetData[];
+};
+
 export type TweetsPageResult = {
 	tweets: TweetData[];
 	nextCursor: string | null;

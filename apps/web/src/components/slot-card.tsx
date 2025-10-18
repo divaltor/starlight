@@ -1,5 +1,6 @@
 import type {
 	ScheduledSlotData,
+	ScheduledSlotResult,
 	TweetData,
 } from "@starlight/api/src/types/tweets";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -89,7 +90,7 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 			columnWidth: 200, // Approximate column width
 			columnGutter: 16,
 		},
-		[shouldRecalculate]
+		[shouldRecalculate, tweets]
 	);
 
 	// Update length ref after positioner setup
@@ -121,6 +122,38 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 
 	const deletePhotoMutation = useMutation(
 		orpc.scheduling.photos.remove.mutationOptions({
+			onMutate: async (variables) => {
+				await queryClient.cancelQueries({ queryKey: ["scheduled-slots"] });
+				const previousData = queryClient.getQueryData<ScheduledSlotResult>([
+					"scheduled-slots",
+				]);
+
+				queryClient.setQueryData<ScheduledSlotResult>(
+					["scheduled-slots"],
+					(old) => {
+						if (!old) {
+							return old;
+						}
+
+						return {
+							...old,
+							tweets: old.tweets
+								.map((t) => ({
+									...t,
+									photos: t.photos.filter((p) => p.id !== variables.photoId),
+								}))
+								.filter((t) => t.photos.length > 0),
+						};
+					}
+				);
+
+				return { previousData };
+			},
+			onError: (_error, _variables, context) => {
+				if (context?.previousData) {
+					queryClient.setQueryData(["scheduled-slots"], context.previousData);
+				}
+			},
 			onSuccess: () => {
 				queryClient.invalidateQueries({
 					queryKey: ["scheduled-slots"],
@@ -141,6 +174,24 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 
 	const deleteSlotMutation = useMutation(
 		orpc.scheduling.slots.delete.mutationOptions({
+			onMutate: async () => {
+				await queryClient.cancelQueries({ queryKey: ["scheduled-slots"] });
+				const previousData = queryClient.getQueryData<ScheduledSlotResult>([
+					"scheduled-slots",
+				]);
+
+				queryClient.setQueryData<ScheduledSlotResult>(
+					["scheduled-slots"],
+					() => ({ slot: null, tweets: [] }) satisfies ScheduledSlotResult
+				);
+
+				return { previousData };
+			},
+			onError: (_error, _variables, context) => {
+				if (context?.previousData) {
+					queryClient.setQueryData(["scheduled-slots"], context.previousData);
+				}
+			},
 			onSuccess: () => {
 				queryClient.invalidateQueries({
 					queryKey: ["scheduled-slots"],
