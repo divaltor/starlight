@@ -1,4 +1,4 @@
-import { DbNull, env, prisma, updatePhotoEmbeddings } from "@starlight/utils";
+import { DbNull, env, Prisma, prisma } from "@starlight/utils";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import { logger } from "@/logger";
 import { redis } from "@/storage";
@@ -123,8 +123,12 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 			throw error;
 		}
 
-		await prisma.$queryRawTyped(
-			updatePhotoEmbeddings(photoId, userId, data.text, data.image ?? [])
+		await prisma.$executeRaw(
+			Prisma.sql`UPDATE photos SET tag_vec = $1::vector, image_vec = $2::vector WHERE id = $3 AND user_id = $4`,
+			data.text,
+			data.image ?? [],
+			photoId,
+			userId
 		);
 
 		logger.info({ photoId, userId }, "Photo %s embeddings generated", photoId);

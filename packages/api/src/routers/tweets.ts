@@ -3,8 +3,8 @@ import { type Prisma, prisma, type User } from "@starlight/utils";
 import { z } from "zod";
 import { no } from "..";
 import { maybeAuthProcedure } from "../middlewares/auth";
-import type { TweetData } from "../types/tweets";
 import { Cursor, type CursorPayload } from "../utils/cursor";
+import { transformTweets } from "../utils/transformations";
 
 const TweetsQuery = z.object({
 	username: z.string().optional(),
@@ -79,12 +79,10 @@ export const retrieveUserTweets = no
 		const { userId, cursor, limit } = input;
 
 		try {
-			// Parse cursor if provided
 			let cursorData: CursorPayload | null = null;
 			if (cursor) {
 				cursorData = Cursor.parse(cursor);
 
-				// Invalid cursor
 				if (!cursorData) {
 					return {
 						tweets: [],
@@ -93,9 +91,7 @@ export const retrieveUserTweets = no
 				}
 			}
 
-			// Build where clause for cursor pagination and filters
 			const whereClause: Prisma.TweetWhereInput = {
-				// Filter by user id only
 				userId,
 			};
 
@@ -107,7 +103,6 @@ export const retrieveUserTweets = no
 				];
 			}
 
-			// Fetch tweets with pagination - only tweets that have photos
 			const tweets = await prisma.tweet.findMany({
 				where: {
 					...whereClause,
@@ -121,7 +116,6 @@ export const retrieveUserTweets = no
 						},
 					},
 				},
-				// Always order by newest first for consistent display
 				orderBy: [
 					{
 						createdAt: "desc",
@@ -133,25 +127,7 @@ export const retrieveUserTweets = no
 				take: limit,
 			});
 
-			const transformedTweets: TweetData[] = tweets.map((tweet) => {
-				const photos = tweet.photos.map((photo) => ({
-					id: photo.id,
-					// biome-ignore lint/style/noNonNullAssertion: We filter out photos with null s3Path
-					url: photo.s3Url!,
-				}));
-
-				const tweetData = tweet.tweetData;
-				const tweetUsername = tweetData?.username;
-
-				return {
-					id: tweet.id,
-					artist: tweetUsername ? `@${tweetUsername}` : "@good_artist",
-					date: tweet.createdAt.toISOString(),
-					photos,
-					hasMultipleImages: photos.length > 1,
-					sourceUrl: `https://x.com/i/status/${tweet.id}`,
-				};
-			});
+			const transformedTweets = transformTweets(tweets);
 
 			let nextCursor: string | null = null;
 			if (tweets.length === limit) {

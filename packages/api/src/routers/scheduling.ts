@@ -4,6 +4,7 @@ import { z } from "zod";
 import { publicProcedure } from "..";
 import type { Context } from "../context";
 import { type AuthContext, protectedProcedure } from "../middlewares/auth";
+import { transformSlotTweets } from "../utils/transformations";
 
 const slotPhotoSchema = z.object({
 	slotId: z.uuid(),
@@ -87,7 +88,14 @@ export const scheduledSlotRemovePhoto = protectedProcedure
 			},
 		});
 
-		return updatedSlot;
+		if (!updatedSlot) {
+			return null;
+		}
+
+		return {
+			slot: updatedSlot,
+			tweets: transformSlotTweets(updatedSlot.scheduledSlotTweets),
+		};
 	});
 
 const getScheduledSlotsSchema = z.object({
@@ -101,7 +109,6 @@ const getScheduledSlotsSchema = z.object({
 });
 
 const createSlotSchema = z.object({
-	scheduledFor: z.string().datetime().optional(),
 	tweetCount: z.number().min(1).max(10).default(5),
 });
 
@@ -150,13 +157,23 @@ export const getScheduledSlot = protectedProcedure
 			orderBy: [{ scheduledFor: "asc" }, { createdAt: "desc" }],
 		});
 
-		return slot;
+		if (!slot) {
+			return {
+				slot: null,
+				tweets: [],
+			};
+		}
+
+		return {
+			slot,
+			tweets: transformSlotTweets(slot.scheduledSlotTweets),
+		};
 	});
 
 export const createScheduledSlot = protectedProcedure
 	.input(createSlotSchema)
 	.handler(async ({ input, context }) => {
-		const { scheduledFor, tweetCount } = input;
+		const { tweetCount } = input;
 		const userId = context.databaseUserId;
 
 		const postingChannel = await prisma.postingChannel.findUnique({
@@ -210,7 +227,6 @@ export const createScheduledSlot = protectedProcedure
 				data: {
 					userId,
 					chatId: postingChannel.chatId,
-					scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
 				},
 			});
 
@@ -233,23 +249,22 @@ export const createScheduledSlot = protectedProcedure
 			return slot;
 		});
 
-		const slot = await prisma.scheduledSlot.findUnique({
-			where: { id: createdSlot.id },
+		const scheduledSlotTweets = await prisma.scheduledSlotTweet.findMany({
+			where: { scheduledSlotId: createdSlot.id },
 			include: {
-				scheduledSlotTweets: {
-					include: {
-						tweet: true,
-						scheduledSlotPhotos: {
-							include: { photo: true },
-							orderBy: { createdAt: "asc" },
-						},
-					},
+				tweet: true,
+				scheduledSlotPhotos: {
+					include: { photo: true },
 					orderBy: { createdAt: "asc" },
 				},
 			},
+			orderBy: { createdAt: "asc" },
 		});
 
-		return slot;
+		return {
+			slot: createdSlot,
+			tweets: transformSlotTweets(scheduledSlotTweets),
+		};
 	});
 
 export const updateScheduledSlot = protectedProcedure
@@ -274,7 +289,11 @@ export const updateScheduledSlot = protectedProcedure
 				},
 			},
 		});
-		return updatedSlot;
+
+		return {
+			slot: updatedSlot,
+			tweets: transformSlotTweets(updatedSlot.scheduledSlotTweets),
+		};
 	});
 
 export const deleteScheduledSlot = protectedProcedure
@@ -304,8 +323,12 @@ async function getSlotWithTweets(slotId: string, userId: string) {
 			scheduledSlotTweets: {
 				include: {
 					tweet: true,
-					scheduledSlotPhotos: { include: { photo: true } },
+					scheduledSlotPhotos: {
+						include: { photo: true },
+						orderBy: { createdAt: "asc" },
+					},
 				},
+				orderBy: { createdAt: "asc" },
 			},
 		},
 	});
@@ -401,17 +424,20 @@ async function shuffleSlotTweet({
 			})),
 		});
 	});
-	return prisma.scheduledSlot.findUnique({
-		where: { id: slotId },
+
+	const scheduledSlotTweets = await prisma.scheduledSlotTweet.findMany({
+		where: { scheduledSlotId: slotId },
 		include: {
-			scheduledSlotTweets: {
-				include: {
-					tweet: true,
-					scheduledSlotPhotos: { include: { photo: true } },
-				},
-			},
+			tweet: true,
+			scheduledSlotPhotos: { include: { photo: true } },
 		},
+		orderBy: { createdAt: "asc" },
 	});
+
+	return {
+		slot,
+		tweets: transformSlotTweets(scheduledSlotTweets),
+	};
 }
 
 async function addRandomTweetToSlot({
@@ -421,9 +447,21 @@ async function addRandomTweetToSlot({
 	slotId: string;
 	userId: string;
 }) {
-	const slot = await getSlotWithTweets(slotId, userId);
+	const slot = await prisma.scheduledSlot.findFirst({
+		where: { id: slotId, userId },
+		include: {
+			scheduledSlotTweets: { select: { tweetId: true } },
+		},
+	});
 
-	const currentTweetIds = slot.scheduledSlotTweets.map((st) => st.tweet.id);
+	if (!slot) {
+		throw new ORPCError("NOT_FOUND", {
+			message: "Slot not found",
+			status: 404,
+		});
+	}
+
+	const currentTweetIds = slot.scheduledSlotTweets.map((st) => st.tweetId);
 	const availableTweets = await getAvailableTweets(userId, currentTweetIds);
 
 	if (availableTweets.length === 0) {
@@ -451,17 +489,19 @@ async function addRandomTweetToSlot({
 		});
 	});
 
-	return prisma.scheduledSlot.findUnique({
-		where: { id: slotId },
+	const scheduledSlotTweets = await prisma.scheduledSlotTweet.findMany({
+		where: { scheduledSlotId: slotId },
 		include: {
-			scheduledSlotTweets: {
-				include: {
-					tweet: true,
-					scheduledSlotPhotos: { include: { photo: true } },
-				},
-			},
+			tweet: true,
+			scheduledSlotPhotos: { include: { photo: true } },
 		},
+		orderBy: { createdAt: "asc" },
 	});
+
+	return {
+		slot,
+		tweets: transformSlotTweets(scheduledSlotTweets),
+	};
 }
 
 const shuffleTweetSchema = z.object({

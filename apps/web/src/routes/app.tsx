@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Filter, Loader2 } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback, useEffect } from "react";
-import { TweetImageGrid } from "@/components/tweet-image-grid";
+import { SlotCard } from "@/components/slot-card";
 import { useTweets } from "@/hooks/use-tweets";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 
@@ -65,16 +65,8 @@ function TwitterArtViewer() {
 
 	const renderMasonryItem = useCallback(
 		({ data, width }: { data: TweetData; width: number }) => (
-			<div className="group relative mb-1" style={{ width }}>
-				<TweetImageGrid
-					artist={data.artist}
-					date={data.date}
-					id={data.id}
-					photos={data.photos}
-					showActions={false}
-					slotTweetId={data.id}
-					sourceUrl={data.sourceUrl}
-				/>
+			<div className="mb-1" style={{ width }}>
+				<SlotCard tweets={[data]} />
 			</div>
 		),
 		[]

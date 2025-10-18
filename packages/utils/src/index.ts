@@ -7,4 +7,3 @@ export {
 	ScheduledSlotStatus,
 } from "./generated/prisma/enums";
 export { DbNull, JsonNull } from "./generated/prisma/internal/prismaNamespace";
-export { updatePhotoEmbeddings } from "./generated/prisma/sql";

@@ -38,16 +38,16 @@ async function main() {
 	}
 
 	const photos = await prisma.$queryRaw<{ id: string; userId: string }[]>`
-			SELECT id, user_id as "userId"
-			FROM photos
-			WHERE deleted_at IS NULL
-			  AND s3_path IS NOT NULL
-			  AND (
-			    embeddings IS NULL
-			    OR (embeddings -> 'text') IS NULL
-			  )
-			ORDER BY id ASC
-		`;
+		SELECT id, user_id as "userId"
+		FROM photos
+		WHERE deleted_at IS NULL
+		  AND s3_path IS NOT NULL
+		  AND (
+			image_vec IS NULL
+			OR tag_vec IS NULL
+		  )
+		ORDER BY id ASC
+	`;
 
 	let enqueued = 0;
 

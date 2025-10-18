@@ -1,3 +1,4 @@
+import type { TweetData } from "@starlight/api/src/types/tweets";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { Filter, Loader2 } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
@@ -32,17 +33,9 @@ function SharedProfileViewer() {
 	);
 
 	const renderMasonryItem = useCallback(
-		({ data, width }: { data: (typeof tweets)[0]; width: number }) => (
+		({ data, width }: { data: TweetData; width: number }) => (
 			<div className="mb-1" style={{ width }}>
-				<TweetImageGrid
-					artist={data.artist}
-					date={data.date}
-					id={data.id}
-					photos={data.photos}
-					showActions={false}
-					slotTweetId={data.id}
-					sourceUrl={data.sourceUrl}
-				/>
+				<TweetImageGrid showActions={false} tweet={data} />
 			</div>
 		),
 		[]

@@ -1,37 +1,25 @@
+import type { TweetData } from "@starlight/api/src/types/tweets";
+import type { ScheduledSlot } from "@starlight/utils";
 import { format } from "date-fns";
 import { Shuffle, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { TweetWithPhotos } from "@/types/api";
 
 type TweetImageGridProps = {
-	scheduledTweet: TweetWithPhotos;
+	tweet: TweetData;
+	slot?: ScheduledSlot;
 	showActions?: boolean;
-	onShuffleTweet?: (tweetId: string) => void;
-	onDeleteImage?: (photoId: string) => void;
+	onShuffleTweet?: (slotId: string, tweetId: string) => void;
+	onDeleteImage?: (slotId: string, photoId: string) => void;
 };
 
 export function TweetImageGrid({
-	scheduledTweet,
+	tweet,
+	slot,
 	showActions = false,
 	onShuffleTweet,
 	onDeleteImage,
 }: TweetImageGridProps) {
-	const tweet = scheduledTweet.tweet;
-	const artistUsername = tweet.tweetData?.username;
-
-	const sourceUrl = `https://x.com/i/status/${tweet.id}`;
-
-	const photos = scheduledTweet.scheduledSlotPhotos.map((photo) => photo.photo);
-	const artist = tweet.tweetData?.username
-		? `@${tweet.tweetData.username}`
-		: "@good_artist";
-
-	const date =
-		tweet.tweetData?.timeParsed?.toISOString() ??
-		scheduledTweet.createdAt?.toISOString() ??
-		"";
-
 	const [isImageLoading, setIsImageLoading] = useState<{
 		[key: string]: boolean;
 	}>({});
@@ -49,11 +37,11 @@ export function TweetImageGrid({
 	const handleArtistClick = (e: React.MouseEvent) => {
 		e.stopPropagation();
 
-		window.open(sourceUrl, "_blank", "noopener,noreferrer");
+		window.open(tweet.sourceUrl, "_blank", "noopener,noreferrer");
 	};
 
-	if (photos.length === 1) {
-		const photo = photos[0];
+	if (tweet.photos.length === 1) {
+		const photo = tweet.photos[0];
 
 		return (
 			<div className="group relative cursor-pointer overflow-hidden rounded-lg bg-gray-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md">
@@ -69,7 +57,7 @@ export function TweetImageGrid({
 					height={400}
 					onLoad={() => handleImageLoad(photo.id, false)}
 					onLoadStart={() => handleImageLoad(photo.id, true)}
-					src={photo.s3Url || photo.originalUrl}
+					src={photo.url}
 					width={400}
 				/>
 				<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
@@ -77,31 +65,25 @@ export function TweetImageGrid({
 					<div className="w-full p-3 text-white">
 						<div className="flex items-center justify-between">
 							<div>
-								{artistUsername ? (
-									<button
-										className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-blue-300"
-										onClick={(e) => handleArtistClick(e)}
-										type="button"
-									>
-										{artist}
-									</button>
-								) : (
-									<p className="font-medium text-sm drop-shadow-lg">{artist}</p>
-								)}
-								{date && (
-									<p className="text-gray-200 text-xs drop-shadow-lg">
-										{formatTweetDate(date)}
-									</p>
-								)}
+								<button
+									className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-blue-300"
+									onClick={(e) => handleArtistClick(e)}
+									type="button"
+								>
+									{tweet.artist}
+								</button>
+								<p className="font-medium text-sm drop-shadow-lg">
+									{tweet.date}
+								</p>
 							</div>
-							{showActions && scheduledTweet.id && (
+							{showActions && slot && (
 								<div className="flex items-center gap-1">
 									{onShuffleTweet && (
 										<Button
 											className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-blue-300"
 											onClick={(e) => {
 												e.stopPropagation();
-												onShuffleTweet(scheduledTweet.id);
+												onShuffleTweet(slot.id, tweet.id);
 											}}
 											size="sm"
 											variant="ghost"
@@ -114,7 +96,7 @@ export function TweetImageGrid({
 											className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 											onClick={(e) => {
 												e.stopPropagation();
-												onDeleteImage(photo.id);
+												onDeleteImage(slot.id, photo.id);
 											}}
 											size="sm"
 											variant="ghost"
@@ -137,29 +119,25 @@ export function TweetImageGrid({
 			{/* Post header */}
 			<div className="mb-3 flex items-center justify-between">
 				<div>
-					{tweet.tweetData?.username ? (
-						<button
-							className="cursor-pointer text-left font-medium text-gray-900 text-sm transition-colors duration-200 hover:text-blue-600"
-							onClick={(e) => handleArtistClick(e)}
-							type="button"
-						>
-							{artist}
-						</button>
-					) : (
-						<p className="font-medium text-gray-900 text-sm">{artist}</p>
-					)}
-					<p className="text-gray-500 text-xs">
-						{date && formatTweetDate(date)}
-					</p>
+					<button
+						className="cursor-pointer text-left font-medium text-gray-900 text-sm transition-colors duration-200 hover:text-blue-600"
+						onClick={(e) => handleArtistClick(e)}
+						type="button"
+					>
+						{tweet.artist}
+					</button>
+					<p className="text-gray-500 text-xs">{formatTweetDate(tweet.date)}</p>
 				</div>
 				<div className="flex items-center gap-2">
-					<span className="text-gray-500 text-xs">{photos.length} images</span>
-					{showActions && onShuffleTweet && scheduledTweet.id && (
+					<span className="text-gray-500 text-xs">
+						{tweet.photos.length} images
+					</span>
+					{showActions && onShuffleTweet && slot && (
 						<Button
 							className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-gray-600 hover:bg-gray-100 hover:text-blue-600"
 							onClick={(e) => {
 								e.stopPropagation();
-								onShuffleTweet(scheduledTweet.id);
+								onShuffleTweet(slot.id, tweet.id);
 							}}
 							size="sm"
 							variant="ghost"
@@ -169,11 +147,10 @@ export function TweetImageGrid({
 					)}
 				</div>
 			</div>
-
 			{/* Dynamic grid based on number of images */}
-			{photos.length === 2 && (
+			{tweet.photos.length === 2 && (
 				<div className="grid grid-cols-2 gap-2">
-					{photos.map((photo) => (
+					{tweet.photos.map((photo) => (
 						<div
 							className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
 							key={photo.id}
@@ -190,17 +167,17 @@ export function TweetImageGrid({
 								height={400}
 								onLoad={() => handleImageLoad(photo.id, false)}
 								onLoadStart={() => handleImageLoad(photo.id, true)}
-								src={photo.s3Url || photo.originalUrl}
+								src={photo.url}
 								width={400}
 							/>
 							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							{showActions && onDeleteImage && scheduledTweet.id && (
+							{showActions && onDeleteImage && slot && (
 								<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
 									<Button
 										className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 										onClick={(e) => {
 											e.stopPropagation();
-											onDeleteImage(photo.id);
+											onDeleteImage(slot.id, photo.id);
 										}}
 										size="sm"
 										variant="ghost"
@@ -213,10 +190,9 @@ export function TweetImageGrid({
 					))}
 				</div>
 			)}
-
-			{photos.length === 3 && (
+			{tweet.photos.length === 3 && (
 				<div className="grid grid-cols-2 gap-2">
-					{photos.map((photo, index) => (
+					{tweet.photos.map((photo, index) => (
 						<div
 							className={`group relative cursor-pointer overflow-hidden rounded bg-gray-100 ${
 								index === 0 ? "col-span-2" : ""
@@ -235,17 +211,17 @@ export function TweetImageGrid({
 								height={400}
 								onLoad={() => handleImageLoad(photo.id, false)}
 								onLoadStart={() => handleImageLoad(photo.id, true)}
-								src={photo.s3Url || photo.originalUrl}
+								src={photo.url}
 								width={400}
 							/>
 							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							{showActions && onDeleteImage && scheduledTweet.id && (
+							{showActions && onDeleteImage && slot && (
 								<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
 									<Button
 										className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 										onClick={(e) => {
 											e.stopPropagation();
-											onDeleteImage(photo.id);
+											onDeleteImage(slot.id, photo.id);
 										}}
 										size="sm"
 										variant="ghost"
@@ -258,10 +234,9 @@ export function TweetImageGrid({
 					))}
 				</div>
 			)}
-
-			{photos.length === 4 && (
+			{tweet.photos.length === 4 && (
 				<div className="grid grid-cols-2 gap-2">
-					{photos.map((photo) => (
+					{tweet.photos.map((photo) => (
 						<div
 							className="group relative cursor-pointer overflow-hidden rounded bg-gray-100"
 							key={photo.id}
@@ -278,17 +253,17 @@ export function TweetImageGrid({
 								height={400}
 								onLoad={() => handleImageLoad(photo.id, false)}
 								onLoadStart={() => handleImageLoad(photo.id, true)}
-								src={photo.s3Url || photo.originalUrl}
+								src={photo.url}
 								width={400}
 							/>
 							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							{showActions && onDeleteImage && scheduledTweet.id && (
+							{showActions && onDeleteImage && slot && (
 								<div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
 									<Button
 										className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 										onClick={(e) => {
 											e.stopPropagation();
-											onDeleteImage(photo.id);
+											onDeleteImage(slot.id, photo.id);
 										}}
 										size="sm"
 										variant="ghost"

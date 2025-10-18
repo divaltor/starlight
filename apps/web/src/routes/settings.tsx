@@ -3,7 +3,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ProfileShareSection } from "@/components/profile-share-section";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -359,11 +358,6 @@ function RouteComponent() {
 								</div>
 							)
 						)}
-					</section>
-
-					{/* Profile Share Section */}
-					<section>
-						<ProfileShareSection embedded rawInitData={rawInitData} />
 					</section>
 				</CardContent>
 			</Card>

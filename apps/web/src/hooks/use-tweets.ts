@@ -1,4 +1,7 @@
-import type { TweetData } from "@starlight/api/types/tweets";
+import type {
+	TweetData,
+	TweetsPageResult,
+} from "@starlight/api/src/types/tweets";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { orpc } from "@/utils/orpc";
 
@@ -27,7 +30,8 @@ export function useTweets(options: UseTweetsOptions = {}) {
 			}),
 			queryKey: ["tweets", { username }],
 			initialPageParam: undefined,
-			getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+			getNextPageParam: (lastPage: TweetsPageResult) =>
+				lastPage.nextCursor ?? undefined,
 			retry: false,
 			gcTime: 10 * 60 * 1000,
 		})

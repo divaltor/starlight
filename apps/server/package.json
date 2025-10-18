@@ -7,8 +7,8 @@
     "start": "bun run src/index.ts",
     "build": "bun run -b tsdown",
     "test": "bun test",
-    "queue:classify": "bun run src/scripts/enqueue-all-classifications.ts",
-    "queue:embeddings": "bun run src/scripts/enqueue-all-embeddings.ts"
+    "queue:classify": "bun run src/scripts/classifications.ts",
+    "queue:embeddings": "bun run src/scripts/embeddings.ts"
   },
   "dependencies": {
     "@axiomhq/pino": "^1.3.1",
