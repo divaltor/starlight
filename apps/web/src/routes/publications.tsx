@@ -242,12 +242,7 @@ function PublicationsPage() {
 								</CardHeader>
 							</Card>
 
-							{/* Tweets list */}
-							<div className="space-y-4">
-								{tweets.map((tweet) => (
-									<SlotCard key={tweet.id} slot={slot} tweets={tweets} />
-								))}
-							</div>
+							<SlotCard slot={slot} tweets={tweets} />
 						</>
 					)}
 				</div>
