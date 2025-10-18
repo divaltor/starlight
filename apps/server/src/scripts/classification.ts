@@ -9,7 +9,7 @@ import { redis } from "@/storage";
 //   DRY_RUN=1             (only log, do not enqueue)
 //   CLEAR_QUEUE=1         (drain waiting & delayed jobs before enqueueing)
 //   FORCE=1               (enqueue even if jobs existed previously; bypass dedupe)
-//   ONLY_MISSING_NSFW=1   (only enqueue photos missing classification.nsfw.is_nsfw)
+//   ALL_PICTURES=1        (enqueue all pictures)
 // Notes:
 //   FORCE only bypasses queue job de-duplication. The worker still skips
 //   photos that already have a classification saved.
@@ -19,7 +19,7 @@ const CLEAR_QUEUE =
 	process.env.CLEAR_QUEUE === "1" || process.env.CLEAR === "1";
 const FORCE = process.env.FORCE === "1";
 // When set, only enqueue photos missing classification.nsfw.is_nsfw
-const ONLY_MISSING_NSFW = process.env.ONLY_MISSING_NSFW === "1";
+const ALL_PICTURES = process.env.ALL_PICTURES === "1";
 
 async function main() {
 	logger.info(
@@ -27,7 +27,7 @@ async function main() {
 			dryRun: DRY_RUN,
 			clear: CLEAR_QUEUE,
 			force: FORCE,
-			onlyMissingNsfw: ONLY_MISSING_NSFW,
+			onlyMissingNsfw: ALL_PICTURES,
 		},
 		"Starting enqueue of all photos for classification"
 	);
@@ -43,8 +43,13 @@ async function main() {
 		}
 	}
 
-	const photos = ONLY_MISSING_NSFW
-		? await prisma.$queryRaw<{ id: string; userId: string }[]>`
+	const photos = ALL_PICTURES
+		? await prisma.photo.findMany({
+				where: { deletedAt: null, s3Path: { not: null } },
+				select: { id: true, userId: true },
+				orderBy: { id: "asc" },
+			})
+		: await prisma.$queryRaw<{ id: string; userId: string }[]>`
 			SELECT id, user_id as "userId"
 			FROM photos
 			WHERE deleted_at IS NULL
@@ -55,12 +60,7 @@ async function main() {
 			    OR (classification -> 'nsfw' -> 'is_nsfw') IS NULL
 			  )
 			ORDER BY id ASC
-		`
-		: await prisma.photo.findMany({
-				where: { deletedAt: null, s3Path: { not: null } },
-				select: { id: true, userId: true },
-				orderBy: { id: "asc" },
-			});
+		`;
 
 	logger.info({ count: photos.length }, "Fetched all photos to enqueue");
 
@@ -87,7 +87,7 @@ async function main() {
 			dryRun: DRY_RUN,
 			force: FORCE,
 			clearQueue: CLEAR_QUEUE,
-			onlyMissingNsfw: ONLY_MISSING_NSFW,
+			onlyMissingNsfw: ALL_PICTURES,
 		},
 		"Finished enqueue script"
 	);
