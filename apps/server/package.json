@@ -7,7 +7,7 @@
     "start": "bun run src/index.ts",
     "build": "bun run -b tsdown",
     "test": "bun test",
-    "queue:classify": "bun run src/scripts/classifications.ts",
+    "queue:classify": "bun run src/scripts/classification.ts",
     "queue:embeddings": "bun run src/scripts/embeddings.ts"
   },
   "dependencies": {
