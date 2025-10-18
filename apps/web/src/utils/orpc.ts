@@ -5,25 +5,11 @@ import { createRouterClient } from "@orpc/server";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import { createContext } from "@starlight/api/context";
 import { appRouter } from "@starlight/api/routers/index";
-import { QueryCache, QueryClient } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { retrieveRawInitData } from "@telegram-apps/sdk-react";
-import { toast } from "sonner";
 
-export const queryClient = new QueryClient({
-	queryCache: new QueryCache({
-		onError: (error) => {
-			toast.error(`Error: ${error.message}`, {
-				action: {
-					label: "retry",
-					onClick: () => {
-						queryClient.invalidateQueries();
-					},
-				},
-			});
-		},
-	}),
-});
+export const queryClient = new QueryClient();
 
 const getORPCClient = createIsomorphicFn()
 	.server(() =>
