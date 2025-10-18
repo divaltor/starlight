@@ -14,6 +14,7 @@ import publicationsHandler from "@/handlers/publications";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
 import { classificationWorker } from "@/queue/classification";
+import { embeddingsWorker } from "@/queue/embeddings";
 import { imagesWorker } from "@/queue/image-collector";
 import { scheduledSlotWorker, scheduledTweetWorker } from "@/queue/scheduler";
 import { scrapperWorker } from "@/queue/scrapper";
@@ -57,6 +58,7 @@ process.on("SIGINT", async () => {
 	await scrapperWorker.close();
 	await scheduledTweetWorker.close();
 	await scheduledSlotWorker.close();
+	await embeddingsWorker.close();
 });
 
 process.on("SIGTERM", async () => {
@@ -65,10 +67,12 @@ process.on("SIGTERM", async () => {
 	await scrapperWorker.close();
 	await scheduledTweetWorker.close();
 	await scheduledSlotWorker.close();
+	await embeddingsWorker.close();
 });
 
 imagesWorker.run();
 classificationWorker.run();
+embeddingsWorker.run();
 scrapperWorker.run();
 scheduledTweetWorker.run();
 scheduledSlotWorker.run();
