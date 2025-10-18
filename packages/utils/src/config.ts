@@ -71,8 +71,8 @@ const env = createEnv({
 		ML_BASE_URL: z.url().optional(),
 		ML_API_TOKEN: z.string().optional(),
 
-		ENABLE_CLASSIFICATION: z.boolean().optional().default(false),
-		ENABLE_EMBEDDINGS: z.boolean().optional().default(false),
+		ENABLE_CLASSIFICATION: z.stringbool().optional().default(false),
+		ENABLE_EMBEDDINGS: z.stringbool().optional().default(false),
 	},
 	clientPrefix: "VITE_",
 	client: {
