@@ -123,10 +123,11 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 			throw error;
 		}
 
-		logger.info({ photoId, userId, data }, "Embeddings data");
+		const textVecStr = `[${data.text.join(",")}]`;
+		const imageVecStr = `[${(data.image ?? []).join(",")}]`;
 
 		await prisma.$executeRaw(
-			Prisma.sql`UPDATE photos SET tag_vec = ${data.text}::vector, image_vec = ${data.image ?? []}::vector WHERE id = ${photoId} AND user_id = ${userId}`
+			Prisma.sql`UPDATE photos SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE id = ${photoId} AND user_id = ${userId}`
 		);
 
 		logger.info({ photoId, userId }, "Photo %s embeddings generated", photoId);
