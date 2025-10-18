@@ -9,8 +9,8 @@ type TweetImageGridProps = {
 	tweet: TweetData;
 	slot?: ScheduledSlot;
 	showActions?: boolean;
-	onShuffleTweet?: (slotId: string, tweetId: string) => void;
-	onDeleteImage?: (slotId: string, photoId: string) => void;
+	onShuffleTweet?: (tweetId: string) => void;
+	onDeleteImage?: (photoId: string) => void;
 };
 
 export function TweetImageGrid({
@@ -79,7 +79,7 @@ export function TweetImageGrid({
 											className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-blue-300"
 											onClick={(e) => {
 												e.stopPropagation();
-												onShuffleTweet(slot.id, tweet.id);
+												onShuffleTweet(tweet.id);
 											}}
 											size="sm"
 											variant="ghost"
@@ -92,7 +92,7 @@ export function TweetImageGrid({
 											className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 											onClick={(e) => {
 												e.stopPropagation();
-												onDeleteImage(slot.id, photo.id);
+												onDeleteImage(photo.id);
 											}}
 											size="sm"
 											variant="ghost"
@@ -133,7 +133,7 @@ export function TweetImageGrid({
 							className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-gray-600 hover:bg-gray-100 hover:text-blue-600"
 							onClick={(e) => {
 								e.stopPropagation();
-								onShuffleTweet(slot.id, tweet.id);
+								onShuffleTweet(tweet.id);
 							}}
 							size="sm"
 							variant="ghost"
@@ -173,7 +173,7 @@ export function TweetImageGrid({
 										className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 										onClick={(e) => {
 											e.stopPropagation();
-											onDeleteImage(slot.id, photo.id);
+											onDeleteImage(photo.id);
 										}}
 										size="sm"
 										variant="ghost"
@@ -217,7 +217,7 @@ export function TweetImageGrid({
 										className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 										onClick={(e) => {
 											e.stopPropagation();
-											onDeleteImage(slot.id, photo.id);
+											onDeleteImage(photo.id);
 										}}
 										size="sm"
 										variant="ghost"
@@ -259,7 +259,7 @@ export function TweetImageGrid({
 										className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-red-300"
 										onClick={(e) => {
 											e.stopPropagation();
-											onDeleteImage(slot.id, photo.id);
+											onDeleteImage(photo.id);
 										}}
 										size="sm"
 										variant="ghost"

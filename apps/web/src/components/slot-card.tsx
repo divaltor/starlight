@@ -23,7 +23,7 @@ import { orpc } from "@/utils/orpc";
 
 type SlotCardProps = {
 	tweets: TweetData[];
-	slot?: ScheduledSlot;
+	slot: ScheduledSlot;
 };
 
 export function SlotCard({ tweets, slot }: SlotCardProps) {
@@ -104,8 +104,12 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 	}) => (
 		<div className="mb-1" style={{ width }}>
 			<TweetImageGrid
-				onDeleteImage={handleDeleteImage}
-				onShuffleTweet={handleShuffleTweet}
+				onDeleteImage={(photoId) =>
+					deletePhotoMutation.mutate({ slotId: slot.id, photoId })
+				}
+				onShuffleTweet={(tweetId) =>
+					shuffleTweetMutation.mutate({ slotId: slot.id, tweetId })
+				}
 				showActions={showActions}
 				slot={slot}
 				tweet={data}
@@ -144,21 +148,7 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 	);
 
 	const handleDeleteSlot = () => {
-		if (slot?.id) {
-			deleteSlotMutation.mutate({ slotId: slot.id });
-		}
-	};
-
-	const handleDeleteImage = (photoId: string) => {
-		if (slot) {
-			deletePhotoMutation.mutate({ slotId: slot.id, photoId });
-		}
-	};
-
-	const handleShuffleTweet = (tweetId: string) => {
-		if (slot?.id) {
-			shuffleTweetMutation.mutate({ slotId: slot.id, tweetId });
-		}
+		deleteSlotMutation.mutate({ slotId: slot.id });
 	};
 
 	return (
@@ -168,9 +158,9 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 					<div className="flex flex-col gap-2">
 						{/* Summary */}
 						<div className="flex flex-wrap items-center gap-2">
-							{slot?.chatId && (
+							{slot.chatId && (
 								<Badge className="text-xs" variant="outline">
-									📢 {slot?.chatId}
+									📢 {slot.chatId}
 								</Badge>
 							)}
 							<div className="flex items-center gap-1">
@@ -234,7 +224,7 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 					</div>
 				</div>
 			</CardHeader>
-			<CardContent className={tweets.length > 0 ? "p-0" : ""}>
+			<CardContent className="pt-0">
 				{tweets.length > 0 && (
 					<div ref={containerRef} style={{ position: "relative" }}>
 						<MasonryScroller

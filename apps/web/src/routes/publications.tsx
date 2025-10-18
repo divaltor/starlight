@@ -1,23 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-	AlertTriangle,
-	Calendar,
-	MessageSquare,
-	MoreVertical,
-	Trash2,
-} from "lucide-react";
+import { AlertTriangle, Calendar } from "lucide-react";
 import { useEffect } from "react";
 import { SlotCard } from "@/components/slot-card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Card, CardContent } from "@/components/ui/card";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
 
@@ -47,22 +33,6 @@ function PublicationsPage() {
 			},
 		})
 	);
-
-	const deleteSlotMutation = useMutation(
-		orpc.scheduling.slots.delete.mutationOptions({
-			onSuccess: () => {
-				queryClient.invalidateQueries({
-					queryKey: ["scheduled-slots"],
-				});
-			},
-		})
-	);
-
-	const handleDeleteSlot = () => {
-		if (slot) {
-			deleteSlotMutation.mutate({ slotId: slot.id });
-		}
-	};
 
 	useEffect(() => {
 		if (isPending || !slot) {
@@ -155,96 +125,10 @@ function PublicationsPage() {
 	);
 
 	if (slot && !isPending) {
-		const uniqueAuthors = [...new Set(tweets.map((tweet) => tweet.artist))];
-
 		return (
 			<div className="min-h-screen bg-gray-50 p-2 sm:p-4">
 				<div className="mx-auto max-w-4xl">
-					{/* No Channels State */}
-					{isError && renderNoChannelsState()}
-
-					{/* Empty State */}
-					{!(isPending || isError || slot) &&
-						renderEmptyState(createSlotMutation.error?.message)}
-
-					{/* Publications Header */}
-					{slot && (
-						<>
-							<Card className="mb-4 shadow-sm">
-								<CardHeader className="pb-3">
-									<div className="flex items-start justify-between gap-3">
-										<div className="flex flex-col gap-2">
-											{/* Summary */}
-											<div className="flex flex-wrap items-center gap-2">
-												{slot.postingChannel.chat.title && (
-													<Badge className="text-xs" variant="outline">
-														📢 {slot.postingChannel.chat.title}
-													</Badge>
-												)}
-												<div className="flex items-center gap-1">
-													<MessageSquare className="h-3 w-3 text-gray-500" />
-													<span className="text-gray-500 text-xs">
-														{slot.scheduledSlotTweets.length} tweet
-														{slot.scheduledSlotTweets.length !== 1 ? "s" : ""}
-													</span>
-												</div>
-												{uniqueAuthors.length > 0 && (
-													<span className="text-gray-400 text-xs">
-														@{uniqueAuthors.slice(0, 2).join(", @")}
-														{uniqueAuthors.length > 2 &&
-															` +${uniqueAuthors.length - 2}`}
-													</span>
-												)}
-											</div>
-										</div>
-
-										{/* Mobile dropdown menu */}
-										<div className="md:hidden">
-											<DropdownMenu>
-												<DropdownMenuTrigger asChild>
-													<Button
-														className="h-8 w-8 p-0"
-														size="sm"
-														variant="ghost"
-													>
-														<MoreVertical className="h-4 w-4" />
-													</Button>
-												</DropdownMenuTrigger>
-												<DropdownMenuContent align="end" className="w-40">
-													{slot.status === "WAITING" && (
-														<DropdownMenuItem
-															className="gap-2 text-red-600 focus:text-red-600"
-															onClick={handleDeleteSlot}
-														>
-															<Trash2 className="h-4 w-4" />
-															Delete
-														</DropdownMenuItem>
-													)}
-												</DropdownMenuContent>
-											</DropdownMenu>
-										</div>
-
-										{/* Desktop controls */}
-										<div className="hidden items-center gap-1 md:flex">
-											{slot.status === "WAITING" && (
-												<Button
-													className="gap-1 text-red-600 text-xs hover:bg-red-50 hover:text-red-700"
-													onClick={handleDeleteSlot}
-													size="sm"
-													variant="outline"
-												>
-													<Trash2 className="h-3 w-3" />
-													Delete
-												</Button>
-											)}
-										</div>
-									</div>
-								</CardHeader>
-							</Card>
-
-							<SlotCard slot={slot} tweets={tweets} />
-						</>
-					)}
+					<SlotCard slot={slot} tweets={tweets} />
 				</div>
 			</div>
 		);

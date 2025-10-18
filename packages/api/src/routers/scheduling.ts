@@ -45,6 +45,7 @@ export const scheduledSlotRemovePhoto = protectedProcedure
 				scheduledSlotTweet: { include: { scheduledSlotPhotos: true } },
 			},
 		});
+
 		if (!scheduledSlotPhoto) {
 			throw new ORPCError("NOT_FOUND", {
 				message: "Photo not found in slot",
