@@ -271,10 +271,7 @@ function RouteComponent() {
 
 					{/* Posting Channel Section */}
 					<section className="space-y-4">
-						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
-							Connected Channel
-						</h2>
-						{isPostingChannelLoading ? (
+						{isPostingChannelLoading && (
 							<div className="flex items-center justify-between">
 								<div className="flex items-center gap-3">
 									<Skeleton className="h-12 w-12 rounded-full" />
@@ -285,78 +282,78 @@ function RouteComponent() {
 								</div>
 								<Skeleton className="h-9 w-24" />
 							</div>
-						) : (
-							postingChannel && (
-								<div className="flex items-center justify-between">
-									<div className="flex items-center gap-3">
-										<div className="h-12 w-12 overflow-hidden rounded-full bg-gray-100">
-											{postingChannel.chat.thumbnailUrl ? (
-												// biome-ignore lint/nursery/useImageSize: Don't care
-												<img
-													alt={postingChannel.chat.title || "Channel"}
-													className="h-full w-full object-cover"
-													src={postingChannel.chat.thumbnailUrl}
-												/>
-											) : (
-												<div className="flex h-full w-full items-center justify-center bg-gray-200 font-medium text-gray-500 text-sm">
-													{postingChannel.chat.title?.charAt(0) || "C"}
-												</div>
-											)}
-										</div>
-										<div>
-											<p className="font-medium text-gray-900 text-sm">
-												{postingChannel.chat.title || "Unknown Channel"}
-											</p>
-											<p className="text-gray-500 text-xs">
-												{postingChannel.chat.username
-													? `@${postingChannel.chat.username}`
-													: `ID: ${postingChannel.chat.id}`}
-											</p>
-										</div>
+						)}
+
+						{!isPostingChannelLoading && postingChannel && (
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-3">
+									<div className="h-12 w-12 overflow-hidden rounded-full bg-gray-100">
+										{postingChannel.chat.thumbnailUrl ? (
+											// biome-ignore lint/nursery/useImageSize: Don't care
+											<img
+												alt={postingChannel.chat.title || "Channel"}
+												className="h-full w-full object-cover"
+												src={postingChannel.chat.thumbnailUrl}
+											/>
+										) : (
+											<div className="flex h-full w-full items-center justify-center bg-gray-200 font-medium text-gray-500 text-sm">
+												{postingChannel.chat.title?.charAt(0) || "C"}
+											</div>
+										)}
 									</div>
-									<Dialog
-										onOpenChange={setShowDisconnectDialog}
-										open={showDisconnectDialog}
-									>
-										<DialogTrigger asChild>
+									<div>
+										<p className="font-medium text-gray-900 text-sm">
+											{postingChannel.chat.title || "Unknown Channel"}
+										</p>
+										<p className="text-gray-500 text-xs">
+											{postingChannel.chat.username
+												? `@${postingChannel.chat.username}`
+												: `ID: ${postingChannel.chat.id}`}
+										</p>
+									</div>
+								</div>
+								<Dialog
+									onOpenChange={setShowDisconnectDialog}
+									open={showDisconnectDialog}
+								>
+									<DialogTrigger asChild>
+										<Button
+											disabled={disconnectChannelMutation.isPending}
+											size="sm"
+											variant="destructive"
+										>
+											Disconnect
+										</Button>
+									</DialogTrigger>
+									<DialogContent>
+										<DialogHeader>
+											<DialogTitle>Disconnect Channel</DialogTitle>
+											<DialogDescription>
+												Are you sure? You won't be able to send publications
+												into this channel.
+											</DialogDescription>
+										</DialogHeader>
+										<DialogFooter>
 											<Button
 												disabled={disconnectChannelMutation.isPending}
-												size="sm"
+												onClick={() => setShowDisconnectDialog(false)}
+												variant="outline"
+											>
+												No
+											</Button>
+											<Button
+												disabled={disconnectChannelMutation.isPending}
+												onClick={() => disconnectChannelMutation.mutate({})}
 												variant="destructive"
 											>
-												Disconnect
+												{disconnectChannelMutation.isPending
+													? "Disconnecting..."
+													: "Sure"}
 											</Button>
-										</DialogTrigger>
-										<DialogContent>
-											<DialogHeader>
-												<DialogTitle>Disconnect Channel</DialogTitle>
-												<DialogDescription>
-													Are you sure? You won't be able to send publications
-													into this channel.
-												</DialogDescription>
-											</DialogHeader>
-											<DialogFooter>
-												<Button
-													disabled={disconnectChannelMutation.isPending}
-													onClick={() => setShowDisconnectDialog(false)}
-													variant="outline"
-												>
-													No
-												</Button>
-												<Button
-													disabled={disconnectChannelMutation.isPending}
-													onClick={() => disconnectChannelMutation.mutate({})}
-													variant="destructive"
-												>
-													{disconnectChannelMutation.isPending
-														? "Disconnecting..."
-														: "Sure"}
-												</Button>
-											</DialogFooter>
-										</DialogContent>
-									</Dialog>
-								</div>
-							)
+										</DialogFooter>
+									</DialogContent>
+								</Dialog>
+							</div>
 						)}
 					</section>
 				</CardContent>
