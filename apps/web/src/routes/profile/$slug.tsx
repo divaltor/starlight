@@ -35,7 +35,7 @@ function SharedProfileViewer() {
 	const renderMasonryItem = useCallback(
 		({ data, width }: { data: TweetData; width: number }) => (
 			<div className="mb-1" style={{ width }}>
-				<TweetImageGrid showActions={false} tweet={data} />
+				<TweetImageGrid tweet={data} />
 			</div>
 		),
 		[]
