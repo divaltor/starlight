@@ -507,7 +507,7 @@ async function addRandomTweetToSlot({
 
 const shuffleTweetSchema = z.object({
 	slotId: z.uuid(),
-	tweetId: z.uuid(),
+	tweetId: z.string(),
 });
 
 export const shuffleTweet = protectedProcedure
