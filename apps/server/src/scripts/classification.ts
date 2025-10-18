@@ -1,4 +1,4 @@
-import { env, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
 import { logger } from "@/logger";
 import { classificationQueue } from "@/queue/classification";
 import { redis } from "@/storage";
@@ -108,7 +108,4 @@ main()
 		await redis.quit().catch((error) => {
 			logger.error({ error }, "Failed to quit Redis");
 		});
-		if (env.NODE_ENV !== "production") {
-			setTimeout(() => process.exit(), 100).unref();
-		}
 	});
