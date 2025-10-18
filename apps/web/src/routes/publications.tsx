@@ -163,25 +163,6 @@ function PublicationsPage() {
 					{/* No Channels State */}
 					{isError && renderNoChannelsState()}
 
-					{/* Create Slot Error State */}
-					{createSlotMutation.isError && (
-						<div className="mb-6">
-							<Card className="border-red-200 bg-red-50">
-								<CardContent className="py-4">
-									<div className="flex items-center gap-2">
-										<div className="h-2 w-2 rounded-full bg-red-500" />
-										<p className="font-medium text-red-800 text-sm">
-											Failed to create slot
-										</p>
-									</div>
-									<p className="mt-2 text-red-700 text-sm">
-										An unexpected error occurred
-									</p>
-								</CardContent>
-							</Card>
-						</div>
-					)}
-
 					{/* Empty State */}
 					{!(isPending || isError || slot) &&
 						renderEmptyState(createSlotMutation.error?.message)}
@@ -279,25 +260,6 @@ function PublicationsPage() {
 			<div className="mx-auto max-w-4xl">
 				{/* No Channels State */}
 				{isError && renderNoChannelsState()}
-
-				{/* Create Slot Error State */}
-				{createSlotMutation.isError && (
-					<div className="mb-6">
-						<Card className="border-red-200 bg-red-50">
-							<CardContent className="py-4">
-								<div className="flex items-center gap-2">
-									<div className="h-2 w-2 rounded-full bg-red-500" />
-									<p className="font-medium text-red-800 text-sm">
-										Failed to create slot
-									</p>
-								</div>
-								<p className="mt-2 text-red-700 text-sm">
-									An unexpected error occurred
-								</p>
-							</CardContent>
-						</Card>
-					</div>
-				)}
 
 				{/* Empty State */}
 				{!(isPending || isError || slot) &&
