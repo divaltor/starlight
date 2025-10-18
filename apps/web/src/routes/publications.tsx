@@ -34,6 +34,26 @@ function PublicationsPage() {
 		})
 	);
 
+	const addTweetMutation = useMutation(
+		orpc.scheduling.tweets.add.mutationOptions({
+			onSuccess: () => {
+				queryClient.invalidateQueries({
+					queryKey: ["scheduled-slots"],
+				});
+			},
+		})
+	);
+
+	const publishSlotMutation = useMutation(
+		orpc.respond.send.mutationOptions({
+			onSuccess: () => {
+				queryClient.invalidateQueries({
+					queryKey: ["scheduled-slots"],
+				});
+			},
+		})
+	);
+
 	useEffect(() => {
 		if (isPending || !slot) {
 			// No publications - show "Add slot" button
@@ -63,7 +83,7 @@ function PublicationsPage() {
 					action: {
 						type: "callback",
 						payload: () => {
-							orpc.respond.send.call({ slotId: slot.id });
+							publishSlotMutation.mutate({ slotId: slot.id });
 						},
 					},
 				},
@@ -75,7 +95,7 @@ function PublicationsPage() {
 						type: "callback",
 						payload: () => {
 							if (slot && !isPending) {
-								orpc.scheduling.tweets.add.call({
+								addTweetMutation.mutate({
 									slotId: slot.id,
 								});
 							}
@@ -91,7 +111,14 @@ function PublicationsPage() {
 				secondaryButton: { state: "hidden" },
 			});
 		};
-	}, [slot, updateButtons, isPending, createSlotMutation]);
+	}, [
+		slot,
+		updateButtons,
+		isPending,
+		createSlotMutation,
+		addTweetMutation,
+		publishSlotMutation,
+	]);
 
 	const renderNoChannelsState = () => (
 		<div className="flex min-h-[50vh] items-center justify-center">
