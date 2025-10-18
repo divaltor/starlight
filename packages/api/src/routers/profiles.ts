@@ -8,7 +8,6 @@ export const changeProfileVisibility = protectedProcedure
 			status: z.enum(["public", "private"]),
 		})
 	)
-	.route({ method: "PUT" })
 	.handler(async ({ input, context }) => {
 		const userId = context.databaseUserId;
 
@@ -20,9 +19,8 @@ export const changeProfileVisibility = protectedProcedure
 		return { success: true };
 	});
 
-export const getUserProfile = protectedProcedure
-	.route({ method: "GET" })
-	.handler(async ({ context }) => {
+export const getUserProfile = protectedProcedure.handler(
+	async ({ context }) => {
 		const userId = context.databaseUserId;
 
 		const userProfile = await prisma.user.findUnique({
@@ -37,4 +35,5 @@ export const getUserProfile = protectedProcedure
 		});
 
 		return userProfile;
-	});
+	}
+);

@@ -14,7 +14,6 @@ const TweetsQuery = z.object({
 
 export const listUserTweets = maybeAuthProcedure
 	.input(TweetsQuery)
-	.route({ method: "GET" })
 	.handler(async ({ input, context }) => {
 		const { user } = context;
 

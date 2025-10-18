@@ -12,7 +12,6 @@ export const respondToWebAppData = protectedProcedure
 			slotId: z.string(),
 		})
 	)
-	.route({ method: "POST" })
 	.handler(async ({ input, context }) => {
 		if (!input.slotId) {
 			throw new ORPCError("BAD_REQUEST", {

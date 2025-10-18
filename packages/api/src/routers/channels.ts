@@ -3,9 +3,8 @@ import { prisma } from "@starlight/utils";
 import { protectedProcedure } from "../middlewares/auth";
 
 // Retrieves the user's posting channel (if connected) including related chat information.
-export const getPostingChannel = protectedProcedure
-	.route({ method: "GET" })
-	.handler(async ({ context }) => {
+export const getPostingChannel = protectedProcedure.handler(
+	async ({ context }) => {
 		const userId = context.databaseUserId;
 
 		const postingChannel = await prisma.postingChannel.findUnique({
@@ -14,12 +13,12 @@ export const getPostingChannel = protectedProcedure
 		});
 
 		return postingChannel;
-	});
+	}
+);
 
 // Deletes (disconnects) the user's posting channel.
-export const deletePostingChannel = protectedProcedure
-	.route({ method: "DELETE" })
-	.handler(async ({ context }) => {
+export const deletePostingChannel = protectedProcedure.handler(
+	async ({ context }) => {
 		const userId = context.databaseUserId;
 
 		try {
@@ -32,4 +31,5 @@ export const deletePostingChannel = protectedProcedure
 				status: 500,
 			});
 		}
-	});
+	}
+);
