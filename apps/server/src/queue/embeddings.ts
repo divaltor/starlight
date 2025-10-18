@@ -124,11 +124,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		}
 
 		await prisma.$executeRaw(
-			Prisma.sql`UPDATE photos SET tag_vec = $1::vector, image_vec = $2::vector WHERE id = $3 AND user_id = $4`,
-			data.text,
-			data.image ?? [],
-			photoId,
-			userId
+			Prisma.sql`UPDATE photos SET tag_vec = ${data.text}::vector, image_vec = ${data.image ?? []}::vector WHERE id = ${photoId} AND user_id = ${userId}`
 		);
 
 		logger.info({ photoId, userId }, "Photo %s embeddings generated", photoId);
