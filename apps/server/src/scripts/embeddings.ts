@@ -28,7 +28,7 @@ async function main() {
 		"Starting enqueue of all photos for embeddings"
 	);
 
-	if (CLEAR_QUEUE && !DRY_RUN) {
+	if (CLEAR_QUEUE) {
 		try {
 			await embeddingsQueue.drain(true);
 			logger.info("Embeddings queue drained (waiting & delayed jobs removed)");

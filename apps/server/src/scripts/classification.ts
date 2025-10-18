@@ -32,7 +32,7 @@ async function main() {
 		"Starting enqueue of all photos for classification"
 	);
 
-	if (CLEAR_QUEUE && !DRY_RUN) {
+	if (CLEAR_QUEUE) {
 		try {
 			await classificationQueue.drain(true);
 			logger.info(
