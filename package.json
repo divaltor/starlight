@@ -28,7 +28,7 @@
     "dev": "turbo dev",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
-    "prestart:server": "bun run db:push",
+    "prestart:server": "bun run db:generate && bun run db:push",
     "start:server": "turbo -F server start",
     "start:web": "turbo -F web start",
     "db:push": "turbo -F @starlight/utils db:push",
