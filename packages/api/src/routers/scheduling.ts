@@ -4,7 +4,10 @@ import { z } from "zod";
 import { publicProcedure } from "..";
 import type { Context } from "../context";
 import { type AuthContext, protectedProcedure } from "../middlewares/auth";
-import { transformSlotTweets } from "../utils/transformations";
+import {
+	transformScheduledSlot,
+	transformSlotTweets,
+} from "../utils/transformations";
 
 const slotPhotoSchema = z.object({
 	slotId: z.uuid(),
@@ -76,6 +79,11 @@ export const scheduledSlotRemovePhoto = protectedProcedure
 		const updatedSlot = await prisma.scheduledSlot.findUnique({
 			where: { id: slotId },
 			include: {
+				postingChannel: {
+					include: {
+						chat: { select: { title: true, username: true } },
+					},
+				},
 				scheduledSlotTweets: {
 					include: {
 						tweet: true,
@@ -94,7 +102,7 @@ export const scheduledSlotRemovePhoto = protectedProcedure
 		}
 
 		return {
-			slot: updatedSlot,
+			slot: transformScheduledSlot(updatedSlot),
 			tweets: transformSlotTweets(updatedSlot.scheduledSlotTweets),
 		};
 	});
@@ -111,13 +119,6 @@ const getScheduledSlotsSchema = z.object({
 
 const createSlotSchema = z.object({
 	tweetCount: z.number().min(1).max(10).default(5),
-});
-
-const updateSlotSchema = z.object({
-	slotId: z.uuid(),
-	status: z
-		.enum([ScheduledSlotStatus.PUBLISHED, ScheduledSlotStatus.PUBLISHING])
-		.optional(),
 });
 
 const deleteSlotSchema = z.object({
@@ -143,7 +144,11 @@ export const getScheduledSlot = protectedProcedure
 		const slot = await prisma.scheduledSlot.findFirst({
 			where: whereClause,
 			include: {
-				postingChannel: { include: { chat: true } },
+				postingChannel: {
+					include: {
+						chat: { select: { title: true, username: true } },
+					},
+				},
 				scheduledSlotTweets: {
 					include: {
 						tweet: true,
@@ -166,7 +171,7 @@ export const getScheduledSlot = protectedProcedure
 		}
 
 		return {
-			slot,
+			slot: transformScheduledSlot(slot),
 			tweets: transformSlotTweets(slot.scheduledSlotTweets),
 		};
 	});
@@ -229,6 +234,13 @@ export const createScheduledSlot = protectedProcedure
 					userId,
 					chatId: postingChannel.chatId,
 				},
+				include: {
+					postingChannel: {
+						include: {
+							chat: { select: { title: true, username: true } },
+						},
+					},
+				},
 			});
 
 			for (const tweet of selectedTweets) {
@@ -263,37 +275,8 @@ export const createScheduledSlot = protectedProcedure
 		});
 
 		return {
-			slot: createdSlot,
+			slot: transformScheduledSlot(createdSlot),
 			tweets: transformSlotTweets(scheduledSlotTweets),
-		};
-	});
-
-export const updateScheduledSlot = protectedProcedure
-	.input(updateSlotSchema)
-	.use(slotContext)
-	.handler(async ({ input }) => {
-		const { status } = input;
-
-		const updatedSlot = await prisma.scheduledSlot.update({
-			where: { id: input.slotId },
-			data: { ...(status && { status }) },
-			include: {
-				scheduledSlotTweets: {
-					include: {
-						tweet: true,
-						scheduledSlotPhotos: {
-							include: { photo: true },
-							orderBy: { createdAt: "asc" },
-						},
-					},
-					orderBy: { createdAt: "asc" },
-				},
-			},
-		});
-
-		return {
-			slot: updatedSlot,
-			tweets: transformSlotTweets(updatedSlot.scheduledSlotTweets),
 		};
 	});
 
@@ -321,6 +304,11 @@ async function getSlotWithTweets(slotId: string, userId: string) {
 	const slot = await prisma.scheduledSlot.findFirst({
 		where: { id: slotId, userId },
 		include: {
+			postingChannel: {
+				include: {
+					chat: { select: { title: true, username: true } },
+				},
+			},
 			scheduledSlotTweets: {
 				include: {
 					tweet: true,
@@ -436,7 +424,7 @@ async function shuffleSlotTweet({
 	});
 
 	return {
-		slot,
+		slot: transformScheduledSlot(slot),
 		tweets: transformSlotTweets(scheduledSlotTweets),
 	};
 }
@@ -451,6 +439,11 @@ async function addRandomTweetToSlot({
 	const slot = await prisma.scheduledSlot.findFirst({
 		where: { id: slotId, userId },
 		include: {
+			postingChannel: {
+				include: {
+					chat: { select: { title: true, username: true } },
+				},
+			},
 			scheduledSlotTweets: { select: { tweetId: true } },
 		},
 	});
@@ -500,7 +493,7 @@ async function addRandomTweetToSlot({
 	});
 
 	return {
-		slot,
+		slot: transformScheduledSlot(slot),
 		tweets: transformSlotTweets(scheduledSlotTweets),
 	};
 }

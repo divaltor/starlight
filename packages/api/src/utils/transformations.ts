@@ -1,10 +1,11 @@
 import type {
 	Photo,
+	ScheduledSlot,
 	ScheduledSlotPhoto,
 	ScheduledSlotTweet,
 	Tweet,
 } from "@starlight/utils";
-import type { TweetData } from "../types/tweets";
+import type { ScheduledSlotData, TweetData } from "../types/tweets";
 
 function transformTweetsBase<T extends Tweet>(
 	tweets: T[],
@@ -47,3 +48,18 @@ export const transformSlotTweets = (
 	}));
 	return transformTweetsBase(transformedTweets, (t) => t.scheduledSlotPhotos);
 };
+
+export const transformScheduledSlot = (
+	slot: ScheduledSlot & {
+		postingChannel: {
+			chat: { title: string | null; username: string | null };
+		};
+	}
+): ScheduledSlotData => ({
+	id: slot.id,
+	status: slot.status,
+	chat: {
+		title: slot.postingChannel.chat.title || undefined,
+		username: slot.postingChannel.chat.username || undefined,
+	},
+});

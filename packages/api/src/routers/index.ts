@@ -10,7 +10,6 @@ import {
 	getScheduledSlot,
 	scheduledSlotRemovePhoto,
 	shuffleTweet,
-	updateScheduledSlot,
 } from "./scheduling";
 import { listUserTweets } from "./tweets";
 
@@ -41,7 +40,6 @@ export const appRouter = {
 		slots: {
 			get: getScheduledSlot,
 			create: createScheduledSlot,
-			update: updateScheduledSlot,
 			delete: deleteScheduledSlot,
 		},
 		tweets: {

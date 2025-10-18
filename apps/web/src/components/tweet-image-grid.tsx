@@ -1,5 +1,7 @@
-import type { TweetData } from "@starlight/api/src/types/tweets";
-import type { ScheduledSlot } from "@starlight/utils";
+import type {
+	ScheduledSlotData,
+	TweetData,
+} from "@starlight/api/src/types/tweets";
 import { format } from "date-fns";
 import { Shuffle, X } from "lucide-react";
 import { useState } from "react";
@@ -7,7 +9,7 @@ import { Button } from "@/components/ui/button";
 
 type TweetImageGridProps = {
 	tweet: TweetData;
-	slot?: ScheduledSlot;
+	slot?: ScheduledSlotData;
 	showActions?: boolean;
 	onShuffleTweet?: (tweetId: string) => void;
 	onDeleteImage?: (photoId: string) => void;

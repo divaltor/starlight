@@ -1,5 +1,7 @@
-import type { TweetData } from "@starlight/api/src/types/tweets";
-import type { ScheduledSlot } from "@starlight/utils";
+import type {
+	ScheduledSlotData,
+	TweetData,
+} from "@starlight/api/src/types/tweets";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, MoreVertical, Trash2 } from "lucide-react";
 import {
@@ -23,7 +25,7 @@ import { orpc } from "@/utils/orpc";
 
 type SlotCardProps = {
 	tweets: TweetData[];
-	slot: ScheduledSlot;
+	slot: ScheduledSlotData;
 };
 
 export function SlotCard({ tweets, slot }: SlotCardProps) {
@@ -158,9 +160,9 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 					<div className="flex flex-col gap-2">
 						{/* Summary */}
 						<div className="flex flex-wrap items-center gap-2">
-							{slot.chatId && (
+							{slot.chat.title && (
 								<Badge className="text-xs" variant="outline">
-									📢 {slot.chatId}
+									📢 {slot.chat.title}
 								</Badge>
 							)}
 							<div className="flex items-center gap-1">
