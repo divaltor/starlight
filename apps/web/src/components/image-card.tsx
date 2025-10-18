@@ -10,14 +10,14 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-interface ImageCardProps {
+type ImageCardProps = {
 	src: string;
 	alt: string;
 	index: number;
 	canDelete: boolean;
 	onDelete: (index: number) => void;
 	sourceUrl?: string;
-}
+};
 
 export function ImageCard({
 	src,
@@ -46,6 +46,7 @@ export function ImageCard({
 			onTouchStart={() => setIsPressed(true)}
 			type="button"
 		>
+			{/** biome-ignore lint/nursery/useImageSize: We need to set the width and height of the image */}
 			<img
 				alt={alt}
 				className="object-cover"

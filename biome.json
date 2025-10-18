@@ -20,9 +20,9 @@
       "!**/.nuxt",
       "!**/generated",
       "!**/node_modules",
-      "!**/.git"
-    ],
-    "experimentalScannerIgnores": ["node_modules"]
+      "!**/.git",
+      "!**/*.css"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -52,7 +52,8 @@
           "options": {
             "functions": ["clsx", "cva", "cn"]
           }
-        }
+        },
+        "noShadow": "off"
       },
       "performance": {
         "noImgElement": "off"
@@ -69,6 +70,10 @@
         "noInferrableTypes": "error",
         "noUselessElse": "error",
         "noMagicNumbers": "off"
+      },
+      "suspicious": {
+        "noConsole": "off",
+        "noExplicitAny": "off"
       }
     }
   },

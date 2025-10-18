@@ -3,7 +3,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ProfileShareSection } from "@/components/profile-share-section";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,17 +22,8 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { decodeCookies } from "@/lib/utils";
-import { useTelegramContext } from "@/providers/TelegramButtonsProvider";
-import {
-	deleteCookies,
-	saveCookies,
-	verifyCookies,
-} from "@/routes/api/cookies";
-import {
-	deletePostingChannel,
-	getPostingChannel,
-} from "@/routes/api/posting-channels";
+import { useTelegramContext } from "@/providers/telegram-buttons-provider";
+import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/settings")({
 	component: RouteComponent,
@@ -41,7 +31,6 @@ export const Route = createFileRoute("/settings")({
 
 function RouteComponent() {
 	const [newCookies, setNewCookies] = useState("");
-	const [error, setError] = useState<string | null>(null);
 	const [showCookieInput, setShowCookieInput] = useState(false);
 	const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
 
@@ -53,188 +42,67 @@ function RouteComponent() {
 		isLoading,
 		error: cookieError,
 		refetch: refetchCookieStatus,
-	} = useQuery({
-		queryKey: ["cookie-status"],
-		queryFn: async () => {
-			return await verifyCookies({
-				headers: { Authorization: rawInitData ?? "" },
-			});
-		},
-		enabled: !!rawInitData,
-		staleTime: 10 * 60 * 1000,
-		gcTime: 30 * 60 * 1000,
-		refetchOnWindowFocus: true,
-		retry: 2,
-	});
-
-	// Query for posting channel
-	const { data: postingChannel, isLoading: isPostingChannelLoading } = useQuery(
-		{
-			queryKey: ["posting-channel"],
-			queryFn: async () => {
-				return await getPostingChannel({
-					headers: { Authorization: rawInitData ?? "" },
-				});
-			},
+	} = useQuery(
+		orpc.cookies.verify.queryOptions({
+			queryKey: ["cookie-status"],
 			enabled: !!rawInitData,
 			staleTime: 5 * 60 * 1000,
 			gcTime: 30 * 60 * 1000,
-		}
+			retry: 1,
+		})
+	);
+
+	// Query for posting channel
+	const { data: postingChannel, isLoading: isPostingChannelLoading } = useQuery(
+		orpc.channels.get.queryOptions({
+			queryKey: ["posting-channel"],
+			enabled: !!rawInitData,
+			staleTime: 5 * 60 * 1000,
+			gcTime: 30 * 60 * 1000,
+			retry: 1,
+		})
 	);
 
 	// Derive state from query data
 	const cookiesStored = cookieStatus?.hasValidCookies ?? false;
-	const twitterId = cookieStatus?.twitterId ?? null;
 
 	const shouldShowCookieInput = !cookiesStored || showCookieInput;
 
-	const saveCookiesMutation = useMutation({
-		mutationFn: async (cookiesData: { cookies: string }) => {
-			return await saveCookies({
-				headers: { Authorization: rawInitData ?? "" },
-				data: cookiesData,
-			});
-		},
-		onMutate: async () => {
-			await queryClient.cancelQueries({ queryKey: ["cookie-status"] });
-
-			const previousStatus = queryClient.getQueryData(["cookie-status"]);
-			return { previousStatus };
-		},
-		onSuccess: async (result, _variables, _context) => {
-			if (result.error) {
-				setError(result.error);
-				return;
-			}
-
-			const verifyResult = await verifyCookies({
-				headers: { Authorization: rawInitData ?? "" },
-			});
-
-			queryClient.setQueryData(["cookie-status"], verifyResult);
-
-			if (verifyResult.hasValidCookies) {
+	const saveCookiesMutation = useMutation(
+		orpc.cookies.save.mutationOptions({
+			onSuccess: () => {
+				queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
 				setShowCookieInput(false);
 				setNewCookies("");
-				setError(null);
-			}
-		},
-		onError: (_error, _variables, context) => {
-			if (context?.previousStatus) {
-				queryClient.setQueryData(["cookie-status"], context.previousStatus);
-			}
-			setError(
-				"An error occurred while saving your cookies. Please try again."
-			);
-		},
-		onSettled: () => {
-			queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
-		},
-	});
+			},
+			onError: () => toast.error("Failed to save cookies"),
+		})
+	);
 
-	const deleteCookiesMutation = useMutation({
-		mutationFn: async () => {
-			return await deleteCookies({
-				headers: { Authorization: rawInitData ?? "" },
-			});
-		},
-		onMutate: async () => {
-			await queryClient.cancelQueries({ queryKey: ["cookie-status"] });
-
-			const previousStatus = queryClient.getQueryData(["cookie-status"]);
-			queryClient.setQueryData(["cookie-status"], {
-				hasValidCookies: false,
-				twitterId: null,
-			});
-
-			return { previousStatus };
-		},
-		onSuccess: (result, _variables, context) => {
-			if (result.success) {
+	const deleteCookiesMutation = useMutation(
+		orpc.cookies.delete.mutationOptions({
+			onSuccess: () => {
+				queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
 				setShowCookieInput(true);
-				setError(null);
-			} else {
-				if (context?.previousStatus) {
-					queryClient.setQueryData(["cookie-status"], context.previousStatus);
-				}
-				setError("Failed to delete cookies. Please try again.");
-			}
-		},
-		onError: (_error, _variables, context) => {
-			if (context?.previousStatus) {
-				queryClient.setQueryData(["cookie-status"], context.previousStatus);
-			}
-			setError("An error occurred while deleting cookies. Please try again.");
-		},
-		onSettled: () => {
-			queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
-		},
-	});
+			},
+			onError: () => {
+				toast.error("Failed to delete cookies");
+			},
+		})
+	);
 
-	const disconnectChannelMutation = useMutation({
-		mutationFn: async () => {
-			return await deletePostingChannel({
-				headers: { Authorization: rawInitData ?? "" },
-			});
-		},
-		onSuccess: (result) => {
-			if (result.success) {
+	const disconnectChannelMutation = useMutation(
+		orpc.channels.disconnect.mutationOptions({
+			onSuccess: () => {
 				queryClient.invalidateQueries({ queryKey: ["posting-channel"] });
 				toast.success("Channel successfully disconnected");
 				setShowDisconnectDialog(false);
-			} else {
+			},
+			onError: () => {
 				toast.error("Failed to disconnect channel");
-			}
-		},
-		onError: () => {
-			toast.error("An error occurred while disconnecting the channel");
-		},
-	});
-
-	const handleSaveCookies = async (e: React.FormEvent<HTMLFormElement>) => {
-		e.preventDefault();
-		setError(null);
-
-		try {
-			const decodedCookies = decodeCookies(newCookies);
-
-			if (!decodedCookies || decodedCookies.length === 0) {
-				setError(
-					"Invalid cookies format. Please check your cookies and try again."
-				);
-				return;
-			}
-
-			const requiredCookies = ["auth_token", "ct0", "kdt", "twid"];
-			const cookieNames = decodedCookies.map((cookie) => cookie.key);
-			const missingCookies = requiredCookies.filter(
-				(name) => !cookieNames.includes(name)
-			);
-
-			if (missingCookies.length > 0) {
-				setError(
-					`Missing required cookies: ${missingCookies.join(", ")}. Please ensure you have all necessary Twitter authentication cookies.`
-				);
-				return;
-			}
-
-			const cookiesBase64 = btoa(newCookies);
-
-			saveCookiesMutation.mutate({ cookies: cookiesBase64 });
-		} catch {
-			setError(
-				"An error occurred while processing your cookies. Please try again."
-			);
-		}
-	};
-
-	const handleDeleteCookies = async () => {
-		deleteCookiesMutation.mutate();
-	};
-
-	const handleDisconnectChannel = () => {
-		disconnectChannelMutation.mutate();
-	};
+			},
+		})
+	);
 
 	if (isLoading && !cookieStatus) {
 		return (
@@ -323,25 +191,6 @@ function RouteComponent() {
 						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
 							Account
 						</h2>
-						<div className="space-y-3">
-							<div className="flex items-center justify-between">
-								<span className="font-medium text-gray-700 text-sm">
-									Twitter ID
-								</span>
-								{twitterId && (
-									<span className="rounded bg-green-100 px-2 py-0.5 font-medium text-green-700 text-xs">
-										Connected
-									</span>
-								)}
-							</div>
-							<div className="rounded-lg border-0 bg-gray-50 px-3 py-2">
-								<p className="font-mono text-gray-900 text-sm">
-									{twitterId || (
-										<span className="text-gray-400 italic">Not connected</span>
-									)}
-								</p>
-							</div>
-						</div>
 					</section>
 
 					{/* Cookie Management Section */}
@@ -359,7 +208,7 @@ function RouteComponent() {
 									<Button
 										className="text-red-600 hover:bg-red-50 hover:text-red-700"
 										disabled={isSubmitting}
-										onClick={handleDeleteCookies}
+										onClick={() => deleteCookiesMutation.mutate({})}
 										size="sm"
 										variant="ghost"
 									>
@@ -379,22 +228,22 @@ function RouteComponent() {
 									</Alert>
 								)}
 
-								<form className="space-y-4" onSubmit={handleSaveCookies}>
+								<form
+									className="space-y-4"
+									onSubmit={(e) => {
+										e.preventDefault();
+										saveCookiesMutation.mutate({ cookies: newCookies });
+									}}
+								>
 									<div className="space-y-2">
 										<textarea
-											className={`min-h-[100px] w-full rounded-lg border bg-white p-3 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${error ? "border-red-300 focus:border-red-400 focus:ring-red-500/20" : "border-gray-200"}`}
+											className="min-h-[100px] w-full rounded-lg border border-gray-200 bg-white p-3 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
 											disabled={isSubmitting}
 											id="new-cookies"
-											onChange={(e) => {
-												setNewCookies(e.target.value);
-												if (error) setError(null);
-											}}
+											onChange={(e) => setNewCookies(e.target.value)}
 											placeholder="Required format: auth_token=xxx; ct0=xxx; ..."
 											value={newCookies}
 										/>
-										{error && (
-											<p className="mt-1 text-red-500 text-xs">{error}</p>
-										)}
 									</div>
 
 									<div className="flex gap-2">
@@ -422,10 +271,7 @@ function RouteComponent() {
 
 					{/* Posting Channel Section */}
 					<section className="space-y-4">
-						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
-							Connected Channel
-						</h2>
-						{isPostingChannelLoading ? (
+						{isPostingChannelLoading && (
 							<div className="flex items-center justify-between">
 								<div className="flex items-center gap-3">
 									<Skeleton className="h-12 w-12 rounded-full" />
@@ -436,11 +282,14 @@ function RouteComponent() {
 								</div>
 								<Skeleton className="h-9 w-24" />
 							</div>
-						) : postingChannel ? (
+						)}
+
+						{!isPostingChannelLoading && postingChannel && (
 							<div className="flex items-center justify-between">
 								<div className="flex items-center gap-3">
 									<div className="h-12 w-12 overflow-hidden rounded-full bg-gray-100">
 										{postingChannel.chat.thumbnailUrl ? (
+											// biome-ignore lint/nursery/useImageSize: Don't care
 											<img
 												alt={postingChannel.chat.title || "Channel"}
 												className="h-full w-full object-cover"
@@ -494,7 +343,7 @@ function RouteComponent() {
 											</Button>
 											<Button
 												disabled={disconnectChannelMutation.isPending}
-												onClick={handleDisconnectChannel}
+												onClick={() => disconnectChannelMutation.mutate({})}
 												variant="destructive"
 											>
 												{disconnectChannelMutation.isPending
@@ -505,16 +354,7 @@ function RouteComponent() {
 									</DialogContent>
 								</Dialog>
 							</div>
-						) : (
-							<div className="py-4 text-gray-500 text-sm">
-								No posting channel connected
-							</div>
 						)}
-					</section>
-
-					{/* Profile Share Section */}
-					<section>
-						<ProfileShareSection embedded rawInitData={rawInitData} />
 					</section>
 				</CardContent>
 			</Card>

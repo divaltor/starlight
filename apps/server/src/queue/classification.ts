@@ -1,8 +1,7 @@
-import { env } from "@repo/utils";
+import { env, prisma } from "@starlight/utils";
 import { Queue, QueueEvents, Worker } from "bullmq";
-import Bun from "bun";
 import { logger } from "@/logger";
-import { prisma, redis } from "@/storage";
+import { redis } from "@/storage";
 import type { Classification } from "@/types";
 
 type ClassificationJobData = {
@@ -13,7 +12,7 @@ type ClassificationJobData = {
 export const classificationQueue = new Queue<ClassificationJobData>(
 	"classification",
 	{
-		connection: redis,
+		connection: redis.options,
 		defaultJobOptions: {
 			attempts: 5,
 			backoff: { type: "exponential", delay: 30_000 }, // 30s, 90s, 270s
@@ -26,7 +25,23 @@ export const classificationQueue = new Queue<ClassificationJobData>(
 export const classificationWorker = new Worker<ClassificationJobData>(
 	"classification",
 	async (job) => {
+		if (!env.ENABLE_CLASSIFICATION) {
+			logger.warn(
+				{ jobId: job.id },
+				"Classification skipped: feature disabled"
+			);
+			return;
+		}
+
 		const { photoId, userId } = job.data;
+
+		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
+			logger.warn(
+				{ photoId, userId },
+				"Classification skipped: service not configured"
+			);
+			return;
+		}
 
 		logger.info(
 			{ photoId, userId },
@@ -34,14 +49,6 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			photoId,
 			userId
 		);
-
-		if (!(env.CLASSIFICATION_API_URL && env.CLASSIFICATION_API_TOKEN)) {
-			logger.warn(
-				{ photoId, userId },
-				"Classification skipped: service not configured"
-			);
-			return;
-		}
 
 		// Fetch photo record to get URL
 		const photo = await prisma.photo.findUnique({
@@ -74,13 +81,12 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
-			"X-API-Token": env.CLASSIFICATION_API_TOKEN,
-			"X-Request-Id": Bun.randomUUIDv7(),
+			"X-API-Token": env.ML_API_TOKEN,
 		};
 
 		try {
 			response = await fetch(
-				new URL("/v1/classify", env.CLASSIFICATION_API_URL).toString(),
+				new URL("/v1/classify", env.ML_BASE_URL).toString(),
 				{
 					method: "POST",
 					headers,
@@ -124,7 +130,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		logger.info({ photoId, userId }, "Photo %s classified", photoId);
 	},
 	{
-		connection: redis,
+		connection: redis.options,
 		concurrency: 2,
 		autorun: false,
 		lockDuration: 1000 * 60 * 5,
@@ -145,7 +151,7 @@ classificationWorker.on("failed", (job) => {
 });
 
 const classificationEvents = new QueueEvents("classification", {
-	connection: redis,
+	connection: redis.options,
 });
 
 classificationEvents.on("completed", ({ jobId }) => {

@@ -1,10 +1,10 @@
 import path from "node:path";
-import { env } from "@repo/utils";
-import { Glob } from "bun";
+import { env } from "@starlight/utils";
 import { create } from "youtube-dl-exec";
 import { logger } from "@/logger";
 
-const filesGlob = new Glob("*.mp4");
+// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
+const filesGlob = new Bun.Glob("*.mp4");
 
 type VideoMetadata = {
 	height?: number;
@@ -31,6 +31,7 @@ async function createVideoInformation(
 	let metadata: VideoMetadata = {};
 
 	try {
+		// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 		metadata = (await Bun.file(infoJsonPath).json()) as VideoMetadata;
 	} catch (error) {
 		logger.error(error, "Error creating video information for %s", filePath);
@@ -51,6 +52,7 @@ export async function downloadVideo(
 ): Promise<VideoInformation[]> {
 	logger.debug("Downloading video from %s to %s", url, folder);
 
+	// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 	const uuid = Bun.randomUUIDv7();
 
 	const subprocess = await youtubedl.exec(url, {
@@ -67,7 +69,7 @@ export async function downloadVideo(
 	});
 
 	if (subprocess.error) {
-		logger.error(subprocess.stdout, "Error downloading video from %s", url);
+		logger.error("Error downloading video from %s", url);
 		throw subprocess.error;
 	}
 

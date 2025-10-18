@@ -18,15 +18,15 @@ import {
 	viewport,
 } from "@telegram-apps/sdk-react";
 
-export interface InitOptions {
+export type InitOptions = {
 	debug?: boolean;
 	mockForMacOS?: boolean;
-}
+};
 
 /**
  * Initializes the Telegram Mini App and configures its dependencies.
  */
-export async function initTMA(): Promise<void> {
+export function initTMA(): void {
 	const launchParams = retrieveLaunchParams();
 	const { tgWebAppPlatform: platform } = launchParams;
 
@@ -74,7 +74,7 @@ export async function initTMA(): Promise<void> {
 		bindThemeParamsCssVars();
 	}
 
-	await mountComponents();
+	mountComponents();
 
 	restoreInitData();
 }
@@ -82,7 +82,7 @@ export async function initTMA(): Promise<void> {
 /**
  * Mount all available Telegram components
  */
-async function mountComponents(): Promise<void> {
+function mountComponents(): void {
 	mountBackButton.ifAvailable();
 	mountMainButton.ifAvailable();
 	mountSettingsButton.ifAvailable();

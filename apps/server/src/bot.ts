@@ -1,12 +1,13 @@
 import { autoRetry } from "@grammyjs/auto-retry";
 import { hydrateFiles } from "@grammyjs/files";
-import { env } from "@repo/utils";
 import { autoQuote } from "@roziscoding/grammy-autoquote";
+import { env } from "@starlight/utils";
 import { Bot, InlineKeyboard, session } from "grammy";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
 import { attachChat, attachUser } from "@/middlewares/session";
 import { RedisAdapter, redis } from "@/storage";
+// biome-ignore lint/style/noExportedImports: Don't care
 import type { Context } from "@/types";
 
 const bot = new Bot<Context>(env.BOT_TOKEN);

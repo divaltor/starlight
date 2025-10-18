@@ -5,8 +5,13 @@ const env = createEnv({
 	server: {
 		BOT_TOKEN: z.string(),
 
+		USE_WEBHOOK: z.boolean().default(false),
+		BASE_WEBHOOK_URL: z.string().optional(),
+
 		REDIS_URL: z.url({ protocol: /^rediss?$/ }),
 		DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
+
+		CORS_ORIGIN: z.string().default("http://localhost:3001"),
 
 		COOKIE_ENCRYPTION_KEY: z
 			.string()
@@ -22,21 +27,28 @@ const env = createEnv({
 		AWS_SECRET_ACCESS_KEY: z.string(),
 		AWS_ENDPOINT: z.string().optional(),
 
-		AXIOM_DATASET: z.string().optional(),
+		AXIOM_BASE_URL: z.url().default("https://api.axiom.co"),
+		AXIOM_DATASET: z.string().default("starlight"),
 		AXIOM_TOKEN: z.string().optional(),
 
-		ENVIRONMENT: z.enum(["dev", "prod"]).optional().default("dev"),
+		NODE_ENV: z
+			.enum(["development", "production"])
+			.optional()
+			.default("development"),
 
 		BASE_FRONTEND_URL: z.string().default(process.env.VERCEL_URL || ""),
 		BASE_CDN_URL: z
 			.string()
 			.transform((val) => {
-				if (val) return val;
+				if (val) {
+					return val;
+				}
 
-				const frontendUrl =
-					process.env.VERCEL_URL || process.env.BASE_FRONTEND_URL || "";
+				const frontendUrl = process.env.BASE_FRONTEND_URL || "";
 
-				if (!frontendUrl) return "";
+				if (!frontendUrl) {
+					return "";
+				}
 
 				try {
 					const url = new URL(
@@ -56,8 +68,15 @@ const env = createEnv({
 
 		INSTAGRAM_COOKIES: z.string().optional(),
 
-		CLASSIFICATION_API_URL: z.string().url().optional(),
-		CLASSIFICATION_API_TOKEN: z.string().optional(),
+		ML_BASE_URL: z.url().optional(),
+		ML_API_TOKEN: z.string().optional(),
+
+		ENABLE_CLASSIFICATION: z.boolean().optional().default(false),
+		ENABLE_EMBEDDINGS: z.boolean().optional().default(false),
+	},
+	clientPrefix: "VITE_",
+	client: {
+		VITE_SERVER_URL: z.string().default("http://localhost:3000"),
 	},
 	skipValidation: false,
 	runtimeEnv: process.env,

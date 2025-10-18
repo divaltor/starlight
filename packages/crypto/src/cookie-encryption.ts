@@ -1,20 +1,23 @@
-import { xchacha20poly1305 } from "@noble/ciphers/chacha";
+import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import {
 	bytesToHex,
 	bytesToUtf8,
 	hexToBytes,
+	managedNonce,
+	randomBytes,
 	utf8ToBytes,
-} from "@noble/ciphers/utils";
-import { managedNonce, randomBytes } from "@noble/ciphers/webcrypto";
-import { hkdf } from "@noble/hashes/hkdf";
-import { sha256 } from "@noble/hashes/sha256";
+} from "@noble/ciphers/utils.js";
+import { hkdf } from "@noble/hashes/hkdf.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+
+const HEX_REGEX = /^[0-9a-fA-F]+$/;
 
 /**
  * Cookie encryption utility using XChaCha20-Poly1305
  */
 export class CookieEncryption {
-	private masterKey: Uint8Array;
-	private salt: Uint8Array;
+	private readonly masterKey: Uint8Array;
+	private readonly salt: Uint8Array;
 
 	constructor(masterKey: string | Uint8Array, salt?: string | Uint8Array) {
 		this.masterKey =
@@ -41,10 +44,12 @@ export class CookieEncryption {
 		// Encrypted data should be hex string with minimum length
 		// XChaCha20-Poly1305 with managedNonce adds 24-byte nonce + 16-byte tag
 		// So minimum encrypted length is (24 + 16) * 2 = 80 hex characters
-		if (data.length < 80) return false;
+		if (data.length < 80) {
+			return false;
+		}
 
 		// Check if it's a valid hex string
-		return /^[0-9a-fA-F]+$/.test(data);
+		return HEX_REGEX.test(data);
 	}
 
 	/**

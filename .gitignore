@@ -282,4 +282,6 @@ dist
 .history
 .ionide
 
+**/generated/
+.nitro
 # End of https://www.toptal.com/developers/gitignore/api/node,visualstudiocode,jetbrains+all,macos

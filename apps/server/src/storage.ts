@@ -1,5 +1,4 @@
-import { env, getPrismaClient } from "@repo/utils";
-import { S3Client } from "bun";
+import { env } from "@starlight/utils";
 import type { StorageAdapter } from "grammy";
 import Redis from "ioredis";
 import { Cookie } from "tough-cookie";
@@ -10,10 +9,8 @@ export const redis = new Redis(env.REDIS_URL, {
 	maxRetriesPerRequest: null,
 });
 
-export const prisma = getPrismaClient();
-
 export class RedisAdapter<T> implements StorageAdapter<T> {
-	private redis: Redis;
+	readonly redis: Redis;
 	private readonly ttl?: number;
 	private readonly parseJSON?: boolean;
 	/**
@@ -69,14 +66,18 @@ export class RedisAdapter<T> implements StorageAdapter<T> {
 	}
 }
 
-export interface RFC6265Cookie {
+export type RFC6265Cookie = {
 	key: string;
 	value: string;
 	domain: string;
-}
+};
+
+const TWID_REGEX = /u=(\d+)/;
 
 export class Cookies {
-	constructor(private cookies: Cookie[]) {
+	readonly cookies: Cookie[];
+
+	constructor(cookies: Cookie[]) {
 		this.cookies = cookies;
 	}
 
@@ -104,7 +105,7 @@ export class Cookies {
 		}
 
 		const decoded = decodeURIComponent(twidValue);
-		const match = decoded.match(/u=(\d+)/);
+		const match = decoded.match(TWID_REGEX);
 		return match ? match[1] : undefined;
 	}
 }
@@ -113,7 +114,8 @@ type SessionData = {
 	cookies: RFC6265Cookie[] | null;
 };
 
-export const s3 = new S3Client({
+// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
+export const s3 = new Bun.S3Client({
 	accessKeyId: env.AWS_ACCESS_KEY_ID,
 	secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
 	endpoint: env.AWS_ENDPOINT,

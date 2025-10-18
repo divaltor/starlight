@@ -4,6 +4,7 @@ const SAMPLE_SIZE = 32;
 const LOW_SIZE = 8;
 
 function initSQRT(N: number): number[] {
+	// oxlint-disable-next-line no-new-array
 	const c = new Array(N);
 	for (let i = 1; i < N; i++) {
 		c[i] = 1;
@@ -15,8 +16,10 @@ function initSQRT(N: number): number[] {
 const SQRT = initSQRT(SAMPLE_SIZE);
 
 function initCOS(N: number): number[][] {
+	// oxlint-disable-next-line no-new-array
 	const cosines = new Array(N);
 	for (let k = 0; k < N; k++) {
+		// oxlint-disable-next-line no-new-array
 		cosines[k] = new Array(N);
 		for (let n = 0; n < N; n++) {
 			cosines[k][n] = Math.cos(((2 * k + 1) / (2.0 * N)) * n * Math.PI);
@@ -29,9 +32,11 @@ const COS = initCOS(SAMPLE_SIZE);
 
 function applyDCT(f: number[][], size: number): number[][] {
 	const N = size;
+	// oxlint-disable-next-line no-new-array
 	const F = new Array(N);
 
 	for (let u = 0; u < N; u++) {
+		// oxlint-disable-next-line no-new-array
 		F[u] = new Array(N);
 		for (let v = 0; v < N; v++) {
 			let sum = 0;
@@ -60,8 +65,10 @@ export async function calculatePerceptualHash(
 		.raw()
 		.toBuffer();
 
+	// oxlint-disable-next-line no-new-array
 	const s = new Array(SAMPLE_SIZE);
 	for (let x = 0; x < SAMPLE_SIZE; x++) {
+		// oxlint-disable-next-line no-new-array
 		s[x] = new Array(SAMPLE_SIZE);
 		for (let y = 0; y < SAMPLE_SIZE; y++) {
 			s[x][y] = data[SAMPLE_SIZE * y + x];

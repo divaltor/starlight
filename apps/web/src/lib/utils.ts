@@ -1,5 +1,4 @@
 import { type ClassValue, clsx } from "clsx";
-import { customAlphabet } from "nanoid";
 import { twMerge } from "tailwind-merge";
 import { z } from "zod/v4";
 
@@ -45,7 +44,7 @@ export function decodeCookies(
 	value: string | null,
 	cookieNames?: string[]
 ): Cookie[] | null {
-	if (!(value && value.trim())) {
+	if (!value?.trim()) {
 		return null;
 	}
 
@@ -123,33 +122,16 @@ export function decodeCookies(
 					continue;
 				}
 
-				const [key, value] = cookie;
-
-				if (key && targetCookieNames.includes(key)) {
-					cookies.push({
-						key,
-						value: value as string,
-						domain: "",
-					});
+				const [key, valueCookie] = cookie;
+				if (targetCookieNames.includes(key)) {
+					cookies.push({ key, value: valueCookie, domain: "" });
 				}
-			} catch (error) {
-				console.warn(`Failed to parse cookie string "${cookieString}":`, error);
+			} catch {
+				// Ignore invalid cookie strings
 			}
 		}
-
 		return cookies.length > 0 ? cookies : null;
-	} catch (error) {
-		console.error("Error decoding cookies:", error);
+	} catch {
 		return null;
 	}
-}
-
-export function cookiesToRfcString(cookies: Cookie[]): string {
-	return cookies.map((cookie) => `${cookie.key}=${cookie.value}`).join("; ");
-}
-
-const slugNanoId = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 10);
-
-export function generateSlug(length = 10): string {
-	return slugNanoId(length);
 }

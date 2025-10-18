@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { CookieEncryption } from "@repo/crypto";
+import { CookieEncryption } from "@starlight/crypto";
 
 describe("CookieEncryption", () => {
 	let encryption: CookieEncryption;

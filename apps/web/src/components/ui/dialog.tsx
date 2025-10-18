@@ -1,3 +1,4 @@
+// biome-ignore lint/performance/noNamespaceImport: Vite can handle this
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
 import type * as React from "react";

@@ -1,3 +1,4 @@
+import { prisma } from "@starlight/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import sharp from "sharp";
@@ -6,12 +7,12 @@ import { logger } from "@/logger";
 import { classificationQueue } from "@/queue/classification";
 import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
 import { calculatePerceptualHash } from "@/services/image";
-import { prisma, redis, s3 } from "@/storage";
+import { redis, s3 } from "@/storage";
 
 export const imagesQueue = new Queue<ImageCollectorJobData>(
 	"images-collector",
 	{
-		connection: redis,
+		connection: redis.options,
 		defaultJobOptions: {
 			attempts: 3,
 			backoff: {
@@ -189,7 +190,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 		}
 	},
 	{
-		connection: redis,
+		connection: redis.options,
 		concurrency: 3,
 		removeOnComplete: { age: 60 * 60, count: 1000 },
 		removeOnFail: { age: 60 * 60 * 24, count: 5000 },
@@ -205,7 +206,7 @@ imagesWorker.on("failed", (job) => {
 });
 
 const imageCollectorEvents = new QueueEvents("images-collector", {
-	connection: redis,
+	connection: redis.options,
 });
 
 imageCollectorEvents.on("completed", ({ jobId }) => {

@@ -1,9 +1,7 @@
-import { StartClient } from "@tanstack/react-start";
+import { StartClient } from "@tanstack/react-start/client";
 import { hydrateRoot } from "react-dom/client";
 import { initTMA } from "@/lib/init";
-import { mockEnv } from "@/lib/mockEnv";
-
-import { createRouter } from "@/router";
+import { mockEnv } from "@/lib/mock-env";
 
 // One-time TMA initialization on client hydration
 async function initializeClient() {
@@ -12,7 +10,7 @@ async function initializeClient() {
 		await mockEnv();
 
 		// Initialize TMA with all components
-		await initTMA();
+		initTMA();
 
 		console.log("✅ TMA client initialization completed");
 	} catch (error) {
@@ -21,8 +19,6 @@ async function initializeClient() {
 }
 
 // Initialize TMA before hydrating
-initializeClient();
+await initializeClient();
 
-const router = createRouter();
-
-hydrateRoot(document, <StartClient router={router} />);
+hydrateRoot(document, <StartClient />);

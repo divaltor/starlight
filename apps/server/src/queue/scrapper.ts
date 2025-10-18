@@ -1,6 +1,6 @@
-import { CookieEncryption } from "@repo/crypto";
-import type { User } from "@repo/utils";
-import { env } from "@repo/utils";
+import { CookieEncryption } from "@starlight/crypto";
+import type { User } from "@starlight/utils";
+import { env, prisma } from "@starlight/utils";
 import {
 	ApiError,
 	AuthenticationError,
@@ -11,7 +11,7 @@ import {
 import { Queue, QueueEvents, Worker } from "bullmq";
 import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";
-import { Cookies, prisma, redis } from "@/storage";
+import { Cookies, redis } from "@/storage";
 
 const cookieEncryption = new CookieEncryption(
 	env.COOKIE_ENCRYPTION_KEY,
@@ -19,7 +19,7 @@ const cookieEncryption = new CookieEncryption(
 );
 
 export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
-	connection: redis,
+	connection: redis.options,
 	defaultJobOptions: {
 		attempts: 3,
 		// It will be retried in 2.5 minutes, 7.5 minutes, 22.5 minutes
@@ -165,7 +165,9 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		let newTweetsInBatch = 0;
 
 		for (const tweet of timeline.tweets) {
-			if (!tweet.id) continue;
+			if (!tweet.id) {
+				continue;
+			}
 
 			const isNewTweet = !existingTweetMap.has(tweet.id);
 
@@ -289,14 +291,14 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		);
 	},
 	{
-		connection: redis,
+		connection: redis.options,
 		concurrency: 1,
 		autorun: false,
 	}
 );
 
 const scrapperEvents = new QueueEvents("feed-scrapper", {
-	connection: redis,
+	connection: redis.options,
 });
 
 scrapperEvents.on("completed", ({ jobId }) => {

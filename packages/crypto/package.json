@@ -1,18 +1,27 @@
 {
-  "name": "@repo/crypto",
-  "version": "1.0.0",
+  "name": "@starlight/crypto",
   "type": "module",
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "default": "./src/*.ts"
     }
   },
-  "dependencies": {
-    "@noble/ciphers": "^1.3.0",
-    "@noble/hashes": "^1.6.1"
+  "scripts": {
+    "build": "bun run -b tsdown"
   },
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "tsdown": "catalog:"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.0.1",
+    "@noble/hashes": "^2.0.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
   }
 }

@@ -162,7 +162,6 @@ class ClassificationResult(ResponseModel):
     @override
     @classmethod
     def from_response(cls, model_response: Any) -> Self:
-        print(model_response)
         aesthetic = AestheticResult.from_response(model_response['cafe'])
 
         return cls.model_validate(
@@ -176,7 +175,7 @@ class ClassificationResult(ResponseModel):
 
 
 class EmbeddingPayload(BaseModel):
-    image: str
+    image: str | None = None
 
     tags: list[str] = []
 
@@ -186,5 +185,5 @@ class EmbeddingPayload(BaseModel):
 
 
 class EmbeddingResponse(BaseModel):
-    image: list[float]
+    image: list[float] | None = None
     text: list[float]
