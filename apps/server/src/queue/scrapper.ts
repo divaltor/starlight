@@ -19,7 +19,7 @@ const cookieEncryption = new CookieEncryption(
 );
 
 export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
-	connection: redis.options,
+	connection: redis,
 	defaultJobOptions: {
 		attempts: 3,
 		// It will be retried in 2.5 minutes, 7.5 minutes, 22.5 minutes
@@ -291,14 +291,14 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		);
 	},
 	{
-		connection: redis.options,
+		connection: redis,
 		concurrency: 1,
 		autorun: false,
 	}
 );
 
 const scrapperEvents = new QueueEvents("feed-scrapper", {
-	connection: redis.options,
+	connection: redis,
 });
 
 scrapperEvents.on("completed", ({ jobId }) => {

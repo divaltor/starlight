@@ -14,7 +14,7 @@ type EmbeddingResponse = {
 };
 
 export const embeddingsQueue = new Queue<ClassificationJobData>("embeddings", {
-	connection: redis.options,
+	connection: redis,
 	defaultJobOptions: {
 		attempts: 5,
 		backoff: { type: "exponential", delay: 30_000 }, // 30s, 90s, 270s
@@ -134,7 +134,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		logger.info({ photoId, userId }, "Photo %s embeddings generated", photoId);
 	},
 	{
-		connection: redis.options,
+		connection: redis,
 		concurrency: 2,
 		autorun: false,
 		lockDuration: 1000 * 60 * 5,
@@ -155,7 +155,7 @@ embeddingsWorker.on("failed", (job) => {
 });
 
 const embeddingsEvents = new QueueEvents("embeddings", {
-	connection: redis.options,
+	connection: redis,
 });
 
 embeddingsEvents.on("completed", ({ jobId }) => {

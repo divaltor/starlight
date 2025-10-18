@@ -12,7 +12,7 @@ type ClassificationJobData = {
 export const classificationQueue = new Queue<ClassificationJobData>(
 	"classification",
 	{
-		connection: redis.options,
+		connection: redis,
 		defaultJobOptions: {
 			attempts: 5,
 			backoff: { type: "exponential", delay: 30_000 }, // 30s, 90s, 270s
@@ -130,7 +130,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		logger.info({ photoId, userId }, "Photo %s classified", photoId);
 	},
 	{
-		connection: redis.options,
+		connection: redis,
 		concurrency: 2,
 		autorun: false,
 		lockDuration: 1000 * 60 * 5,
@@ -151,7 +151,7 @@ classificationWorker.on("failed", (job) => {
 });
 
 const classificationEvents = new QueueEvents("classification", {
-	connection: redis.options,
+	connection: redis,
 });
 
 classificationEvents.on("completed", ({ jobId }) => {

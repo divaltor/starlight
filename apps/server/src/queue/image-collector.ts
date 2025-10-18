@@ -12,7 +12,7 @@ import { redis, s3 } from "@/storage";
 export const imagesQueue = new Queue<ImageCollectorJobData>(
 	"images-collector",
 	{
-		connection: redis.options,
+		connection: redis,
 		defaultJobOptions: {
 			attempts: 3,
 			backoff: {
@@ -190,7 +190,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 		}
 	},
 	{
-		connection: redis.options,
+		connection: redis,
 		concurrency: 3,
 		removeOnComplete: { age: 60 * 60, count: 1000 },
 		removeOnFail: { age: 60 * 60 * 24, count: 5000 },
@@ -206,7 +206,7 @@ imagesWorker.on("failed", (job) => {
 });
 
 const imageCollectorEvents = new QueueEvents("images-collector", {
-	connection: redis.options,
+	connection: redis,
 });
 
 imageCollectorEvents.on("completed", ({ jobId }) => {

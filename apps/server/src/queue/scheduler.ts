@@ -7,7 +7,7 @@ import { bot } from "@/bot";
 import { logger } from "@/logger";
 import { redis } from "@/storage";
 
-export const schedulerFlow = new FlowProducer({ connection: redis.options });
+export const schedulerFlow = new FlowProducer({ connection: redis });
 
 type ScheduledTweetJobData = {
 	userId: string;
@@ -71,7 +71,7 @@ export const scheduledSlotWorker = new Worker<ScheduledSlotJobData>(
 		);
 	},
 	{
-		connection: redis.options,
+		connection: redis,
 		concurrency: 10,
 		autorun: false,
 	}
@@ -205,7 +205,7 @@ export const scheduledTweetWorker = new Worker<ScheduledTweetJobData>(
 		);
 	},
 	{
-		connection: redis.options,
+		connection: redis,
 		concurrency: 1,
 		lockDuration: 1000 * 60 * 5, // 5 minutes
 		autorun: false,
@@ -227,7 +227,7 @@ scheduledTweetWorker.on("failed", (job, _err) => {
 });
 
 const scheduledTweetEvents = new QueueEvents("scheduled-tweet", {
-	connection: redis.options,
+	connection: redis,
 });
 
 scheduledTweetEvents.on("completed", ({ jobId }) => {
