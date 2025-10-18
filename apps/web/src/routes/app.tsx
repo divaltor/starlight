@@ -21,14 +21,6 @@ function TwitterArtViewer() {
 					payload: "/publications",
 				},
 			},
-			secondaryButton: {
-				state: "visible",
-				text: "Collections",
-				action: {
-					type: "navigate",
-					payload: "/collections",
-				},
-			},
 		});
 
 		return () => {
