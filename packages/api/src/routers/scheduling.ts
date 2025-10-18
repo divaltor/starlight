@@ -31,6 +31,7 @@ const slotContext = publicProcedure
 export const scheduledSlotRemovePhoto = protectedProcedure
 	.input(slotPhotoSchema)
 	.use(slotContext)
+	.route({ method: "DELETE" })
 	.handler(async ({ input, context }) => {
 		const { slotId, photoId } = input;
 		const userId = context.databaseUserId;
@@ -129,6 +130,7 @@ const addTweetSchema = z.object({
 
 export const getScheduledSlot = protectedProcedure
 	.input(getScheduledSlotsSchema)
+	.route({ method: "GET" })
 	.handler(async ({ input, context }) => {
 		const userId = context.databaseUserId;
 		const { status } = input;
@@ -172,6 +174,7 @@ export const getScheduledSlot = protectedProcedure
 
 export const createScheduledSlot = protectedProcedure
 	.input(createSlotSchema)
+	.route({ method: "POST" })
 	.handler(async ({ input, context }) => {
 		const { tweetCount } = input;
 		const userId = context.databaseUserId;
@@ -270,6 +273,7 @@ export const createScheduledSlot = protectedProcedure
 export const updateScheduledSlot = protectedProcedure
 	.input(updateSlotSchema)
 	.use(slotContext)
+	.route({ method: "PUT" })
 	.handler(async ({ input }) => {
 		const { status } = input;
 
@@ -298,6 +302,7 @@ export const updateScheduledSlot = protectedProcedure
 
 export const deleteScheduledSlot = protectedProcedure
 	.input(deleteSlotSchema)
+	.route({ method: "DELETE" })
 	.handler(async ({ input, context }) => {
 		const { slotId } = input;
 		const userId = context.databaseUserId;
@@ -511,6 +516,7 @@ const shuffleTweetSchema = z.object({
 
 export const shuffleTweet = protectedProcedure
 	.input(shuffleTweetSchema)
+	.route({ method: "POST" })
 	.handler(async ({ input, context }) => {
 		const { slotId, tweetId } = input;
 		const userId = context.databaseUserId;
@@ -519,6 +525,7 @@ export const shuffleTweet = protectedProcedure
 
 export const addTweetToSlot = protectedProcedure
 	.input(addTweetSchema)
+	.route({ method: "POST" })
 	.handler(async ({ input, context }) => {
 		const { slotId } = input;
 		const userId = context.databaseUserId;
