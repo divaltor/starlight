@@ -377,7 +377,9 @@ async function shuffleSlotTweet({
 }) {
 	const slot = await getSlotWithTweets(slotId, userId);
 
-	const slotTweet = slot.scheduledSlotTweets.find((st) => st.id === tweetId);
+	const slotTweet = slot.scheduledSlotTweets.find(
+		(st) => st.tweet.id === tweetId
+	);
 
 	if (!slotTweet) {
 		throw new ORPCError("NOT_FOUND", {
