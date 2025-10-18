@@ -123,6 +123,8 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 			throw error;
 		}
 
+		logger.info({ photoId, userId, data }, "Embeddings data");
+
 		await prisma.$executeRaw(
 			Prisma.sql`UPDATE photos SET tag_vec = ${data.text}::vector, image_vec = ${data.image ?? []}::vector WHERE id = ${photoId} AND user_id = ${userId}`
 		);
