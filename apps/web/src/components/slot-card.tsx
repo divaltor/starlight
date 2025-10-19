@@ -212,8 +212,8 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 						{/* Summary */}
 						<div className="flex flex-wrap items-center gap-2">
 							{slot.chat.title && (
-								<Badge className="text-xs" variant="outline">
-									📢 {slot.chat.title}
+								<Badge size="xs" variant="outline">
+									#{slot.chat.title}
 								</Badge>
 							)}
 							<div className="flex items-center gap-1">

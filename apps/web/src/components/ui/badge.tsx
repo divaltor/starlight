@@ -4,33 +4,43 @@ import type * as React from "react";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-	"inline-flex items-center rounded-full border px-2.5 py-0.5 font-semibold text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+	"badge", // DaisyUI base
 	{
 		variants: {
 			variant: {
-				default: "border-transparent bg-primary text-primary-foreground",
-				secondary: "border-transparent bg-secondary text-secondary-foreground",
-				destructive:
-					"border-transparent bg-destructive text-destructive-foreground",
-				outline: "text-foreground",
-				waiting: "border-yellow-200 bg-yellow-100 text-yellow-800",
-				published: "border-blue-200 bg-blue-100 text-blue-800",
-				done: "border-green-200 bg-green-100 text-green-800",
+				default: "badge-primary",
+				secondary: "badge-secondary",
+				destructive: "badge-error",
+				outline: "badge-outline",
+				waiting: "badge-warning",
+				published: "badge-info",
+				done: "badge-success",
+			},
+			size: {
+				default: "badge-md",
+				xs: "badge-xs",
+				sm: "badge-sm",
+				lg: "badge-lg",
+				xl: "badge-xl",
 			},
 		},
 		defaultVariants: {
 			variant: "default",
+			size: "default",
 		},
 	}
 );
 
 export interface BadgeProps
-	extends React.HTMLAttributes<HTMLDivElement>,
+	extends React.HTMLAttributes<HTMLSpanElement>,
 		VariantProps<typeof badgeVariants> {}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
+function Badge({ className, variant, size, ...props }: BadgeProps) {
 	return (
-		<div className={cn(badgeVariants({ variant }), className)} {...props} />
+		<span
+			className={cn(badgeVariants({ variant, size }), className)}
+			{...props}
+		/>
 	);
 }
 
