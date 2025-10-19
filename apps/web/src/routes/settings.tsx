@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +33,7 @@ function RouteComponent() {
 	const [newCookies, setNewCookies] = useState("");
 	const [showCookieInput, setShowCookieInput] = useState(false);
 	const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
+	const [displayError, setDisplayError] = useState<string | null>(null);
 
 	const { rawInitData } = useTelegramContext();
 	const queryClient = useQueryClient();
@@ -75,8 +75,11 @@ function RouteComponent() {
 				queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
 				setShowCookieInput(false);
 				setNewCookies("");
+				setDisplayError(null);
 			},
-			onError: () => toast.error("Failed to save cookies"),
+			onError: (error: Error) => {
+				setDisplayError(error.message || "Failed to save cookies");
+			},
 		})
 	);
 
@@ -86,9 +89,6 @@ function RouteComponent() {
 				queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
 				setShowCookieInput(true);
 			},
-			onError: () => {
-				toast.error("Failed to delete cookies");
-			},
 		})
 	);
 
@@ -96,11 +96,7 @@ function RouteComponent() {
 		orpc.channels.disconnect.mutationOptions({
 			onSuccess: () => {
 				queryClient.invalidateQueries({ queryKey: ["posting-channel"] });
-				toast.success("Channel successfully disconnected");
 				setShowDisconnectDialog(false);
-			},
-			onError: () => {
-				toast.error("Failed to disconnect channel");
 			},
 		})
 	);
@@ -185,18 +181,19 @@ function RouteComponent() {
 				</CardHeader>
 
 				<CardContent className="space-y-10 pt-4 pb-0">
-					{/* User Information Section */}
-					<section className="space-y-3">
-						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
-							Account
-						</h2>
-					</section>
-
 					{/* Cookie Management Section */}
 					<section className="space-y-4">
 						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
 							Authentication Cookies
 						</h2>
+
+						{/* Cookie Success/Error Messages */}
+						{cookieError && (
+							<Alert variant="destructive">
+								<AlertCircle className="h-4 w-4" />
+								<span>{cookieError.message}</span>
+							</Alert>
+						)}
 						{cookiesStored && !shouldShowCookieInput ? (
 							<Alert className="alert-vertical sm:alert-horizontal">
 								<Cookie className="h-4 w-4 shrink-0" />
@@ -234,13 +231,19 @@ function RouteComponent() {
 								>
 									<div className="space-y-2">
 										<TextField
+											className={displayError ? "textarea-error" : ""}
 											id="new-cookies"
-											isDisabled={isSubmitting}
 											multiline
-											onChange={(value) => setNewCookies(value)}
+											onChange={(value) => {
+												setNewCookies(value);
+												setDisplayError(null);
+											}}
 											placeholder="Paste your authentication cookies here"
 											value={newCookies}
 										/>
+										{displayError && (
+											<p className="text-error text-sm">{displayError}</p>
+										)}
 									</div>
 
 									<div className="flex gap-2">

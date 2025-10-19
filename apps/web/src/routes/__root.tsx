@@ -8,7 +8,6 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { StrictMode } from "react";
-import { Toaster } from "@/components/ui/sonner";
 import appCss from "@/index.css?url";
 import { TelegramButtonsProvider } from "@/providers/telegram-buttons-provider";
 import type { orpc } from "@/utils/orpc";
@@ -76,7 +75,6 @@ function RootDocument() {
 				</TelegramButtonsProvider>
 				<TanStackRouterDevtools position="bottom-left" />
 				<ReactQueryDevtools buttonPosition="bottom-right" position="bottom" />
-				<Toaster />
 				<Scripts />
 			</body>
 		</html>
