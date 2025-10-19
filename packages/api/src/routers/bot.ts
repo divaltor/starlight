@@ -51,7 +51,7 @@ export const respondToWebAppData = protectedProcedure
 
 		const postingChannel = slot.postingChannel;
 
-		await redis.setex(`${context.databaseUserId}:publish`, 60 * 5, slot.id);
+		await redis.setex(`${context.user.id}:publish`, 60 * 5, slot.id);
 
 		await bot.api.answerWebAppQuery(
 			context.queryId,
