@@ -205,7 +205,7 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 	};
 
 	return (
-		<Card className="overflow-hidden shadow-sm">
+		<Card className="card-border">
 			<CardHeader className={tweets.length > 0 ? "pb-3" : "pb-0"}>
 				<div className="flex items-start justify-between gap-3">
 					<div className="flex flex-col gap-2">
