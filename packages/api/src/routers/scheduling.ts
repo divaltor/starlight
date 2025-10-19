@@ -401,10 +401,16 @@ async function shuffleSlotTweet({
 
 	await prisma.$transaction(async (tx) => {
 		await tx.scheduledSlotPhoto.deleteMany({
-			where: { scheduledSlotTweetId: tweetId },
+			where: { scheduledSlotTweet: { tweet: { id: tweetId } } },
 		});
 		await tx.scheduledSlotTweet.update({
-			where: { id: tweetId },
+			where: {
+				scheduledSlotId_tweetId_userId: {
+					scheduledSlotId: slotId,
+					tweetId,
+					userId,
+				},
+			},
 			data: { tweetId: newTweet.id },
 		});
 		await tx.scheduledSlotPhoto.createMany({

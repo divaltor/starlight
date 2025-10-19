@@ -31,6 +31,7 @@
     "@telegram-apps/init-data-node": "^2.0.10",
     "grammy": "catalog:",
     "hono": "catalog:",
+    "ioredis": "catalog:",
     "zod": "catalog:"
   }
 }

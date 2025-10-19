@@ -3,6 +3,7 @@ import { CookieEncryption } from "@starlight/crypto";
 import { env } from "@starlight/utils";
 import { z } from "zod";
 import { maybeAuthProcedure, protectedProcedure } from "../middlewares/auth";
+import { redis } from "../utils/redis";
 
 const cookiesSchema = z.object({
 	cookies: z.string(),
@@ -30,8 +31,7 @@ export const saveCookies = protectedProcedure
 			context.user.id.toString()
 		);
 
-		// biome-ignore lint/correctness/noUndeclaredVariables: Bun global redis instance
-		await Bun.redis.set(`user:cookies:${context.user.id}`, encryptedCookies);
+		await redis.set(`user:cookies:${context.user.id}`, encryptedCookies);
 	});
 
 export const verifyCookies = maybeAuthProcedure.handler(async ({ context }) => {
@@ -40,10 +40,7 @@ export const verifyCookies = maybeAuthProcedure.handler(async ({ context }) => {
 			return { hasValidCookies: false };
 		}
 
-		// biome-ignore lint/correctness/noUndeclaredVariables: Bun global redis instance
-		const storedCookies = await Bun.redis.get(
-			`user:cookies:${context.user.id}`
-		);
+		const storedCookies = await redis.get(`user:cookies:${context.user.id}`);
 
 		if (!storedCookies) {
 			return { hasValidCookies: false };
@@ -52,8 +49,7 @@ export const verifyCookies = maybeAuthProcedure.handler(async ({ context }) => {
 		try {
 			cookieEncryption.safeDecrypt(storedCookies, context.user.id.toString());
 		} catch {
-			// biome-ignore lint/correctness/noUndeclaredVariables: Bun global redis instance
-			await Bun.redis.del(`user:cookies:${context.user.id}`);
+			await redis.del(`user:cookies:${context.user.id}`);
 			return { hasValidCookies: false };
 		}
 
@@ -67,6 +63,5 @@ export const verifyCookies = maybeAuthProcedure.handler(async ({ context }) => {
 });
 
 export const deleteCookies = protectedProcedure.handler(async ({ context }) => {
-	// biome-ignore lint/correctness/noUndeclaredVariables: Bun global redis instance
-	await Bun.redis.del(`user:cookies:${context.user.id}`);
+	await redis.del(`user:cookies:${context.user.id}`);
 });

@@ -3,6 +3,7 @@ import { env, prisma } from "@starlight/utils";
 import { Bot, InlineQueryResultBuilder } from "grammy";
 import { z } from "zod";
 import { protectedProcedure } from "../middlewares/auth";
+import { redis } from "../utils/redis";
 
 const bot = new Bot(env.BOT_TOKEN);
 
@@ -50,8 +51,7 @@ export const respondToWebAppData = protectedProcedure
 
 		const postingChannel = slot.postingChannel;
 
-		// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
-		await Bun.redis.setex(`${context.databaseUserId}:publish`, 60 * 5, slot.id);
+		await redis.setex(`${context.databaseUserId}:publish`, 60 * 5, slot.id);
 
 		await bot.api.answerWebAppQuery(
 			context.queryId,
