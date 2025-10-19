@@ -1,16 +1,16 @@
 import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Filter } from "lucide-react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback, useEffect } from "react";
+import NotFound from "@/components/not-found";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
-import { Button } from "@/components/ui/button";
 import { useTweets } from "@/hooks/use-tweets";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
 
 function TwitterArtViewer() {
 	const { updateButtons } = useTelegramContext();
+	const router = useRouter();
 
 	useEffect(() => {
 		// TODO: Add condition when we don't have any posts available to parse or even didn't setup a bot yet.
@@ -83,17 +83,21 @@ function TwitterArtViewer() {
 	}
 
 	return (
-		<div className="min-h-screen bg-gray-50 p-4">
+		<div className="min-h-screen p-4">
 			{!isLoading && tweets.length === 0 && (
-				<div className="prose flex flex-col items-center justify-center py-16">
-					<Filter className="mb-4 h-16 w-16 text-gray-400" />
-					<h3 className="mb-2 font-medium text-gray-900 text-xl">
-						No photos found, did you setup cookies?
-					</h3>
-					<Button className="mt-4">
-						<Link to="/settings">Go to Settings</Link>
-					</Button>
-				</div>
+				<NotFound
+					description="Did you setup cookies? Try again later."
+					primaryAction={{
+						label: "Go to Settings",
+						onClick: () => {
+							router.navigate({ to: "/settings" });
+						},
+						onMouseEnter: () => {
+							router.preloadRoute({ to: "/settings" });
+						},
+					}}
+					title="No photos found"
+				/>
 			)}
 
 			{/* Masonry Grid */}

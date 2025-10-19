@@ -7,6 +7,7 @@ type ActionConfig = {
 	onClick?: () => void;
 	href?: string;
 	variant?: ComponentProps<typeof Button>["variant"];
+	onMouseEnter?: () => void;
 };
 
 type NotFoundProps = {
@@ -40,8 +41,8 @@ export function NotFound({
 					<div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
 						{primaryAction && (
 							<Button
-								asChild={!!primaryAction.href}
 								onClick={primaryAction.onClick}
+								onMouseEnter={primaryAction.onMouseEnter}
 								variant={primaryAction.variant}
 							>
 								{primaryAction.href ? (
@@ -53,8 +54,8 @@ export function NotFound({
 						)}
 						{secondaryAction && (
 							<Button
-								asChild={!!secondaryAction.href}
 								onClick={secondaryAction.onClick}
+								onMouseEnter={secondaryAction.onMouseEnter}
 								variant={secondaryAction.variant ?? "outline"}
 							>
 								{secondaryAction.href ? (

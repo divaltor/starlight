@@ -13,6 +13,21 @@ import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/settings")({
 	component: RouteComponent,
+	loader: async ({ context: { queryClient } }) => {
+		if (import.meta.env.SSR) {
+			return;
+		}
+
+		const profileOptions = orpc.profiles.get.queryOptions({
+			queryKey: ["profile"],
+			enabled: true,
+			staleTime: 5 * 60 * 1000,
+			gcTime: 30 * 60 * 1000,
+			retry: 1,
+		});
+
+		await queryClient.fetchQuery(profileOptions);
+	},
 });
 
 function RouteComponent() {
