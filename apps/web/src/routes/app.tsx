@@ -1,9 +1,10 @@
 import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
-import { createFileRoute } from "@tanstack/react-router";
-import { Filter, Loader2 } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Filter } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback, useEffect } from "react";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
+import { Button } from "@/components/ui/button";
 import { useTweets } from "@/hooks/use-tweets";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
@@ -83,17 +84,15 @@ function TwitterArtViewer() {
 
 	return (
 		<div className="min-h-screen bg-gray-50 p-4">
-			{isLoading && <Loader2 className="animate-spin" />}
-
 			{!isLoading && tweets.length === 0 && (
 				<div className="flex flex-col items-center justify-center py-16">
 					<Filter className="mb-4 h-16 w-16 text-gray-400" />
 					<h3 className="mb-2 font-medium text-gray-900 text-xl">
-						No matching posts found
+						No photos found, did you setup cookies?
 					</h3>
-					<p className="max-w-md text-center text-gray-600">
-						Try adjusting your filters or reset them to see all posts.
-					</p>
+					<Button asChild className="mt-4">
+						<Link to="/settings">Go to Settings</Link>
+					</Button>
 				</div>
 			)}
 
