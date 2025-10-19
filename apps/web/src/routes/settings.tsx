@@ -281,8 +281,11 @@ function RouteComponent() {
 						)}
 					</section>
 
+					<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+						Advanced settings
+					</h2>
 					{/* Posting Channel Section */}
-					<section className="space-y-4">
+					<section>
 						{profile?.postingChannel && (
 							<div className="flex items-center justify-between">
 								<div className="flex items-center gap-3">
@@ -345,15 +348,11 @@ function RouteComponent() {
 					</section>
 
 					{/* Profile Visibility Section */}
-					<section className="space-y-4">
-						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
-							Profile Visibility
-						</h2>
+					<section>
 						<label className="label cursor-pointer">
 							<input
 								checked={profile?.user?.isPublic ?? false}
 								className="toggle toggle-sm toggle-primary"
-								disabled={isSubmitting}
 								onChange={(e) =>
 									visibilityMutation.mutate({
 										status: e.target.checked ? "public" : "private",
