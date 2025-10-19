@@ -1,4 +1,5 @@
 from abc import ABC
+from enum import StrEnum
 from typing import Any, Literal, Self, override
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
@@ -174,13 +175,23 @@ class ClassificationResult(ResponseModel):
         )
 
 
+class EncodingMode(StrEnum):
+    DOCUMENT = 'document'
+    QUERY = 'retrieval.query'
+
+
 class EmbeddingPayload(BaseModel):
     image: str | None = None
 
-    tags: list[str] = []
+    tags: list[str] | str = Field(default_factory=list)
+
+    encoding_mode: EncodingMode = EncodingMode.DOCUMENT
 
     @property
     def text(self) -> str:
+        if isinstance(self.tags, str):
+            return self.tags
+
         return ', '.join(self.tags)
 
 

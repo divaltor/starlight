@@ -13,6 +13,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from app.config import config
+from app.models import EncodingMode
 
 resource = Resource(
     attributes={
@@ -45,10 +46,18 @@ def setup_otel(app: FastAPI) -> None:
 
 
 @contextmanager
-def pipeline_span(operation_name: str, model_id: str | None = None) -> Generator[None]:
+def pipeline_span(
+    operation_name: str,
+    model_id: str | None = None,
+    encoding_mode: EncodingMode | None = None,
+) -> Generator[None]:
     tracer = trace.get_tracer('starlight.pipeline')
     with tracer.start_as_current_span(operation_name) as span:
         if model_id:
             span.set_attribute('model.id', model_id)
+
+        if encoding_mode:
+            span.set_attribute('encoding.mode', encoding_mode.value)
+
         span.set_attribute('pipeline.operation', operation_name)
         yield

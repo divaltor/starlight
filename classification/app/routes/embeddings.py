@@ -41,20 +41,25 @@ async def embeddings(
 ) -> EmbeddingResponse:
     try:
         # Always encode text
-        with pipeline_span('text_embedding', 'jinaai/jina-clip-v2'):
+        with pipeline_span('text_embedding', 'jinaai/jina-clip-v2', payload.encoding_mode):
             emb_text_vec: ndarray = embedding_model.encode(
                 [payload.text],
+                prompt_name=payload.encoding_mode.value,
                 normalize_embeddings=True,
             )
 
-        emb_image: ndarray | None = None
+        emb_image: ndarray | None = None  # pyright: ignore[reportAssignmentType]
 
         if payload.image:
             with torch.no_grad():
                 img = await preprocess_image(payload.image.strip())
 
-                with pipeline_span('image_embedding', 'jinaai/jina-clip-v2'):
-                    emb_image: ndarray = embedding_model.encode([img], normalize_embeddings=True)  # pyright: ignore[reportCallIssue, reportArgumentType]
+                with pipeline_span('image_embedding', 'jinaai/jina-clip-v2', payload.encoding_mode):
+                    emb_image: ndarray = embedding_model.encode(
+                        [img],
+                        prompt_name=payload.encoding_mode.value,
+                        normalize_embeddings=True,
+                    )  # pyright: ignore[reportCallIssue, reportArgumentType]
 
         return EmbeddingResponse(
             image=emb_image[0].tolist() if emb_image is not None else None,
