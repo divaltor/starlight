@@ -13,7 +13,6 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import {
-	Dialog,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
@@ -32,7 +31,6 @@ export const Route = createFileRoute("/settings")({
 
 function RouteComponent() {
 	const [newCookies, setNewCookies] = useState("");
-	const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
 	const [displayError, setDisplayError] = useState<string | null>(null);
 
 	const { rawInitData } = useTelegramContext();
@@ -87,7 +85,6 @@ function RouteComponent() {
 					...old,
 					postingChannel: undefined,
 				}));
-				setShowDisconnectDialog(false);
 			},
 		})
 	);
@@ -296,19 +293,14 @@ function RouteComponent() {
 										</p>
 									</div>
 								</div>
-								<Dialog
-									onOpenChange={setShowDisconnectDialog}
-									open={showDisconnectDialog}
-								>
-									<DialogTrigger asChild>
-										<Button
-											disabled={disconnectChannelMutation.isPending}
-											size="sm"
-											variant="destructive"
-										>
-											Disconnect
-										</Button>
-									</DialogTrigger>
+								<DialogTrigger>
+									<Button
+										disabled={disconnectChannelMutation.isPending}
+										size="sm"
+										variant="destructive"
+									>
+										Disconnect
+									</Button>
 									<DialogContent>
 										<DialogHeader>
 											<DialogTitle>Disconnect Channel</DialogTitle>
@@ -317,14 +309,7 @@ function RouteComponent() {
 												into this channel.
 											</DialogDescription>
 										</DialogHeader>
-										<DialogFooter>
-											<Button
-												disabled={disconnectChannelMutation.isPending}
-												onClick={() => setShowDisconnectDialog(false)}
-												variant="outline"
-											>
-												No
-											</Button>
+										<DialogFooter className="pt-4">
 											<Button
 												disabled={disconnectChannelMutation.isPending}
 												onClick={() => disconnectChannelMutation.mutate({})}
@@ -336,7 +321,7 @@ function RouteComponent() {
 											</Button>
 										</DialogFooter>
 									</DialogContent>
-								</Dialog>
+								</DialogTrigger>
 							</div>
 						)}
 					</section>

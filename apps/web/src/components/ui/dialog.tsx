@@ -1,48 +1,27 @@
-// biome-ignore lint/performance/noNamespaceImport: Vite can handle this
-import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { XIcon } from "lucide-react";
+import { X } from "lucide-react";
 import type * as React from "react";
-
+import type { DialogProps } from "react-aria-components";
+import {
+	Button as AriaButton,
+	Dialog as AriaDialog,
+	DialogTrigger as AriaDialogTrigger,
+	Modal as AriaModal,
+	Heading,
+} from "react-aria-components";
 import { cn } from "@/lib/utils";
 
-function Dialog({
-	...props
-}: React.ComponentProps<typeof DialogPrimitive.Root>) {
-	return <DialogPrimitive.Root data-slot="dialog" {...props} />;
+interface DialogContentProps
+	extends Omit<React.ComponentProps<typeof AriaDialog>, "children"> {
+	showCloseButton?: boolean;
+	className?: string;
+	children?: React.ReactNode | ((props: DialogProps) => React.ReactNode);
 }
 
 function DialogTrigger({
+	children,
 	...props
-}: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
-	return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
-}
-
-function DialogPortal({
-	...props
-}: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-	return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
-}
-
-function DialogClose({
-	...props
-}: React.ComponentProps<typeof DialogPrimitive.Close>) {
-	return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
-}
-
-function DialogOverlay({
-	className,
-	...props
-}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
-	return (
-		<DialogPrimitive.Overlay
-			className={cn(
-				"data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=open]:animate-in",
-				className
-			)}
-			data-slot="dialog-overlay"
-			{...props}
-		/>
-	);
+}: React.ComponentProps<typeof AriaDialogTrigger>) {
+	return <AriaDialogTrigger {...props}>{children}</AriaDialogTrigger>;
 }
 
 function DialogContent({
@@ -50,40 +29,45 @@ function DialogContent({
 	children,
 	showCloseButton = true,
 	...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & {
-	showCloseButton?: boolean;
-}) {
+}: DialogContentProps) {
 	return (
-		<DialogPortal data-slot="dialog-portal">
-			<DialogOverlay />
-			<DialogPrimitive.Content
+		<AriaModal
+			className={cn(
+				"data-state-closed:fade-out-0 data-state-closed:slide-out-to-top-2 data-state-open:fade-in-0 data-state-open:slide-in-from-top-2 fixed inset-0 z-50 bg-black/30 backdrop-blur-sm data-state-closed:animate-out data-state-open:animate-in",
+				className
+			)}
+		>
+			<AriaDialog
+				{...props}
 				className={cn(
-					"data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 data-[state=closed]:animate-out data-[state=open]:animate-in sm:max-w-lg",
+					"data-state-closed:fade-out-0 data-state-closed:slide-out-to-top-2 data-state-closed:zoom-out-95 data-state-open:fade-in-0 data-state-open:slide-in-from-top-2 data-state-open:zoom-in-95 fixed top-[50%] left-[50%] z-50 max-h-[90vh] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] overflow-auto rounded-lg border border-base-200 bg-base-100 p-6 shadow-lg duration-200 data-state-closed:animate-out data-state-open:animate-in",
 					className
 				)}
-				data-slot="dialog-content"
-				{...props}
 			>
-				{children}
+				{typeof children === "function" ? children(props) : children}
 				{showCloseButton && (
-					<DialogPrimitive.Close
-						className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
-						data-slot="dialog-close"
+					<AriaButton
+						className={cn(
+							"btn btn-circle btn-ghost btn-sm absolute top-2 right-2 [&>svg]:h-4 [&>svg]:w-4"
+						)}
+						slot="close"
 					>
-						<XIcon />
+						<X />
 						<span className="sr-only">Close</span>
-					</DialogPrimitive.Close>
+					</AriaButton>
 				)}
-			</DialogPrimitive.Content>
-		</DialogPortal>
+			</AriaDialog>
+		</AriaModal>
 	);
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
-			className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
-			data-slot="dialog-header"
+			className={cn(
+				"flex flex-col space-y-1.5 text-center sm:text-left",
+				className
+			)}
 			{...props}
 		/>
 	);
@@ -93,10 +77,9 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
 			className={cn(
-				"flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+				"flex flex-col-reverse gap-2 sm:flex sm:flex-row sm:justify-end",
 				className
 			)}
-			data-slot="dialog-footer"
 			{...props}
 		/>
 	);
@@ -105,38 +88,34 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
 function DialogTitle({
 	className,
 	...props
-}: React.ComponentProps<typeof DialogPrimitive.Title>) {
+}: React.ComponentProps<typeof Heading>) {
 	return (
-		<DialogPrimitive.Title
-			className={cn("font-semibold text-lg leading-none", className)}
-			data-slot="dialog-title"
+		<Heading
+			className={cn(
+				"font-semibold text-lg leading-none tracking-tight",
+				className
+			)}
+			slot="title"
 			{...props}
 		/>
 	);
 }
 
-function DialogDescription({
-	className,
-	...props
-}: React.ComponentProps<typeof DialogPrimitive.Description>) {
+function DialogDescription({ className, ...props }: React.ComponentProps<"p">) {
 	return (
-		<DialogPrimitive.Description
+		<p
 			className={cn("text-muted-foreground text-sm", className)}
-			data-slot="dialog-description"
+			slot="description"
 			{...props}
 		/>
 	);
 }
 
 export {
-	Dialog,
-	DialogClose,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogOverlay,
-	DialogPortal,
-	DialogTitle,
 	DialogTrigger,
+	DialogContent,
+	DialogHeader,
+	DialogFooter,
+	DialogTitle,
+	DialogDescription,
 };
