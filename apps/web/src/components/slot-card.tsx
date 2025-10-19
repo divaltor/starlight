@@ -205,7 +205,7 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 	};
 
 	return (
-		<Card className="card-border">
+		<Card className="card-border pt-4">
 			<CardHeader className={tweets.length > 0 ? "pb-3" : "pb-0"}>
 				<div className="flex items-start justify-between gap-3">
 					<div className="flex flex-col gap-2">
