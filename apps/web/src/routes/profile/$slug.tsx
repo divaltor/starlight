@@ -3,7 +3,6 @@ import type {
 	TweetsPageResult,
 } from "@starlight/api/src/types/tweets";
 import { createFileRoute, useParams } from "@tanstack/react-router";
-import { Filter } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback } from "react";
 import { NotFound } from "@/components/not-found";
@@ -52,49 +51,56 @@ function SharedProfileViewer() {
 
 		if (isNotFound) {
 			return (
-				<NotFound
-					description="This shared profile link is no longer available. It may have been revoked"
-					primaryAction={{
-						label: "Back to home",
-						onClick: () => {
-							window.location.href = "/app";
-						},
-					}}
-					title="Link is disabled (｡•́︿•̀｡)"
-				/>
+				<div className="h-screen bg-base-100 p-4">
+					<NotFound
+						description="This shared profile link is no longer available. It may have been revoked"
+						primaryAction={{
+							label: "Back to home",
+							onClick: () => {
+								window.location.href = "/app";
+							},
+						}}
+						title="Link is disabled (｡•́︿•̀｡)"
+					/>
+				</div>
 			);
 		}
 
 		return (
-			<NotFound
-				description={
-					error instanceof Error ? error.message : "An error occurred"
-				}
-				primaryAction={{
-					label: "Go to App",
-					onClick: () => {
-						window.location.href = "/app";
-					},
-				}}
-				secondaryAction={{
-					label: "Retry",
-					onClick: () => window.location.reload(),
-				}}
-				title="Failed to load shared profile"
-			/>
+			<div className="h-screen bg-base-100 p-4">
+				<NotFound
+					description={
+						error instanceof Error ? error.message : "An error occurred"
+					}
+					primaryAction={{
+						label: "Go to App",
+						onClick: () => {
+							window.location.href = "/app";
+						},
+					}}
+					secondaryAction={{
+						label: "Retry",
+						onClick: () => window.location.reload(),
+					}}
+					title="Failed to load shared profile"
+				/>
+			</div>
 		);
 	}
 
 	return (
-		<div className="min-h-screen bg-gray-50 p-4">
+		<div
+			className={
+				!isLoading && tweets.length === 0
+					? "h-screen bg-base-100 p-4"
+					: "min-h-screen bg-base-100 p-4"
+			}
+		>
 			{!isLoading && tweets.length === 0 && (
-				<div className="prose flex flex-col items-center justify-center py-16">
-					<Filter className="mb-4 h-16 w-16 text-gray-400" />
-					<h3 className="mb-2 font-medium text-gray-900 text-xl">
-						No posts found
-					</h3>
-					<p className="max-w-md text-center text-gray-600">Try again later.</p>
-				</div>
+				<NotFound
+					description="This user hasn't shared any posts yet. Try again later."
+					title="No posts found"
+				/>
 			)}
 
 			{tweets.length > 0 && (
