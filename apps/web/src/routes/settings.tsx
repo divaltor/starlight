@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -142,9 +142,6 @@ function RouteComponent() {
 	if (cookieError && !profile) {
 		return (
 			<main className="container mx-auto max-w-2xl px-4 py-10">
-				<div className="mb-8 flex items-center justify-between">
-					<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
-				</div>
 				<Card>
 					<CardContent className="py-8">
 						<Alert variant="destructive">
@@ -209,11 +206,11 @@ function RouteComponent() {
 							<div className="space-y-4">
 								{!profile?.hasValidCookies && (
 									<Alert variant="default">
-										<AlertCircle />
-										<AlertTitle>
+										<AlertCircle className="h-4 w-4" />
+										<AlertDescription>
 											Connect your Twitter account by adding authentication
 											cookies
-										</AlertTitle>
+										</AlertDescription>
 									</Alert>
 								)}
 
@@ -274,7 +271,7 @@ function RouteComponent() {
 						Advanced settings
 					</h2>
 					{/* Posting Channel Section */}
-					<section>
+					<section className="space-y-4">
 						{profile?.postingChannel && (
 							<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 								<div className="flex items-center gap-3">
@@ -315,6 +312,14 @@ function RouteComponent() {
 									Disconnect
 								</Button>
 							</div>
+						)}
+						{!profile?.postingChannel && (
+							<Alert variant="default">
+								<AlertCircle className="h-4 w-4" />
+								<AlertDescription>
+									Send /connect command to a bot to connect a channel.
+								</AlertDescription>
+							</Alert>
 						)}
 					</section>
 
