@@ -11,7 +11,11 @@ export const getRouter = () => {
 		scrollRestoration: true,
 		defaultPreloadStaleTime: 0,
 		context: { queryClient, orpc },
-		defaultNotFoundComponent: () => <NotFound />,
+		defaultNotFoundComponent: () => (
+			<div className="h-screen bg-base-100 p-4">
+				<NotFound />
+			</div>
+		),
 		Wrap: ({ children }) => (
 			<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 		),
