@@ -28,9 +28,7 @@ export function NotFound({
 	className = "",
 }: NotFoundProps) {
 	return (
-		<div
-			className={`flex min-h-screen items-center justify-center p-4 ${className}`}
-		>
+		<div className={`flex h-full items-center justify-center p-4 ${className}`}>
 			<div className="mx-auto max-w-md text-center">
 				<div className="mb-6 inline-flex size-20 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
 					{icon ?? <Ghost className="size-10 text-gray-400" />}

@@ -83,7 +83,11 @@ function TwitterArtViewer() {
 	}
 
 	return (
-		<div className="min-h-screen p-4">
+		<div
+			className={
+				!isLoading && tweets.length === 0 ? "h-screen p-4" : "min-h-screen p-4"
+			}
+		>
 			{!isLoading && tweets.length === 0 && (
 				<NotFound
 					description="Did you setup cookies? Try again later."

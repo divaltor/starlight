@@ -276,9 +276,9 @@ function RouteComponent() {
 					{/* Posting Channel Section */}
 					<section>
 						{profile?.postingChannel && (
-							<div className="flex items-center justify-between">
+							<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 								<div className="flex items-center gap-3">
-									<div className="h-12 w-12 overflow-hidden rounded-full bg-gray-100">
+									<div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-gray-100">
 										{profile?.postingChannel.photoThumbnail ? (
 											// biome-ignore lint/nursery/useImageSize: Don't care
 											<img
@@ -292,7 +292,7 @@ function RouteComponent() {
 											</div>
 										)}
 									</div>
-									<div>
+									<div className="min-w-0 flex-1">
 										<p className="font-medium text-gray-900 text-sm">
 											{profile?.postingChannel.title || "Unknown Channel"}
 										</p>
@@ -304,6 +304,7 @@ function RouteComponent() {
 									</div>
 								</div>
 								<Button
+									className="w-full sm:w-auto"
 									disabled={disconnectChannelMutation.isPending}
 									onClick={() => {
 										disconnectChannelMutation.mutate({});
@@ -319,7 +320,7 @@ function RouteComponent() {
 
 					{/* Profile Visibility Section */}
 					<section className="mb-2">
-						<label className="label cursor-pointer">
+						<label className="label cursor-pointer gap-2 text-wrap">
 							<input
 								checked={profile?.user?.isPublic ?? false}
 								className="toggle toggle-sm toggle-primary"
@@ -330,7 +331,7 @@ function RouteComponent() {
 								}
 								type="checkbox"
 							/>
-							<span className="label-text">
+							<span className="label-text w-full text-left">
 								Make your profile visible to other people
 							</span>
 						</label>
