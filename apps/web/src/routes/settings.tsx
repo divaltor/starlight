@@ -1,6 +1,6 @@
 import type { ProfileResult } from "@starlight/api/routers/index";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Alert, AlertTitle } from "@/components/ui/alert";
@@ -89,6 +89,23 @@ function RouteComponent() {
 		})
 	);
 
+	const visibilityMutation = useMutation(
+		orpc.profiles.visibility.mutationOptions({
+			onSuccess: (
+				_data: { success: boolean },
+				variables: { status: "public" | "private" }
+			) => {
+				queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+					...old,
+					user: {
+						...old.user,
+						isPublic: variables.status === "public",
+					},
+				}));
+			},
+		})
+	);
+
 	if (isLoading && !profile) {
 		return (
 			<main className="container mx-auto max-w-2xl px-4 py-10">
@@ -151,7 +168,8 @@ function RouteComponent() {
 	const isSubmitting =
 		saveCookiesMutation.isPending ||
 		deleteCookiesMutation.isPending ||
-		disconnectChannelMutation.isPending;
+		disconnectChannelMutation.isPending ||
+		visibilityMutation.isPending;
 
 	return (
 		<main className="container mx-auto max-w-2xl px-4 py-10">
@@ -201,7 +219,7 @@ function RouteComponent() {
 						) : (
 							<div className="space-y-4">
 								{!profile?.hasValidCookies && (
-									<Alert variant="amber">
+									<Alert variant="default">
 										<AlertCircle />
 										<AlertTitle>
 											Connect your Twitter account by adding authentication
@@ -325,7 +343,47 @@ function RouteComponent() {
 							</div>
 						)}
 					</section>
+
+					{/* Profile Visibility Section */}
+					<section className="space-y-4">
+						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+							Profile Visibility
+						</h2>
+						<label className="label cursor-pointer">
+							<input
+								checked={profile?.user?.isPublic ?? false}
+								className="toggle toggle-sm toggle-primary"
+								disabled={isSubmitting}
+								onChange={(e) =>
+									visibilityMutation.mutate({
+										status: e.target.checked ? "public" : "private",
+									})
+								}
+								type="checkbox"
+							/>
+							<span className="label-text">
+								Make your profile visible to other people
+							</span>
+						</label>
+					</section>
 				</CardContent>
+				{/* Profile Block - Shown when public */}
+				{profile?.user?.isPublic && (
+					<div className="w-full bg-base-200 p-4">
+						<div className="flex items-center">
+							<p className="text-gray-600 text-sm">
+								Link to your profile:{" "}
+								<Link
+									className="text-neutral text-sm underline"
+									params={{ slug: profile.user.username }}
+									to="/profile/$slug"
+								>
+									{`${window.location.origin}/profile/${profile.user.username}`}
+								</Link>
+							</p>
+						</div>
+					</div>
+				)}
 			</Card>
 		</main>
 	);
