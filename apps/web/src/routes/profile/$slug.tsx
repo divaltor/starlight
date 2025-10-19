@@ -113,6 +113,11 @@ function SharedProfileViewer() {
 
 export const Route = createFileRoute("/profile/$slug")({
 	loader: async ({ context: { queryClient }, params: { slug } }) => {
+		// Skip prefetch on server to avoid context errors for user-specific data in TMA
+		if (import.meta.env.SSR) {
+			return;
+		}
+
 		await queryClient.fetchInfiniteQuery(
 			orpc.tweets.list.infiniteOptions({
 				input: (pageParam: string | undefined) => ({
