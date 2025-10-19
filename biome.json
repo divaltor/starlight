@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "ignoreUnknown": false,
+    "ignoreUnknown": true,
     "includes": [
       "**",
       "!**/.next",
@@ -21,7 +21,24 @@
       "!**/generated",
       "!**/node_modules",
       "!**/.git",
-      "!**/*.css"
+      "!**/*.css",
+      "!**/.output",
+      "!**/dist",
+      "!**/.tanstack",
+      "!**/.nitro",
+      "!**/out"
+    ],
+    "experimentalScannerIgnores": [
+      "node_modules",
+      ".git",
+      ".turbo",
+      ".nitro",
+      "out",
+      "packages/api/node_modules",
+      "packages/crypto/node_modules",
+      "packages/utils/node_modules",
+      "apps/server/node_modules",
+      "apps/web/node_modules"
     ]
   },
   "formatter": {

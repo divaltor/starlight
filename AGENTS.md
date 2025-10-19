@@ -25,7 +25,7 @@ Ultracite enforces strict type safety, accessibility standards, and consistent c
 - Use Uber design system for creating friendly UI
 - Use DaisyUI for designing a components
 - Use React Aria components for headless UI
-
+- Use Tailwind CSS Typography plugin for text
 
 ### Accessibility (a11y)
 - Don't use `accessKey` attribute on any HTML element.
