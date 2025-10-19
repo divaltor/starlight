@@ -154,43 +154,39 @@ function PublicationsPage() {
 
 	if (slot && !isPending) {
 		return (
-			<div className="min-h-screen bg-base-100 p-4">
-				<div className="mx-auto max-w-4xl">
-					<SlotCard slot={slot} tweets={tweets} />
+			<div className="flex min-h-screen flex-col bg-base-100 p-4">
+				<div className="flex-1">
+					<div className="mx-auto max-w-4xl">
+						<SlotCard slot={slot} tweets={tweets} />
+					</div>
 				</div>
 			</div>
 		);
 	}
 
-	const isEmptyState = !(slot || isPending || isError);
-
 	return (
-		<div
-			className={
-				isEmptyState || isPending
-					? "h-screen bg-base-100 p-4"
-					: "min-h-screen bg-base-100 p-4"
-			}
-		>
-			<div className="mx-auto h-full max-w-4xl">
-				{/* No Channels State */}
-				{isError && renderNoChannelsState()}
+		<div className="flex min-h-screen flex-col bg-base-100 p-4">
+			<div className="flex flex-1 items-center justify-center">
+				<div className="mx-auto h-full max-w-4xl">
+					{/* No Channels State */}
+					{isError && renderNoChannelsState()}
 
-				{/* Empty State */}
-				{!(isPending || isError || slot) &&
-					renderEmptyState(createSlotMutation.error?.message)}
+					{/* Empty State */}
+					{!(isPending || isError || slot) &&
+						renderEmptyState(createSlotMutation.error?.message)}
 
-				{/* Loading */}
-				{isPending && (
-					<div className="flex h-full items-center justify-center">
-						<div className="text-center">
-							<span className="loading loading-spinner mx-auto text-primary" />
-							<p className="mt-2 text-base-content/50">
-								Loading publications...
-							</p>
+					{/* Loading */}
+					{isPending && (
+						<div className="flex h-full items-center justify-center">
+							<div className="text-center">
+								<span className="loading loading-spinner mx-auto text-primary" />
+								<p className="mt-2 text-base-content/50">
+									Loading publications...
+								</p>
+							</div>
 						</div>
-					</div>
-				)}
+					)}
+				</div>
 			</div>
 		</div>
 	);

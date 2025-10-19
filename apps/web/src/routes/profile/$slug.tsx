@@ -45,72 +45,43 @@ function SharedProfileViewer() {
 	);
 
 	if (error) {
-		const isNotFound =
-			error instanceof Error &&
-			error.message.toLowerCase().includes("not found");
-
-		if (isNotFound) {
-			return (
-				<div className="h-screen bg-base-100 p-4">
-					<NotFound
-						description="This shared profile link is no longer available. It may have been revoked"
-						primaryAction={{
-							label: "Back to home",
-							onClick: () => {
-								window.location.href = "/app";
-							},
-						}}
-						title="Link is disabled (｡•́︿•̀｡)"
-					/>
-				</div>
-			);
-		}
-
 		return (
 			<div className="h-screen bg-base-100 p-4">
 				<NotFound
-					description={
-						error instanceof Error ? error.message : "An error occurred"
-					}
+					description="Profile is private or no longer exists."
 					primaryAction={{
-						label: "Go to App",
+						label: "Back to home",
 						onClick: () => {
 							window.location.href = "/app";
 						},
 					}}
-					secondaryAction={{
-						label: "Retry",
-						onClick: () => window.location.reload(),
-					}}
-					title="Failed to load shared profile"
+					title="Cannot access the profile (｡•́︿•̀｡)"
 				/>
 			</div>
 		);
 	}
 
 	return (
-		<div
-			className={
-				!isLoading && tweets.length === 0
-					? "h-screen bg-base-100 p-4"
-					: "min-h-screen bg-base-100 p-4"
-			}
-		>
+		<div className="flex min-h-screen flex-col bg-base-100 p-4">
 			{!isLoading && tweets.length === 0 && (
-				<NotFound
-					description="This user hasn't shared any posts yet. Try again later."
-					title="No posts found"
-				/>
+				<div className="flex flex-1 items-center justify-center">
+					<NotFound
+						description="This user hasn't shared any posts yet. Try again later."
+						title="No posts found"
+					/>
+				</div>
 			)}
 
 			{tweets.length > 0 && (
-				<div className="mx-auto max-w-7xl">
-					<Masonry
-						columnGutter={16}
-						items={tweets}
-						onRender={infiniteLoader}
-						render={renderMasonryItem}
-					/>
+				<div className="flex-1">
+					<div className="mx-auto max-w-7xl">
+						<Masonry
+							columnGutter={16}
+							items={tweets}
+							onRender={infiniteLoader}
+							render={renderMasonryItem}
+						/>
+					</div>
 				</div>
 			)}
 		</div>
