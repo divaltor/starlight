@@ -114,6 +114,11 @@ function TwitterArtViewer() {
 
 export const Route = createFileRoute("/app")({
 	loader: async ({ context: { queryClient } }) => {
+		// Skip prefetch on server to avoid context errors for user-specific data in TMA
+		if (import.meta.env.SSR) {
+			return;
+		}
+
 		await queryClient.fetchInfiniteQuery(
 			orpc.tweets.list.infiniteOptions({
 				input: (pageParam: string | undefined) => ({
