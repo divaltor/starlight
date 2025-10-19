@@ -5,6 +5,8 @@ WORKDIR /code
 ENV NODE_ENV=production
 ENV YOUTUBE_DL_SKIP_DOWNLOAD=true
 ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=true
+ENV HOME=/root
+ENV PATH="$HOME/.local/bin:$PATH"
 
 # For Prisma
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
