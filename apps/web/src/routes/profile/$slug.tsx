@@ -88,7 +88,7 @@ function SharedProfileViewer() {
 	return (
 		<div className="min-h-screen bg-gray-50 p-4">
 			{!isLoading && tweets.length === 0 && (
-				<div className="flex flex-col items-center justify-center py-16">
+				<div className="prose flex flex-col items-center justify-center py-16">
 					<Filter className="mb-4 h-16 w-16 text-gray-400" />
 					<h3 className="mb-2 font-medium text-gray-900 text-xl">
 						No posts found

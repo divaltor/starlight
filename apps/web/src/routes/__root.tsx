@@ -68,7 +68,7 @@ function RootDocument() {
 			<head>
 				<HeadContent />
 			</head>
-			<body>
+			<body className="min-h-screen bg-base-100">
 				<TelegramButtonsProvider>
 					<StrictMode>
 						<Outlet />

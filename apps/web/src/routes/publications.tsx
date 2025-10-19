@@ -174,7 +174,7 @@ function PublicationsPage() {
 				{/* Loading */}
 				{isPending && (
 					<div className="flex min-h-[50vh] items-center justify-center">
-						<div className="text-center">
+						<div className="prose text-center">
 							<div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
 							<p className="mt-2 text-gray-500">Loading publications...</p>
 						</div>

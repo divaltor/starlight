@@ -22,6 +22,7 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TextField } from "@/components/ui/text-field";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
 
@@ -110,7 +111,7 @@ function RouteComponent() {
 				<div className="mb-8 flex items-center justify-between">
 					<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
 				</div>
-				<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
+				<Card>
 					<CardHeader className="pb-1">
 						<Skeleton className="h-6 w-32" />
 						<Skeleton className="h-4 w-64" />
@@ -142,7 +143,7 @@ function RouteComponent() {
 				<div className="mb-8 flex items-center justify-between">
 					<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
 				</div>
-				<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
+				<Card>
 					<CardContent className="py-8">
 						<Alert variant="destructive">
 							<AlertCircle className="h-4 w-4" />
@@ -174,18 +175,16 @@ function RouteComponent() {
 				<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
 			</div>
 
-			<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
-				<CardHeader className="pb-1">
-					<CardTitle className="font-medium text-gray-900 text-lg">
-						Account Settings
-					</CardTitle>
+			<Card className="card-border">
+				<CardHeader className="pt-4 pb-1">
+					<CardTitle className="card-title">Account Settings</CardTitle>
 					<CardDescription className="text-gray-500">
 						Manage your account authentication, posting channel and sharing
 						options
 					</CardDescription>
 				</CardHeader>
 
-				<CardContent className="space-y-10">
+				<CardContent className="space-y-10 pt-4 pb-0">
 					{/* User Information Section */}
 					<section className="space-y-3">
 						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
@@ -199,22 +198,20 @@ function RouteComponent() {
 							Authentication Cookies
 						</h2>
 						{cookiesStored && !shouldShowCookieInput ? (
-							<Alert>
-								<AlertTitle className="flex w-full items-center justify-between">
-									<span className="flex items-center gap-2">
-										<Cookie className="h-4 w-4" />
-										Authentication cookies are saved.
-									</span>
+							<Alert className="alert-vertical sm:alert-horizontal">
+								<Cookie className="h-4 w-4 shrink-0" />
+								<span>Authentication cookies are saved.</span>
+								<div>
 									<Button
-										className="text-red-600 hover:bg-red-50 hover:text-red-700"
 										disabled={isSubmitting}
+										isSoft={true}
 										onClick={() => deleteCookiesMutation.mutate({})}
 										size="sm"
-										variant="ghost"
+										variant="destructive"
 									>
 										<Trash2 className="h-4 w-4" /> Remove
 									</Button>
-								</AlertTitle>
+								</div>
 							</Alert>
 						) : (
 							<div className="space-y-4">
@@ -236,21 +233,19 @@ function RouteComponent() {
 									}}
 								>
 									<div className="space-y-2">
-										<textarea
-											className="min-h-[100px] w-full rounded-lg border border-gray-200 bg-white p-3 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-											disabled={isSubmitting}
+										<TextField
 											id="new-cookies"
-											onChange={(e) => setNewCookies(e.target.value)}
-											placeholder="Required format: auth_token=xxx; ct0=xxx; ..."
+											isDisabled={isSubmitting}
+											multiline
+											onChange={(value) => setNewCookies(value)}
+											placeholder="Paste your authentication cookies here"
 											value={newCookies}
 										/>
 									</div>
 
 									<div className="flex gap-2">
 										<Button disabled={isSubmitting} size="sm" type="submit">
-											{saveCookiesMutation.isPending
-												? "Connecting..."
-												: "Connect Account"}
+											Save cookies
 										</Button>
 										{cookiesStored && (
 											<Button
