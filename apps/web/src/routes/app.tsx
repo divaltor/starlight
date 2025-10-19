@@ -1,4 +1,4 @@
-import type { TweetData } from "@starlight/api/types/tweets";
+import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
 import { createFileRoute } from "@tanstack/react-router";
 import { Filter, Loader2 } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
@@ -6,6 +6,7 @@ import { useCallback, useEffect } from "react";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
 import { useTweets } from "@/hooks/use-tweets";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
+import { orpc } from "@/utils/orpc";
 
 function TwitterArtViewer() {
 	const { updateButtons } = useTelegramContext();
@@ -112,5 +113,21 @@ function TwitterArtViewer() {
 }
 
 export const Route = createFileRoute("/app")({
+	loader: async ({ context: { queryClient } }) => {
+		await queryClient.fetchInfiniteQuery(
+			orpc.tweets.list.infiniteOptions({
+				input: (pageParam: string | undefined) => ({
+					cursor: pageParam,
+					limit: 30,
+				}),
+				queryKey: ["tweets", { username: undefined }],
+				initialPageParam: undefined,
+				getNextPageParam: (lastPage: TweetsPageResult) =>
+					lastPage.nextCursor ?? undefined,
+				retry: false,
+				gcTime: 10 * 60 * 1000,
+			})
+		);
+	},
 	component: TwitterArtViewer,
 });
