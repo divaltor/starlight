@@ -217,17 +217,17 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 								</Badge>
 							)}
 							<div className="flex items-center gap-1">
-								<MessageSquare className="h-3 w-3 text-gray-500" />
-								<span className="text-gray-500 text-xs">
+								<MessageSquare className="h-3 w-3 text-base-content/60" />
+								<span className="text-base-content/60 text-xs">
 									{tweets.length} tweet
 									{tweets.length !== 1 ? "s" : ""}
 								</span>
 							</div>
-							<span className="text-gray-500 text-xs">
+							<span className="text-base-content/60 text-xs">
 								{totalPhotos} photo{totalPhotos !== 1 ? "s" : ""}
 							</span>
 							{uniqueAuthors.length > 0 && (
-								<span className="text-gray-400 text-xs">
+								<span className="text-base-content/40 text-xs">
 									{uniqueAuthors
 										.slice(0, 2)
 										.map((author) => author)
@@ -265,7 +265,7 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 					<div className="hidden items-center gap-1 md:flex">
 						{showActions && (
 							<Button
-								className="gap-1 text-red-600 text-xs hover:bg-red-50 hover:text-red-700"
+								className="gap-1 text-error text-xs hover:bg-error/10 hover:text-error"
 								onClick={handleDeleteSlot}
 								size="sm"
 								variant="outline"
