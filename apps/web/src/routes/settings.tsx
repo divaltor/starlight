@@ -5,21 +5,7 @@ import { AlertCircle, Cookie, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import {
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-	DialogTrigger,
-} from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TextField } from "@/components/ui/text-field";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
@@ -173,20 +159,8 @@ function RouteComponent() {
 
 	return (
 		<main className="container mx-auto max-w-2xl px-4 py-10">
-			<div className="mb-8 flex items-center justify-between">
-				<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
-			</div>
-
 			<Card className="card-border">
-				<CardHeader className="pt-4 pb-1">
-					<CardTitle className="card-title">Account Settings</CardTitle>
-					<CardDescription className="text-gray-500">
-						Manage your account authentication, posting channel and sharing
-						options
-					</CardDescription>
-				</CardHeader>
-
-				<CardContent className="space-y-10 pt-4 pb-4">
+				<CardContent className="mt-4 space-y-6 pt-2 pb-2">
 					{/* Cookie Management Section */}
 					<section className="space-y-4">
 						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
@@ -281,7 +255,7 @@ function RouteComponent() {
 						)}
 					</section>
 
-					<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+					<h2 className="-mt-2 font-semibold text-gray-800 text-sm uppercase tracking-wide">
 						Advanced settings
 					</h2>
 					{/* Posting Channel Section */}
@@ -314,41 +288,22 @@ function RouteComponent() {
 										</p>
 									</div>
 								</div>
-								<DialogTrigger>
-									<Button
-										disabled={disconnectChannelMutation.isPending}
-										size="sm"
-										variant="destructive"
-									>
-										Disconnect
-									</Button>
-									<DialogContent>
-										<DialogHeader>
-											<DialogTitle>Disconnect Channel</DialogTitle>
-											<DialogDescription>
-												Are you sure? You won't be able to send publications
-												into this channel.
-											</DialogDescription>
-										</DialogHeader>
-										<DialogFooter className="pt-4">
-											<Button
-												disabled={disconnectChannelMutation.isPending}
-												onClick={() => disconnectChannelMutation.mutate({})}
-												variant="destructive"
-											>
-												{disconnectChannelMutation.isPending
-													? "Disconnecting..."
-													: "Sure"}
-											</Button>
-										</DialogFooter>
-									</DialogContent>
-								</DialogTrigger>
+								<Button
+									disabled={disconnectChannelMutation.isPending}
+									onClick={() => {
+										disconnectChannelMutation.mutate({});
+									}}
+									size="sm"
+									variant="destructive"
+								>
+									Disconnect
+								</Button>
 							</div>
 						)}
 					</section>
 
 					{/* Profile Visibility Section */}
-					<section>
+					<section className="mb-2">
 						<label className="label cursor-pointer">
 							<input
 								checked={profile?.user?.isPublic ?? false}
