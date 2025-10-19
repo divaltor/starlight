@@ -14,38 +14,30 @@ from PIL import Image
 from app.otel import pipeline_span
 
 if TYPE_CHECKING:
-    import torch
     from PIL.Image import Image as PILImage
 
 logger = structlog.get_logger()
+
+ua = UserAgent()
 
 
 async def preprocess_image(image: str) -> PILImage:
     with pipeline_span('preprocess_image'):
         match image.startswith(('http://', 'https://')):
             case True:
-                ua = UserAgent()
                 headers = {'User-Agent': ua.random, 'Accept-Encoding': 'gzip, br'}
                 try:
-                    timeout = aiohttp.ClientTimeout(total=10)
+                    async with aiohttp.ClientSession(
+                        timeout=aiohttp.ClientTimeout(total=25),
+                    ) as session:
+                        resp = await session.get(image, headers=headers)
 
-                    async with (
-                        aiohttp.ClientSession(timeout=timeout, headers=headers) as session,
-                        session.get(image) as resp,
-                    ):
                         if not resp.ok:
                             raise HTTPException(
                                 status_code=400,
                                 detail=f'Failed to download image: HTTP {resp.status}',
                             )
 
-                        content_type = resp.headers.get('Content-Type', '')
-
-                        if not content_type.startswith('image/'):
-                            raise HTTPException(
-                                status_code=400,
-                                detail='URL does not point to an image',
-                            )
                         raw = await resp.read()
                 except HTTPException:
                     raise
@@ -73,8 +65,3 @@ async def preprocess_image(image: str) -> PILImage:
             raise HTTPException(status_code=400, detail=f'Invalid image data: {e}') from e
 
         return img
-
-
-def l2norm(x: torch.Tensor) -> torch.Tensor:
-    # TODO: Replace with torch.linalg.norm
-    return x / (x.norm(dim=-1, keepdim=True) + 1e-12)
