@@ -1,92 +1,80 @@
+import type { ProfileResult } from "@starlight/api/routers/index";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
-import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-	DialogTrigger,
-} from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TextField } from "@/components/ui/text-field";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/settings")({
 	component: RouteComponent,
+	loader: async ({ context: { queryClient } }) => {
+		if (import.meta.env.SSR) {
+			return;
+		}
+
+		const profileOptions = orpc.profiles.get.queryOptions({
+			queryKey: ["profile"],
+			enabled: true,
+			staleTime: 5 * 60 * 1000,
+			gcTime: 30 * 60 * 1000,
+			retry: 1,
+		});
+
+		await queryClient.fetchQuery(profileOptions);
+	},
 });
 
 function RouteComponent() {
 	const [newCookies, setNewCookies] = useState("");
-	const [showCookieInput, setShowCookieInput] = useState(false);
-	const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
+	const [displayError, setDisplayError] = useState<string | null>(null);
 
 	const { rawInitData } = useTelegramContext();
 	const queryClient = useQueryClient();
 
 	const {
-		data: cookieStatus,
+		data: profile,
 		isLoading,
 		error: cookieError,
-		refetch: refetchCookieStatus,
+		refetch: refetchProfile,
 	} = useQuery(
-		orpc.cookies.verify.queryOptions({
-			queryKey: ["cookie-status"],
+		orpc.profiles.get.queryOptions({
+			queryKey: ["profile"],
 			enabled: !!rawInitData,
 			staleTime: 5 * 60 * 1000,
 			gcTime: 30 * 60 * 1000,
 			retry: 1,
 		})
 	);
-
-	// Query for posting channel
-	const { data: postingChannel, isLoading: isPostingChannelLoading } = useQuery(
-		orpc.channels.get.queryOptions({
-			queryKey: ["posting-channel"],
-			enabled: !!rawInitData,
-			staleTime: 5 * 60 * 1000,
-			gcTime: 30 * 60 * 1000,
-			retry: 1,
-		})
-	);
-
-	// Derive state from query data
-	const cookiesStored = cookieStatus?.hasValidCookies ?? false;
-
-	const shouldShowCookieInput = !cookiesStored || showCookieInput;
 
 	const saveCookiesMutation = useMutation(
 		orpc.cookies.save.mutationOptions({
 			onSuccess: () => {
-				queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
-				setShowCookieInput(false);
+				queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+					...old,
+					hasValidCookies: true,
+				}));
 				setNewCookies("");
+				setDisplayError(null);
 			},
-			onError: () => toast.error("Failed to save cookies"),
+			onError: (error: Error) => {
+				setDisplayError(error.message || "Failed to save cookies");
+			},
 		})
 	);
 
 	const deleteCookiesMutation = useMutation(
 		orpc.cookies.delete.mutationOptions({
 			onSuccess: () => {
-				queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
-				setShowCookieInput(true);
-			},
-			onError: () => {
-				toast.error("Failed to delete cookies");
+				queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+					...old,
+					hasValidCookies: false,
+				}));
 			},
 		})
 	);
@@ -94,23 +82,38 @@ function RouteComponent() {
 	const disconnectChannelMutation = useMutation(
 		orpc.channels.disconnect.mutationOptions({
 			onSuccess: () => {
-				queryClient.invalidateQueries({ queryKey: ["posting-channel"] });
-				toast.success("Channel successfully disconnected");
-				setShowDisconnectDialog(false);
-			},
-			onError: () => {
-				toast.error("Failed to disconnect channel");
+				queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+					...old,
+					postingChannel: undefined,
+				}));
 			},
 		})
 	);
 
-	if (isLoading && !cookieStatus) {
+	const visibilityMutation = useMutation(
+		orpc.profiles.visibility.mutationOptions({
+			onSuccess: (
+				_data: { success: boolean },
+				variables: { status: "public" | "private" }
+			) => {
+				queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+					...old,
+					user: {
+						...old.user,
+						isPublic: variables.status === "public",
+					},
+				}));
+			},
+		})
+	);
+
+	if (isLoading && !profile) {
 		return (
 			<main className="container mx-auto max-w-2xl px-4 py-10">
 				<div className="mb-8 flex items-center justify-between">
 					<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
 				</div>
-				<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
+				<Card>
 					<CardHeader className="pb-1">
 						<Skeleton className="h-6 w-32" />
 						<Skeleton className="h-4 w-64" />
@@ -136,20 +139,17 @@ function RouteComponent() {
 		);
 	}
 
-	if (cookieError && !cookieStatus) {
+	if (cookieError && !profile) {
 		return (
 			<main className="container mx-auto max-w-2xl px-4 py-10">
-				<div className="mb-8 flex items-center justify-between">
-					<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
-				</div>
-				<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
+				<Card>
 					<CardContent className="py-8">
 						<Alert variant="destructive">
 							<AlertCircle className="h-4 w-4" />
 							<AlertTitle>Failed to load settings</AlertTitle>
 							<div className="mt-2">
 								<Button
-									onClick={() => refetchCookieStatus()}
+									onClick={() => refetchProfile()}
 									size="sm"
 									variant="outline"
 								>
@@ -166,65 +166,51 @@ function RouteComponent() {
 	const isSubmitting =
 		saveCookiesMutation.isPending ||
 		deleteCookiesMutation.isPending ||
-		disconnectChannelMutation.isPending;
+		disconnectChannelMutation.isPending ||
+		visibilityMutation.isPending;
 
 	return (
 		<main className="container mx-auto max-w-2xl px-4 py-10">
-			<div className="mb-8 flex items-center justify-between">
-				<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
-			</div>
-
-			<Card className="border-0 bg-white/50 shadow-md backdrop-blur-sm">
-				<CardHeader className="pb-1">
-					<CardTitle className="font-medium text-gray-900 text-lg">
-						Account Settings
-					</CardTitle>
-					<CardDescription className="text-gray-500">
-						Manage your account authentication, posting channel and sharing
-						options
-					</CardDescription>
-				</CardHeader>
-
-				<CardContent className="space-y-10">
-					{/* User Information Section */}
-					<section className="space-y-3">
-						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
-							Account
-						</h2>
-					</section>
-
+			<Card className="card-border">
+				<CardContent className="mt-4 space-y-6 pt-2 pb-2">
 					{/* Cookie Management Section */}
 					<section className="space-y-4">
 						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
 							Authentication Cookies
 						</h2>
-						{cookiesStored && !shouldShowCookieInput ? (
-							<Alert>
-								<AlertTitle className="flex w-full items-center justify-between">
-									<span className="flex items-center gap-2">
-										<Cookie className="h-4 w-4" />
-										Authentication cookies are saved.
-									</span>
+
+						{/* Cookie Success/Error Messages */}
+						{cookieError && (
+							<Alert variant="destructive">
+								<AlertCircle className="h-4 w-4" />
+								<span>{cookieError.message}</span>
+							</Alert>
+						)}
+						{profile?.hasValidCookies ? (
+							<Alert className="alert-vertical sm:alert-horizontal">
+								<Cookie className="h-4 w-4 shrink-0" />
+								<span>Authentication cookies are saved.</span>
+								<div>
 									<Button
-										className="text-red-600 hover:bg-red-50 hover:text-red-700"
 										disabled={isSubmitting}
+										isSoft={true}
 										onClick={() => deleteCookiesMutation.mutate({})}
 										size="sm"
-										variant="ghost"
+										variant="destructive"
 									>
 										<Trash2 className="h-4 w-4" /> Remove
 									</Button>
-								</AlertTitle>
+								</div>
 							</Alert>
 						) : (
 							<div className="space-y-4">
-								{!cookiesStored && (
-									<Alert variant="amber">
-										<AlertCircle />
-										<AlertTitle>
+								{!profile?.hasValidCookies && (
+									<Alert variant="default">
+										<AlertCircle className="h-4 w-4" />
+										<AlertDescription>
 											Connect your Twitter account by adding authentication
 											cookies
-										</AlertTitle>
+										</AlertDescription>
 									</Alert>
 								)}
 
@@ -236,26 +222,38 @@ function RouteComponent() {
 									}}
 								>
 									<div className="space-y-2">
-										<textarea
-											className="min-h-[100px] w-full rounded-lg border border-gray-200 bg-white p-3 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-											disabled={isSubmitting}
+										<TextField
+											className={displayError ? "textarea-error" : ""}
 											id="new-cookies"
-											onChange={(e) => setNewCookies(e.target.value)}
-											placeholder="Required format: auth_token=xxx; ct0=xxx; ..."
+											multiline
+											onChange={(value) => {
+												setNewCookies(value);
+												setDisplayError(null);
+											}}
+											placeholder="Paste your authentication cookies here"
 											value={newCookies}
 										/>
+										{displayError && (
+											<p className="text-error text-sm">{displayError}</p>
+										)}
 									</div>
 
 									<div className="flex gap-2">
 										<Button disabled={isSubmitting} size="sm" type="submit">
-											{saveCookiesMutation.isPending
-												? "Connecting..."
-												: "Connect Account"}
+											Save cookies
 										</Button>
-										{cookiesStored && (
+										{profile?.hasValidCookies && (
 											<Button
 												disabled={isSubmitting}
-												onClick={() => setShowCookieInput(false)}
+												onClick={() =>
+													queryClient.setQueryData(
+														["profile"],
+														(old: ProfileResult) => ({
+															...old,
+															hasValidCookies: false,
+														})
+													)
+												}
 												size="sm"
 												type="button"
 												variant="outline"
@@ -269,94 +267,98 @@ function RouteComponent() {
 						)}
 					</section>
 
+					<h2 className="-mt-2 font-semibold text-gray-800 text-sm uppercase tracking-wide">
+						Advanced settings
+					</h2>
 					{/* Posting Channel Section */}
 					<section className="space-y-4">
-						{isPostingChannelLoading && (
-							<div className="flex items-center justify-between">
+						{profile?.postingChannel && (
+							<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 								<div className="flex items-center gap-3">
-									<Skeleton className="h-12 w-12 rounded-full" />
-									<div className="space-y-2">
-										<Skeleton className="h-4 w-24" />
-										<Skeleton className="h-3 w-32" />
-									</div>
-								</div>
-								<Skeleton className="h-9 w-24" />
-							</div>
-						)}
-
-						{!isPostingChannelLoading && postingChannel && (
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-3">
-									<div className="h-12 w-12 overflow-hidden rounded-full bg-gray-100">
-										{postingChannel.chat.thumbnailUrl ? (
+									<div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-gray-100">
+										{profile?.postingChannel.photoThumbnail ? (
 											// biome-ignore lint/nursery/useImageSize: Don't care
 											<img
-												alt={postingChannel.chat.title || "Channel"}
+												alt={profile?.postingChannel.title || "Channel"}
 												className="h-full w-full object-cover"
-												src={postingChannel.chat.thumbnailUrl}
+												src={profile?.postingChannel.photoThumbnail}
 											/>
 										) : (
 											<div className="flex h-full w-full items-center justify-center bg-gray-200 font-medium text-gray-500 text-sm">
-												{postingChannel.chat.title?.charAt(0) || "C"}
+												{profile?.postingChannel.title?.charAt(0) || "C"}
 											</div>
 										)}
 									</div>
-									<div>
+									<div className="min-w-0 flex-1">
 										<p className="font-medium text-gray-900 text-sm">
-											{postingChannel.chat.title || "Unknown Channel"}
+											{profile?.postingChannel.title || "Unknown Channel"}
 										</p>
-										<p className="text-gray-500 text-xs">
-											{postingChannel.chat.username
-												? `@${postingChannel.chat.username}`
-												: `ID: ${postingChannel.chat.id}`}
+										<p className="prose prose-sm text-gray-500">
+											{profile?.postingChannel.username
+												? `@${profile?.postingChannel.username}`
+												: `ID: ${profile?.postingChannel.id}`}
 										</p>
 									</div>
 								</div>
-								<Dialog
-									onOpenChange={setShowDisconnectDialog}
-									open={showDisconnectDialog}
+								<Button
+									className="w-full sm:w-auto"
+									disabled={disconnectChannelMutation.isPending}
+									onClick={() => {
+										disconnectChannelMutation.mutate({});
+									}}
+									size="sm"
+									variant="destructive"
 								>
-									<DialogTrigger asChild>
-										<Button
-											disabled={disconnectChannelMutation.isPending}
-											size="sm"
-											variant="destructive"
-										>
-											Disconnect
-										</Button>
-									</DialogTrigger>
-									<DialogContent>
-										<DialogHeader>
-											<DialogTitle>Disconnect Channel</DialogTitle>
-											<DialogDescription>
-												Are you sure? You won't be able to send publications
-												into this channel.
-											</DialogDescription>
-										</DialogHeader>
-										<DialogFooter>
-											<Button
-												disabled={disconnectChannelMutation.isPending}
-												onClick={() => setShowDisconnectDialog(false)}
-												variant="outline"
-											>
-												No
-											</Button>
-											<Button
-												disabled={disconnectChannelMutation.isPending}
-												onClick={() => disconnectChannelMutation.mutate({})}
-												variant="destructive"
-											>
-												{disconnectChannelMutation.isPending
-													? "Disconnecting..."
-													: "Sure"}
-											</Button>
-										</DialogFooter>
-									</DialogContent>
-								</Dialog>
+									Disconnect
+								</Button>
 							</div>
 						)}
+						{!profile?.postingChannel && (
+							<Alert variant="default">
+								<AlertCircle className="h-4 w-4" />
+								<AlertDescription>
+									Send /connect command to a bot to connect a channel.
+								</AlertDescription>
+							</Alert>
+						)}
+					</section>
+
+					{/* Profile Visibility Section */}
+					<section className="mb-2">
+						<label className="label cursor-pointer gap-2 text-wrap">
+							<input
+								checked={profile?.user?.isPublic ?? false}
+								className="toggle toggle-sm toggle-primary"
+								onChange={(e) =>
+									visibilityMutation.mutate({
+										status: e.target.checked ? "public" : "private",
+									})
+								}
+								type="checkbox"
+							/>
+							<span className="label-text w-full text-left">
+								Make your profile visible to other people
+							</span>
+						</label>
 					</section>
 				</CardContent>
+				{/* Profile Block - Shown when public */}
+				{profile?.user?.isPublic && (
+					<div className="w-full bg-base-200 p-4">
+						<div className="flex items-center">
+							<p className="text-gray-600 text-sm">
+								Link to your profile:{" "}
+								<Link
+									className="text-neutral text-sm underline"
+									params={{ slug: profile.user.username }}
+									to="/profile/$slug"
+								>
+									{`${window.location.origin}/profile/${profile.user.username}`}
+								</Link>
+							</p>
+						</div>
+					</div>
+				)}
 			</Card>
 		</main>
 	);

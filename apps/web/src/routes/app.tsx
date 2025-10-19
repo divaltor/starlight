@@ -1,16 +1,17 @@
 import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Filter } from "lucide-react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { AlertTriangle } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback, useEffect } from "react";
+import NotFound from "@/components/not-found";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
-import { Button } from "@/components/ui/button";
 import { useTweets } from "@/hooks/use-tweets";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
 
 function TwitterArtViewer() {
 	const { updateButtons } = useTelegramContext();
+	const router = useRouter();
 
 	useEffect(() => {
 		// TODO: Add condition when we don't have any posts available to parse or even didn't setup a bot yet.
@@ -70,41 +71,46 @@ function TwitterArtViewer() {
 	if (error) {
 		return (
 			<div className="flex min-h-screen items-center justify-center">
-				<div className="text-center">
-					<h2 className="font-semibold text-gray-900 text-xl">
-						Failed to load tweets
-					</h2>
-					<p className="mt-2 text-gray-600">
-						{error instanceof Error ? error.message : "An error occurred"}
-					</p>
-				</div>
+				<NotFound
+					description="An error occurred while loading tweets. Please try again later."
+					icon={<AlertTriangle className="size-10 text-base-content/20" />}
+					title="Failed to load tweets (｡•́︿•̀｡)"
+				/>
 			</div>
 		);
 	}
 
 	return (
-		<div className="min-h-screen bg-gray-50 p-4">
+		<div className="flex min-h-screen flex-col p-4">
 			{!isLoading && tweets.length === 0 && (
-				<div className="flex flex-col items-center justify-center py-16">
-					<Filter className="mb-4 h-16 w-16 text-gray-400" />
-					<h3 className="mb-2 font-medium text-gray-900 text-xl">
-						No photos found, did you setup cookies?
-					</h3>
-					<Button asChild className="mt-4">
-						<Link to="/settings">Go to Settings</Link>
-					</Button>
+				<div className="flex flex-1 items-center justify-center">
+					<NotFound
+						description="Did you setup cookies? Try again later."
+						primaryAction={{
+							label: "Go to Settings",
+							onClick: () => {
+								router.navigate({ to: "/settings" });
+							},
+							onMouseEnter: () => {
+								router.preloadRoute({ to: "/settings" });
+							},
+						}}
+						title="No photos found"
+					/>
 				</div>
 			)}
 
 			{/* Masonry Grid */}
 			{tweets.length > 0 && (
-				<div className="mx-auto max-w-7xl">
-					<Masonry
-						columnGutter={16}
-						items={tweets}
-						onRender={infiniteLoader}
-						render={renderMasonryItem}
-					/>
+				<div className="flex-1">
+					<div className="mx-auto max-w-7xl">
+						<Masonry
+							columnGutter={16}
+							items={tweets}
+							onRender={infiniteLoader}
+							render={renderMasonryItem}
+						/>
+					</div>
 				</div>
 			)}
 		</div>

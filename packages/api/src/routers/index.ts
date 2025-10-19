@@ -1,7 +1,11 @@
-import type { RouterClient } from "@orpc/server";
+import type {
+	InferRouterInputs,
+	InferRouterOutputs,
+	RouterClient,
+} from "@orpc/server";
 import { respondToWebAppData } from "./bot";
-import { deletePostingChannel, getPostingChannel } from "./channels";
-import { deleteCookies, saveCookies, verifyCookies } from "./cookies";
+import { deletePostingChannel } from "./channels";
+import { deleteCookies, saveCookies } from "./cookies";
 import { changeProfileVisibility, getUserProfile } from "./profiles";
 import {
 	addTweetToSlot,
@@ -23,11 +27,9 @@ export const appRouter = {
 	},
 	cookies: {
 		save: saveCookies,
-		verify: verifyCookies,
 		delete: deleteCookies,
 	},
 	channels: {
-		get: getPostingChannel,
 		disconnect: deletePostingChannel,
 	},
 	tweets: {
@@ -50,3 +52,9 @@ export const appRouter = {
 };
 export type AppRouter = typeof appRouter;
 export type AppRouterClient = RouterClient<typeof appRouter>;
+
+export type Inputs = InferRouterInputs<typeof appRouter>;
+export type Outputs = InferRouterOutputs<typeof appRouter>;
+
+export type ProfileResult = Outputs["profiles"]["get"];
+export type PostingChannelResult = ProfileResult["postingChannel"];

@@ -86,8 +86,8 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		const twid = cookies.userId();
 
 		if (!twid) {
-			logger.error({ userId }, "User cookies not found");
-			throw new Error("User cookies not found");
+			logger.error({ userId }, "User ID not found");
+			throw new Error("User ID not found");
 		}
 
 		const scrapper = new Scraper();
