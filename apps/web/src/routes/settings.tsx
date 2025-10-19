@@ -1,3 +1,4 @@
+import type { ProfileResult } from "@starlight/api/routers/index";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
@@ -31,7 +32,6 @@ export const Route = createFileRoute("/settings")({
 
 function RouteComponent() {
 	const [newCookies, setNewCookies] = useState("");
-	const [showCookieInput, setShowCookieInput] = useState(false);
 	const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
 	const [displayError, setDisplayError] = useState<string | null>(null);
 
@@ -39,41 +39,27 @@ function RouteComponent() {
 	const queryClient = useQueryClient();
 
 	const {
-		data: cookieStatus,
+		data: profile,
 		isLoading,
 		error: cookieError,
-		refetch: refetchCookieStatus,
+		refetch: refetchProfile,
 	} = useQuery(
-		orpc.cookies.verify.queryOptions({
-			queryKey: ["cookie-status"],
+		orpc.profiles.get.queryOptions({
+			queryKey: ["profile"],
 			enabled: !!rawInitData,
 			staleTime: 5 * 60 * 1000,
 			gcTime: 30 * 60 * 1000,
 			retry: 1,
 		})
 	);
-
-	// Query for posting channel
-	const { data: postingChannel, isLoading: isPostingChannelLoading } = useQuery(
-		orpc.channels.get.queryOptions({
-			queryKey: ["posting-channel"],
-			enabled: !!rawInitData,
-			staleTime: 5 * 60 * 1000,
-			gcTime: 30 * 60 * 1000,
-			retry: 1,
-		})
-	);
-
-	// Derive state from query data
-	const cookiesStored = cookieStatus?.hasValidCookies ?? false;
-
-	const shouldShowCookieInput = !cookiesStored || showCookieInput;
 
 	const saveCookiesMutation = useMutation(
 		orpc.cookies.save.mutationOptions({
 			onSuccess: () => {
-				queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
-				setShowCookieInput(false);
+				queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+					...old,
+					hasValidCookies: true,
+				}));
 				setNewCookies("");
 				setDisplayError(null);
 			},
@@ -86,8 +72,10 @@ function RouteComponent() {
 	const deleteCookiesMutation = useMutation(
 		orpc.cookies.delete.mutationOptions({
 			onSuccess: () => {
-				queryClient.invalidateQueries({ queryKey: ["cookie-status"] });
-				setShowCookieInput(true);
+				queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+					...old,
+					hasValidCookies: false,
+				}));
 			},
 		})
 	);
@@ -95,13 +83,16 @@ function RouteComponent() {
 	const disconnectChannelMutation = useMutation(
 		orpc.channels.disconnect.mutationOptions({
 			onSuccess: () => {
-				queryClient.invalidateQueries({ queryKey: ["posting-channel"] });
+				queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+					...old,
+					postingChannel: undefined,
+				}));
 				setShowDisconnectDialog(false);
 			},
 		})
 	);
 
-	if (isLoading && !cookieStatus) {
+	if (isLoading && !profile) {
 		return (
 			<main className="container mx-auto max-w-2xl px-4 py-10">
 				<div className="mb-8 flex items-center justify-between">
@@ -133,7 +124,7 @@ function RouteComponent() {
 		);
 	}
 
-	if (cookieError && !cookieStatus) {
+	if (cookieError && !profile) {
 		return (
 			<main className="container mx-auto max-w-2xl px-4 py-10">
 				<div className="mb-8 flex items-center justify-between">
@@ -146,7 +137,7 @@ function RouteComponent() {
 							<AlertTitle>Failed to load settings</AlertTitle>
 							<div className="mt-2">
 								<Button
-									onClick={() => refetchCookieStatus()}
+									onClick={() => refetchProfile()}
 									size="sm"
 									variant="outline"
 								>
@@ -180,7 +171,7 @@ function RouteComponent() {
 					</CardDescription>
 				</CardHeader>
 
-				<CardContent className="space-y-10 pt-4 pb-0">
+				<CardContent className="space-y-10 pt-4 pb-4">
 					{/* Cookie Management Section */}
 					<section className="space-y-4">
 						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
@@ -194,7 +185,7 @@ function RouteComponent() {
 								<span>{cookieError.message}</span>
 							</Alert>
 						)}
-						{cookiesStored && !shouldShowCookieInput ? (
+						{profile?.hasValidCookies ? (
 							<Alert className="alert-vertical sm:alert-horizontal">
 								<Cookie className="h-4 w-4 shrink-0" />
 								<span>Authentication cookies are saved.</span>
@@ -212,7 +203,7 @@ function RouteComponent() {
 							</Alert>
 						) : (
 							<div className="space-y-4">
-								{!cookiesStored && (
+								{!profile?.hasValidCookies && (
 									<Alert variant="amber">
 										<AlertCircle />
 										<AlertTitle>
@@ -250,10 +241,18 @@ function RouteComponent() {
 										<Button disabled={isSubmitting} size="sm" type="submit">
 											Save cookies
 										</Button>
-										{cookiesStored && (
+										{profile?.hasValidCookies && (
 											<Button
 												disabled={isSubmitting}
-												onClick={() => setShowCookieInput(false)}
+												onClick={() =>
+													queryClient.setQueryData(
+														["profile"],
+														(old: ProfileResult) => ({
+															...old,
+															hasValidCookies: false,
+														})
+													)
+												}
 												size="sm"
 												type="button"
 												variant="outline"
@@ -269,44 +268,31 @@ function RouteComponent() {
 
 					{/* Posting Channel Section */}
 					<section className="space-y-4">
-						{isPostingChannelLoading && (
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-3">
-									<Skeleton className="h-12 w-12 rounded-full" />
-									<div className="space-y-2">
-										<Skeleton className="h-4 w-24" />
-										<Skeleton className="h-3 w-32" />
-									</div>
-								</div>
-								<Skeleton className="h-9 w-24" />
-							</div>
-						)}
-
-						{!isPostingChannelLoading && postingChannel && (
+						{profile?.postingChannel && (
 							<div className="flex items-center justify-between">
 								<div className="flex items-center gap-3">
 									<div className="h-12 w-12 overflow-hidden rounded-full bg-gray-100">
-										{postingChannel.chat.thumbnailUrl ? (
+										{profile?.postingChannel.photoThumbnail ? (
 											// biome-ignore lint/nursery/useImageSize: Don't care
 											<img
-												alt={postingChannel.chat.title || "Channel"}
+												alt={profile?.postingChannel.title || "Channel"}
 												className="h-full w-full object-cover"
-												src={postingChannel.chat.thumbnailUrl}
+												src={profile?.postingChannel.photoThumbnail}
 											/>
 										) : (
 											<div className="flex h-full w-full items-center justify-center bg-gray-200 font-medium text-gray-500 text-sm">
-												{postingChannel.chat.title?.charAt(0) || "C"}
+												{profile?.postingChannel.title?.charAt(0) || "C"}
 											</div>
 										)}
 									</div>
 									<div>
 										<p className="font-medium text-gray-900 text-sm">
-											{postingChannel.chat.title || "Unknown Channel"}
+											{profile?.postingChannel.title || "Unknown Channel"}
 										</p>
-										<p className="text-gray-500 text-xs">
-											{postingChannel.chat.username
-												? `@${postingChannel.chat.username}`
-												: `ID: ${postingChannel.chat.id}`}
+										<p className="prose prose-sm text-gray-500">
+											{profile?.postingChannel.username
+												? `@${profile?.postingChannel.username}`
+												: `ID: ${profile?.postingChannel.id}`}
 										</p>
 									</div>
 								</div>

@@ -1,12 +1,8 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { motion } from "motion/react";
 import type * as React from "react";
-import type { Ref } from "react";
 import { Input as AriaInput } from "react-aria-components";
 
 import { cn } from "@/lib/utils";
-
-const MotionInput = motion.create(AriaInput);
 
 const inputVariants = cva("input", {
 	variants: {
@@ -48,10 +44,9 @@ interface InputProps
 		>,
 		VariantProps<typeof inputVariants> {
 	className?: string;
-	ref?: Ref<HTMLInputElement>;
 }
 
-function Input({ className, variant, color, size, ref, ...props }: InputProps) {
+function Input({ className, variant, color, size, ...props }: InputProps) {
 	const classes = cn(
 		inputVariants({
 			variant,
@@ -61,20 +56,7 @@ function Input({ className, variant, color, size, ref, ...props }: InputProps) {
 		})
 	);
 
-	return (
-		<MotionInput
-			{...props}
-			className={classes}
-			ref={ref}
-			transition={{
-				duration: 0.2,
-				ease: "easeInOut",
-			}}
-			whileFocus={{
-				boxShadow: "0 0 0 2px rgba(59, 130, 246, 0.2)",
-			}}
-		/>
-	);
+	return <AriaInput {...props} className={classes} />;
 }
 
 Input.displayName = "Input";

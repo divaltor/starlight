@@ -90,7 +90,7 @@ function TwitterArtViewer() {
 					<h3 className="mb-2 font-medium text-gray-900 text-xl">
 						No photos found, did you setup cookies?
 					</h3>
-					<Button asChild className="mt-4">
+					<Button className="mt-4">
 						<Link to="/settings">Go to Settings</Link>
 					</Button>
 				</div>

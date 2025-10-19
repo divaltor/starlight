@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/client";
 import { CookieEncryption } from "@starlight/crypto";
 import { env } from "@starlight/utils";
 import { z } from "zod";
-import { maybeAuthProcedure, protectedProcedure } from "../middlewares/auth";
+import { type AuthContext, protectedProcedure } from "../middlewares/auth";
 import { redis } from "../utils/redis";
 
 const cookiesSchema = z.object({
@@ -34,7 +34,7 @@ export const saveCookies = protectedProcedure
 		await redis.set(`user:cookies:${context.user.id}`, encryptedCookies);
 	});
 
-export const verifyCookies = maybeAuthProcedure.handler(async ({ context }) => {
+export const verifyCookies = async ({ context }: { context: AuthContext }) => {
 	try {
 		if (!context.user) {
 			return { hasValidCookies: false };
@@ -57,10 +57,9 @@ export const verifyCookies = maybeAuthProcedure.handler(async ({ context }) => {
 	} catch {
 		return {
 			hasValidCookies: false,
-			error: "Failed to verify cookies",
 		};
 	}
-});
+};
 
 export const deleteCookies = protectedProcedure.handler(async ({ context }) => {
 	await redis.del(`user:cookies:${context.user.id}`);
