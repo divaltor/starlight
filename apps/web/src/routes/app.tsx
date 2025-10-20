@@ -153,6 +153,19 @@ export const Route = createFileRoute("/app")({
 
 		await queryClient.fetchQuery(profileOptions);
 
+		const profileData = queryClient.getQueryData<ProfileResult>(
+			profileOptions.queryKey
+		);
+		if (profileData?.postingChannel) {
+			queryClient.prefetchQuery(
+				orpc.scheduling.slots.get.queryOptions({
+					queryKey: ["scheduled-slots"],
+					input: { status: "WAITING" },
+					retry: false,
+				})
+			);
+		}
+
 		await queryClient.fetchInfiniteQuery(
 			orpc.tweets.list.infiniteOptions({
 				input: (pageParam: string | undefined) => ({
