@@ -1,7 +1,7 @@
 import type { ProfileResult } from "@starlight/api/routers/index";
 import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback, useEffect } from "react";
@@ -13,7 +13,6 @@ import { orpc } from "@/utils/orpc";
 
 function TwitterArtViewer() {
 	const { updateButtons, rawInitData } = useTelegramContext();
-	const router = useRouter();
 
 	const { data: profile } = useQuery<ProfileResult>(
 		orpc.profiles.get.queryOptions({
@@ -26,7 +25,7 @@ function TwitterArtViewer() {
 	);
 
 	useEffect(() => {
-		if (!profile?.hasValidCookies) {
+		if (profile && !profile.hasValidCookies) {
 			updateButtons({
 				mainButton: {
 					state: "visible" as const,
@@ -39,7 +38,7 @@ function TwitterArtViewer() {
 					},
 				},
 			});
-		} else if (profile.postingChannel) {
+		} else if (profile?.postingChannel) {
 			updateButtons({
 				mainButton: {
 					state: "visible" as const,
