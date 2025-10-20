@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle, Calendar } from "lucide-react";
 import { useEffect } from "react";
 import { SlotCard } from "@/components/slot-card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
 
@@ -120,19 +121,17 @@ function PublicationsPage() {
 
 	const renderNoChannelsState = () => (
 		<div className="flex h-full items-center justify-center">
-			<div className="alert alert-warning mx-auto max-w-md shadow-lg">
+			<Alert className="mx-auto max-w-md shadow-lg" variant="amber">
 				<AlertTriangle className="h-6 w-6 shrink-0 stroke-current" />
-				<span className="font-medium text-lg">
-					No Posting Channels Available
-				</span>
-				<div>
-					<p className="text-sm">
-						You need to add at least one posting channel before you can create
-						and schedule publications. Please configure your channels using
-						/connect command in chat.
-					</p>
-				</div>
-			</div>
+				<AlertTitle className="font-medium text-lg">
+					Channel is not connected
+				</AlertTitle>
+				<AlertDescription>
+					You need to connect your channel before you can create and schedule
+					publications. Please configure your channel using /connect command in
+					chat.
+				</AlertDescription>
+			</Alert>
 		</div>
 	);
 
