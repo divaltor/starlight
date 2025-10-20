@@ -187,7 +187,7 @@ function RouteComponent() {
 							</Alert>
 						)}
 						{profile?.hasValidCookies ? (
-							<Alert className="alert-vertical sm:alert-horizontal">
+							<Alert className="alert-horizontal">
 								<Cookie className="h-4 w-4 shrink-0" />
 								<span>Authentication cookies are saved.</span>
 								<div>
@@ -307,7 +307,7 @@ function RouteComponent() {
 										disconnectChannelMutation.mutate({});
 									}}
 									size="sm"
-									variant="destructive"
+									variant="outline"
 								>
 									Disconnect
 								</Button>
