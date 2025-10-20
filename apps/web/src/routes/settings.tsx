@@ -303,11 +303,12 @@ function RouteComponent() {
 								<Button
 									className="w-full sm:w-auto"
 									disabled={disconnectChannelMutation.isPending}
+									isSoft={true}
 									onClick={() => {
 										disconnectChannelMutation.mutate({});
 									}}
 									size="sm"
-									variant="outline"
+									variant="destructive"
 								>
 									Disconnect
 								</Button>
