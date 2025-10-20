@@ -62,6 +62,8 @@ function PublicationsPage() {
 					text: "Add slot",
 					hasShineEffect: true,
 					isEnabled: !isPending,
+					color: "#ffd6a7",
+					textColor: "#9f2d00",
 					action: {
 						type: "callback",
 						payload: () => createSlotMutation.mutate({}),
@@ -79,6 +81,8 @@ function PublicationsPage() {
 					state: "visible",
 					isEnabled: !!slot,
 					hasShineEffect: true,
+					color: "#ffd6a7",
+					textColor: "#9f2d00",
 					action: {
 						type: "callback",
 						payload: () => {
@@ -90,6 +94,8 @@ function PublicationsPage() {
 					state: "visible",
 					text: "Add tweet",
 					isEnabled: true,
+					color: "#efeae6",
+					textColor: "#291334",
 					action: {
 						type: "callback",
 						payload: () => {

@@ -19,6 +19,8 @@ function TwitterArtViewer() {
 			mainButton: {
 				state: "visible",
 				text: "Publications",
+				color: "#ffd6a7",
+				textColor: "#9f2d00",
 				action: {
 					type: "navigate",
 					payload: "/publications",

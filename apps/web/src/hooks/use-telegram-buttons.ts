@@ -82,6 +82,10 @@ export function useTelegramButtons(
 						isEnabled: state !== "disabled",
 						isLoaderVisible: isLoading,
 						hasShineEffect,
+						...(config.mainButton.color && { color: config.mainButton.color }),
+						...(config.mainButton.textColor && {
+							textColor: config.mainButton.textColor,
+						}),
 					});
 
 					if (action && mainButton.onClick.isAvailable()) {
@@ -108,6 +112,12 @@ export function useTelegramButtons(
 						isEnabled: state !== "disabled",
 						isLoaderVisible: isLoading,
 						hasShineEffect,
+						...(config.secondaryButton.color && {
+							color: config.secondaryButton.color,
+						}),
+						...(config.secondaryButton.textColor && {
+							textColor: config.secondaryButton.textColor,
+						}),
 					});
 
 					if (action && secondaryButton.onClick.isAvailable()) {
