@@ -104,7 +104,7 @@ function DialogTitle({
 function DialogDescription({ className, ...props }: React.ComponentProps<"p">) {
 	return (
 		<p
-			className={cn("text-muted-foreground text-sm", className)}
+			className={cn("text-base-content/60 text-sm", className)}
 			slot="description"
 			{...props}
 		/>

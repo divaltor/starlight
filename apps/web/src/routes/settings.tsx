@@ -111,7 +111,7 @@ function RouteComponent() {
 		return (
 			<main className="container mx-auto max-w-2xl px-4 py-10">
 				<div className="mb-8 flex items-center justify-between">
-					<h1 className="font-semibold text-2xl text-gray-900">Settings</h1>
+					<h1 className="font-semibold text-2xl text-base-content">Settings</h1>
 				</div>
 				<Card>
 					<CardHeader className="pb-1">
@@ -175,7 +175,7 @@ function RouteComponent() {
 				<CardContent className="mt-4 space-y-6 pt-2 pb-2">
 					{/* Cookie Management Section */}
 					<section className="space-y-4">
-						<h2 className="font-semibold text-gray-800 text-sm uppercase tracking-wide">
+						<h2 className="font-semibold text-base-content text-sm uppercase tracking-wide">
 							Authentication Cookies
 						</h2>
 
@@ -267,7 +267,7 @@ function RouteComponent() {
 						)}
 					</section>
 
-					<h2 className="-mt-2 font-semibold text-gray-800 text-sm uppercase tracking-wide">
+					<h2 className="-mt-2 font-semibold text-base-content text-sm uppercase tracking-wide">
 						Advanced settings
 					</h2>
 					{/* Posting Channel Section */}
@@ -275,7 +275,7 @@ function RouteComponent() {
 						{profile?.postingChannel && (
 							<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 								<div className="flex items-center gap-3">
-									<div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-gray-100">
+									<div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-base-200">
 										{profile?.postingChannel.photoThumbnail ? (
 											// biome-ignore lint/nursery/useImageSize: Don't care
 											<img
@@ -284,16 +284,16 @@ function RouteComponent() {
 												src={profile?.postingChannel.photoThumbnail}
 											/>
 										) : (
-											<div className="flex h-full w-full items-center justify-center bg-gray-200 font-medium text-gray-500 text-sm">
+											<div className="flex h-full w-full items-center justify-center bg-base-200 font-medium text-base-content/70 text-sm">
 												{profile?.postingChannel.title?.charAt(0) || "C"}
 											</div>
 										)}
 									</div>
 									<div className="min-w-0 flex-1">
-										<p className="font-medium text-gray-900 text-sm">
+										<p className="font-medium text-base-content text-sm">
 											{profile?.postingChannel.title || "Unknown Channel"}
 										</p>
-										<p className="prose prose-sm text-gray-500">
+										<p className="prose prose-sm text-base-content/70">
 											{profile?.postingChannel.username
 												? `@${profile?.postingChannel.username}`
 												: `ID: ${profile?.postingChannel.id}`}
@@ -346,7 +346,7 @@ function RouteComponent() {
 				{profile?.user?.isPublic && (
 					<div className="w-full bg-base-200 p-4">
 						<div className="flex items-center">
-							<p className="text-gray-600 text-sm">
+							<p className="text-base-content/70 text-sm">
 								Link to your profile:{" "}
 								<Link
 									className="text-neutral text-sm underline"

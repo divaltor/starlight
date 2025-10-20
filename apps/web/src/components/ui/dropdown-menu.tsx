@@ -176,7 +176,7 @@ function DropdownMenuSeparator({
 }: React.ComponentProps<"hr">) {
 	return (
 		<hr
-			className={cn("-mx-1 my-1 h-px bg-border", className)}
+			className={cn("-mx-1 my-1 h-px bg-base-200/50", className)}
 			data-slot="dropdown-menu-separator"
 			{...props}
 		/>
@@ -190,7 +190,7 @@ function DropdownMenuShortcut({
 	return (
 		<span
 			className={cn(
-				"ml-auto text-muted-foreground text-xs tracking-widest",
+				"ml-auto text-base-content/60 text-xs tracking-widest",
 				className
 			)}
 			data-slot="dropdown-menu-shortcut"
