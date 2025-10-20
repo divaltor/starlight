@@ -82,7 +82,9 @@ export function useTelegramButtons(
 						isEnabled: state !== "disabled",
 						isLoaderVisible: isLoading,
 						hasShineEffect,
-						...(config.mainButton.color && { color: config.mainButton.color }),
+						...(config.mainButton.color && {
+							backgroundColor: config.mainButton.color,
+						}),
 						...(config.mainButton.textColor && {
 							textColor: config.mainButton.textColor,
 						}),
@@ -113,7 +115,7 @@ export function useTelegramButtons(
 						isLoaderVisible: isLoading,
 						hasShineEffect,
 						...(config.secondaryButton.color && {
-							color: config.secondaryButton.color,
+							backgroundColor: config.secondaryButton.color,
 						}),
 						...(config.secondaryButton.textColor && {
 							textColor: config.secondaryButton.textColor,
