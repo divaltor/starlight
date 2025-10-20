@@ -53,18 +53,14 @@ function PublicationsPage() {
 	);
 
 	useEffect(() => {
-		if (isPending) {
-			return;
-		}
-
-		if (!slot) {
+		if (isPending || !slot) {
 			// No publications - show "Add slot" button
 			updateButtons({
 				mainButton: {
 					state: "visible",
 					text: "Add slot",
 					hasShineEffect: true,
-					isEnabled: true,
+					isEnabled: !isPending,
 					color: "#ffd6a7",
 					textColor: "#9f2d00",
 					action: {
@@ -76,7 +72,7 @@ function PublicationsPage() {
 					state: "hidden",
 				},
 			});
-		} else if (slot) {
+		} else if (!isPending && slot) {
 			// Has publications - show "Publish" and "Add tweet" buttons
 			updateButtons({
 				mainButton: {
@@ -96,7 +92,7 @@ function PublicationsPage() {
 				secondaryButton: {
 					state: "visible",
 					text: "Add tweet",
-					isEnabled: true,
+					isEnabled: !isPending,
 					color: "#efeae6",
 					textColor: "#291334",
 					action: {
