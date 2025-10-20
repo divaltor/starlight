@@ -49,7 +49,7 @@ function DropdownMenuContent({
 	return (
 		<Popover
 			className={cn(
-				"dropdown-content z-[1] w-52 rounded-box bg-base-100 p-2 shadow",
+				"dropdown-content z-[1] w-52 rounded-box bg-base-100 p-2 shadow transition-all duration-200 ease-in-out data-[state=open]:visible data-[state=closed]:invisible data-[state=closed]:scale-95 data-[state=open]:scale-100 data-[state=closed]:opacity-0 data-[state=open]:opacity-100",
 				className
 			)}
 			{...props}
@@ -234,7 +234,7 @@ function DropdownMenuSubContent({
 	return (
 		<Popover
 			className={cn(
-				"z-50 min-w-[8rem] origin-[var(--radix-dropdown-menu-content-transform-origin)] overflow-hidden rounded-box border bg-base-100 p-1 text-base-content shadow-lg",
+				"z-50 min-w-[8rem] origin-[var(--radix-dropdown-menu-content-transform-origin)] overflow-hidden rounded-box border bg-base-100 p-1 text-base-content shadow-lg transition-all duration-200 ease-in-out data-[state=open]:visible data-[state=closed]:invisible data-[state=closed]:scale-95 data-[state=open]:scale-100 data-[state=closed]:opacity-0 data-[state=open]:opacity-100",
 				className
 			)}
 			data-slot="dropdown-menu-sub-content"

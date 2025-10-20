@@ -253,7 +253,7 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 										className="gap-2 text-error"
 										onClick={handleDeleteSlot}
 									>
-										<Trash2 className="h-4 w-4" />
+										<Trash2 className="h-4 w-4 text-error" />
 										Delete
 									</DropdownMenuItem>
 								)}
