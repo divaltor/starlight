@@ -378,7 +378,7 @@ async function shuffleSlotTweet({
 	const slot = await getSlotWithTweets(slotId, userId);
 
 	const slotTweet = slot.scheduledSlotTweets.find(
-		(st) => st.tweet.id === tweetId
+		(st) => st.tweetId === tweetId
 	);
 
 	if (!slotTweet) {
@@ -388,7 +388,7 @@ async function shuffleSlotTweet({
 		});
 	}
 
-	const currentTweetIds = slot.scheduledSlotTweets.map((st) => st.tweet.id);
+	const currentTweetIds = slot.scheduledSlotTweets.map((st) => st.tweetId);
 	const availableTweets = await getAvailableTweets(userId, currentTweetIds);
 
 	if (availableTweets.length === 0) {
@@ -401,21 +401,15 @@ async function shuffleSlotTweet({
 
 	await prisma.$transaction(async (tx) => {
 		await tx.scheduledSlotPhoto.deleteMany({
-			where: { scheduledSlotTweet: { tweet: { id: tweetId } } },
+			where: { scheduledSlotTweetId: slotTweet.id },
 		});
 		await tx.scheduledSlotTweet.update({
-			where: {
-				scheduledSlotId_tweetId_userId: {
-					scheduledSlotId: slotId,
-					tweetId,
-					userId,
-				},
-			},
+			where: { id: slotTweet.id },
 			data: { tweetId: newTweet.id },
 		});
 		await tx.scheduledSlotPhoto.createMany({
 			data: newTweet.photos.map((photo) => ({
-				scheduledSlotTweetId: tweetId,
+				scheduledSlotTweetId: slotTweet.id,
 				photoId: photo.id,
 				userId,
 			})),
