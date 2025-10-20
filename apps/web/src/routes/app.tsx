@@ -115,15 +115,6 @@ function TwitterArtViewer() {
 				<div className="flex flex-1 items-center justify-center">
 					<NotFound
 						description="Did you setup cookies? Try again later."
-						primaryAction={{
-							label: "Go to Settings",
-							onClick: () => {
-								router.navigate({ to: "/settings" });
-							},
-							onMouseEnter: () => {
-								router.preloadRoute({ to: "/settings" });
-							},
-						}}
 						title="No photos found"
 					/>
 				</div>
