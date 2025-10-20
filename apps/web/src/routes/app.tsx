@@ -1,4 +1,6 @@
+import type { ProfileResult } from "@starlight/api/routers/index";
 import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { AlertTriangle } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
@@ -10,23 +12,59 @@ import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
 
 function TwitterArtViewer() {
-	const { updateButtons } = useTelegramContext();
+	const { updateButtons, rawInitData } = useTelegramContext();
 	const router = useRouter();
 
+	const { data: profile, isLoading: profileLoading } = useQuery<ProfileResult>(
+		orpc.profiles.get.queryOptions({
+			queryKey: ["profile"],
+			enabled: !!rawInitData,
+			staleTime: 5 * 60 * 1000,
+			gcTime: 30 * 60 * 1000,
+			retry: 1,
+		})
+	);
+
 	useEffect(() => {
-		// TODO: Add condition when we don't have any posts available to parse or even didn't setup a bot yet.
-		updateButtons({
-			mainButton: {
-				state: "visible",
-				text: "Publications",
-				color: "#ffd6a7",
-				textColor: "#9f2d00",
-				action: {
-					type: "navigate",
-					payload: "/publications",
+		if (profileLoading || !profile) {
+			updateButtons({
+				mainButton: { state: "hidden" },
+				secondaryButton: { state: "hidden" },
+			});
+			return;
+		}
+
+		if (!profile.hasValidCookies) {
+			updateButtons({
+				mainButton: {
+					state: "visible" as const,
+					text: "Setup cookies" as const,
+					color: "#ffd6a7" as const,
+					textColor: "#9f2d00" as const,
+					action: {
+						type: "navigate" as const,
+						payload: "/settings" as const,
+					},
 				},
-			},
-		});
+			});
+		} else if (profile.postingChannel) {
+			updateButtons({
+				mainButton: {
+					state: "visible" as const,
+					text: "Publications" as const,
+					color: "#ffd6a7" as const,
+					textColor: "#9f2d00" as const,
+					action: {
+						type: "navigate" as const,
+						payload: "/publications" as const,
+					},
+				},
+			});
+		} else {
+			updateButtons({
+				mainButton: { state: "hidden" as const },
+			});
+		}
 
 		return () => {
 			updateButtons({
@@ -34,10 +72,7 @@ function TwitterArtViewer() {
 				secondaryButton: { state: "hidden" },
 			});
 		};
-	}, [
-		// TODO: Add condition when we don't have any posts available to parse or even didn't setup a bot yet.
-		updateButtons,
-	]);
+	}, [updateButtons, profile, profileLoading]);
 
 	const {
 		tweets,
@@ -125,6 +160,16 @@ export const Route = createFileRoute("/app")({
 		if (import.meta.env.SSR) {
 			return;
 		}
+
+		const profileOptions = orpc.profiles.get.queryOptions({
+			queryKey: ["profile"],
+			enabled: true,
+			staleTime: 5 * 60 * 1000,
+			gcTime: 30 * 60 * 1000,
+			retry: 1,
+		});
+
+		await queryClient.fetchQuery(profileOptions);
 
 		await queryClient.fetchInfiniteQuery(
 			orpc.tweets.list.infiniteOptions({
