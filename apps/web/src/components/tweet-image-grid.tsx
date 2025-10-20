@@ -2,7 +2,6 @@ import type {
 	ScheduledSlotData,
 	TweetData,
 } from "@starlight/api/src/types/tweets";
-import { format } from "date-fns";
 import { Shuffle, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -25,8 +24,6 @@ export function TweetImageGrid({
 	const [isImageLoading, setIsImageLoading] = useState<{
 		[key: string]: boolean;
 	}>({});
-
-	const formatTweetDate = format(new Date(tweet.date), "MMM d, yyyy");
 
 	const handleImageLoad = (imageId: string, isLoading: boolean) => {
 		setIsImageLoading((prev) => ({ ...prev, [imageId]: isLoading }));
@@ -71,7 +68,7 @@ export function TweetImageGrid({
 									{tweet.artist}
 								</button>
 								<p className="font-medium text-sm drop-shadow-lg">
-									{formatTweetDate}
+									{tweet.date}
 								</p>
 							</div>
 							{showActions && slot && (
@@ -124,7 +121,7 @@ export function TweetImageGrid({
 					>
 						{tweet.artist}
 					</button>
-					<p className="text-base-content/60 text-xs">{formatTweetDate}</p>
+					<p className="text-base-content/60 text-xs">{tweet.date}</p>
 				</div>
 				<div className="flex items-center gap-2">
 					<span className="text-base-content/60 text-xs">

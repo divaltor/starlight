@@ -5,6 +5,7 @@ import type {
 	ScheduledSlotTweet,
 	Tweet,
 } from "@starlight/utils";
+import { format } from "date-fns";
 import type { ScheduledSlotData, TweetData } from "../types/tweets";
 
 function transformTweetsBase<T extends Tweet>(
@@ -23,7 +24,7 @@ function transformTweetsBase<T extends Tweet>(
 		return {
 			id: tweet.id,
 			artist: tweetUsername ? `@${tweetUsername}` : "@good_artist",
-			date: tweet.createdAt.toISOString(),
+			date: format(tweet.createdAt, "MMM d, yyyy"),
 			photos,
 			hasMultipleImages: photos.length > 1,
 			sourceUrl: `https://x.com/i/status/${tweet.id}`,

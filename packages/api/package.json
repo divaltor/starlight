@@ -32,6 +32,7 @@
     "grammy": "catalog:",
     "hono": "catalog:",
     "ioredis": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "date-fns": "^4.1.0"
   }
 }
