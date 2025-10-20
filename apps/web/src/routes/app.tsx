@@ -15,7 +15,7 @@ function TwitterArtViewer() {
 	const { updateButtons, rawInitData } = useTelegramContext();
 	const router = useRouter();
 
-	const { data: profile, isLoading: profileLoading } = useQuery<ProfileResult>(
+	const { data: profile } = useQuery<ProfileResult>(
 		orpc.profiles.get.queryOptions({
 			queryKey: ["profile"],
 			enabled: !!rawInitData,
@@ -26,15 +26,7 @@ function TwitterArtViewer() {
 	);
 
 	useEffect(() => {
-		if (profileLoading || !profile) {
-			updateButtons({
-				mainButton: { state: "hidden" },
-				secondaryButton: { state: "hidden" },
-			});
-			return;
-		}
-
-		if (!profile.hasValidCookies) {
+		if (!profile?.hasValidCookies) {
 			updateButtons({
 				mainButton: {
 					state: "visible" as const,
@@ -72,7 +64,7 @@ function TwitterArtViewer() {
 				secondaryButton: { state: "hidden" },
 			});
 		};
-	}, [updateButtons, profile, profileLoading]);
+	}, [updateButtons, profile]);
 
 	const {
 		tweets,
