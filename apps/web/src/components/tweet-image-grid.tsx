@@ -169,7 +169,7 @@ export function TweetImageGrid({
 							{showActions && onDeleteImage && slot && (
 								<div className="absolute top-2 right-2">
 									<Button
-										className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:bg-white/20 hover:text-error"
+										className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:text-error"
 										onClick={(e) => {
 											e.stopPropagation();
 											onDeleteImage(photo.id);
@@ -213,7 +213,7 @@ export function TweetImageGrid({
 							{showActions && onDeleteImage && slot && (
 								<div className="absolute top-2 right-2">
 									<Button
-										className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:bg-white/20 hover:text-error"
+										className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:text-error"
 										onClick={(e) => {
 											e.stopPropagation();
 											onDeleteImage(photo.id);
@@ -255,7 +255,7 @@ export function TweetImageGrid({
 							{showActions && onDeleteImage && slot && (
 								<div className="absolute top-2 right-2">
 									<Button
-										className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:bg-white/20 hover:text-error"
+										className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:text-error"
 										onClick={(e) => {
 											e.stopPropagation();
 											onDeleteImage(photo.id);
