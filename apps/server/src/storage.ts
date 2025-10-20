@@ -74,12 +74,6 @@ export type RFC6265Cookie = {
 
 const TWID_REGEX = /u=(\d+)/;
 
-type ParsedCookie = {
-	"Host raw": string;
-	"Name raw": string;
-	"Content raw": string;
-};
-
 export class Cookies {
 	readonly cookies: Cookie[];
 
@@ -94,17 +88,10 @@ export class Cookies {
 	}
 
 	static fromJSON(data: string): Cookies {
-		const parsed = JSON.parse(data) as ParsedCookie[];
+		const parsed = JSON.parse(data);
 
 		return new Cookies(
-			parsed.map(
-				(cookie: ParsedCookie) =>
-					new Cookie({
-						domain: cookie["Host raw"],
-						key: cookie["Name raw"],
-						value: cookie["Content raw"],
-					})
-			)
+			parsed.map((cookie: RFC6265Cookie) => new Cookie(cookie))
 		);
 	}
 
