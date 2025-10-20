@@ -227,7 +227,7 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 								{totalPhotos} photo{totalPhotos !== 1 ? "s" : ""}
 							</span>
 							{uniqueAuthors.length > 0 && (
-								<span className="text-base-content/40 text-xs">
+								<span className="text-base-content/60 text-xs">
 									{uniqueAuthors
 										.slice(0, 2)
 										.map((author) => author)
@@ -242,15 +242,15 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 					{/* Mobile dropdown menu */}
 					<div className="md:hidden">
 						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
+							<DropdownMenuTrigger>
 								<Button className="h-8 w-8 p-0" size="sm" variant="ghost">
 									<MoreVertical className="h-4 w-4" />
 								</Button>
 							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-40">
+							<DropdownMenuContent className="w-40">
 								{showActions && (
 									<DropdownMenuItem
-										className="gap-2 text-red-600 focus:text-red-600"
+										className="gap-2 text-error"
 										onClick={handleDeleteSlot}
 									>
 										<Trash2 className="h-4 w-4" />
@@ -265,10 +265,9 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 					<div className="hidden items-center gap-1 md:flex">
 						{showActions && (
 							<Button
-								className="gap-1 text-error text-xs hover:bg-error/10 hover:text-error"
 								onClick={handleDeleteSlot}
 								size="sm"
-								variant="outline"
+								variant="destructive"
 							>
 								<Trash2 className="h-3 w-3" />
 								Delete
