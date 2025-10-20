@@ -10,18 +10,17 @@ function PublicationsPage() {
 	const queryClient = useQueryClient();
 	const { rawInitData, updateButtons } = useTelegramContext();
 
-	const {
-		data: { slot, tweets } = { slot: null, tweets: [] },
-		isPending,
-		isError,
-	} = useQuery(
+	const { data, isPending, isError } = useQuery(
 		orpc.scheduling.slots.get.queryOptions({
 			queryKey: ["scheduled-slots"],
 			enabled: !!rawInitData,
 			retry: false,
 			input: { status: "WAITING" },
+			staleTime: 5 * 60 * 1000,
 		})
 	);
+
+	const { slot, tweets } = data ?? { slot: null, tweets: [] };
 
 	const createSlotMutation = useMutation(
 		orpc.scheduling.slots.create.mutationOptions({
@@ -54,14 +53,18 @@ function PublicationsPage() {
 	);
 
 	useEffect(() => {
-		if (isPending || !slot) {
+		if (isPending) {
+			return;
+		}
+
+		if (!slot) {
 			// No publications - show "Add slot" button
 			updateButtons({
 				mainButton: {
 					state: "visible",
 					text: "Add slot",
 					hasShineEffect: true,
-					isEnabled: !isPending,
+					isEnabled: true,
 					color: "#ffd6a7",
 					textColor: "#9f2d00",
 					action: {
@@ -73,7 +76,7 @@ function PublicationsPage() {
 					state: "hidden",
 				},
 			});
-		} else if (!isPending && slot) {
+		} else if (slot) {
 			// Has publications - show "Publish" and "Add tweet" buttons
 			updateButtons({
 				mainButton: {
@@ -98,13 +101,7 @@ function PublicationsPage() {
 					textColor: "#291334",
 					action: {
 						type: "callback",
-						payload: () => {
-							if (slot && !isPending) {
-								addTweetMutation.mutate({
-									slotId: slot.id,
-								});
-							}
-						},
+						payload: () => addTweetMutation.mutate({ slotId: slot.id }),
 					},
 				},
 			});

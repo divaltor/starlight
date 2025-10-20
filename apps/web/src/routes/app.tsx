@@ -51,10 +51,6 @@ function TwitterArtViewer() {
 					},
 				},
 			});
-		} else {
-			updateButtons({
-				mainButton: { state: "hidden" as const },
-			});
 		}
 
 		return () => {
@@ -162,6 +158,7 @@ export const Route = createFileRoute("/app")({
 					queryKey: ["scheduled-slots"],
 					input: { status: "WAITING" },
 					retry: false,
+					staleTime: 5 * 60 * 1000,
 				})
 			);
 		}
