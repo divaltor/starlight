@@ -32,17 +32,28 @@ type SlotCardProps = {
 export function SlotCard({ tweets, slot }: SlotCardProps) {
 	const queryClient = useQueryClient();
 	const showActions = slot?.status === "WAITING";
-	// Track length for positioner - only use positioner when collection gets smaller
 	const lengthRef = useRef<number>(0);
-	const containerRef = useRef(null);
+	const containerRef = useRef<HTMLDivElement>(null);
 
-	const totalPhotos = tweets.reduce(
-		(sum, tweet) => sum + tweet.photos.length,
-		0
+	const scrollerRef = useRef<HTMLDivElement>(null);
+	const [adjustment, setAdjustment] = useState<{
+		oldHeight: number;
+		affectedTweetId: string;
+		oldScrollTop: number;
+		oldTop: number;
+	} | null>(null);
+	const [version, setVersion] = useState(0);
+	const prevTweetsLengthRef = useRef(tweets.length);
+
+	const totalPhotos = useMemo(
+		() => tweets.reduce((sum, tweet) => sum + tweet.photos.length, 0),
+		[tweets]
 	);
-	const uniqueAuthors = [...new Set(tweets.map((tweet) => tweet.artist))];
+	const uniqueAuthors = useMemo(
+		() => [...new Set(tweets.map((tweet) => tweet.artist))],
+		[tweets]
+	);
 
-	// useWindowSize hook
 	const useWindowSize = () => {
 		const [windowSize, setWindowSize] = useState({
 			width: typeof window !== "undefined" ? window.innerWidth : 0,
@@ -66,19 +77,6 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 
 	const [windowWidth, windowHeight] = useWindowSize();
 
-	// Track current and previous length to detect when collection gets smaller
-	const currentLength = tweets.length;
-	const prevLengthRef = useRef<number | undefined>(undefined);
-
-	const shouldRecalculate = useMemo(() => {
-		const prevLength = prevLengthRef.current;
-		prevLengthRef.current = currentLength;
-
-		// Only recalculate when collection gets smaller
-		return prevLength !== undefined && currentLength < prevLength;
-	}, [currentLength]);
-
-	// Set up masonry positioning - only recalculate when collection gets smaller
 	const { offset, width } = useContainerPosition(containerRef, [
 		windowWidth,
 		windowHeight,
@@ -90,11 +88,15 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 			columnWidth: 200, // Approximate column width
 			columnGutter: 16,
 		},
-		[shouldRecalculate, tweets]
+		[tweets, version]
 	);
 
-	// Update length ref after positioner setup
-	lengthRef.current = currentLength;
+	useEffect(() => {
+		scrollerRef.current = containerRef.current
+			?.parentElement as HTMLDivElement | null;
+	}, []);
+
+	lengthRef.current = tweets.length;
 
 	const resizeObserver = useResizeObserver(positioner);
 
@@ -122,52 +124,166 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 
 	const deletePhotoMutation = useMutation(
 		orpc.scheduling.photos.remove.mutationOptions({
-			onMutate: async (variables) => {
+			onMutate: async (variables: { slotId: string; photoId: string }) => {
 				await queryClient.cancelQueries({ queryKey: ["scheduled-slots"] });
 				const previousData = queryClient.getQueryData<ScheduledSlotResult>([
 					"scheduled-slots",
 				]);
 
+				const affectedIndex =
+					previousData?.tweets.findIndex((t: TweetData) =>
+						t.photos.some((p) => p.id === variables.photoId)
+					) ?? -1;
+
+				let affTweetId = "";
+				let oldHeight = 0;
+				let oldTop = 0;
+				let oldScrollTop = 0;
+
+				if (
+					previousData &&
+					affectedIndex !== -1 &&
+					typeof positioner === "function" &&
+					scrollerRef.current
+				) {
+					const pos = (positioner as any)(affectedIndex);
+					oldHeight = pos.height;
+					oldTop = pos.top;
+					oldScrollTop = scrollerRef.current.scrollTop;
+					affTweetId = previousData.tweets[affectedIndex].id;
+				}
+
 				queryClient.setQueryData<ScheduledSlotResult>(
 					["scheduled-slots"],
-					(old) => {
+					(old?: ScheduledSlotResult) => {
 						if (!old) {
 							return old;
 						}
 
+						const newTweets = old.tweets
+							.map((t: TweetData) => ({
+								...t,
+								photos: t.photos.filter((p) => p.id !== variables.photoId),
+							}))
+							.filter((t: TweetData) => t.photos.length > 0);
+
 						return {
 							...old,
-							tweets: old.tweets
-								.map((t) => ({
-									...t,
-									photos: t.photos.filter((p) => p.id !== variables.photoId),
-								}))
-								.filter((t) => t.photos.length > 0),
+							tweets: newTweets,
 						};
 					}
 				);
 
+				setVersion((v) => v + 1);
+
+				if (affTweetId) {
+					setAdjustment({
+						oldHeight,
+						affectedTweetId: affTweetId,
+						oldScrollTop,
+						oldTop,
+					});
+				}
+
 				return { previousData };
 			},
-			onError: (_error, _variables, context) => {
+			onError: (
+				_error: unknown,
+				_variables: unknown,
+				context?: { previousData?: ScheduledSlotResult }
+			) => {
 				if (context?.previousData) {
 					queryClient.setQueryData(["scheduled-slots"], context.previousData);
 				}
+				setAdjustment(null);
+				setVersion((v) => v + 1);
 			},
 			onSuccess: () => {
 				queryClient.invalidateQueries({
 					queryKey: ["scheduled-slots"],
 				});
+				setVersion((v) => v + 1);
 			},
 		})
 	);
 
 	const shuffleTweetMutation = useMutation(
 		orpc.scheduling.tweets.shuffle.mutationOptions({
+			onMutate: async (variables: { slotId: string; tweetId: string }) => {
+				await queryClient.cancelQueries({ queryKey: ["scheduled-slots"] });
+				const previousData = queryClient.getQueryData<ScheduledSlotResult>([
+					"scheduled-slots",
+				]);
+
+				const affectedIndex =
+					previousData?.tweets.findIndex(
+						(t: TweetData) => t.id === variables.tweetId
+					) ?? -1;
+
+				const affTweetId = variables.tweetId;
+				let oldHeight = 0;
+				let oldTop = 0;
+				let oldScrollTop = 0;
+
+				if (
+					affectedIndex !== -1 &&
+					typeof positioner === "function" &&
+					scrollerRef.current
+				) {
+					const pos = (positioner as any)(affectedIndex);
+					oldHeight = pos.height;
+					oldTop = pos.top;
+					oldScrollTop = scrollerRef.current.scrollTop;
+				}
+
+				queryClient.setQueryData(
+					["scheduled-slots"],
+					(old?: ScheduledSlotResult) => {
+						if (!old) {
+							return old;
+						}
+
+						return {
+							...old,
+							tweets: old.tweets.map((t: TweetData) =>
+								t.id === variables.tweetId
+									? {
+											...t,
+											photos: [...t.photos].sort(() => Math.random() - 0.5),
+										}
+									: t
+							),
+						};
+					}
+				);
+
+				setVersion((v) => v + 1);
+
+				setAdjustment({
+					oldHeight,
+					affectedTweetId: affTweetId,
+					oldScrollTop,
+					oldTop,
+				});
+
+				return { previousData };
+			},
+			onError: (
+				_error: unknown,
+				_variables: unknown,
+				context?: { previousData?: ScheduledSlotResult }
+			) => {
+				if (context?.previousData) {
+					queryClient.setQueryData(["scheduled-slots"], context.previousData);
+				}
+				setAdjustment(null);
+				setVersion((v) => v + 1);
+			},
 			onSuccess: () => {
 				queryClient.invalidateQueries({
 					queryKey: ["scheduled-slots"],
 				});
+				setVersion((v) => v + 1);
 			},
 		})
 	);
@@ -185,17 +301,26 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 					() => ({ slot: null, tweets: [] }) satisfies ScheduledSlotResult
 				);
 
+				setVersion((v) => v + 1);
+
 				return { previousData };
 			},
-			onError: (_error, _variables, context) => {
+			onError: (
+				_error: unknown,
+				_variables: unknown,
+				context?: { previousData?: ScheduledSlotResult }
+			) => {
 				if (context?.previousData) {
 					queryClient.setQueryData(["scheduled-slots"], context.previousData);
 				}
+				setAdjustment(null);
+				setVersion((v) => v + 1);
 			},
 			onSuccess: () => {
 				queryClient.invalidateQueries({
 					queryKey: ["scheduled-slots"],
 				});
+				setVersion((v) => v + 1);
 			},
 		})
 	);
@@ -203,6 +328,53 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 	const handleDeleteSlot = () => {
 		deleteSlotMutation.mutate({ slotId: slot.id });
 	};
+
+	useEffect(() => {
+		if (
+			adjustment &&
+			scrollerRef.current &&
+			typeof positioner === "function" &&
+			tweets
+		) {
+			const newIndex = tweets.findIndex(
+				(t: TweetData) => t.id === adjustment.affectedTweetId
+			);
+			let newHeight = 0;
+			if (newIndex !== -1) {
+				const newPos = (positioner as any)(newIndex);
+				newHeight = newPos.height;
+			}
+			const delta = adjustment.oldHeight - newHeight;
+			if (delta > 0 && adjustment.oldTop < adjustment.oldScrollTop) {
+				scrollerRef.current.scrollTop = Math.max(
+					0,
+					adjustment.oldScrollTop - delta
+				);
+			}
+			setAdjustment(null);
+		}
+	}, [adjustment, tweets, positioner]);
+
+	useEffect(() => {
+		const el = scrollerRef.current;
+		if (!el) {
+			return;
+		}
+
+		const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 5; // tolerance for floating point
+		const prevLength = prevTweetsLengthRef.current;
+
+		if (tweets.length > prevLength && atBottom) {
+			// Was at bottom before add, scroll to new bottom after layout
+			requestAnimationFrame(() => {
+				if (el) {
+					el.scrollTop = el.scrollHeight - el.clientHeight;
+				}
+			});
+		}
+
+		prevTweetsLengthRef.current = tweets.length;
+	}, [tweets.length, tweets]); // Run on length change
 
 	return (
 		<Card className="card-border pt-4">
