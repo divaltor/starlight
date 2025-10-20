@@ -9,6 +9,7 @@ const badgeVariants = cva(
 		variants: {
 			variant: {
 				default: "badge-primary",
+				accent: "badge-accent",
 				secondary: "badge-secondary",
 				destructive: "badge-error",
 				outline: "badge-outline",

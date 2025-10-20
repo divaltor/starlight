@@ -212,7 +212,7 @@ export function SlotCard({ tweets, slot }: SlotCardProps) {
 						{/* Summary */}
 						<div className="flex flex-wrap items-center gap-2">
 							{slot.chat.title && (
-								<Badge size="xs" variant="outline">
+								<Badge size="sm" variant="accent">
 									#{slot.chat.title}
 								</Badge>
 							)}
