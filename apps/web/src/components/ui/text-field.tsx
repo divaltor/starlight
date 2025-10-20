@@ -1,7 +1,5 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { motion } from "motion/react";
 import type * as React from "react";
-import type { Ref } from "react";
 import {
 	TextField as AriaTextField,
 	FieldError,
@@ -12,8 +10,6 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Input } from "./input";
-
-const MotionTextArea = motion.create(TextArea);
 
 const textFieldVariants = cva("form-control", {
 	variants: {
@@ -38,7 +34,7 @@ interface TextFieldProps
 	description?: string;
 	placeholder?: string;
 	className?: string;
-	inputRef?: Ref<HTMLInputElement | HTMLTextAreaElement>;
+	inputRef?: React.Ref<HTMLInputElement | HTMLTextAreaElement>;
 	multiline?: boolean;
 }
 
@@ -67,26 +63,19 @@ function TextField({
 				</Label>
 			)}
 			{multiline ? (
-				<MotionTextArea
+				<TextArea
 					className={cn(
-						"textarea w-full",
+						"textarea w-full transition-shadow duration-200 ease-in-out focus:ring-2 focus:ring-blue-500/20",
 						size === "default" || !size ? "textarea-md" : `textarea-${size}`,
 						className
 					)}
 					placeholder={placeholder}
-					ref={inputRef as Ref<HTMLTextAreaElement>}
-					transition={{
-						duration: 0.2,
-						ease: "easeInOut",
-					}}
-					whileFocus={{
-						boxShadow: "0 0 0 2px rgba(59, 130, 246, 0.2)",
-					}}
+					ref={inputRef as React.Ref<HTMLTextAreaElement>}
 				/>
 			) : (
 				<Input
 					placeholder={placeholder}
-					ref={inputRef as Ref<HTMLInputElement>}
+					ref={inputRef as React.Ref<HTMLInputElement>}
 					size={size === "default" || !size ? "md" : size}
 				/>
 			)}
