@@ -328,7 +328,7 @@ function RouteComponent() {
 						<label className="label cursor-pointer gap-2 text-wrap">
 							<input
 								checked={profile?.user?.isPublic ?? false}
-								className="toggle toggle-sm toggle-neutral"
+								className="toggle toggle-sm data-[theme=light]:toggle-neutral data-[theme=dark]:toggle-accent"
 								onChange={(e) =>
 									visibilityMutation.mutate({
 										status: e.target.checked ? "public" : "private",
