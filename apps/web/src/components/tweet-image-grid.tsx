@@ -48,7 +48,7 @@ export function TweetImageGrid({
 				{/** biome-ignore lint/a11y/useAltText: Fuck off */}
 				{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 				<img
-					className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-90"
+					className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-80 dark:contrast-105"
 					height={400}
 					onLoad={() => handleImageLoad(photo.id, false)}
 					onLoadStart={() => handleImageLoad(photo.id, true)}
@@ -158,7 +158,7 @@ export function TweetImageGrid({
 							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
 							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 							<img
-								className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-90"
+								className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-80 dark:contrast-105"
 								height={400}
 								onLoad={() => handleImageLoad(photo.id, false)}
 								onLoadStart={() => handleImageLoad(photo.id, true)}
@@ -202,7 +202,7 @@ export function TweetImageGrid({
 							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
 							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 							<img
-								className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-90"
+								className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-80 dark:contrast-105"
 								height={400}
 								onLoad={() => handleImageLoad(photo.id, false)}
 								onLoadStart={() => handleImageLoad(photo.id, true)}
@@ -244,7 +244,7 @@ export function TweetImageGrid({
 							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
 							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 							<img
-								className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-90"
+								className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-80 dark:contrast-105"
 								height={400}
 								onLoad={() => handleImageLoad(photo.id, false)}
 								onLoadStart={() => handleImageLoad(photo.id, true)}

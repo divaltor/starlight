@@ -349,7 +349,7 @@ function RouteComponent() {
 							<p className="text-base-content/70 text-sm">
 								Link to your profile:{" "}
 								<Link
-									className="text-neutral text-sm underline"
+									className="link text-sm"
 									params={{ slug: profile.user.username }}
 									to="/profile/$slug"
 								>
