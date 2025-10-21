@@ -74,15 +74,15 @@ export const transformScheduledSlot = (
 export const transformSearchResults = (results: SearchResult[]): TweetData[] =>
 	transformTweetsBase(
 		results.map((result) => ({
-			id: result.tweetId,
-			username: result.artist,
-			createdAt: result.tweetCreatedAt,
+			id: result.tweet_id,
+			username: result.username,
+			createdAt: result.tweet_created_at,
 			photos: [
 				{
-					id: result.id,
-					originalUrl: result.originalUrl,
-					s3Url: result.s3Path
-						? `${env.BASE_CDN_URL}/${result.s3Path}`
+					id: result.photo_id,
+					originalUrl: result.original_url,
+					s3Url: result.s3_path
+						? `${env.BASE_CDN_URL}/${result.s3_path}`
 						: undefined,
 				},
 			],

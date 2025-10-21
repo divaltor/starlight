@@ -1,12 +1,13 @@
 import type { ScheduledSlotStatus } from "@starlight/utils";
 
 export type SearchResult = {
-	id: string;
-	originalUrl: string;
-	s3Path: string;
-	artist: string;
-	tweetId: string;
-	tweetCreatedAt: Date;
+	photo_id: string;
+	original_url: string;
+	s3_path: string;
+	username: string;
+	tweet_id: string;
+	tweet_created_at: Date;
+	is_nsfw: boolean;
 };
 
 export type PhotoData = {

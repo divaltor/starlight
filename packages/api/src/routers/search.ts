@@ -77,13 +77,13 @@ export const searchImages = publicProcedure
             JOIN tweets t ON t.id = p.tweet_id
         )
             SELECT
-            id as photoId,
-            original_url as originalUrl,
-            s3_path as s3Path,
-            username as artist,
-            tweet_created_at as createdAt,
-            tweet_id as tweetId,
-            is_nsfw as isNsfw,
+            id as photo_id,
+            original_url as original_url,
+            s3_path as s3_path,
+            username,
+            tweet_created_at as tweet_created_at,
+            tweet_id as tweet_id,
+            is_nsfw as is_nsfw,
             (0.4 * s_coarse) +
             (0.3 * s_image) +
             (0.2 * s_tag) +
@@ -92,11 +92,13 @@ export const searchImages = publicProcedure
             (0.03 * style_manga) -
             (0.07 * style_other) -
             (0.1 * style_real_life) -
-            (0.1 * style_third_dimension) AS finalScore
+            (0.1 * style_third_dimension) AS final_score
             FROM metadata_fusion
-            ORDER BY finalScore DESC NULLS LAST
+            ORDER BY final_score DESC NULLS LAST
             LIMIT 40;
         `;
+
+		console.log(images);
 
 		return transformSearchResults(images);
 	});
