@@ -1,0 +1,102 @@
+import { ORPCError } from "@orpc/client";
+import { env, prisma } from "@starlight/utils";
+import z from "zod";
+import { publicProcedure } from "..";
+import type { SearchResult } from "../types/tweets";
+import { transformSearchResults } from "../utils/transformations";
+
+export const searchImages = publicProcedure
+	.input(
+		z.object({
+			query: z.string().max(128),
+		})
+	)
+	.handler(async ({ input }) => {
+		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
+			throw new ORPCError("Service not available, sorry!");
+		}
+
+		const response = await fetch(
+			new URL("/v1/embeddings", env.ML_BASE_URL).toString(),
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"X-API-Token": env.ML_API_TOKEN,
+				},
+				body: JSON.stringify({
+					text: input.query,
+					encoding_mode: "retrieval.query",
+				}),
+			}
+		);
+
+		if (!response.ok) {
+			throw new ORPCError("Failed to search images", {
+				status: 500,
+			});
+		}
+
+		const { text } = (await response.json()) as { text: string[] };
+
+		const textVec = `[${text.join(",")}]`;
+
+		const images = await prisma.$queryRaw<SearchResult[]>`
+        WITH coarse AS (
+            SELECT
+                p.id,
+                1.0 - (p.image_vec <=> ${textVec}::vector) AS s_image,
+                1.0 - (p.tag_vec <=> ${textVec}) AS s_tag,
+                GREATEST(1.0 - (p.image_vec <=> ${textVec}::vector), 1.0 - (p.tag_vec <=> ${textVec}::vector)) AS s_coarse
+            FROM photos p
+            WHERE image_vec IS NOT NULL AND tag_vec IS NOT NULL AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
+            ORDER BY s_coarse DESC
+            LIMIT 100
+        ),
+        metadata_fusion AS (
+            SELECT
+                p.id,
+                c.s_coarse,
+                c.s_image,
+                c.s_tag,
+                p.s3_path,
+                p.original_url,
+                t.username,
+                t.created_at,
+                t.id as tweet_id,
+                t.created_at as tweet_created_at,
+                (classification->>'aesthetic')::float AS aesthetic,
+                (classification->'style'->>'anime')::float AS style_anime,
+                (classification->'style'->>'manga_like')::float AS style_manga,
+                (classification->'style'->>'other')::float AS style_other,
+                (classification->'style'->>'real_life')::float AS style_real_life,
+                (classification->'style'->>'third_dimension')::float AS style_third_dimension,
+                (classification->'nsfw'->>'is_nsfw')::boolean AS is_nsfw
+            FROM coarse c
+            JOIN photos p ON p.id = c.id
+            JOIN tweets t ON t.id = p.tweet_id
+        )
+            SELECT
+            id as photoId,
+            original_url as originalUrl,
+            s3_path as s3Path,
+            username as artist,
+            tweet_created_at as createdAt,
+            tweet_id as tweetId,
+            is_nsfw as isNsfw,
+            (0.4 * s_coarse) +
+            (0.3 * s_image) +
+            (0.2 * s_tag) +
+            (0.15 * aesthetic) +
+            (0.05 * style_anime) +
+            (0.03 * style_manga) -
+            (0.07 * style_other) -
+            (0.1 * style_real_life) -
+            (0.1 * style_third_dimension) AS finalScore
+            FROM metadata_fusion
+            ORDER BY finalScore DESC NULLS LAST
+            LIMIT 40;
+        `;
+
+		return transformSearchResults(images);
+	});

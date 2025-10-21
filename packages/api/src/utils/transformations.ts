@@ -1,16 +1,25 @@
-import type {
-	Photo,
-	ScheduledSlot,
-	ScheduledSlotPhoto,
-	ScheduledSlotTweet,
-	Tweet,
+import {
+	env,
+	type Photo,
+	type ScheduledSlot,
+	type ScheduledSlotPhoto,
+	type ScheduledSlotTweet,
+	type Tweet,
 } from "@starlight/utils";
 import { format } from "date-fns";
-import type { ScheduledSlotData, TweetData } from "../types/tweets";
+import type {
+	ScheduledSlotData,
+	SearchResult,
+	TweetData,
+} from "../types/tweets";
 
-function transformTweetsBase<T extends Tweet>(
+function transformTweetsBase<
+	T extends Pick<Tweet, "id" | "createdAt" | "username">,
+>(
 	tweets: T[],
-	getPhotos: (tweet: T) => Array<Photo & { s3Url: string | undefined }>
+	getPhotos: (
+		tweet: T
+	) => Array<Pick<Photo, "id" | "originalUrl"> & { s3Url: string | undefined }>
 ): TweetData[] {
 	return tweets.map((tweet) => {
 		const photos = getPhotos(tweet).map((photo) => ({
@@ -18,12 +27,9 @@ function transformTweetsBase<T extends Tweet>(
 			url: photo.s3Url || photo.originalUrl,
 		}));
 
-		const tweetData = tweet.tweetData;
-		const tweetUsername = tweetData?.username;
-
 		return {
 			id: tweet.id,
-			artist: tweetUsername ? `@${tweetUsername}` : "@good_artist",
+			artist: tweet.username ? `@${tweet.username}` : "@good_artist",
 			date: format(tweet.createdAt, "MMM d, yyyy"),
 			photos,
 			hasMultipleImages: photos.length > 1,
@@ -64,3 +70,22 @@ export const transformScheduledSlot = (
 		username: slot.postingChannel.chat.username || undefined,
 	},
 });
+
+export const transformSearchResults = (results: SearchResult[]): TweetData[] =>
+	transformTweetsBase(
+		results.map((result) => ({
+			id: result.tweetId,
+			username: result.artist,
+			createdAt: result.tweetCreatedAt,
+			photos: [
+				{
+					id: result.id,
+					originalUrl: result.originalUrl,
+					s3Url: result.s3Path
+						? `${env.BASE_CDN_URL}/${result.s3Path}`
+						: undefined,
+				},
+			],
+		})),
+		(result) => result.photos
+	);

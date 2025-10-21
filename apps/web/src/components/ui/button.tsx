@@ -14,11 +14,16 @@ const buttonVariants = cva("btn transition-all duration-150 ease-in-out", {
 			secondary: "btn-secondary",
 			ghost: "btn-ghost",
 			link: "btn-link",
+			accent: "btn-accent",
+			neutral: "btn-neutral",
+			active: "btn-active",
 		},
 		size: {
 			default: "btn-md",
 			sm: "btn-sm",
 			lg: "btn-lg",
+			xs: "btn-xs",
+			xl: "btn-xl",
 			icon: "btn-circle size-9",
 		},
 		pressed: {
