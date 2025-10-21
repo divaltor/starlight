@@ -51,7 +51,6 @@ export const searchImages = publicProcedure
             FROM photos p
             WHERE image_vec IS NOT NULL AND tag_vec IS NOT NULL AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
             ORDER BY s_coarse DESC
-            LIMIT 1000
         ),
         metadata_fusion AS (
             SELECT
