@@ -46,7 +46,7 @@ export const searchImages = publicProcedure
             SELECT
                 p.id,
                 1.0 - (p.image_vec <=> ${textVec}::vector) AS s_image,
-                1.0 - (p.tag_vec <=> ${textVec}) AS s_tag,
+                1.0 - (p.tag_vec <=> ${textVec}::vector) AS s_tag,
                 GREATEST(1.0 - (p.image_vec <=> ${textVec}::vector), 1.0 - (p.tag_vec <=> ${textVec}::vector)) AS s_coarse
             FROM photos p
             WHERE image_vec IS NOT NULL AND tag_vec IS NOT NULL AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
