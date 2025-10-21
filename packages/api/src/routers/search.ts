@@ -51,7 +51,7 @@ export const searchImages = publicProcedure
             FROM photos p
             WHERE image_vec IS NOT NULL AND tag_vec IS NOT NULL AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
             ORDER BY s_coarse DESC
-            LIMIT 100
+            LIMIT 1000
         ),
         metadata_fusion AS (
             SELECT
@@ -84,11 +84,11 @@ export const searchImages = publicProcedure
             tweet_created_at as tweet_created_at,
             tweet_id as tweet_id,
             is_nsfw as is_nsfw,
-            (0.4 * s_coarse) +
+            (0.5 * s_coarse) +
             (0.3 * s_image) +
             (0.2 * s_tag) +
-            (0.15 * aesthetic) +
-            (0.05 * style_anime) +
+            (0.1 * aesthetic) +
+            (0.03 * style_anime) +
             (0.03 * style_manga) -
             (0.07 * style_other) -
             (0.1 * style_real_life) -
