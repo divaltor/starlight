@@ -18,14 +18,12 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
-ua = UserAgent()
-
 
 async def preprocess_image(image: str) -> PILImage:
     with pipeline_span('preprocess_image'):
         match image.startswith(('http://', 'https://')):
             case True:
-                headers = {'User-Agent': ua.random, 'Accept-Encoding': 'gzip, br'}
+                headers = {'Accept-Encoding': 'gzip, br'}
                 try:
                     async with aiohttp.ClientSession(
                         timeout=aiohttp.ClientTimeout(total=25),
