@@ -51,6 +51,7 @@ export const searchImages = publicProcedure
             FROM photos p
             WHERE image_vec IS NOT NULL AND tag_vec IS NOT NULL AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
             ORDER BY s_coarse DESC
+            LIMIT 200
         ),
         metadata_fusion AS (
             SELECT
@@ -74,22 +75,50 @@ export const searchImages = publicProcedure
             FROM coarse c
             JOIN photos p ON p.id = c.id
             JOIN tweets t ON t.id = p.tweet_id
-        )
+        ),
+        ranked AS (
             SELECT
-            id as photo_id,
-            original_url as original_url,
-            s3_path as s3_path,
-            username,
-            tweet_created_at as tweet_created_at,
-            tweet_id as tweet_id,
-            is_nsfw as is_nsfw,
-            (0.1 * s_coarse) +
-            (0.4 * s_image) +
-            (0.3 * s_tag) AS final_score
+                *,
+                ROW_NUMBER() OVER (ORDER BY s_image DESC) as rank_image,
+                ROW_NUMBER() OVER (ORDER BY s_tag DESC) as rank_tag,
+                ROW_NUMBER() OVER (ORDER BY COALESCE(aesthetic, 5.0) DESC) as rank_aesthetic,
+                ROW_NUMBER() OVER (ORDER BY tweet_created_at DESC) as rank_recency
             FROM metadata_fusion
-            ORDER BY final_score DESC NULLS LAST
-            LIMIT 40;
-        `;
+        ),
+        fused AS (
+            SELECT
+                id as photo_id,
+                original_url as original_url,
+                s3_path as s3_path,
+                username,
+                tweet_created_at as tweet_created_at,
+                tweet_id as tweet_id,
+                is_nsfw as is_nsfw,
+                (
+                    (1.0 / (rank_image + 60) * 0.5) +
+                    (1.0 / (rank_tag + 60) * 0.3) +
+                    (1.0 / (rank_aesthetic + 60) * 0.1) +
+                    (1.0 / (rank_recency + 60) * 0.1)
+                ) * 
+                (
+                    (COALESCE(aesthetic, 5.0) / 10.0) * 
+                    EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (30.0 * 24 * 3600)))
+                ) AS final_score
+            FROM ranked
+        )
+        SELECT
+            photo_id,
+            original_url,
+            s3_path,
+            username,
+            tweet_created_at,
+            tweet_id,
+            is_nsfw,
+            final_score
+        FROM fused
+        ORDER BY final_score DESC NULLS LAST
+        LIMIT 40;
+		`;
 
 		console.log(images);
 
