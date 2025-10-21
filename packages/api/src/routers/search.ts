@@ -84,15 +84,9 @@ export const searchImages = publicProcedure
             tweet_created_at as tweet_created_at,
             tweet_id as tweet_id,
             is_nsfw as is_nsfw,
-            (0.5 * s_coarse) +
-            (0.3 * s_image) +
-            (0.2 * s_tag) +
-            (0.1 * aesthetic) +
-            (0.03 * style_anime) +
-            (0.03 * style_manga) -
-            (0.07 * style_other) -
-            (0.1 * style_real_life) -
-            (0.1 * style_third_dimension) AS final_score
+            (0.1 * s_coarse) +
+            (0.4 * s_image) +
+            (0.3 * s_tag) AS final_score
             FROM metadata_fusion
             ORDER BY final_score DESC NULLS LAST
             LIMIT 40;
