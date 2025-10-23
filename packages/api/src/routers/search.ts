@@ -100,7 +100,7 @@ export const searchImages = publicProcedure
                     (1.0 / (rank_recency + 60) * 0.1)
                 ) * 
                 (
-                    (aesthetic) * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (30.0 * 24 * 3600)))
+                    (aesthetic * (1.0 - style_real_life)) * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (30.0 * 24 * 3600)))
                 ) AS final_score
             FROM ranked
         )
