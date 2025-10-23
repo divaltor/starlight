@@ -49,9 +49,8 @@ export const searchImages = publicProcedure
                 1.0 - (p.tag_vec <=> ${textVec}::vector) AS s_tag,
                 GREATEST(1.0 - (p.image_vec <=> ${textVec}::vector), 1.0 - (p.tag_vec <=> ${textVec}::vector)) AS s_coarse
             FROM photos p
-            WHERE image_vec IS NOT NULL AND tag_vec IS NOT NULL AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
+            WHERE classification IS NOT NULL AND image_vec IS NOT NULL AND tag_vec IS NOT NULL AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
             ORDER BY s_coarse DESC
-            LIMIT 200
         ),
         metadata_fusion AS (
             SELECT
@@ -81,7 +80,7 @@ export const searchImages = publicProcedure
                 *,
                 ROW_NUMBER() OVER (ORDER BY s_image DESC) as rank_image,
                 ROW_NUMBER() OVER (ORDER BY s_tag DESC) as rank_tag,
-                ROW_NUMBER() OVER (ORDER BY COALESCE(aesthetic, 5.0) DESC) as rank_aesthetic,
+                ROW_NUMBER() OVER (ORDER BY aesthetic DESC) as rank_aesthetic,
                 ROW_NUMBER() OVER (ORDER BY tweet_created_at DESC) as rank_recency
             FROM metadata_fusion
         ),
@@ -101,8 +100,7 @@ export const searchImages = publicProcedure
                     (1.0 / (rank_recency + 60) * 0.1)
                 ) * 
                 (
-                    (COALESCE(aesthetic, 5.0) / 10.0) * 
-                    EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (30.0 * 24 * 3600)))
+                    (aesthetic) * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (30.0 * 24 * 3600)))
                 ) AS final_score
             FROM ranked
         )
@@ -117,7 +115,7 @@ export const searchImages = publicProcedure
             final_score
         FROM fused
         ORDER BY final_score DESC NULLS LAST
-        LIMIT 40;
+        LIMIT 80;
 		`;
 
 		console.log(images);
