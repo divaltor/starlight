@@ -25,7 +25,7 @@ export const searchImages = publicProcedure
 					"X-API-Token": env.ML_API_TOKEN,
 				},
 				body: JSON.stringify({
-					text: input.query,
+					tags: input.query,
 					encoding_mode: "retrieval.query",
 				}),
 			}
@@ -37,7 +37,7 @@ export const searchImages = publicProcedure
 			});
 		}
 
-		const { text } = (await response.json()) as { text: string[] };
+		const { text } = (await response.json()) as { text: number[] };
 
 		const textVec = `[${text.join(",")}]`;
 
