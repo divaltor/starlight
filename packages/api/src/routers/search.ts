@@ -43,7 +43,7 @@ export const searchImages = publicProcedure
 
 		const images = await prisma.$queryRaw<SearchResult[]>`
         WITH coarse AS (
-            SELECT
+            SELECT DISTINCT
                 p.id,
                 1.0 - (p.image_vec <=> ${textVec}::vector) AS s_image,
                 1.0 - (p.tag_vec <=> ${textVec}::vector) AS s_tag,
