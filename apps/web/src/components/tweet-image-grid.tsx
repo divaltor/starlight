@@ -1,4 +1,3 @@
-import "photoswipe/dist/photoswipe.css";
 import type {
 	ScheduledSlotData,
 	TweetData,
