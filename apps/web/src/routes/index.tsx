@@ -12,11 +12,12 @@ import { LayoutManager } from "@/utils/layout";
 import { orpc } from "@/utils/orpc";
 
 const examples = [
-	"furina genshin impact",
+	"girls on the beach",
 	"white elf on pastel background",
-	"hollow knight",
+	"miku & teto",
 	"photographer with camera",
 	"sunrise winter landscape",
+	"hololive girls",
 	"sketch lineart",
 ];
 
