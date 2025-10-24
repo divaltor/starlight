@@ -98,8 +98,8 @@ export const searchImages = publicProcedure
                 tweet_id as tweet_id,
                 is_nsfw as is_nsfw,
                 (
-                    (1.0 / (rank_image + 60) * 0.5) +
-                    (1.0 / (rank_tag + 60) * 0.3) +
+                    (1.0 / (rank_image + 60) * 0.3) +
+                    (1.0 / (rank_tag + 60) * 0.5) +
                     (1.0 / (rank_aesthetic + 60) * 0.1) +
                     (1.0 / (rank_recency + 60) * 0.1)
                 ) * 
