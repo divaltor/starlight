@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { orpc } from "@/utils/orpc";
 
 const examples = [
@@ -62,12 +63,12 @@ export default function DiscoverPage() {
 					// Hero Section with centered search
 					<section className="hero hero-center">
 						<div className="hero-content text-center">
-							<div className="max-w-lg">
+							<div className="max-w-2xl">
 								<p className="py-6 text-2xl text-base-content/80">
-									Find inspiring images with natural language
+									Find cute anime girls using natural language
 								</p>
 								<form className="form-control" onSubmit={handleSearch}>
-									<div className="join mx-auto max-w-lg">
+									<div className="join mx-auto flex w-full justify-center">
 										<Input
 											className="input input-bordered join-item"
 											onChange={(e) => setQuery(e.target.value)}
@@ -76,11 +77,18 @@ export default function DiscoverPage() {
 											value={query}
 										/>
 										<Button
-											className="btn btn-primary join-item"
+											className={cn(
+												"btn btn-primary join-item",
+												searchMutation.isPending && "btn-disabled"
+											)}
 											disabled={searchMutation.isPending}
 											type="submit"
 										>
-											<Search className="h-4 w-4" />
+											{searchMutation.isPending ? (
+												<span className="loading loading-spinner h-4 w-4" />
+											) : (
+												<Search className="h-4 w-4" />
+											)}
 											<span>Search</span>
 										</Button>
 									</div>
@@ -120,11 +128,18 @@ export default function DiscoverPage() {
 									value={query}
 								/>
 								<Button
-									className="btn btn-primary join-item"
+									className={cn(
+										"btn btn-primary join-item",
+										searchMutation.isPending && "btn-disabled"
+									)}
 									disabled={searchMutation.isPending}
 									type="submit"
 								>
-									<Search className="h-4 w-4" />
+									{searchMutation.isPending ? (
+										<span className="loading loading-spinner h-4 w-4" />
+									) : (
+										<Search className="h-4 w-4" />
+									)}
 									<span>Search</span>
 								</Button>
 							</div>
