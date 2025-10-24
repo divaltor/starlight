@@ -79,7 +79,7 @@ export default function DiscoverPage() {
 										<img
 											alt="Searching for cute anime girls..."
 											className="mx-auto h-auto w-64"
-											src="/nanashi-mumei-processing.gif"
+											src="/suisei.gif"
 										/>
 									</div>
 								) : (
