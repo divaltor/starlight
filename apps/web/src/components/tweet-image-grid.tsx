@@ -1,10 +1,11 @@
+import "photoswipe/dist/photoswipe.css";
 import type {
-	PhotoData,
 	ScheduledSlotData,
 	TweetData,
 } from "@starlight/api/src/types/tweets";
 import { Shuffle, X } from "lucide-react";
 import { useState } from "react";
+import { Gallery, Item } from "react-photoswipe-gallery";
 import { Button } from "@/components/ui/button";
 
 type TweetImageGridProps = {
@@ -28,16 +29,6 @@ export function TweetImageGrid({
 		[key: string]: boolean;
 	}>({});
 
-	const [isBlurred, setIsBlurred] = useState<Record<string, boolean>>(() =>
-		tweet.photos.reduce(
-			(acc: Record<string, boolean>, photo: PhotoData) => {
-				acc[photo.id] = !!photo.is_nsfw;
-				return acc;
-			},
-			{} as Record<string, boolean>
-		)
-	);
-
 	const handleImageLoad = (imageId: string, isLoading: boolean) => {
 		setIsImageLoading((prev) => ({ ...prev, [imageId]: isLoading }));
 	};
@@ -52,82 +43,93 @@ export function TweetImageGrid({
 		const photo = tweet.photos[0];
 
 		return (
-			<button
-				className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md"
-				onClick={() => {
-					const photo = tweet.photos[0];
-					if (photo.is_nsfw && isBlurred[photo.id]) {
-						setIsBlurred((prev) => ({ ...prev, [photo.id]: false }));
-					}
+			<Gallery
+				options={{
+					showHideAnimationType: "zoom",
 				}}
-				type="button"
+				withCaption={false}
 			>
-				{isImageLoading[photo.id] && (
-					<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
-						<div className="loading loading-spinner loading-sm" />
-					</div>
-				)}
-				{/** biome-ignore lint/a11y/useAltText: Fuck off */}
-				{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
-				<img
-					className={`h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105 ${
-						photo.is_nsfw && isBlurred[photo.id] ? "blur-sm" : ""
-					}`}
-					height={400}
-					onLoad={() => handleImageLoad(photo.id, false)}
-					onLoadStart={() => handleImageLoad(photo.id, true)}
-					src={photo.url}
-					width={400}
-				/>
-				<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-				<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
-					<div className="w-full p-3 text-white">
-						<div className="flex items-center justify-between">
-							{!hideArtist && (
-								<div>
-									<button
-										className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-primary"
-										onClick={(e) => handleArtistClick(e)}
-										type="button"
-									>
-										{tweet.artist}
-									</button>
+				<Item
+					height={photo.height}
+					original={photo.url}
+					thumbnail={photo.url}
+					width={photo.width}
+				>
+					{({ ref, open }) => (
+						<button
+							className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md"
+							onClick={open}
+							ref={ref}
+							type="button"
+						>
+							{isImageLoading[photo.id] && (
+								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
+									<div className="loading loading-spinner loading-sm" />
 								</div>
 							)}
-							{showActions && slot && (
-								<div className="flex items-center gap-1">
-									{onShuffleTweet && (
-										<Button
-											className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-primary"
-											onClick={(e) => {
-												e.stopPropagation();
-												onShuffleTweet(tweet.id);
-											}}
-											size="sm"
-											variant="ghost"
-										>
-											<Shuffle className="h-3 w-3" />
-										</Button>
-									)}
-									{onDeleteImage && (
-										<Button
-											className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
-											onClick={(e) => {
-												e.stopPropagation();
-												onDeleteImage(photo.id);
-											}}
-											size="sm"
-											variant="ghost"
-										>
-											<X className="h-3 w-3" />
-										</Button>
-									)}
+							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
+							<img
+								className={`${
+									photo.is_nsfw ? "blur-sm" : ""
+								} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
+								height={400}
+								onLoad={() => handleImageLoad(photo.id, false)}
+								onLoadStart={() => handleImageLoad(photo.id, true)}
+								src={photo.url}
+								width={400}
+							/>
+							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+							<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
+								<div className="w-full p-3 text-white">
+									<div className="flex items-center justify-between">
+										{!hideArtist && (
+											<div>
+												<button
+													className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-primary"
+													onClick={(e) => handleArtistClick(e)}
+													type="button"
+												>
+													{tweet.artist}
+												</button>
+											</div>
+										)}
+										{showActions && slot && (
+											<div className="flex items-center gap-1">
+												{onShuffleTweet && (
+													<Button
+														className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-primary"
+														onClick={(e) => {
+															e.stopPropagation();
+															onShuffleTweet(tweet.id);
+														}}
+														size="sm"
+														variant="ghost"
+													>
+														<Shuffle className="h-3 w-3" />
+													</Button>
+												)}
+												{onDeleteImage && (
+													<Button
+														className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+														onClick={(e) => {
+															e.stopPropagation();
+															onDeleteImage(photo.id);
+														}}
+														size="sm"
+														variant="ghost"
+													>
+														<X className="h-3 w-3" />
+													</Button>
+												)}
+											</div>
+										)}
+									</div>
 								</div>
-							)}
-						</div>
-					</div>
-				</div>
-			</button>
+							</div>
+						</button>
+					)}
+				</Item>
+			</Gallery>
 		);
 	}
 
@@ -167,158 +169,183 @@ export function TweetImageGrid({
 				</div>
 			</div>
 			{/* Dynamic grid based on number of images */}
-			{tweet.photos.length === 2 && (
-				<div className="grid grid-cols-2 gap-2">
-					{tweet.photos.map((photo) => (
-						<button
-							className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100"
-							key={photo.id}
-							onClick={() => {
-								if (photo.is_nsfw && isBlurred[photo.id]) {
-									setIsBlurred((prev) => ({ ...prev, [photo.id]: false }));
-								}
-							}}
-							type="button"
-						>
-							{isImageLoading[photo.id] && (
-								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
-									<div className="loading loading-spinner loading-sm" />
-								</div>
-							)}
-							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
-							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
-							<img
-								className={`h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105 ${
-									photo.is_nsfw && isBlurred[photo.id] ? "blur-sm" : ""
-								}`}
-								height={400}
-								onLoad={() => handleImageLoad(photo.id, false)}
-								onLoadStart={() => handleImageLoad(photo.id, true)}
-								src={photo.url}
-								width={400}
-							/>
-							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							{showActions && onDeleteImage && slot && (
-								<div className="absolute top-2 right-2">
-									<Button
-										className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:text-error"
-										onClick={(e) => {
-											e.stopPropagation();
-											onDeleteImage(photo.id);
-										}}
-										size="sm"
-										variant="ghost"
+			<Gallery
+				options={{
+					showHideAnimationType: "zoom",
+				}}
+				withCaption={false}
+			>
+				{tweet.photos.length === 2 && (
+					<div className="grid grid-cols-2 gap-2">
+						{tweet.photos.map((photo) => (
+							<Item
+								height={photo.height}
+								key={photo.id}
+								original={photo.url}
+								thumbnail={photo.url}
+								width={photo.width}
+							>
+								{({ ref, open }) => (
+									<button
+										className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100"
+										onClick={open}
+										ref={ref}
+										type="button"
 									>
-										<X className="h-3 w-3" />
-									</Button>
-								</div>
-							)}
-						</button>
-					))}
-				</div>
-			)}
-			{tweet.photos.length === 3 && (
-				<div className="grid grid-cols-2 gap-2">
-					{tweet.photos.map((photo, index) => (
-						<button
-							className={`group relative cursor-pointer overflow-hidden rounded-box bg-base-100 ${
-								index === 0 ? "col-span-2" : ""
-							}`}
-							key={photo.id}
-							onClick={() => {
-								if (photo.is_nsfw && isBlurred[photo.id]) {
-									setIsBlurred((prev) => ({ ...prev, [photo.id]: false }));
-								}
-							}}
-							type="button"
-						>
-							{isImageLoading[photo.id] && (
-								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
-									<div className="loading loading-spinner loading-sm" />
-								</div>
-							)}
-							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
-							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
-							<img
-								className={`h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105 ${
-									photo.is_nsfw && isBlurred[photo.id] ? "blur-sm" : ""
-								}`}
-								height={400}
-								onLoad={() => handleImageLoad(photo.id, false)}
-								onLoadStart={() => handleImageLoad(photo.id, true)}
-								src={photo.url}
-								width={400}
-							/>
-							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							{showActions && onDeleteImage && slot && (
-								<div className="absolute top-2 right-2">
-									<Button
-										className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:text-error"
-										onClick={(e) => {
-											e.stopPropagation();
-											onDeleteImage(photo.id);
-										}}
-										size="sm"
-										variant="ghost"
+										{isImageLoading[photo.id] && (
+											<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
+												<div className="loading loading-spinner loading-sm" />
+											</div>
+										)}
+										{/** biome-ignore lint/a11y/useAltText: Fuck off */}
+										{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
+										<img
+											className={`${
+												photo.is_nsfw ? "blur-sm" : ""
+											} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
+											height={400}
+											onLoad={() => handleImageLoad(photo.id, false)}
+											onLoadStart={() => handleImageLoad(photo.id, true)}
+											src={photo.url}
+											width={400}
+										/>
+										<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+										{showActions && onDeleteImage && slot && (
+											<div className="absolute top-2 right-2">
+												<Button
+													className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:text-error"
+													onClick={(e) => {
+														e.stopPropagation();
+														onDeleteImage(photo.id);
+													}}
+													size="sm"
+													variant="ghost"
+												>
+													<X className="h-3 w-3" />
+												</Button>
+											</div>
+										)}
+									</button>
+								)}
+							</Item>
+						))}
+					</div>
+				)}
+				{tweet.photos.length === 3 && (
+					<div className="grid grid-cols-2 gap-2">
+						{tweet.photos.map((photo, index) => (
+							<Item
+								height={photo.height}
+								key={photo.id}
+								original={photo.url}
+								thumbnail={photo.url}
+								width={photo.width}
+							>
+								{({ ref, open }) => (
+									<button
+										className={`group relative cursor-pointer overflow-hidden rounded-box bg-base-100 ${
+											index === 0 ? "col-span-2" : ""
+										}`}
+										onClick={open}
+										ref={ref}
+										type="button"
 									>
-										<X className="h-3 w-3" />
-									</Button>
-								</div>
-							)}
-						</button>
-					))}
-				</div>
-			)}
-			{tweet.photos.length === 4 && (
-				<div className="grid grid-cols-2 gap-2">
-					{tweet.photos.map((photo) => (
-						<button
-							className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100"
-							key={photo.id}
-							onClick={() => {
-								if (photo.is_nsfw && isBlurred[photo.id]) {
-									setIsBlurred((prev) => ({ ...prev, [photo.id]: false }));
-								}
-							}}
-							type="button"
-						>
-							{isImageLoading[photo.id] && (
-								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
-									<div className="loading loading-spinner loading-sm" />
-								</div>
-							)}
-							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
-							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
-							<img
-								className={`h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105 ${
-									photo.is_nsfw && isBlurred[photo.id] ? "blur-sm" : ""
-								}`}
-								height={400}
-								onLoad={() => handleImageLoad(photo.id, false)}
-								onLoadStart={() => handleImageLoad(photo.id, true)}
-								src={photo.url}
-								width={400}
-							/>
-							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							{showActions && onDeleteImage && slot && (
-								<div className="absolute top-2 right-2">
-									<Button
-										className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:text-error"
-										onClick={(e) => {
-											e.stopPropagation();
-											onDeleteImage(photo.id);
-										}}
-										size="sm"
-										variant="ghost"
+										{isImageLoading[photo.id] && (
+											<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
+												<div className="loading loading-spinner loading-sm" />
+											</div>
+										)}
+										{/** biome-ignore lint/a11y/useAltText: Fuck off */}
+										{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
+										<img
+											className={`${
+												photo.is_nsfw ? "blur-sm" : ""
+											} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
+											height={400}
+											onLoad={() => handleImageLoad(photo.id, false)}
+											onLoadStart={() => handleImageLoad(photo.id, true)}
+											src={photo.url}
+											width={400}
+										/>
+										<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+										{showActions && onDeleteImage && slot && (
+											<div className="absolute top-2 right-2">
+												<Button
+													className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:text-error"
+													onClick={(e) => {
+														e.stopPropagation();
+														onDeleteImage(photo.id);
+													}}
+													size="sm"
+													variant="ghost"
+												>
+													<X className="h-3 w-3" />
+												</Button>
+											</div>
+										)}
+									</button>
+								)}
+							</Item>
+						))}
+					</div>
+				)}
+				{tweet.photos.length === 4 && (
+					<div className="grid grid-cols-2 gap-2">
+						{tweet.photos.map((photo) => (
+							<Item
+								height={photo.height}
+								key={photo.id}
+								original={photo.url}
+								thumbnail={photo.url}
+								width={photo.width}
+							>
+								{({ ref, open }) => (
+									<button
+										className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100"
+										onClick={open}
+										ref={ref}
+										type="button"
 									>
-										<X className="h-3 w-3" />
-									</Button>
-								</div>
-							)}
-						</button>
-					))}
-				</div>
-			)}
+										{isImageLoading[photo.id] && (
+											<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
+												<div className="loading loading-spinner loading-sm" />
+											</div>
+										)}
+										{/** biome-ignore lint/a11y/useAltText: Fuck off */}
+										{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
+										<img
+											className={`${
+												photo.is_nsfw ? "blur-sm" : ""
+											} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
+											height={400}
+											onLoad={() => handleImageLoad(photo.id, false)}
+											onLoadStart={() => handleImageLoad(photo.id, true)}
+											src={photo.url}
+											width={400}
+										/>
+										<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+										{showActions && onDeleteImage && slot && (
+											<div className="absolute top-2 right-2">
+												<Button
+													className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:text-error"
+													onClick={(e) => {
+														e.stopPropagation();
+														onDeleteImage(photo.id);
+													}}
+													size="sm"
+													variant="ghost"
+												>
+													<X className="h-3 w-3" />
+												</Button>
+											</div>
+										)}
+									</button>
+								)}
+							</Item>
+						))}
+					</div>
+				)}
+			</Gallery>
 		</div>
 	);
 }

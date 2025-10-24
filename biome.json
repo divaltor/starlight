@@ -59,6 +59,9 @@
       "correctness": {
         "useExhaustiveDependencies": "info"
       },
+      "a11y": {
+        "useAltText": "off"
+      },
       "complexity": {
         "noExcessiveCognitiveComplexity": "off"
       },
