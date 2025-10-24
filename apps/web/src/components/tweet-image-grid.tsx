@@ -67,9 +67,6 @@ export function TweetImageGrid({
 								>
 									{tweet.artist}
 								</button>
-								<p className="font-medium text-sm drop-shadow-lg">
-									{tweet.date}
-								</p>
 							</div>
 							{showActions && slot && (
 								<div className="flex items-center gap-1">
@@ -121,7 +118,6 @@ export function TweetImageGrid({
 					>
 						{tweet.artist}
 					</button>
-					<p className="text-base-content/60 text-xs">{tweet.date}</p>
 				</div>
 				<div className="flex items-center gap-2">
 					<span className="text-base-content/60 text-xs">
