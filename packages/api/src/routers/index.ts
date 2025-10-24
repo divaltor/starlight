@@ -15,7 +15,7 @@ import {
 	scheduledSlotRemovePhoto,
 	shuffleTweet,
 } from "./scheduling";
-import { searchImages } from "./search";
+import { randomImages, searchImages } from "./search";
 import { listUserTweets } from "./tweets";
 
 export const appRouter = {
@@ -36,6 +36,7 @@ export const appRouter = {
 	tweets: {
 		list: listUserTweets,
 		search: searchImages,
+		random: randomImages,
 	},
 	scheduling: {
 		photos: {
