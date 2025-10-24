@@ -13,6 +13,7 @@ export type SearchResult = {
 export type PhotoData = {
 	id: string;
 	url: string;
+	is_nsfw?: boolean;
 };
 
 export type TweetData = {

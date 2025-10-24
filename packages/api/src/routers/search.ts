@@ -118,7 +118,73 @@ export const searchImages = publicProcedure
         LIMIT 80;
 		`;
 
-		console.log(images);
-
 		return transformSearchResults(images);
 	});
+
+export const randomImages = publicProcedure.handler(async () => {
+	const images = await prisma.$queryRaw<SearchResult[]>`
+        WITH base AS (
+            SELECT
+                p.id,
+                p.s3_path,
+                p.original_url,
+                t.username,
+                t.created_at as tweet_created_at,
+                t.id as tweet_id,
+                (p.classification->>'aesthetic')::float AS aesthetic,
+                (p.classification->'style'->>'anime')::float AS style_anime,
+                (p.classification->'style'->>'real_life')::float AS style_real_life,
+                (p.classification->'style'->>'other')::float AS style_other,
+                (p.classification->'nsfw'->>'is_nsfw')::boolean AS is_nsfw
+            FROM photos p
+            JOIN tweets t ON t.id = p.tweet_id
+            WHERE p.classification IS NOT NULL 
+            AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
+            AND NOT (p.classification->'nsfw'->>'is_nsfw')::boolean
+        ),
+        ranked AS (
+            SELECT *,
+                aesthetic * style_anime * 
+                (1.0 - style_real_life) * 
+                (1.0 - style_other) AS effective,
+                ROW_NUMBER() OVER (
+                    ORDER BY 
+                    aesthetic * style_anime * 
+                    (1.0 - style_real_life) * 
+                    (1.0 - style_other) DESC
+                ) AS rank_style,
+                ROW_NUMBER() OVER (ORDER BY tweet_created_at DESC) AS rank_recency
+            FROM base
+        ),
+        fused AS (
+            SELECT
+                id as photo_id,
+                s3_path,
+                original_url,
+                username,
+                tweet_created_at,
+                tweet_id,
+                is_nsfw,
+                (
+                    (1.0 / (rank_style + 60) * 0.9) +
+                    (1.0 / (rank_recency + 60) * 0.1)
+                ) * effective * 
+                EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (30.0 * 24 * 3600.0))) AS final_score
+            FROM ranked
+        )
+        SELECT
+            photo_id,
+            original_url,
+            s3_path,
+            username,
+            tweet_created_at,
+            tweet_id,
+            is_nsfw,
+            final_score
+        FROM fused
+        ORDER BY final_score DESC NULLS LAST
+        LIMIT 30;
+	`;
+
+	return transformSearchResults(images);
+});

@@ -1,4 +1,5 @@
 import type {
+	PhotoData,
 	ScheduledSlotData,
 	TweetData,
 } from "@starlight/api/src/types/tweets";
@@ -25,6 +26,16 @@ export function TweetImageGrid({
 		[key: string]: boolean;
 	}>({});
 
+	const [isBlurred, setIsBlurred] = useState<Record<string, boolean>>(() =>
+		tweet.photos.reduce(
+			(acc: Record<string, boolean>, photo: PhotoData) => {
+				acc[photo.id] = !!photo.is_nsfw;
+				return acc;
+			},
+			{} as Record<string, boolean>
+		)
+	);
+
 	const handleImageLoad = (imageId: string, isLoading: boolean) => {
 		setIsImageLoading((prev) => ({ ...prev, [imageId]: isLoading }));
 	};
@@ -39,7 +50,16 @@ export function TweetImageGrid({
 		const photo = tweet.photos[0];
 
 		return (
-			<div className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md">
+			<button
+				className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md"
+				onClick={() => {
+					const photo = tweet.photos[0];
+					if (photo.is_nsfw && isBlurred[photo.id]) {
+						setIsBlurred((prev) => ({ ...prev, [photo.id]: false }));
+					}
+				}}
+				type="button"
+			>
 				{isImageLoading[photo.id] && (
 					<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
 						<div className="loading loading-spinner loading-sm" />
@@ -48,7 +68,9 @@ export function TweetImageGrid({
 				{/** biome-ignore lint/a11y/useAltText: Fuck off */}
 				{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 				<img
-					className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-80 dark:contrast-105"
+					className={`h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105 ${
+						photo.is_nsfw && isBlurred[photo.id] ? "blur-sm" : ""
+					}`}
 					height={400}
 					onLoad={() => handleImageLoad(photo.id, false)}
 					onLoadStart={() => handleImageLoad(photo.id, true)}
@@ -101,7 +123,7 @@ export function TweetImageGrid({
 						</div>
 					</div>
 				</div>
-			</div>
+			</button>
 		);
 	}
 
@@ -142,9 +164,15 @@ export function TweetImageGrid({
 			{tweet.photos.length === 2 && (
 				<div className="grid grid-cols-2 gap-2">
 					{tweet.photos.map((photo) => (
-						<div
+						<button
 							className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100"
 							key={photo.id}
+							onClick={() => {
+								if (photo.is_nsfw && isBlurred[photo.id]) {
+									setIsBlurred((prev) => ({ ...prev, [photo.id]: false }));
+								}
+							}}
+							type="button"
 						>
 							{isImageLoading[photo.id] && (
 								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
@@ -154,7 +182,9 @@ export function TweetImageGrid({
 							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
 							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 							<img
-								className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-80 dark:contrast-105"
+								className={`h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105 ${
+									photo.is_nsfw && isBlurred[photo.id] ? "blur-sm" : ""
+								}`}
 								height={400}
 								onLoad={() => handleImageLoad(photo.id, false)}
 								onLoadStart={() => handleImageLoad(photo.id, true)}
@@ -177,18 +207,24 @@ export function TweetImageGrid({
 									</Button>
 								</div>
 							)}
-						</div>
+						</button>
 					))}
 				</div>
 			)}
 			{tweet.photos.length === 3 && (
 				<div className="grid grid-cols-2 gap-2">
 					{tweet.photos.map((photo, index) => (
-						<div
+						<button
 							className={`group relative cursor-pointer overflow-hidden rounded-box bg-base-100 ${
 								index === 0 ? "col-span-2" : ""
 							}`}
 							key={photo.id}
+							onClick={() => {
+								if (photo.is_nsfw && isBlurred[photo.id]) {
+									setIsBlurred((prev) => ({ ...prev, [photo.id]: false }));
+								}
+							}}
+							type="button"
 						>
 							{isImageLoading[photo.id] && (
 								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
@@ -198,7 +234,9 @@ export function TweetImageGrid({
 							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
 							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 							<img
-								className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-80 dark:contrast-105"
+								className={`h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105 ${
+									photo.is_nsfw && isBlurred[photo.id] ? "blur-sm" : ""
+								}`}
 								height={400}
 								onLoad={() => handleImageLoad(photo.id, false)}
 								onLoadStart={() => handleImageLoad(photo.id, true)}
@@ -221,16 +259,22 @@ export function TweetImageGrid({
 									</Button>
 								</div>
 							)}
-						</div>
+						</button>
 					))}
 				</div>
 			)}
 			{tweet.photos.length === 4 && (
 				<div className="grid grid-cols-2 gap-2">
 					{tweet.photos.map((photo) => (
-						<div
+						<button
 							className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100"
 							key={photo.id}
+							onClick={() => {
+								if (photo.is_nsfw && isBlurred[photo.id]) {
+									setIsBlurred((prev) => ({ ...prev, [photo.id]: false }));
+								}
+							}}
+							type="button"
 						>
 							{isImageLoading[photo.id] && (
 								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
@@ -240,7 +284,9 @@ export function TweetImageGrid({
 							{/** biome-ignore lint/a11y/useAltText: Fuck off */}
 							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 							<img
-								className="h-auto w-full transition-transform duration-300 group-hover:scale-105 dark:brightness-80 dark:contrast-105"
+								className={`h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105 ${
+									photo.is_nsfw && isBlurred[photo.id] ? "blur-sm" : ""
+								}`}
 								height={400}
 								onLoad={() => handleImageLoad(photo.id, false)}
 								onLoadStart={() => handleImageLoad(photo.id, true)}
@@ -263,7 +309,7 @@ export function TweetImageGrid({
 									</Button>
 								</div>
 							)}
-						</div>
+						</button>
 					))}
 				</div>
 			)}

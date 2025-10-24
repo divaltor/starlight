@@ -19,12 +19,15 @@ function transformTweetsBase<
 	tweets: T[],
 	getPhotos: (
 		tweet: T
-	) => Array<Pick<Photo, "id" | "originalUrl"> & { s3Url: string | undefined }>
+	) => Array<
+		Pick<Photo, "id" | "originalUrl"> & { s3Url?: string; is_nsfw?: boolean }
+	>
 ): TweetData[] {
 	return tweets.map((tweet) => {
 		const photos = getPhotos(tweet).map((photo) => ({
 			id: photo.id,
 			url: photo.s3Url || photo.originalUrl,
+			is_nsfw: photo.is_nsfw,
 		}));
 
 		return {
@@ -84,6 +87,7 @@ export const transformSearchResults = (results: SearchResult[]): TweetData[] =>
 					s3Url: result.s3_path
 						? `${env.BASE_CDN_URL}/${result.s3_path}`
 						: undefined,
+					is_nsfw: result.is_nsfw,
 				},
 			],
 		})),
