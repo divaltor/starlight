@@ -17,10 +17,13 @@ function transformTweetsBase<
 	T extends Pick<Tweet, "id" | "createdAt" | "username">,
 >(
 	tweets: T[],
-	getPhotos: (
-		tweet: T
-	) => Array<
-		Pick<Photo, "id" | "originalUrl"> & { s3Url?: string; is_nsfw?: boolean }
+	getPhotos: (tweet: T) => Array<
+		Pick<Photo, "id" | "originalUrl"> & {
+			s3Url?: string;
+			is_nsfw?: boolean;
+			height?: number;
+			width?: number;
+		}
 	>
 ): TweetData[] {
 	return tweets.map((tweet) => {
@@ -28,6 +31,8 @@ function transformTweetsBase<
 			id: photo.id,
 			url: photo.s3Url || photo.originalUrl,
 			is_nsfw: photo.is_nsfw,
+			height: photo.height,
+			width: photo.width,
 		}));
 
 		return {
@@ -42,13 +47,23 @@ function transformTweetsBase<
 }
 
 export const transformTweets = (
-	tweets: (Tweet & { photos: (Photo & { s3Url: string | undefined })[] })[]
+	tweets: (Tweet & {
+		photos: (Photo & {
+			s3Url: string | undefined;
+			height?: number;
+			width?: number;
+		})[];
+	})[]
 ) => transformTweetsBase(tweets, (t) => t.photos);
 
 export const transformSlotTweets = (
 	tweets: (ScheduledSlotTweet & { tweet: Tweet } & {
 		scheduledSlotPhotos: (ScheduledSlotPhoto & {
-			photo: Photo & { s3Url: string | undefined };
+			photo: Photo & {
+				s3Url: string | undefined;
+				height?: number;
+				width?: number;
+			};
 		})[];
 	})[]
 ) => {
@@ -88,6 +103,8 @@ export const transformSearchResults = (results: SearchResult[]): TweetData[] =>
 						? `${env.BASE_CDN_URL}/${result.s3_path}`
 						: undefined,
 					is_nsfw: result.is_nsfw,
+					height: result.height,
+					width: result.width,
 				},
 			],
 		})),

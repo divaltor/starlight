@@ -1,12 +1,14 @@
-import { useMutation } from "@tanstack/react-query";
+import type { TweetData } from "@starlight/api/src/types/tweets";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Masonry } from "masonic";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { LayoutManager } from "@/utils/layout";
 import { orpc } from "@/utils/orpc";
 
 const examples = [
@@ -24,10 +26,26 @@ export default function DiscoverPage() {
 		"initial"
 	);
 	const [showExamples, setShowExamples] = useState(true);
+	const [isLargeScreen, setIsLargeScreen] = useState(false);
+	const [visibleIndices, setVisibleIndices] = useState<number[]>([]);
+
+	useEffect(() => {
+		const updateScreen = () => {
+			setIsLargeScreen(window.innerWidth > 1024);
+		};
+		updateScreen();
+		window.addEventListener("resize", updateScreen);
+		return () => window.removeEventListener("resize", updateScreen);
+	}, []);
 
 	const searchMutation = useMutation(
 		orpc.tweets.search.mutationOptions({ retry: false })
 	);
+
+	const randomQuery = useQuery({
+		...orpc.tweets.random.queryOptions({ retry: false }),
+		enabled: true,
+	});
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -56,6 +74,45 @@ export default function DiscoverPage() {
 
 	const results = searchMutation.data || [];
 
+	// Generate non-overlapping positions for random images
+	const randomImages: TweetData[] = randomQuery.data || [];
+	const placedData = useMemo(() => {
+		if (randomImages.length === 0 || typeof window === "undefined") {
+			return [];
+		}
+
+		const layout = new LayoutManager(100, 100);
+		return layout.placeTweets(randomImages);
+	}, [randomImages]);
+
+	useEffect(() => {
+		if (
+			placedData.length > 0 &&
+			randomQuery.isSuccess &&
+			!searchMutation.isPending &&
+			results.length === 0
+		) {
+			const timeouts: NodeJS.Timeout[] = [];
+			for (let i = 0; i < placedData.length; i++) {
+				const item = placedData[i];
+				const timer = setTimeout(() => {
+					setVisibleIndices((prev) => [...prev, item.index]);
+				}, i * 500);
+				timeouts.push(timer);
+			}
+			return () => {
+				for (const timeout of timeouts) {
+					clearTimeout(timeout);
+				}
+			};
+		}
+	}, [
+		placedData,
+		randomQuery.isSuccess,
+		searchMutation.isPending,
+		results.length,
+	]);
+
 	return (
 		<div className="flex min-h-screen flex-col bg-base-100">
 			{/* Main Content */}
@@ -70,9 +127,9 @@ export default function DiscoverPage() {
 						/>
 					</div>
 				) : (
-					// Hero Section with centered search
-					<section className="hero hero-center">
-						<div className="hero-content text-center">
+					// Hero Section with centered search and floating images on large screen
+					<section className="hero hero-center relative w-full max-w-7xl">
+						<div className="hero-content relative z-10 text-center">
 							<div className="max-w-2xl">
 								{searchMutation.isPending ? (
 									<div className="flex justify-center py-6">
@@ -153,6 +210,37 @@ export default function DiscoverPage() {
 					</section>
 				)}
 			</div>
+			{isLargeScreen &&
+				randomQuery.isSuccess &&
+				placedData.length > 0 &&
+				!searchMutation.isPending &&
+				results.length === 0 && (
+					<div className="pointer-events-none absolute inset-0 overflow-hidden">
+						{placedData.map(({ position, index }) => {
+							const tweet = randomImages[index];
+							const isVisible = visibleIndices.includes(index);
+							return (
+								<div
+									className={cn(
+										"absolute transition-opacity duration-700 ease-in-out",
+										isVisible ? "opacity-85" : "opacity-0"
+									)}
+									key={tweet.id}
+									style={{
+										top: `${position.top}%`,
+										left: `${position.left}%`,
+										width: "250px",
+										height: "auto",
+										transform: "translate(-50%, -50%)",
+										zIndex: 1,
+									}}
+								>
+									<TweetImageGrid hideArtist tweet={tweet} />
+								</div>
+							);
+						})}
+					</div>
+				)}
 
 			{/* Sticky Search Bar - only when results */}
 			{results.length > 0 && (

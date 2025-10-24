@@ -58,6 +58,8 @@ export const searchImages = publicProcedure
                 c.s_coarse,
                 c.s_image,
                 c.s_tag,
+                p.height,
+                p.width,
                 p.s3_path,
                 p.original_url,
                 t.username,
@@ -87,6 +89,8 @@ export const searchImages = publicProcedure
         fused AS (
             SELECT
                 id as photo_id,
+                height,
+                width,
                 original_url as original_url,
                 s3_path as s3_path,
                 username,
@@ -106,6 +110,8 @@ export const searchImages = publicProcedure
         )
         SELECT
             photo_id,
+            height,
+            width,
             original_url,
             s3_path,
             username,
@@ -126,6 +132,8 @@ export const randomImages = publicProcedure.handler(async () => {
         WITH base AS (
             SELECT
                 p.id,
+                p.height,
+                p.width,
                 p.s3_path,
                 p.original_url,
                 t.username,
@@ -159,6 +167,8 @@ export const randomImages = publicProcedure.handler(async () => {
         fused AS (
             SELECT
                 id as photo_id,
+                height,
+                width,
                 s3_path,
                 original_url,
                 username,
@@ -182,6 +192,8 @@ export const randomImages = publicProcedure.handler(async () => {
             original_url,
             s3_path,
             username,
+            height,
+            width,
             tweet_created_at,
             tweet_id,
             is_nsfw,

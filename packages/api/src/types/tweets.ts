@@ -8,12 +8,16 @@ export type SearchResult = {
 	tweet_id: string;
 	tweet_created_at: Date;
 	is_nsfw: boolean;
+	height: number;
+	width: number;
 };
 
 export type PhotoData = {
 	id: string;
 	url: string;
 	is_nsfw?: boolean;
+	height?: number;
+	width?: number;
 };
 
 export type TweetData = {
