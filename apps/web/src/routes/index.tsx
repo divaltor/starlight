@@ -10,14 +10,20 @@ import { cn } from "@/lib/utils";
 import { orpc } from "@/utils/orpc";
 
 const examples = [
-	"sunset over mountains",
-	"abstract art in blue tones",
-	"vintage car photography",
-	"nature landscape with river",
+	"furina genshin impact",
+	"white elf on pastel background",
+	"hollow knight",
+	"photographer with camera",
+	"sunrise winter landscape",
+	"sketch lineart",
 ];
 
 export default function DiscoverPage() {
 	const [query, setQuery] = useState("");
+	const [inputPosition, setInputPosition] = useState<"initial" | "bottom">(
+		"initial"
+	);
+	const [showExamples, setShowExamples] = useState(true);
 
 	const searchMutation = useMutation(
 		orpc.tweets.search.mutationOptions({ retry: false })
@@ -26,12 +32,16 @@ export default function DiscoverPage() {
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (query.trim()) {
+			setInputPosition("bottom");
+			setShowExamples(false);
 			searchMutation.mutate({ query });
 		}
 	};
 
 	const handleExampleClick = (example: string) => {
 		setQuery(example);
+		setInputPosition("bottom");
+		setShowExamples(false);
 		searchMutation.mutate({ query: example });
 	};
 
@@ -68,33 +78,55 @@ export default function DiscoverPage() {
 									Find cute anime girls using natural language
 								</p>
 								<form className="form-control" onSubmit={handleSearch}>
-									<div className="join mx-auto flex w-full justify-center">
-										<Input
-											className="input input-bordered join-item"
-											onChange={(e) => setQuery(e.target.value)}
-											placeholder="Search for images..."
-											type="text"
-											value={query}
-										/>
-										<Button
+									<div
+										className={cn(
+											"z-20 transition-all duration-500 ease-in-out",
+											inputPosition === "initial"
+												? "relative mx-auto w-full max-w-md"
+												: "fixed right-0 bottom-0 left-0 w-full border-base-200 border-t bg-base-100"
+										)}
+									>
+										<div
 											className={cn(
-												"btn btn-primary join-item",
-												searchMutation.isPending && "btn-disabled"
+												inputPosition === "bottom"
+													? "mx-auto max-w-lg p-4"
+													: "p-0"
 											)}
-											disabled={searchMutation.isPending}
-											type="submit"
 										>
-											{searchMutation.isPending ? (
-												<span className="loading loading-spinner h-4 w-4" />
-											) : (
-												<Search className="h-4 w-4" />
-											)}
-											<span>Search</span>
-										</Button>
+											<div className="join flex w-full">
+												<Input
+													className="input input-bordered join-item flex-1"
+													onChange={(e) => setQuery(e.target.value)}
+													placeholder="Search for images..."
+													type="text"
+													value={query}
+												/>
+												<Button
+													className={cn(
+														"btn btn-primary join-item",
+														searchMutation.isPending && "btn-disabled"
+													)}
+													disabled={searchMutation.isPending}
+													type="submit"
+												>
+													{searchMutation.isPending ? (
+														<span className="loading loading-spinner h-4 w-4" />
+													) : (
+														<Search className="h-4 w-4" />
+													)}
+													<span>Search</span>
+												</Button>
+											</div>
+										</div>
 									</div>
 								</form>
 								{/* Examples */}
-								<div className="py-6 text-center">
+								<div
+									className={cn(
+										"py-6 text-center transition-opacity duration-300 ease-in-out",
+										showExamples ? "opacity-100" : "opacity-0"
+									)}
+								>
 									<div className="flex flex-wrap justify-center gap-2">
 										{examples.map((example) => (
 											<Button
@@ -116,7 +148,7 @@ export default function DiscoverPage() {
 
 			{/* Sticky Search Bar - only when results */}
 			{results.length > 0 && (
-				<div className="sticky bottom-0 z-10 border-base-200 border-t bg-base-100 p-4">
+				<div className="sticky bottom-0 z-10 p-4">
 					<div className="mx-auto max-w-lg">
 						<form className="form-control" onSubmit={handleSearch}>
 							<div className="join mx-auto w-full max-w-lg">
