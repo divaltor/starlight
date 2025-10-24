@@ -72,11 +72,11 @@ export function TweetImageGrid({
 								className={`${
 									photo.is_nsfw ? "blur-sm" : ""
 								} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
-								height={400}
+								height={photo.height || 400}
 								onLoad={() => handleImageLoad(photo.id, false)}
 								onLoadStart={() => handleImageLoad(photo.id, true)}
 								src={photo.url}
-								width={400}
+								width={photo.width || 400}
 							/>
 							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 							<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
@@ -197,17 +197,16 @@ export function TweetImageGrid({
 												<div className="loading loading-spinner loading-sm" />
 											</div>
 										)}
-										{/** biome-ignore lint/a11y/useAltText: Fuck off */}
 										{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 										<img
 											className={`${
 												photo.is_nsfw ? "blur-sm" : ""
 											} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
-											height={400}
+											height={photo.height || 400}
 											onLoad={() => handleImageLoad(photo.id, false)}
 											onLoadStart={() => handleImageLoad(photo.id, true)}
 											src={photo.url}
-											width={400}
+											width={photo.width || 400}
 										/>
 										<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 										{showActions && onDeleteImage && slot && (
@@ -255,17 +254,16 @@ export function TweetImageGrid({
 												<div className="loading loading-spinner loading-sm" />
 											</div>
 										)}
-										{/** biome-ignore lint/a11y/useAltText: Fuck off */}
 										{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 										<img
 											className={`${
 												photo.is_nsfw ? "blur-sm" : ""
 											} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
-											height={400}
+											height={photo.height || 400}
 											onLoad={() => handleImageLoad(photo.id, false)}
 											onLoadStart={() => handleImageLoad(photo.id, true)}
 											src={photo.url}
-											width={400}
+											width={photo.width || 400}
 										/>
 										<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 										{showActions && onDeleteImage && slot && (
@@ -311,17 +309,16 @@ export function TweetImageGrid({
 												<div className="loading loading-spinner loading-sm" />
 											</div>
 										)}
-										{/** biome-ignore lint/a11y/useAltText: Fuck off */}
 										{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
 										<img
 											className={`${
 												photo.is_nsfw ? "blur-sm" : ""
 											} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
-											height={400}
+											height={photo.height || 400}
 											onLoad={() => handleImageLoad(photo.id, false)}
 											onLoadStart={() => handleImageLoad(photo.id, true)}
 											src={photo.url}
-											width={400}
+											width={photo.width || 400}
 										/>
 										<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 										{showActions && onDeleteImage && slot && (
