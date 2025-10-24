@@ -89,24 +89,49 @@ export const transformScheduledSlot = (
 	},
 });
 
-export const transformSearchResults = (results: SearchResult[]): TweetData[] =>
-	transformTweetsBase(
-		results.map((result) => ({
-			id: result.tweet_id,
-			username: result.username,
-			createdAt: result.tweet_created_at,
-			photos: [
-				{
-					id: result.photo_id,
-					originalUrl: result.original_url,
-					s3Url: result.s3_path
-						? `${env.BASE_CDN_URL}/${result.s3_path}`
-						: undefined,
-					is_nsfw: result.is_nsfw,
-					height: result.height,
-					width: result.width,
-				},
-			],
-		})),
-		(result) => result.photos
+export const transformSearchResults = (
+	results: SearchResult[]
+): TweetData[] => {
+	const grouped = results.reduce(
+		(acc, result) => {
+			const tweetId = result.tweet_id;
+			if (!acc[tweetId]) {
+				acc[tweetId] = {
+					id: tweetId,
+					username: result.username,
+					createdAt: result.tweet_created_at,
+					photos: [],
+				};
+			}
+			acc[tweetId].photos.push({
+				id: result.photo_id,
+				originalUrl: result.original_url,
+				s3Url: result.s3_path
+					? `${env.BASE_CDN_URL}/${result.s3_path}`
+					: undefined,
+				is_nsfw: result.is_nsfw,
+				height: result.height,
+				width: result.width,
+			});
+			return acc;
+		},
+		{} as Record<
+			string,
+			{
+				id: string;
+				username: string;
+				createdAt: Date;
+				photos: Array<{
+					id: string;
+					originalUrl: string;
+					s3Url?: string;
+					is_nsfw?: boolean;
+					height?: number;
+					width?: number;
+				}>;
+			}
+		>
 	);
+
+	return transformTweetsBase(Object.values(grouped), (tweet) => tweet.photos);
+};
