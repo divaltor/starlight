@@ -28,7 +28,35 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "Starlight Manager",
+				title: "Starlight Gallery",
+			},
+			{
+				property: "og:title",
+				content: "Starlight Gallery",
+			},
+			{
+				property: "og:description",
+				content: "View the your liked anime arts on X (Twitter).",
+			},
+			{
+				property: "og:image",
+				content: "/og.png",
+			},
+			{
+				property: "twitter:card",
+				name: "summary_large_image",
+			},
+			{
+				name: "twitter:title",
+				content: "Starlight Gallery",
+			},
+			{
+				name: "twitter:description",
+				content: "View your liked anime arts on X (Twitter).",
+			},
+			{
+				name: "twitter:image",
+				content: "/og.png",
 			},
 		],
 		links: [
