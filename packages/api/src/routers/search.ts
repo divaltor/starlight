@@ -171,6 +171,11 @@ export const randomImages = publicProcedure.handler(async () => {
                 ) * effective * 
                 EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (30.0 * 24 * 3600.0))) AS final_score
             FROM ranked
+        ),
+        top500 AS (
+            SELECT * FROM fused 
+            ORDER BY final_score DESC 
+            LIMIT 500
         )
         SELECT
             photo_id,
@@ -181,8 +186,8 @@ export const randomImages = publicProcedure.handler(async () => {
             tweet_id,
             is_nsfw,
             final_score
-        FROM fused
-        ORDER BY final_score DESC NULLS LAST
+        FROM top500
+        ORDER BY RANDOM()
         LIMIT 30;
 	`;
 

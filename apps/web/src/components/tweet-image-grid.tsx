@@ -13,12 +13,14 @@ type TweetImageGridProps = {
 	showActions?: boolean;
 	onShuffleTweet?: (tweetId: string) => void;
 	onDeleteImage?: (photoId: string) => void;
+	hideArtist?: boolean;
 };
 
 export function TweetImageGrid({
 	tweet,
 	slot,
 	showActions = false,
+	hideArtist = false,
 	onShuffleTweet,
 	onDeleteImage,
 }: TweetImageGridProps) {
@@ -81,15 +83,17 @@ export function TweetImageGrid({
 				<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
 					<div className="w-full p-3 text-white">
 						<div className="flex items-center justify-between">
-							<div>
-								<button
-									className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-primary"
-									onClick={(e) => handleArtistClick(e)}
-									type="button"
-								>
-									{tweet.artist}
-								</button>
-							</div>
+							{!hideArtist && (
+								<div>
+									<button
+										className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-primary"
+										onClick={(e) => handleArtistClick(e)}
+										type="button"
+									>
+										{tweet.artist}
+									</button>
+								</div>
+							)}
 							{showActions && slot && (
 								<div className="flex items-center gap-1">
 									{onShuffleTweet && (
@@ -132,15 +136,17 @@ export function TweetImageGrid({
 		<div className="rounded-box border border-base-200 bg-base-100 p-3 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md">
 			{/* Post header */}
 			<div className="mb-3 flex items-center justify-between">
-				<div>
-					<button
-						className="cursor-pointer text-left font-medium text-base-content text-sm transition-colors duration-200 hover:text-primary"
-						onClick={(e) => handleArtistClick(e)}
-						type="button"
-					>
-						{tweet.artist}
-					</button>
-				</div>
+				{!hideArtist && (
+					<div>
+						<button
+							className="cursor-pointer text-left font-medium text-base-content text-sm transition-colors duration-200 hover:text-primary"
+							onClick={(e) => handleArtistClick(e)}
+							type="button"
+						>
+							{tweet.artist}
+						</button>
+					</div>
+				)}
 				<div className="flex items-center gap-2">
 					<span className="text-base-content/60 text-xs">
 						{tweet.photos.length} images
