@@ -74,23 +74,31 @@ export default function DiscoverPage() {
 					<section className="hero hero-center">
 						<div className="hero-content text-center">
 							<div className="max-w-2xl">
-								<p className="py-6 text-2xl text-base-content/80">
-									Find cute anime girls using natural language
-								</p>
+								{searchMutation.isPending ? (
+									<div className="flex justify-center py-6">
+										<img
+											alt="Searching for cute anime girls..."
+											className="mx-auto h-auto w-64"
+											src="/nanashi-mumei-processing.gif"
+										/>
+									</div>
+								) : (
+									<p className="py-6 text-2xl text-base-content/80">
+										Find cute anime girls using natural language
+									</p>
+								)}
 								<form className="form-control" onSubmit={handleSearch}>
 									<div
 										className={cn(
 											"z-20 transition-all duration-500 ease-in-out",
 											inputPosition === "initial"
-												? "relative mx-auto w-full max-w-md"
-												: "fixed right-0 bottom-0 left-0 w-full border-base-200 border-t bg-base-100"
+												? "relative mx-auto w-full max-w-lg"
+												: "fixed inset-x-0 bottom-0 p-4"
 										)}
 									>
 										<div
 											className={cn(
-												inputPosition === "bottom"
-													? "mx-auto max-w-lg p-4"
-													: "p-0"
+												inputPosition === "bottom" ? "mx-auto max-w-lg" : "p-0"
 											)}
 										>
 											<div className="join flex w-full">
@@ -114,7 +122,7 @@ export default function DiscoverPage() {
 													) : (
 														<Search className="h-4 w-4" />
 													)}
-													<span>Search</span>
+													<span className="hidden sm:inline">Search</span>
 												</Button>
 											</div>
 										</div>
@@ -151,7 +159,7 @@ export default function DiscoverPage() {
 				<div className="sticky bottom-0 z-10 p-4">
 					<div className="mx-auto max-w-lg">
 						<form className="form-control" onSubmit={handleSearch}>
-							<div className="join mx-auto w-full max-w-lg">
+							<div className="join w-full">
 								<Input
 									className="input input-bordered join-item flex-1"
 									onChange={(e) => setQuery(e.target.value)}
@@ -172,7 +180,7 @@ export default function DiscoverPage() {
 									) : (
 										<Search className="h-4 w-4" />
 									)}
-									<span>Search</span>
+									<span className="hidden sm:inline">Search</span>
 								</Button>
 							</div>
 						</form>

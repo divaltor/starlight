@@ -37,3 +37,7 @@
 	--depth: 1;
 	--noise: 1;
   }
+
+html {
+	scrollbar-gutter: stable;
+}
