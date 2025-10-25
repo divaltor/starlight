@@ -49,7 +49,7 @@ const Carousel = ({
 				}}
 			>
 				<Swiper
-					cardsEffect={{ slideShadows: false }}
+					cardsEffect={{ slideShadows: false, rotate: false }}
 					effect="cards"
 					grabCursor={true}
 					modules={[EffectCards]}
