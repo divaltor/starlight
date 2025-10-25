@@ -229,7 +229,7 @@ export default function DiscoverPage() {
 							return (
 								<div
 									className={cn(
-										"absolute transition-opacity duration-700 ease-in-out",
+										"pointer-events-auto absolute transition-opacity duration-700 ease-in-out",
 										isVisible ? "opacity-85" : "opacity-0"
 									)}
 									key={tweet.id}
