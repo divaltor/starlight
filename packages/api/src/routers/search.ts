@@ -1,14 +1,19 @@
+import { Decoder, Encoder } from "@msgpack/msgpack";
 import { ORPCError } from "@orpc/client";
 import { env, prisma } from "@starlight/utils";
 import z from "zod";
 import { publicProcedure } from "..";
 import type { SearchResult } from "../types/tweets";
+import { redis } from "../utils/redis";
 import { transformSearchResults } from "../utils/transformations";
+
+const encoder = new Encoder();
+const decoder = new Decoder();
 
 export const searchImages = publicProcedure
 	.input(
 		z.object({
-			query: z.string().max(128),
+			query: z.string().max(256),
 		})
 	)
 	.handler(async ({ input }) => {
@@ -16,28 +21,51 @@ export const searchImages = publicProcedure
 			throw new ORPCError("Service not available, sorry!");
 		}
 
-		const response = await fetch(
-			new URL("/v1/embeddings", env.ML_BASE_URL).toString(),
-			{
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"X-API-Token": env.ML_API_TOKEN,
-				},
-				body: JSON.stringify({
-					tags: input.query,
-					encoding_mode: "retrieval.query",
-				}),
+		const query = input.query.trim();
+
+		// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
+		const hashedQuery = Bun.hash.xxHash32(query);
+		const ttlKey = `query:${hashedQuery}`;
+		let text: number[];
+
+		const memberExists = await redis.getBuffer(ttlKey);
+
+		if (memberExists) {
+			text = decoder.decode(memberExists) as number[];
+		} else {
+			const response = await fetch(
+				new URL("/v1/embeddings", env.ML_BASE_URL).toString(),
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"X-API-Token": env.ML_API_TOKEN,
+					},
+					body: JSON.stringify({
+						tags: query,
+						encoding_mode: "retrieval.query",
+					}),
+				}
+			);
+
+			if (!response.ok) {
+				throw new ORPCError("Failed to search images", {
+					status: 500,
+				});
 			}
-		);
 
-		if (!response.ok) {
-			throw new ORPCError("Failed to search images", {
-				status: 500,
-			});
+			const data = (await response.json()) as {
+				text: number[];
+			};
+
+			text = data.text;
+
+			await redis.setex(
+				ttlKey,
+				60 * 60 * 24 * 3,
+				Buffer.from(encoder.encode(text))
+			);
 		}
-
-		const { text } = (await response.json()) as { text: number[] };
 
 		const textVec = `[${text.join(",")}]`;
 

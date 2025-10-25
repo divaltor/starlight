@@ -22,6 +22,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@msgpack/msgpack": "^3.1.2",
     "@orpc/client": "catalog:",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
@@ -29,10 +30,10 @@
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
     "@telegram-apps/init-data-node": "^2.0.10",
+    "date-fns": "^4.1.0",
     "grammy": "catalog:",
     "hono": "catalog:",
     "ioredis": "catalog:",
-    "zod": "catalog:",
-    "date-fns": "^4.1.0"
+    "zod": "catalog:"
   }
 }
