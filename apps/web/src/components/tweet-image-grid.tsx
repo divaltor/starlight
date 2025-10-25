@@ -6,7 +6,7 @@ import { Shuffle, X } from "lucide-react";
 import type { UIElementData } from "photoswipe";
 import type { PhotoSwipe } from "photoswipe/lightbox";
 import { useState } from "react";
-import { Gallery, Item, useGallery } from "react-photoswipe-gallery";
+import { Gallery, Item } from "react-photoswipe-gallery";
 import { Button } from "@/components/ui/button";
 import { Carousel } from "@/components/ui/skiper-ui/carousel";
 
@@ -30,7 +30,6 @@ export function TweetImageGrid({
 	const [isImageLoading, setIsImageLoading] = useState<{
 		[key: string]: boolean;
 	}>({});
-	const { open } = useGallery();
 
 	const handleImageLoad = (imageId: string, isLoading: boolean) => {
 		setIsImageLoading((prev) => ({ ...prev, [imageId]: isLoading }));
@@ -212,104 +211,98 @@ export function TweetImageGrid({
 			uiElements={uiElements}
 			withCaption={false}
 		>
-			{convertedPhotos.map((photo) => (
-				<Item
-					alt={photo.alt}
-					height={photo.height}
-					key={photo.id}
-					original={photo.src}
-					thumbnail={photo.src}
-					width={photo.width}
-				>
-					{() => null}
-				</Item>
-			))}
 			<Carousel
 				images={convertedPhotos}
-				renderSlide={(item, index) => (
-					<div className="relative h-full w-full">
-						{isImageLoading[item.id || ""] && (
-							<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100/80">
-								<div className="loading loading-spinner loading-sm" />
-							</div>
-						)}
-						{/** biome-ignore lint/a11y/useSemanticElements: nested buttons */}
-						<div
-							className="group relative h-full w-full cursor-pointer overflow-hidden rounded-box transition-all duration-300 hover:z-10"
-							onClick={() => open(index)}
-							onKeyDown={(e) => {
-								if (e.key === "Enter" || e.key === " ") {
-									e.preventDefault();
-									open(index);
-								}
-							}}
-							role="button"
-							tabIndex={0}
-						>
-							{/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
-							<img
-								alt={item.alt}
-								className={`${
-									item.is_nsfw ? "blur-sm" : ""
-								} block h-full w-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
-								height={item.height || 400}
-								onLoad={() => handleImageLoad(item.id || "", false)}
-								onLoadStart={() => handleImageLoad(item.id || "", true)}
-								src={item.src}
-								width={item.width || 400}
-							/>
-							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
-								<div className="w-full p-3 text-white">
-									<div className="flex items-center justify-between">
-										<div
-											className={
-												showArtistOnHover
-													? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
-													: ""
-											}
-										>
-											<button
-												className="cursor-pointer text-left font-medium text-sm drop-shadow-lg transition-colors duration-200 hover:text-primary"
-												onClick={(e) => handleArtistClick(e)}
-												type="button"
+				renderSlide={(item) => (
+					<Item
+						alt={item.alt}
+						height={item.height || 400}
+						original={item.src}
+						thumbnail={item.src}
+						width={item.width || 400}
+					>
+						{({ ref, open }) => (
+							// biome-ignore lint/a11y/useKeyWithClickEvents: don't care
+							// biome-ignore lint/a11y/useSemanticElements: don't care
+							<div
+								className="group relative h-full w-full cursor-pointer overflow-hidden rounded-box transition-all duration-300 hover:z-10"
+								onClick={open}
+								ref={ref}
+								role="button"
+								tabIndex={0}
+							>
+								{isImageLoading[item.id || ""] && (
+									<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100/80">
+										<div className="loading loading-spinner loading-sm" />
+									</div>
+								)}
+								{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: don't care */}
+								<img
+									alt={item.alt}
+									className={`${
+										item.is_nsfw ? "blur-sm" : ""
+									} block h-full w-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
+									height={item.height || 400}
+									onLoad={() => handleImageLoad(item.id || "", false)}
+									onLoadStart={() => handleImageLoad(item.id || "", true)}
+									src={item.src}
+									width={item.width || 400}
+								/>
+								<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+								<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
+									<div className="w-full p-3 text-white">
+										<div className="flex items-center justify-between">
+											<div
+												className={
+													showArtistOnHover
+														? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+														: ""
+												}
 											>
-												{tweet.artist}
-											</button>
+												<button
+													className="cursor-pointer text-left font-medium text-sm drop-shadow-lg transition-colors duration-200 hover:text-primary"
+													onClick={(e) => handleArtistClick(e)}
+													type="button"
+												>
+													{tweet.artist}
+												</button>
+											</div>
+											{showActions && slot && (
+												<div className="flex items-center gap-1">
+													{onShuffleTweet && (
+														<Button
+															className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-primary"
+															onClick={(e) => {
+																e.stopPropagation();
+																onShuffleTweet(tweet.id);
+															}}
+															size="sm"
+															variant="ghost"
+														>
+															<Shuffle className="h-3 w-3" />
+														</Button>
+													)}
+													{onDeleteImage && (
+														<Button
+															className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+															onClick={(e) => {
+																e.stopPropagation();
+																onDeleteImage(item.id || "");
+															}}
+															size="sm"
+															variant="ghost"
+														>
+															<X className="h-3 w-3" />
+														</Button>
+													)}
+												</div>
+											)}
 										</div>
-										{showActions && slot && onShuffleTweet && (
-											<Button
-												className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-primary"
-												onClick={(e) => {
-													e.stopPropagation();
-													onShuffleTweet(tweet.id);
-												}}
-												size="sm"
-												variant="ghost"
-											>
-												<Shuffle className="h-3 w-3" />
-											</Button>
-										)}
 									</div>
 								</div>
 							</div>
-						</div>
-						{showActions && onDeleteImage && slot && (
-							<div className="absolute top-2 right-2 z-20">
-								<Button
-									className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/50 p-0 text-white hover:bg-white/20 hover:text-error"
-									onClick={(e) => {
-										e.stopPropagation();
-										onDeleteImage(item.id || "");
-									}}
-									size="sm"
-									variant="ghost"
-								>
-									<X className="h-3 w-3" />
-								</Button>
-							</div>
 						)}
-					</div>
+					</Item>
 				)}
 			/>
 		</Gallery>
