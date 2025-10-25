@@ -14,6 +14,10 @@ async function initializeClient() {
 
 		console.log("✅ TMA client initialization completed");
 	} catch (error) {
+		if (process.env.NODE_ENV !== "development") {
+			return;
+		}
+
 		console.error("❌ TMA client initialization failed:", error);
 	}
 }
