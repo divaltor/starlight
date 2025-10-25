@@ -242,7 +242,7 @@ export default function DiscoverPage() {
 										zIndex: 1,
 									}}
 								>
-									<TweetImageGrid hideArtist tweet={tweet} />
+									<TweetImageGrid showArtistOnHover tweet={tweet} />
 								</div>
 							);
 						})}
