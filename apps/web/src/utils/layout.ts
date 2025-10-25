@@ -11,7 +11,7 @@ export class LayoutManager {
 		height: number;
 	}> = [];
 
-	constructor(pageWidth: number, pageHeight: number, centerZonePercent = 0.25) {
+	constructor(pageWidth: number, pageHeight: number, centerZonePercent = 0.3) {
 		this.pageWidth = pageWidth;
 		this.pageHeight = pageHeight;
 
@@ -121,29 +121,13 @@ export class LayoutManager {
 		}> = [];
 		const CONTAINER_WIDTH_PERCENT = 20;
 
-		// Compute heights and sort indices by height descending
-		const indices: Array<{ index: number; height: number }> = [];
+		// Place in original order
 		for (let i = 0; i < tweets.length; i++) {
 			const tweet = tweets[i];
 			if (!tweet.photos.length) {
 				continue;
 			}
 
-			const firstPhoto = tweet.photos[0];
-			let aspect = 0.8;
-			if (firstPhoto.width && firstPhoto.height && firstPhoto.width > 0) {
-				aspect = firstPhoto.height / firstPhoto.width;
-			}
-			const height = CONTAINER_WIDTH_PERCENT * aspect;
-			indices.push({ index: i, height });
-		}
-
-		// Sort by height descending
-		indices.sort((a, b) => b.height - a.height);
-
-		// Place in sorted order
-		for (const { index: sortedIndex } of indices) {
-			const tweet = tweets[sortedIndex];
 			const firstPhoto = tweet.photos[0];
 			let aspect = 0.8;
 			if (firstPhoto.width && firstPhoto.height && firstPhoto.width > 0) {
@@ -156,7 +140,7 @@ export class LayoutManager {
 				computedHeight
 			);
 			if (placement) {
-				results.push({ position: placement, index: sortedIndex });
+				results.push({ position: placement, index: i });
 			}
 		}
 		return results;
