@@ -11,6 +11,8 @@ export default defineConfig({
 		nitroV2Plugin({
 			compatibilityDate: "2025-10-17",
 			preset: "bun",
+			minify: true,
+			sourceMap: true,
 		}),
 		tailwindcss(),
 		tanstackStart(),
