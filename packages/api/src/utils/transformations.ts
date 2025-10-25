@@ -27,13 +27,18 @@ function transformTweetsBase<
 	>
 ): TweetData[] {
 	return tweets.map((tweet) => {
-		const photos = getPhotos(tweet).map((photo) => ({
-			id: photo.id,
-			url: photo.s3Url || photo.originalUrl,
-			is_nsfw: photo.is_nsfw,
-			height: photo.height,
-			width: photo.width,
-		}));
+		const photos = getPhotos(tweet).map((photo) => {
+			const extension = photo.originalUrl.split(".").pop() ?? "jpg";
+
+			return {
+				id: photo.id,
+				url: photo.s3Url || photo.originalUrl,
+				is_nsfw: photo.is_nsfw,
+				height: photo.height,
+				width: photo.width,
+				alt: `${tweet.username}-${photo.id}.${extension}`,
+			};
+		});
 
 		return {
 			id: tweet.id,

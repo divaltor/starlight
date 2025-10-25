@@ -18,6 +18,7 @@ export type PhotoData = {
 	is_nsfw?: boolean;
 	height?: number;
 	width?: number;
+	alt: string;
 };
 
 export type TweetData = {
