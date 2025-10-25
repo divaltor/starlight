@@ -50,11 +50,6 @@ export default function DiscoverPage() {
 
 	const randomImages: TweetData[] = randomQuery.data || [];
 
-	const singleImageTweets = useMemo(
-		() => randomImages.filter((tweet) => tweet.photos.length === 1),
-		[randomImages]
-	);
-
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (query.trim()) {
@@ -84,13 +79,13 @@ export default function DiscoverPage() {
 
 	// Generate non-overlapping positions for random images
 	const placedData = useMemo(() => {
-		if (singleImageTweets.length === 0 || typeof window === "undefined") {
+		if (randomImages.length === 0 || typeof window === "undefined") {
 			return [];
 		}
 
 		const layout = new LayoutManager(100, 100);
-		return layout.placeTweets(singleImageTweets);
-	}, [singleImageTweets]);
+		return layout.placeTweets(randomImages);
+	}, [randomImages]);
 
 	useEffect(() => {
 		if (
@@ -224,7 +219,7 @@ export default function DiscoverPage() {
 				results.length === 0 && (
 					<div className="pointer-events-none absolute inset-0 overflow-hidden">
 						{placedData.map(({ position, index }) => {
-							const tweet = singleImageTweets[index];
+							const tweet = randomImages[index];
 							const isVisible = visibleIndices.includes(index);
 							return (
 								<div
