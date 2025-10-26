@@ -47,6 +47,7 @@ export default function DiscoverPage() {
 		...orpc.tweets.random.queryOptions({ retry: false }),
 		queryKey: ["tweets-random"],
 		enabled: true,
+		staleTime: 1000 * 60 * 60, // 1 hour
 	});
 
 	const randomImages: TweetData[] = randomQuery.data || [];
