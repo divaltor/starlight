@@ -45,6 +45,7 @@ export default function DiscoverPage() {
 
 	const randomQuery = useQuery({
 		...orpc.tweets.random.queryOptions({ retry: false }),
+		queryKey: ["tweets-random"],
 		enabled: true,
 	});
 
@@ -282,5 +283,11 @@ export default function DiscoverPage() {
 }
 
 export const Route = createFileRoute("/")({
+	loader: ({ context: { queryClient } }) => {
+		queryClient.prefetchQuery({
+			...orpc.tweets.random.queryOptions({ retry: false }),
+			queryKey: ["tweets-random"],
+		});
+	},
 	component: DiscoverPage,
 });
