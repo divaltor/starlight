@@ -28,7 +28,11 @@ export const searchImages = publicProcedure
 		const ttlKey = `query:${hashedQuery}`;
 		let text: number[];
 
-		const memberExists = await redis.getBuffer(ttlKey);
+		const memberExists = await redis.getexBuffer(
+			ttlKey,
+			"EX",
+			60 * 60 * 24 * 7
+		);
 
 		if (memberExists) {
 			text = decoder.decode(memberExists) as number[];
@@ -62,7 +66,7 @@ export const searchImages = publicProcedure
 
 			await redis.setex(
 				ttlKey,
-				60 * 60 * 24 * 3,
+				60 * 60 * 24 * 7,
 				Buffer.from(encoder.encode(text))
 			);
 		}
