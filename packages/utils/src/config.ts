@@ -93,12 +93,14 @@ const env = createEnv({
 
 export function getRandomProxy(): string | undefined {
 	if (!env.PROXY_URLS) {
-		return undefined;
+		return;
 	}
 
-	const proxyUrls = env.PROXY_URLS.split(',').map(url => url.trim()).filter(Boolean);
+	const proxyUrls = env.PROXY_URLS.split(",")
+		.map((url) => url.trim())
+		.filter(Boolean);
 	if (proxyUrls.length === 0) {
-		return undefined;
+		return;
 	}
 
 	const randomIndex = Math.floor(Math.random() * proxyUrls.length);
