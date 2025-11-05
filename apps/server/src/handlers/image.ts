@@ -400,6 +400,7 @@ privateChat.command("scrapper").filter(
 		const scheduledJob = await scrapperQueue.getJobScheduler(
 			`scrapper-${ctx.user?.id}`
 		);
+		const args = ctx.match;
 
 		if (!scheduledJob) {
 			ctx.logger.debug("Upserting job scheduler for user %s", ctx.user?.id);
@@ -428,13 +429,15 @@ privateChat.command("scrapper").filter(
 			return;
 		}
 
-		try {
-			await scrapperRateLimiter.consume(ctx.from.id);
-		} catch {
-			await ctx.reply(
-				"Sorry, but we already collected images for you. You can start a job each 15 minutes only for your convenience to not accidentally block your account."
-			);
-			return;
+		if (args !== "safe") {
+			try {
+				await scrapperRateLimiter.consume(ctx.from.id);
+			} catch {
+				await ctx.reply(
+					"Sorry, but we already collected images for you. You can start a job each 15 minutes only for your convenience to not accidentally block your account."
+				);
+				return;
+			}
 		}
 
 		await scrapperQueue.add(
