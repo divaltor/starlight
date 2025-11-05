@@ -1,6 +1,6 @@
 import { CookieEncryption } from "@starlight/crypto";
 import type { User } from "@starlight/utils";
-import { env, prisma } from "@starlight/utils";
+import { env, getRandomProxy, prisma } from "@starlight/utils";
 import {
 	ApiError,
 	AuthenticationError,
@@ -100,7 +100,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			fetch: (url: URL | RequestInfo, options: RequestInit = {}) =>
 				fetch(url, {
 					...options,
-					proxy: env.PROXY_URL,
+					proxy: getRandomProxy(),
 					headers: {
 						...options.headers,
 						"User-Agent": userAgent.toString(),

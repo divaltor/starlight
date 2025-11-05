@@ -80,7 +80,7 @@ const env = createEnv({
 			.default("false")
 			.transform((val) => z.stringbool().parse(val)),
 
-		PROXY_URL: z.string().optional(),
+		PROXY_URLS: z.string().optional(),
 	},
 	clientPrefix: "VITE_",
 	client: {
@@ -90,5 +90,19 @@ const env = createEnv({
 	runtimeEnv: process.env,
 	emptyStringAsUndefined: true,
 });
+
+export function getRandomProxy(): string | undefined {
+	if (!env.PROXY_URLS) {
+		return undefined;
+	}
+
+	const proxyUrls = env.PROXY_URLS.split(',').map(url => url.trim()).filter(Boolean);
+	if (proxyUrls.length === 0) {
+		return undefined;
+	}
+
+	const randomIndex = Math.floor(Math.random() * proxyUrls.length);
+	return proxyUrls[randomIndex];
+}
 
 export default env;
