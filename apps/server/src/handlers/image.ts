@@ -1,4 +1,5 @@
 import { b, fmt } from "@grammyjs/parse-mode";
+import { CookieEncryption } from "@starlight/crypto";
 import { env, type Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { RateLimiterRedis } from "rate-limiter-flexible";
@@ -6,7 +7,7 @@ import { channelKeyboard, webAppKeyboard } from "@/bot";
 import { schedulerFlow } from "@/queue/scheduler";
 import { scrapperQueue } from "@/queue/scrapper";
 import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
-import { redis } from "@/storage";
+import { Cookies, redis } from "@/storage";
 import type { Context } from "@/types";
 
 const scrapperRateLimiter = new RateLimiterRedis({
@@ -15,6 +16,11 @@ const scrapperRateLimiter = new RateLimiterRedis({
 	duration: 60 * 15, // per 15 minutes
 	keyPrefix: "scrapper",
 });
+
+const cookieEncryption = new CookieEncryption(
+	env.COOKIE_ENCRYPTION_KEY,
+	env.COOKIE_ENCRYPTION_SALT
+);
 
 const composer = new Composer<Context>();
 
@@ -329,6 +335,50 @@ composer.on("inline_query", async (ctx) => {
 		cache_time: 30,
 	});
 });
+
+privateChat.command("cookies").filter(
+	async (ctx) => ctx.session.cookies === null,
+	async (ctx) => {
+		const keyboard = new InlineKeyboard().webApp("Set cookies", {
+			url: `${env.BASE_FRONTEND_URL}/settings`,
+		});
+
+		await ctx.reply("No cookies found. Please set your cookies first.", {
+			reply_markup: keyboard,
+		});
+	}
+);
+
+privateChat.command("cookies").filter(
+	async (ctx) => ctx.session.cookies !== null,
+	async (ctx) => {
+		try {
+			const user_cookies = await redis.get(
+				`user:cookies:${ctx.user?.telegramId}`
+			);
+
+			if (!user_cookies) {
+				await ctx.reply("No cookies found in storage.");
+				return;
+			}
+
+			const cookiesJson = cookieEncryption.safeDecrypt(
+				user_cookies,
+				ctx.user?.telegramId.toString() || ""
+			);
+
+			const cookies = Cookies.fromJSON(cookiesJson);
+			const cookiesString = cookies.toString();
+
+			await ctx.reply(`Your cookies:\n\n${cookiesString}`);
+		} catch (error) {
+			ctx.logger.error({ error }, "Failed to decrypt cookies");
+			await ctx.reply(
+				"Failed to decrypt cookies. Please try setting them again."
+			);
+		}
+	}
+);
 
 privateChat.command("scrapper").filter(
 	async (ctx) => ctx.session.cookies === null,
