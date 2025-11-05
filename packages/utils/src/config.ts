@@ -79,6 +79,8 @@ const env = createEnv({
 			.string()
 			.default("false")
 			.transform((val) => z.stringbool().parse(val)),
+
+		PROXY_URL: z.string().optional(),
 	},
 	clientPrefix: "VITE_",
 	client: {

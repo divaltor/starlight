@@ -9,6 +9,7 @@ import {
 	type Tweet,
 } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
+import UserAgent from "user-agents";
 import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";
 import { Cookies, redis } from "@/storage";
@@ -90,7 +91,22 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			throw new Error("User ID not found");
 		}
 
-		const scrapper = new Scraper();
+		const userAgent = new UserAgent({
+			platform: "MacIntel",
+			deviceCategory: "desktop",
+		});
+
+		const scrapper = new Scraper({
+			fetch: (url: URL | RequestInfo, options: RequestInit = {}) =>
+				fetch(url, {
+					...options,
+					proxy: env.PROXY_URL,
+					headers: {
+						...options.headers,
+						"User-Agent": userAgent.toString(),
+					},
+				}),
+		});
 		await scrapper.setCookies(cookies.toString().split(";"));
 
 		let timeline: QueryTweetsResponse;
