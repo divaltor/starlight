@@ -96,11 +96,13 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			deviceCategory: "desktop",
 		});
 
+		const proxy = getRandomProxy();
+
 		const scrapper = new Scraper({
 			fetch: (url: URL | RequestInfo, options: RequestInit = {}) =>
 				fetch(url, {
 					...options,
-					proxy: getRandomProxy(),
+					proxy,
 					headers: {
 						...options.headers,
 						"User-Agent": userAgent.toString(),
@@ -117,6 +119,8 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			logger.error(
 				{
 					userId,
+					proxy,
+					userAgent: userAgent.toString(),
 					error:
 						error instanceof ApiError
 							? {
