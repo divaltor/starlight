@@ -73,6 +73,7 @@ export type RFC6265Cookie = {
 };
 
 const TWID_REGEX = /u=(\d+)/;
+const DOMAIN_REGEX = /https?:\/\/(.+?)\//;
 
 export class Cookies {
 	readonly cookies: Cookie[];
@@ -91,7 +92,7 @@ export class Cookies {
 		const parsed = JSON.parse(data);
 
 		return new Cookies(
-			parsed.map((cookie: RFC6265Cookie) => new Cookie(cookie))
+			parsed.map((cookie: any) => new Cookie(mapToRFC6265Cookie(cookie)))
 		);
 	}
 
@@ -120,5 +121,18 @@ export const s3 = new Bun.S3Client({
 	secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
 	endpoint: env.AWS_ENDPOINT,
 });
+
+function extractDomain(hostRaw: string): string {
+	const match = hostRaw.match(DOMAIN_REGEX);
+	return match?.[1] ?? "x.com";
+}
+
+export function mapToRFC6265Cookie(firefoxCookie: any): RFC6265Cookie {
+	return {
+		key: firefoxCookie["Name raw"],
+		value: firefoxCookie["Content raw"],
+		domain: extractDomain(firefoxCookie["Host raw"]),
+	};
+}
 
 export type { SessionData };
