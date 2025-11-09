@@ -38,6 +38,7 @@
     "tough-cookie": "^6.0.0",
     "user-agents": "^1.1.669",
     "uuid": "^13.0.0",
+    "x-client-transaction-id": "^0.1.9",
     "youtube-dl-exec": "^3.0.26",
     "zod": "^4.1.12"
   },
