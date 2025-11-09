@@ -25,7 +25,7 @@
     "@starlight/api": "workspace:*",
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
-    "@the-convocation/twitter-scraper": "^0.19.0",
+    "@the-convocation/twitter-scraper": "^0.19.1",
     "bullmq": "^5.61.0",
     "grammy": "catalog:",
     "hono": "catalog:",
