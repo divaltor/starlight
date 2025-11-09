@@ -25,7 +25,7 @@
     "@starlight/api": "workspace:*",
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
-    "@the-convocation/twitter-scraper": "git+https://github.com/divaltor/twitter-scraper.git#liked-tweets-api",
+    "@the-convocation/twitter-scraper": "git+https://github.com/divaltor/twitter-scraper.git",
     "bullmq": "^5.61.0",
     "grammy": "catalog:",
     "hono": "catalog:",

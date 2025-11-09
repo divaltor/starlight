@@ -21,8 +21,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@repo/utils": ["../../packages/utils/src/index"],
-      "@repo/crypto": ["../../packages/crypto/src/index"]
+      "@the-convocation/twitter-scraper": ["./node_modules/@the-convocation/twitter-scraper/src/_module.ts"]
     },
     "types": ["bun"],
     "composite": true

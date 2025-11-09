@@ -39,7 +39,7 @@ async function getXHeaders() {
 
 	const transactionId = await transaction.generateTransactionId(
 		"GET",
-		"/1.1/jot/client_event.json"
+		"/graphql/rk2aeVVvKsyUdG3jf5uiLw/Likes"
 	);
 
 	return transactionId;

@@ -29,7 +29,7 @@
         "@starlight/api": "workspace:*",
         "@starlight/crypto": "workspace:*",
         "@starlight/utils": "workspace:*",
-        "@the-convocation/twitter-scraper": "git+https://github.com/divaltor/twitter-scraper.git#liked-tweets-api",
+        "@the-convocation/twitter-scraper": "git+https://github.com/divaltor/twitter-scraper.git",
         "bullmq": "^5.61.0",
         "grammy": "catalog:",
         "hono": "catalog:",
@@ -1207,7 +1207,7 @@
 
     "@testing-library/react": ["@testing-library/react@16.3.0", "", { "dependencies": { "@babel/runtime": "^7.12.5" }, "peerDependencies": { "@testing-library/dom": "^10.0.0", "@types/react": "^18.0.0 || ^19.0.0", "@types/react-dom": "^18.0.0 || ^19.0.0", "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" }, "optionalPeers": ["@types/react", "@types/react-dom"] }, "sha512-kFSyxiEDwv1WLl2fgsq6pPBbw5aWKrsY2/noi1Id0TK0UParSF62oFQFGHXIyaG4pp2tEub/Zlel+fjjZILDsw=="],
 
-    "@the-convocation/twitter-scraper": ["@the-convocation/twitter-scraper@github:divaltor/twitter-scraper#a128320", { "dependencies": { "@sinclair/typebox": "^0.32.20", "cross-fetch": "^4.0.0-alpha.5", "debug": "^4.4.1", "headers-polyfill": "^3.1.2", "json-stable-stringify": "^1.0.2", "otpauth": "^9.2.2", "set-cookie-parser": "^2.6.0", "tough-cookie": "^4.1.2", "tslib": "^2.5.2" }, "peerDependencies": { "cycletls": "^2.0.4" }, "optionalPeers": ["cycletls"] }, "divaltor-twitter-scraper-a128320"],
+    "@the-convocation/twitter-scraper": ["@the-convocation/twitter-scraper@github:divaltor/twitter-scraper#970e945", { "dependencies": { "@sinclair/typebox": "^0.32.20", "cross-fetch": "^4.0.0-alpha.5", "debug": "^4.4.1", "headers-polyfill": "^3.1.2", "json-stable-stringify": "^1.0.2", "otpauth": "^9.2.2", "set-cookie-parser": "^2.6.0", "tough-cookie": "^4.1.2", "tslib": "^2.5.2" }, "peerDependencies": { "cycletls": "^2.0.4" }, "optionalPeers": ["cycletls"] }, "divaltor-twitter-scraper-970e945"],
 
     "@trpc/server": ["@trpc/server@11.6.0", "", { "peerDependencies": { "typescript": ">=5.7.2" } }, "sha512-skTso0AWbOZck40jwNeYv++AMZXNWLUWdyk+pB5iVaYmEKTuEeMoPrEudR12VafbEU6tZa8HK3QhBfTYYHDCdg=="],
 
@@ -1915,7 +1915,7 @@
 
     "openapi-types": ["openapi-types@12.1.3", "", {}, "sha512-N4YtSYJqghVu4iek2ZUvcN/0aqH1kRDuNqzcycDxhOUpg7GdvLa2F3DgS6yBNhInhv2r/6I0Flkn7CqL8+nIcw=="],
 
-    "otpauth": ["otpauth@9.4.0", "", { "dependencies": { "@noble/hashes": "1.7.1" } }, "sha512-fHIfzIG5RqCkK9cmV8WU+dPQr9/ebR5QOwGZn2JAr1RQF+lmAuLL2YdtdqvmBjNmgJlYk3KZ4a0XokaEhg1Jsw=="],
+    "otpauth": ["otpauth@9.4.1", "", { "dependencies": { "@noble/hashes": "1.8.0" } }, "sha512-+iVvys36CFsyXEqfNftQm1II7SW23W1wx9RwNk0Cd97lbvorqAhBDksb/0bYry087QMxjiuBS0wokdoZ0iUeAw=="],
 
     "oxlint-tsgolint": ["oxlint-tsgolint@0.2.1", "", { "optionalDependencies": { "@oxlint-tsgolint/darwin-arm64": "0.2.1", "@oxlint-tsgolint/darwin-x64": "0.2.1", "@oxlint-tsgolint/linux-arm64": "0.2.1", "@oxlint-tsgolint/linux-x64": "0.2.1", "@oxlint-tsgolint/win32-arm64": "0.2.1", "@oxlint-tsgolint/win32-x64": "0.2.1" }, "bin": { "tsgolint": "bin/tsgolint.js" } }, "sha512-Z5tZw9nilmLo+EukScIhGZSVRasjyCCUQrDlX5CoJNqbnv/mlo+mnTmiEN4cmJeKMwHSHSvgAaDn+0gfHAv24w=="],
 
@@ -2151,7 +2151,7 @@
 
     "server": ["server@workspace:apps/server"],
 
-    "set-cookie-parser": ["set-cookie-parser@2.7.1", "", {}, "sha512-IOc8uWeOZgnb3ptbCURJWNjWUPcO3ZnTTdzsurqERrP6nPyv+paC55vJM0LpOlT2ne+Ix+9+CRG1MNLlyZ4GjQ=="],
+    "set-cookie-parser": ["set-cookie-parser@2.7.2", "", {}, "sha512-oeM1lpU/UvhTxw+g3cIfxXHyJRc/uidd3yK1P242gzHds0udQBYzs3y8j4gCCW+ZJ7ad0yctld8RYO+bdurlvw=="],
 
     "set-function-length": ["set-function-length@1.2.2", "", { "dependencies": { "define-data-property": "^1.1.4", "es-errors": "^1.3.0", "function-bind": "^1.1.2", "get-intrinsic": "^1.2.4", "gopd": "^1.0.1", "has-property-descriptors": "^1.0.2" } }, "sha512-pgRc4hJ4/sNjWCSS9AmnS40x3bNMDTknHgL5UaMBTMyJnU90EgWh1Rz+MC9eFu4BuN/UwZjKQuY/1v3rM7HMfg=="],
 
@@ -2677,7 +2677,7 @@
 
     "open/is-wsl": ["is-wsl@2.2.0", "", { "dependencies": { "is-docker": "^2.0.0" } }, "sha512-fKzAra0rGJUUBwGBgNkHZuToZcn+TtXHpeCgmkMJMMYx1sQDYaCSyjJBSCa2nH1DGm7s3n1oBnohoVTBaN7Lww=="],
 
-    "otpauth/@noble/hashes": ["@noble/hashes@1.7.1", "", {}, "sha512-B8XBPsn4vT/KJAGqDzbwztd+6Yte3P4V7iafm24bxgDe/mlRuK6xmWPuCNrKt2vDafZ8MfJLlchDG/vYafQEjQ=="],
+    "otpauth/@noble/hashes": ["@noble/hashes@1.8.0", "", {}, "sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A=="],
 
     "path-scurry/lru-cache": ["lru-cache@10.4.3", "", {}, "sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ=="],
 
