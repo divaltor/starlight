@@ -8,7 +8,6 @@ import {
 } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import UserAgent from "user-agents";
-import ClientTransaction, { handleXMigration } from "x-client-transaction-id";
 import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";
 import { Cookies, redis } from "@/storage";
@@ -29,19 +28,6 @@ export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
 		},
 	},
 });
-
-async function getXHeaders() {
-	const document = await handleXMigration();
-
-	const transaction = await ClientTransaction.create(document);
-
-	const transactionId = await transaction.generateTransactionId(
-		"GET",
-		"/i/api/graphql/rk2aeVVvKsyUdG3jf5uiLw/Likes"
-	);
-
-	return transactionId;
-}
 
 type ScrapperJobData = {
 	userId: string;
@@ -110,24 +96,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 
 		const proxy = getRandomProxy();
 
-		const xHeaders = await getXHeaders();
-
-		const scrapper = new Scraper({
-			fetch: (url: URL | RequestInfo, options: RequestInit = {}) =>
-				fetch(url, {
-					...options,
-					proxy,
-					headers: {
-						...options.headers,
-						"User-Agent":
-							"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-						"X-Twitter-Auth-Type": "OAuth2Session",
-						"X-Twitter-Active-User": "yes",
-						"X-Twitter-Client-Language": "en",
-						"X-Client-Transaction-Id": xHeaders,
-					},
-				}),
-		});
+		const scrapper = new Scraper();
 		await scrapper.setCookies(cookies.toString().split(";"));
 
 		let timeline: QueryTweetsResponse;
@@ -140,7 +109,6 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 					userId,
 					proxy,
 					userAgent: userAgent.toString(),
-					transactionId: xHeaders,
 					error: String(error),
 				},
 				"Unable to fetch timeline for user %s",
@@ -155,7 +123,6 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 				userId,
 				cursor: job.data.cursor,
 				tweets: timeline.tweets.length,
-				transactionId: xHeaders,
 			},
 			"Scraped timeline for user %s, page %s",
 			userId,
