@@ -34,6 +34,7 @@ type ScrapperJobData = {
 	count: number;
 	limit: number;
 	cursor?: string;
+	force?: boolean;
 };
 
 export const scrapperWorker = new Worker<ScrapperJobData>(
@@ -198,8 +199,8 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 				});
 			}
 
-			// Stop if we've seen too many consecutive known tweets
-			if (consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) {
+			// Stop if we've seen too many consecutive known tweets (unless force is enabled)
+			if (!job.data.force && consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) {
 				logger.info(
 					{
 						userId,
@@ -246,10 +247,19 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 
 		// Stop if we hit consecutive threshold or other limits
 		if (
-			consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD ||
+			(!job.data.force && consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) ||
 			job.data.count >= job.data.limit ||
 			!timeline.next
 		) {
+			let reason: string;
+			if (!job.data.force && consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) {
+				reason = "consecutive_threshold";
+			} else if (job.data.count >= job.data.limit) {
+				reason = "count_limit";
+			} else {
+				reason = "no_next_cursor";
+			}
+
 			logger.info(
 				{
 					userId,
@@ -257,12 +267,8 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 					limit: job.data.limit,
 					consecutiveKnownTweets,
 					newTweetsInBatch,
-					reason:
-						consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD
-							? "consecutive_threshold"
-							: job.data.count >= job.data.limit
-								? "count_limit"
-								: "no_next_cursor",
+					force: job.data.force,
+					reason,
 				},
 				"Stopping scrape job"
 			);
@@ -276,6 +282,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 				count: job.data.count,
 				limit: job.data.limit,
 				cursor: timeline.next,
+				force: job.data.force,
 			},
 			{
 				delay: 1000 * 60 * 1, // 1 minute
