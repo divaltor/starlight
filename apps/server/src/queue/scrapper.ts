@@ -121,7 +121,11 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 					proxy,
 					headers: {
 						...options.headers,
-						"User-Agent": userAgent.toString(),
+						"User-Agent":
+							"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+						"X-Twitter-Auth-Type": "OAuth2Session",
+						"X-Twitter-Active-User": "yes",
+						"X-Twitter-Client-Language": "en",
 						"X-Client-Transaction-Id": xHeaders,
 					},
 				}),
