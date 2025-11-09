@@ -37,7 +37,7 @@ async function getXHeaders() {
 
 	const transactionId = await transaction.generateTransactionId(
 		"GET",
-		"/graphql/rk2aeVVvKsyUdG3jf5uiLw/Likes"
+		"/i/api/graphql/rk2aeVVvKsyUdG3jf5uiLw/Likes"
 	);
 
 	return transactionId;
@@ -124,7 +124,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 						"X-Twitter-Auth-Type": "OAuth2Session",
 						"X-Twitter-Active-User": "yes",
 						"X-Twitter-Client-Language": "en",
-						// "X-Client-Transaction-Id": xHeaders,
+						"X-Client-Transaction-Id": xHeaders,
 					},
 				}),
 		});
