@@ -126,7 +126,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 						"X-Twitter-Auth-Type": "OAuth2Session",
 						"X-Twitter-Active-User": "yes",
 						"X-Twitter-Client-Language": "en",
-						"X-Client-Transaction-Id": xHeaders,
+						// "X-Client-Transaction-Id": xHeaders,
 					},
 				}),
 		});
