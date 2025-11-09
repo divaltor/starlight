@@ -2,8 +2,6 @@ import { CookieEncryption } from "@starlight/crypto";
 import type { User } from "@starlight/utils";
 import { env, getRandomProxy, prisma } from "@starlight/utils";
 import {
-	ApiError,
-	AuthenticationError,
 	type QueryTweetsResponse,
 	Scraper,
 	type Tweet,
@@ -143,15 +141,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 					proxy,
 					userAgent: userAgent.toString(),
 					transactionId: xHeaders,
-					error:
-						error instanceof ApiError
-							? {
-									status: error.response.status,
-									message: error.response.statusText,
-								}
-							: error instanceof AuthenticationError
-								? error.message
-								: error,
+					error: String(error),
 				},
 				"Unable to fetch timeline for user %s",
 				userId
