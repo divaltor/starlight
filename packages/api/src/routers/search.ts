@@ -31,7 +31,7 @@ export const searchImages = publicProcedure
 		const memberExists = await redis.getexBuffer(
 			ttlKey,
 			"EX",
-			60 * 60 * 24 * 7
+			60 * 60 * 24 * 90
 		);
 
 		if (memberExists) {

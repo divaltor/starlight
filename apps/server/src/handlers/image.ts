@@ -445,8 +445,7 @@ privateChat.command("scrapper").filter(
 			{
 				userId: ctx.user?.id as string,
 				count: 0,
-				limit: 300,
-				force: true,
+				limit: 100,
 			},
 			{
 				deduplication: {
