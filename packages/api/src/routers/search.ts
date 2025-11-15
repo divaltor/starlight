@@ -24,7 +24,7 @@ export const searchImages = publicProcedure
 		const query = input.query.trim();
 
 		// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
-		const hashedQuery = Bun.hash.xxHash32(query);
+		const hashedQuery = Bun.hash.xxHash3(query);
 		const ttlKey = `query:${hashedQuery}`;
 		let text: number[];
 
