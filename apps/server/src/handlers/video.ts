@@ -8,6 +8,13 @@ const composer = new Composer<Context>();
 
 const feature = composer.chatType("private");
 
+function extractTweetId(url: string): string {
+	const match = url.match(
+		/https?:\/\/(?:x\.com|twitter\.com)\/\w+\/status\/(\d+)/
+	);
+	return match?.[1] ?? "";
+}
+
 function cleanupTweetText(text: string | undefined): string | undefined {
 	if (!text) {
 		return;
@@ -29,6 +36,7 @@ feature.command("q").filter(
 		await ctx.replyWithChatAction("upload_video");
 
 		const link = ctx.match;
+		const tweetId = extractTweetId(link);
 		const tempDir = tmp.dirSync({ unsafeCleanup: true });
 
 		let videos: VideoInformation[] = [];
@@ -41,7 +49,7 @@ feature.command("q").filter(
 		try {
 			[videos, tweet] = await Promise.all([
 				downloadVideo(link, tempDir.name),
-				scrapper.getTweet(link).catch((error) => {
+				scrapper.getTweet(tweetId).catch((error) => {
 					ctx.logger.error({ error }, "Error getting tweet");
 					return null;
 				}),
