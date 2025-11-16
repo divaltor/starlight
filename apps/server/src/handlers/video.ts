@@ -41,7 +41,10 @@ feature.command("q").filter(
 		try {
 			[videos, tweet] = await Promise.all([
 				downloadVideo(link, tempDir.name),
-				scrapper.getTweet(link).catch(() => null),
+				scrapper.getTweet(link).catch((error) => {
+					ctx.logger.error({ error }, "Error getting tweet");
+					return null;
+				}),
 			]);
 		} catch (error) {
 			ctx.logger.error(error, "Error downloading video");
