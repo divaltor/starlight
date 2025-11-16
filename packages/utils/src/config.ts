@@ -66,8 +66,6 @@ const env = createEnv({
 			.default(""),
 		DEFAULT_MEDIA_PATH: z.string().default("media/"),
 
-		INSTAGRAM_COOKIES: z.string().optional(),
-
 		ML_BASE_URL: z.url().optional(),
 		ML_API_TOKEN: z.string().optional(),
 

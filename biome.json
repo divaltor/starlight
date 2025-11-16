@@ -77,7 +77,8 @@
         "noShadow": "off"
       },
       "performance": {
-        "noImgElement": "off"
+        "noImgElement": "off",
+        "useTopLevelRegex": "off"
       },
       "style": {
         "noParameterAssign": "error",
