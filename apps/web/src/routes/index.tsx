@@ -76,6 +76,7 @@ export default function DiscoverPage() {
 	};
 
 	const handleExampleClick = (example: string) => {
+		setInputValue(example);
 		setUrlQuery(example);
 		searchMutation.mutate({ query: example });
 	};
