@@ -10,6 +10,7 @@ export type SearchResult = {
 	is_nsfw: boolean;
 	height: number;
 	width: number;
+	final_score: number;
 };
 
 export type PhotoData = {
@@ -46,5 +47,10 @@ export type ScheduledSlotResult = {
 
 export type TweetsPageResult = {
 	tweets: TweetData[];
+	nextCursor: string | null;
+};
+
+export type SearchPageResult = {
+	results: TweetData[];
 	nextCursor: string | null;
 };

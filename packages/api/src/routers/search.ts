@@ -4,6 +4,7 @@ import { env, prisma } from "@starlight/utils";
 import z from "zod";
 import { publicProcedure } from "..";
 import type { SearchResult } from "../types/tweets";
+import { Cursor, type SearchCursorPayload } from "../utils/cursor";
 import { redis } from "../utils/redis";
 import { transformSearchResults } from "../utils/transformations";
 
@@ -14,6 +15,8 @@ export const searchImages = publicProcedure
 	.input(
 		z.object({
 			query: z.string().max(256),
+			cursor: z.string().optional(),
+			limit: z.number().min(1).max(100).default(30),
 		})
 	)
 	.handler(async ({ input }) => {
@@ -22,6 +25,7 @@ export const searchImages = publicProcedure
 		}
 
 		const query = input.query.trim();
+		const { cursor, limit } = input;
 
 		// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 		const hashedQuery = Bun.hash.xxHash3(query);
@@ -71,15 +75,35 @@ export const searchImages = publicProcedure
 			);
 		}
 
-		const textVec = `[${text.join(",")}]`;
+		let cursorData: SearchCursorPayload | null = null;
+		if (cursor) {
+			cursorData = Cursor.parse<SearchCursorPayload>(cursor);
 
-		const images = await prisma.$queryRaw<SearchResult[]>`
+			if (!cursorData) {
+				return {
+					results: [],
+					nextCursor: null,
+				};
+			}
+		}
+
+		const queryTime = cursorData?.queryTime
+			? `'${cursorData.queryTime}'::timestamptz`
+			: "NOW()";
+
+		const whereClause = cursorData
+			? `WHERE final_score < ${cursorData.lastScore} OR (final_score = ${cursorData.lastScore} AND photo_id < '${cursorData.lastPhotoId}')`
+			: "";
+
+		const textQuery = `[${text.join(",")}]`;
+
+		const images = await prisma.$queryRawUnsafe<SearchResult[]>(`
         WITH coarse AS (
             SELECT
                 p.id,
-                1.0 - (p.image_vec <=> ${textVec}::vector) AS s_image,
-                1.0 - (p.tag_vec <=> ${textVec}::vector) AS s_tag,
-                GREATEST(1.0 - (p.image_vec <=> ${textVec}::vector), 1.0 - (p.tag_vec <=> ${textVec}::vector)) AS s_coarse
+                    1.0 - (p.image_vec <=> '${textQuery}'::vector) AS s_image,
+                1.0 - (p.tag_vec <=> '${textQuery}'::vector) AS s_tag,
+                GREATEST(1.0 - (p.image_vec <=> '${textQuery}'::vector), 1.0 - (p.tag_vec <=> '${textQuery}'::vector)) AS s_coarse
             FROM photos p
             WHERE classification IS NOT NULL AND image_vec IS NOT NULL AND tag_vec IS NOT NULL AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
             ORDER BY s_coarse DESC
@@ -136,7 +160,7 @@ export const searchImages = publicProcedure
                     (1.0 / (rank_recency + 60) * 0.1)
                 ) * 
                 (
-                    (aesthetic * (1.0 - style_real_life)) * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (30.0 * 24 * 3600)))
+                    (aesthetic * (1.0 - style_real_life)) * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime} - tweet_created_at)) / (30.0 * 24 * 3600)))
                 ) AS final_score
             FROM ranked
         )
@@ -152,11 +176,28 @@ export const searchImages = publicProcedure
             is_nsfw,
             final_score
         FROM fused
-        ORDER BY final_score DESC NULLS LAST
-        LIMIT 80;
-		`;
+        ${whereClause}
+        ORDER BY final_score DESC NULLS LAST, photo_id DESC
+        LIMIT ${limit};
+		`);
 
-		return transformSearchResults(images);
+		const transformedResults = transformSearchResults(images);
+
+		let nextCursor: string | null = null;
+		if (images.length === limit) {
+			// biome-ignore lint/style/noNonNullAssertion: We know there's at least one image
+			const lastImage = images.at(-1)!;
+			nextCursor = Cursor.create<SearchCursorPayload>({
+				lastScore: lastImage.final_score,
+				lastPhotoId: lastImage.photo_id,
+				queryTime: cursorData?.queryTime ?? new Date().toISOString(),
+			});
+		}
+
+		return {
+			results: transformedResults,
+			nextCursor,
+		};
 	});
 
 export const randomImages = publicProcedure.handler(async () => {

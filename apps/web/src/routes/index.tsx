@@ -1,13 +1,14 @@
 import type { TweetData } from "@starlight/api/src/types/tweets";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Search } from "lucide-react";
-import { Masonry } from "masonic";
+import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useSearch } from "@/hooks/use-search";
 import { cn } from "@/lib/utils";
 import { LayoutManager } from "@/utils/layout";
 import { orpc } from "@/utils/orpc";
@@ -43,43 +44,43 @@ export default function DiscoverPage() {
 		return () => window.removeEventListener("resize", updateScreen);
 	}, []);
 
-	const searchMutation = useMutation(
-		orpc.tweets.search.mutationOptions({ retry: false })
-	);
+	const { results, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
+		useSearch({ query: urlQuery });
 
 	const randomQuery = useQuery({
 		...orpc.tweets.random.queryOptions({ retry: false }),
 		queryKey: ["tweets-random"],
 		enabled: true,
-		staleTime: 1000 * 60 * 60, // 1 hour
+		staleTime: 1000 * 60 * 60,
 	});
 
 	const randomImages: TweetData[] = randomQuery.data || [];
-	const initialSearchDone = useRef(false);
-
-	if (
-		urlQuery.trim() &&
-		!initialSearchDone.current &&
-		!searchMutation.isPending
-	) {
-		initialSearchDone.current = true;
-		searchMutation.mutate({ query: urlQuery });
-	}
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
 		const trimmedQuery = inputValue.trim();
 		if (trimmedQuery) {
 			setUrlQuery(trimmedQuery);
-			searchMutation.mutate({ query: trimmedQuery });
 		}
 	};
 
 	const handleExampleClick = (example: string) => {
 		setInputValue(example);
 		setUrlQuery(example);
-		searchMutation.mutate({ query: example });
 	};
+
+	const infiniteLoader = useInfiniteLoader(
+		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
+			if (hasNextPage && !isFetchingNextPage) {
+				await fetchNextPage();
+			}
+		},
+		{
+			isItemLoaded: (index, items) => !!items[index],
+			minimumBatchSize: 30,
+			threshold: 5,
+		}
+	);
 
 	const renderMasonryItem = useCallback(
 		({ data, width }: { data: any; width: number }) => (
@@ -89,8 +90,6 @@ export default function DiscoverPage() {
 		),
 		[]
 	);
-
-	const results = searchMutation.data || [];
 
 	// Generate non-overlapping positions for random images
 	const placedData = useMemo(() => {
@@ -106,7 +105,7 @@ export default function DiscoverPage() {
 		if (
 			placedData.length > 0 &&
 			randomQuery.isSuccess &&
-			!searchMutation.isPending &&
+			!isLoading &&
 			results.length === 0
 		) {
 			const timeouts: NodeJS.Timeout[] = [];
@@ -123,12 +122,7 @@ export default function DiscoverPage() {
 				}
 			};
 		}
-	}, [
-		placedData,
-		randomQuery.isSuccess,
-		searchMutation.isPending,
-		results.length,
-	]);
+	}, [placedData, randomQuery.isSuccess, isLoading, results.length]);
 
 	return (
 		<div className="flex min-h-screen flex-col bg-base-100">
@@ -140,6 +134,7 @@ export default function DiscoverPage() {
 						<Masonry
 							columnGutter={16}
 							items={results}
+							onRender={infiniteLoader}
 							render={renderMasonryItem}
 						/>
 					</div>
@@ -148,7 +143,7 @@ export default function DiscoverPage() {
 					<section className="hero hero-center relative w-full max-w-7xl">
 						<div className="hero-content relative z-10 text-center">
 							<div className="max-w-2xl">
-								{searchMutation.isPending ? (
+								{isLoading ? (
 									<div className="flex justify-center py-6">
 										<img
 											alt="Searching for cute anime girls..."
@@ -186,12 +181,12 @@ export default function DiscoverPage() {
 												<Button
 													className={cn(
 														"btn btn-primary join-item",
-														searchMutation.isPending && "btn-disabled"
+														isLoading && "btn-disabled"
 													)}
-													disabled={searchMutation.isPending}
+													disabled={isLoading}
 													type="submit"
 												>
-													{searchMutation.isPending ? (
+													{isLoading ? (
 														<span className="loading loading-spinner h-4 w-4" />
 													) : (
 														<Search className="h-4 w-4" />
@@ -230,7 +225,7 @@ export default function DiscoverPage() {
 			{isLargeScreen &&
 				randomQuery.isSuccess &&
 				placedData.length > 0 &&
-				!searchMutation.isPending &&
+				!isLoading &&
 				results.length === 0 && (
 					<div className="pointer-events-none absolute inset-0 overflow-hidden">
 						{placedData.map(({ position, index }) => {
@@ -275,12 +270,12 @@ export default function DiscoverPage() {
 								<Button
 									className={cn(
 										"btn btn-primary join-item",
-										searchMutation.isPending && "btn-disabled"
+										isLoading && "btn-disabled"
 									)}
-									disabled={searchMutation.isPending}
+									disabled={isLoading}
 									type="submit"
 								>
-									{searchMutation.isPending ? (
+									{isLoading ? (
 										<span className="loading loading-spinner h-4 w-4" />
 									) : (
 										<Search className="h-4 w-4" />

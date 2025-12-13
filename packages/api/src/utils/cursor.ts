@@ -3,12 +3,18 @@ export type CursorPayload = {
 	createdAt: string;
 };
 
+export type SearchCursorPayload = {
+	lastScore: number;
+	lastPhotoId: string;
+	queryTime: string;
+};
+
 export const Cursor = {
-	create(data: CursorPayload): string {
+	create<T = CursorPayload>(data: T): string {
 		return Buffer.from(JSON.stringify(data)).toString("base64url");
 	},
 
-	parse(cursor: string): CursorPayload | null {
+	parse<T = CursorPayload>(cursor: string): T | null {
 		let decoded: string;
 		try {
 			decoded = Buffer.from(cursor, "base64url").toString();
