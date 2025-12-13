@@ -143,7 +143,7 @@ export default function DiscoverPage() {
 					<section className="hero hero-center relative w-full max-w-7xl">
 						<div className="hero-content relative z-10 text-center">
 							<div className="max-w-2xl">
-								{isLoading ? (
+								{isLoading && urlQuery ? (
 									<div className="flex justify-center py-6">
 										<img
 											alt="Searching for cute anime girls..."
