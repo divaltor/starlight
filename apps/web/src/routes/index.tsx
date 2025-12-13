@@ -3,7 +3,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Masonry } from "masonic";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { parseAsString, useQueryState } from "nuqs";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,13 +23,16 @@ const examples = [
 ];
 
 export default function DiscoverPage() {
-	const [query, setQuery] = useState("");
-	const [inputPosition, setInputPosition] = useState<"initial" | "bottom">(
-		"initial"
+	const [urlQuery, setUrlQuery] = useQueryState(
+		"q",
+		parseAsString.withDefault("")
 	);
-	const [showExamples, setShowExamples] = useState(true);
+	const [inputValue, setInputValue] = useState(urlQuery);
 	const [isLargeScreen, setIsLargeScreen] = useState(false);
 	const [visibleIndices, setVisibleIndices] = useState<number[]>([]);
+
+	const inputPosition: "initial" | "bottom" = urlQuery ? "bottom" : "initial";
+	const showExamples = !urlQuery;
 
 	useEffect(() => {
 		const updateScreen = () => {
@@ -51,20 +55,28 @@ export default function DiscoverPage() {
 	});
 
 	const randomImages: TweetData[] = randomQuery.data || [];
+	const initialSearchDone = useRef(false);
+
+	if (
+		urlQuery.trim() &&
+		!initialSearchDone.current &&
+		!searchMutation.isPending
+	) {
+		initialSearchDone.current = true;
+		searchMutation.mutate({ query: urlQuery });
+	}
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
-		if (query.trim()) {
-			setInputPosition("bottom");
-			setShowExamples(false);
-			searchMutation.mutate({ query });
+		const trimmedQuery = inputValue.trim();
+		if (trimmedQuery) {
+			setUrlQuery(trimmedQuery);
+			searchMutation.mutate({ query: trimmedQuery });
 		}
 	};
 
 	const handleExampleClick = (example: string) => {
-		setQuery(example);
-		setInputPosition("bottom");
-		setShowExamples(false);
+		setUrlQuery(example);
 		searchMutation.mutate({ query: example });
 	};
 
@@ -165,10 +177,10 @@ export default function DiscoverPage() {
 											<div className="join flex w-full">
 												<Input
 													className="input input-bordered join-item flex-1"
-													onChange={(e) => setQuery(e.target.value)}
+													onChange={(e) => setInputValue(e.target.value)}
 													placeholder="Search for images..."
 													type="text"
-													value={query}
+													value={inputValue}
 												/>
 												<Button
 													className={cn(
@@ -254,10 +266,10 @@ export default function DiscoverPage() {
 							<div className="join w-full">
 								<Input
 									className="input input-bordered join-item flex-1"
-									onChange={(e) => setQuery(e.target.value)}
+									onChange={(e) => setInputValue(e.target.value)}
 									placeholder="Search for images..."
 									type="text"
-									value={query}
+									value={inputValue}
 								/>
 								<Button
 									className={cn(

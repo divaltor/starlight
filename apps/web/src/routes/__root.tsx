@@ -7,6 +7,7 @@ import {
 	Scripts,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { StrictMode } from "react";
 import appCss from "@/index.css?url";
 import { TelegramButtonsProvider } from "@/providers/telegram-buttons-provider";
@@ -85,7 +86,9 @@ function RootDocument() {
 			<body className="min-h-screen bg-base-100">
 				<TelegramButtonsProvider>
 					<StrictMode>
-						<Outlet />
+						<NuqsAdapter>
+							<Outlet />
+						</NuqsAdapter>
 					</StrictMode>
 				</TelegramButtonsProvider>
 				<TanStackRouterDevtools position="bottom-left" />
