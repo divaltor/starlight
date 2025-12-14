@@ -38,9 +38,11 @@ export function useSearch(options: UseSearchOptions) {
 		})
 	);
 
+	const isEnabled = !!query.trim();
+
 	return {
 		results: data?.pages.flatMap((page) => page.results) ?? ([] as TweetData[]),
-		isLoading: status === "pending",
+		isLoading: isEnabled && status === "pending",
 		isFetching,
 		isFetchingNextPage,
 		hasNextPage,
