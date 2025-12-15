@@ -36,6 +36,7 @@ model User {
     scheduledSlots   ScheduledSlot[]
     postingChannels  PostingChannel?
     collectionShares CollectionShare[]
+    videos           Video[]
 
     @@map("users")
 }
@@ -296,4 +297,31 @@ model CollectionShareAuthor {
     @@unique([collectionShareId, username])
     @@index([collectionShareId])
     @@map("collection_share_authors")
+}
+
+model Video {
+    id     String @id @default(uuid(7)) @db.Uuid
+    userId String @map("user_id") @db.Uuid
+
+    tweetId   String  @map("tweet_id")
+    tweetText String? @map("tweet_text") @db.Text
+
+    telegramFileId       String @map("telegram_file_id")
+    telegramFileUniqueId String @map("telegram_file_unique_id")
+
+    width  Int?
+    height Int?
+
+    description String? @db.Text
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    // Relations
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@unique([telegramFileUniqueId, userId])
+    @@index([userId])
+    @@index([tweetId])
+    @@map("videos")
 }
