@@ -57,6 +57,39 @@ feature.on(":text").filter(
 
 		const link = ctx.msg.text;
 		const tweetId = extractTweetId(link);
+
+		// Check if video already exists in database
+		const existingVideo = await prisma.video.findFirst({
+			where: { tweetId },
+			orderBy: { createdAt: "desc" },
+		});
+
+		if (existingVideo) {
+			ctx.logger.info(
+				"Found existing video for tweet %s, sending via file_id",
+				tweetId
+			);
+
+			try {
+				await ctx.replyWithVideo(existingVideo.telegramFileId, {
+					width: existingVideo.width ?? undefined,
+					height: existingVideo.height ?? undefined,
+					reply_markup: existingVideo.tweetText
+						? createVideoKeyboard(existingVideo.id, false)
+						: undefined,
+				});
+
+				ctx.logger.info("Existing video sent successfully to %s", ctx.chatId);
+				return;
+			} catch (error) {
+				ctx.logger.error(
+					{ error, videoId: existingVideo.id },
+					"Error sending existing video, will download fresh copy"
+				);
+				// Continue to download fresh copy if sending existing file fails
+			}
+		}
+
 		const tempDir = tmp.dirSync({ unsafeCleanup: true });
 
 		let videos: VideoInformation[] = [];
