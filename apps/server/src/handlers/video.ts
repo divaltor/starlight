@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/correctness/noUndeclaredVariables: <explanation> */
 import { prisma } from "@starlight/utils";
 import { Scraper, type Tweet } from "@the-convocation/twitter-scraper";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
@@ -86,34 +87,31 @@ feature.on(":text").filter(
 			try {
 				ctx.logger.debug("Sending video %s to %s", video.filePath, ctx.chatId);
 
+				const videoId = Bun.randomUUIDv7();
+
 				const sentMessage = await ctx.replyWithVideo(
 					new InputFile(video.filePath),
 					{
 						width: video.metadata?.width,
 						height: video.metadata?.height,
-						caption: cleanedText,
+						reply_markup: cleanedText
+							? createVideoKeyboard(videoId, false)
+							: undefined,
 					}
 				);
 
-				const savedVideo = await prisma.video.create({
+				await prisma.video.create({
 					data: {
+						id: videoId,
 						userId: ctx.user.id,
 						tweetId,
-						tweetText: tweet?.text,
+						tweetText: cleanedText,
 						telegramFileId: sentMessage.video.file_id,
 						telegramFileUniqueId: sentMessage.video.file_unique_id,
 						width: sentMessage.video.width,
 						height: sentMessage.video.height,
 					},
 				});
-
-				if (cleanedText) {
-					await ctx.api.editMessageReplyMarkup(
-						ctx.chatId,
-						sentMessage.message_id,
-						{ reply_markup: createVideoKeyboard(savedVideo.id, false) }
-					);
-				}
 
 				ctx.logger.info(
 					"Video %s sent successfully to %s",
@@ -139,10 +137,11 @@ feature.on(":text").filter(
 
 // Callback query handler for adding description
 feature.callbackQuery(/^video:add_desc:(.+)$/, async (ctx) => {
+	await ctx.answerCallbackQuery();
+
 	const videoId = ctx.match[1];
 
 	if (!videoId) {
-		await ctx.answerCallbackQuery({ text: "Invalid video ID" });
 		return;
 	}
 
@@ -151,31 +150,40 @@ feature.callbackQuery(/^video:add_desc:(.+)$/, async (ctx) => {
 	});
 
 	if (!video) {
-		await ctx.answerCallbackQuery({ text: "Video not found" });
 		return;
 	}
 
-	if (!video.tweetText) {
-		await ctx.answerCallbackQuery({ text: "No tweet text available" });
-		return;
+	try {
+		await ctx.editMessageCaption({
+			caption: video.tweetText ?? undefined,
+			reply_markup: createVideoKeyboard(videoId, true),
+		});
+	} catch (error) {
+		if (error instanceof GrammyError) {
+			ctx.logger.warn(
+				{ error, videoId },
+				"Failed to edit message, resending video"
+			);
+
+			await ctx.replyWithVideo(video.telegramFileId, {
+				width: video.width ?? undefined,
+				height: video.height ?? undefined,
+				caption: video.tweetText ?? undefined,
+				reply_markup: createVideoKeyboard(videoId, true),
+			});
+		} else {
+			throw error;
+		}
 	}
-
-	const cleanedText = cleanupTweetText(video.tweetText);
-
-	await ctx.editMessageCaption({
-		caption: cleanedText ?? "",
-		reply_markup: createVideoKeyboard(videoId, true),
-	});
-
-	await ctx.answerCallbackQuery({ text: "Description added" });
 });
 
 // Callback query handler for removing description
 feature.callbackQuery(/^video:remove_desc:(.+)$/, async (ctx) => {
+	await ctx.answerCallbackQuery();
+
 	const videoId = ctx.match[1];
 
 	if (!videoId) {
-		await ctx.answerCallbackQuery({ text: "Invalid video ID" });
 		return;
 	}
 
@@ -184,16 +192,30 @@ feature.callbackQuery(/^video:remove_desc:(.+)$/, async (ctx) => {
 	});
 
 	if (!video) {
-		await ctx.answerCallbackQuery({ text: "Video not found" });
 		return;
 	}
 
-	await ctx.editMessageCaption({
-		caption: undefined,
-		reply_markup: createVideoKeyboard(videoId, false),
-	});
+	try {
+		await ctx.editMessageCaption({
+			caption: undefined,
+			reply_markup: createVideoKeyboard(videoId, false),
+		});
+	} catch (error) {
+		if (error instanceof GrammyError) {
+			ctx.logger.warn(
+				{ error, videoId },
+				"Failed to edit message, resending video"
+			);
 
-	await ctx.answerCallbackQuery({ text: "Description removed" });
+			await ctx.replyWithVideo(video.telegramFileId, {
+				width: video.width ?? undefined,
+				height: video.height ?? undefined,
+				reply_markup: createVideoKeyboard(videoId, false),
+			});
+		} else {
+			throw error;
+		}
+	}
 });
 
 export default composer;
