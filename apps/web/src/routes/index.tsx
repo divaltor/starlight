@@ -61,13 +61,13 @@ export default function DiscoverPage() {
 		e.preventDefault();
 		const trimmedQuery = inputValue.trim();
 		if (trimmedQuery) {
-			setUrlQuery(trimmedQuery);
+			setUrlQuery(trimmedQuery, { history: "push" });
 		}
 	};
 
 	const handleExampleClick = (example: string) => {
 		setInputValue(example);
-		setUrlQuery(example);
+		setUrlQuery(example, { history: "push" });
 	};
 
 	const infiniteLoader = useInfiniteLoader(
