@@ -3,6 +3,7 @@ import { ORPCError } from "@orpc/client";
 import { env, prisma } from "@starlight/utils";
 import z from "zod";
 import { publicProcedure } from "..";
+import { maybeAuthProcedure } from "../middlewares/auth";
 import type { SearchResult } from "../types/tweets";
 import { Cursor, type SearchCursorPayload } from "../utils/cursor";
 import { redis } from "../utils/redis";
@@ -11,21 +12,47 @@ import { transformSearchResults } from "../utils/transformations";
 const encoder = new Encoder();
 const decoder = new Decoder();
 
-export const searchImages = publicProcedure
+export const searchImages = maybeAuthProcedure
 	.input(
 		z.object({
 			query: z.string().max(256),
 			cursor: z.string().optional(),
 			limit: z.number().min(1).max(100).default(30),
+			ownOnly: z.boolean().optional().default(false),
 		})
 	)
-	.handler(async ({ input }) => {
+	.handler(async ({ input, context }) => {
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
 			throw new ORPCError("Service not available, sorry!");
 		}
 
+		const { user } = context;
 		const query = input.query.trim();
-		const { cursor, limit } = input;
+		const { cursor, limit, ownOnly } = input;
+
+		// If ownOnly is true, require authentication
+		if (ownOnly && !user) {
+			throw new ORPCError("UNAUTHORIZED", {
+				message: "Authentication required for personal search",
+				status: 401,
+			});
+		}
+
+		// Get database user ID if searching own tweets
+		let databaseUserId: string | null = null;
+		if (ownOnly && user) {
+			const dbUser = await prisma.user.findUnique({
+				where: { telegramId: user.id },
+				select: { id: true },
+			});
+			if (!dbUser) {
+				throw new ORPCError("NOT_FOUND", {
+					message: "User not found",
+					status: 404,
+				});
+			}
+			databaseUserId = dbUser.id;
+		}
 
 		// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 		const hashedQuery = Bun.hash.xxHash3(query);
@@ -97,6 +124,12 @@ export const searchImages = publicProcedure
 
 		const textQuery = `[${text.join(",")}]`;
 
+		// Build user filter based on ownOnly flag
+		const userFilter =
+			ownOnly && databaseUserId
+				? `p.user_id = '${databaseUserId}'`
+				: "p.user_id IN (SELECT id FROM users WHERE is_public = true)";
+
 		const images = await prisma.$queryRawUnsafe<SearchResult[]>(`
         WITH coarse AS (
             SELECT
@@ -105,7 +138,7 @@ export const searchImages = publicProcedure
                 1.0 - (p.tag_vec <=> '${textQuery}'::vector) AS s_tag,
                 GREATEST(1.0 - (p.image_vec <=> '${textQuery}'::vector), 1.0 - (p.tag_vec <=> '${textQuery}'::vector)) AS s_coarse
             FROM photos p
-            WHERE classification IS NOT NULL AND image_vec IS NOT NULL AND tag_vec IS NOT NULL AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
+            WHERE classification IS NOT NULL AND image_vec IS NOT NULL AND tag_vec IS NOT NULL AND ${userFilter}
             ORDER BY s_coarse DESC
         ),
         metadata_fusion AS (

@@ -2,17 +2,29 @@ import type { ProfileResult } from "@starlight/api/routers/index";
 import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
-import { useCallback, useEffect } from "react";
+import { parseAsString, useQueryState } from "nuqs";
+import { useCallback, useEffect, useState } from "react";
 import NotFound from "@/components/not-found";
 import { TweetImageGrid } from "@/components/tweet-image-grid";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useSearch } from "@/hooks/use-search";
 import { useTweets } from "@/hooks/use-tweets";
+import { cn } from "@/lib/utils";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
 
 function TwitterArtViewer() {
 	const { updateButtons, rawInitData } = useTelegramContext();
+
+	// Search state with URL params and history support
+	const [urlQuery, setUrlQuery] = useQueryState(
+		"q",
+		parseAsString.withDefault("")
+	);
+	const [inputValue, setInputValue] = useState(urlQuery);
 
 	const { data: profile } = useQuery<ProfileResult>(
 		orpc.profiles.get.queryOptions({
@@ -61,6 +73,17 @@ function TwitterArtViewer() {
 		};
 	}, [updateButtons, profile]);
 
+	// Search hook - search only own tweets in TMA
+	const {
+		results: searchResults,
+		isLoading: isSearchLoading,
+		isFetchingNextPage: isSearchFetchingNextPage,
+		hasNextPage: hasSearchNextPage,
+		fetchNextPage: fetchSearchNextPage,
+	} = useSearch({ query: urlQuery, ownOnly: true });
+
+	const isSearchActive = urlQuery.trim().length > 0;
+
 	const {
 		tweets,
 		isLoading,
@@ -69,10 +92,32 @@ function TwitterArtViewer() {
 		error,
 		fetchNextPage,
 	} = useTweets();
+
+	const handleSearch = (e: React.FormEvent) => {
+		e.preventDefault();
+		const trimmedQuery = inputValue.trim();
+		setUrlQuery(trimmedQuery || null, { history: "push" });
+	};
+
+	// Infinite loader for regular tweets
 	const infiniteLoader = useInfiniteLoader(
 		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
 			if (hasNextPage && !isFetchingNextPage) {
 				await fetchNextPage();
+			}
+		},
+		{
+			isItemLoaded: (index, items) => !!items[index],
+			minimumBatchSize: 30,
+			threshold: 5,
+		}
+	);
+
+	// Infinite loader for search results
+	const searchInfiniteLoader = useInfiniteLoader(
+		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
+			if (hasSearchNextPage && !isSearchFetchingNextPage) {
+				await fetchSearchNextPage();
 			}
 		},
 		{
@@ -104,25 +149,66 @@ function TwitterArtViewer() {
 		);
 	}
 
+	// Determine which data to display
+	const displayItems = isSearchActive ? searchResults : tweets;
+	const displayLoading = isSearchActive ? isSearchLoading : isLoading;
+	const currentInfiniteLoader = isSearchActive
+		? searchInfiniteLoader
+		: infiniteLoader;
+
 	return (
 		<div className="flex min-h-screen flex-col p-4">
-			{!isLoading && tweets.length === 0 && (
+			{/* Search Bar */}
+			<div className="sticky top-0 z-10 mb-4 bg-base-100/80 py-2 backdrop-blur-sm">
+				<form className="mx-auto max-w-lg" onSubmit={handleSearch}>
+					<div className="join flex w-full">
+						<Input
+							className="input input-bordered join-item flex-1"
+							onChange={(e) => setInputValue(e.target.value)}
+							placeholder="Search for images..."
+							type="text"
+							value={inputValue}
+						/>
+						<Button
+							className={cn(
+								"btn btn-primary join-item",
+								displayLoading && "btn-disabled"
+							)}
+							disabled={displayLoading}
+							type="submit"
+						>
+							{displayLoading ? (
+								<span className="loading loading-spinner h-4 w-4" />
+							) : (
+								<Search className="h-4 w-4" />
+							)}
+							<span className="hidden sm:inline">Search</span>
+						</Button>
+					</div>
+				</form>
+			</div>
+
+			{!displayLoading && displayItems.length === 0 && (
 				<div className="flex flex-1 items-center justify-center">
 					<NotFound
-						description="Did you setup cookies? Try again later."
-						title="No photos found"
+						description={
+							isSearchActive
+								? "No results found for your search. Try different keywords."
+								: "Did you setup cookies? Try again later."
+						}
+						title={isSearchActive ? "No search results" : "No photos found"}
 					/>
 				</div>
 			)}
 
 			{/* Masonry Grid */}
-			{tweets.length > 0 && (
+			{displayItems.length > 0 && (
 				<div className="flex-1">
 					<div className="mx-auto max-w-7xl">
 						<Masonry
 							columnGutter={16}
-							items={tweets}
-							onRender={infiniteLoader}
+							items={displayItems}
+							onRender={currentInfiniteLoader}
 							render={renderMasonryItem}
 						/>
 					</div>

@@ -8,10 +8,11 @@ import { orpc } from "@/utils/orpc";
 type UseSearchOptions = {
 	query: string;
 	limit?: number;
+	ownOnly?: boolean;
 };
 
 export function useSearch(options: UseSearchOptions) {
-	const { query, limit = 30 } = options;
+	const { query, limit = 30, ownOnly = false } = options;
 
 	const {
 		data,
@@ -27,8 +28,9 @@ export function useSearch(options: UseSearchOptions) {
 				query,
 				cursor: pageParam,
 				limit,
+				ownOnly,
 			}),
-			queryKey: ["search", { query }],
+			queryKey: ["search", { query, ownOnly }],
 			initialPageParam: undefined,
 			getNextPageParam: (lastPage: SearchPageResult) =>
 				lastPage.nextCursor ?? undefined,
