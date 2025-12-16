@@ -158,35 +158,16 @@ function TwitterArtViewer() {
 
 	return (
 		<div className="flex min-h-screen flex-col p-4">
-			{/* Search Bar */}
-			<div className="sticky top-0 z-10 mb-4 bg-base-100/80 py-2 backdrop-blur-sm">
-				<form className="mx-auto max-w-lg" onSubmit={handleSearch}>
-					<div className="join flex w-full">
-						<Input
-							className="input input-bordered join-item flex-1"
-							onChange={(e) => setInputValue(e.target.value)}
-							placeholder="Search for images..."
-							type="text"
-							value={inputValue}
-						/>
-						<Button
-							className={cn(
-								"btn btn-primary join-item",
-								displayLoading && "btn-disabled"
-							)}
-							disabled={displayLoading}
-							type="submit"
-						>
-							{displayLoading ? (
-								<span className="loading loading-spinner h-4 w-4" />
-							) : (
-								<Search className="h-4 w-4" />
-							)}
-							<span className="hidden sm:inline">Search</span>
-						</Button>
-					</div>
-				</form>
-			</div>
+			{/* Loading State */}
+			{displayLoading && (
+				<div className="flex flex-1 items-center justify-center">
+					<img
+						alt="Searching for cute anime girls..."
+						className="mx-auto h-auto w-64"
+						src="/suisei-hq.gif"
+					/>
+				</div>
+			)}
 
 			{!displayLoading && displayItems.length === 0 && (
 				<div className="flex flex-1 items-center justify-center">
@@ -214,6 +195,38 @@ function TwitterArtViewer() {
 					</div>
 				</div>
 			)}
+
+			{/* Sticky Search Bar at Bottom */}
+			<div className="sticky bottom-0 z-10 py-4">
+				<div className="mx-auto max-w-lg">
+					<form className="form-control" onSubmit={handleSearch}>
+						<div className="join w-full">
+							<Input
+								className="input input-bordered join-item flex-1"
+								onChange={(e) => setInputValue(e.target.value)}
+								placeholder="Search for images..."
+								type="text"
+								value={inputValue}
+							/>
+							<Button
+								className={cn(
+									"btn btn-primary join-item",
+									displayLoading && "btn-disabled"
+								)}
+								disabled={displayLoading}
+								type="submit"
+							>
+								{displayLoading ? (
+									<span className="loading loading-spinner h-4 w-4" />
+								) : (
+									<Search className="h-4 w-4" />
+								)}
+								<span className="hidden sm:inline">Search</span>
+							</Button>
+						</div>
+					</form>
+				</div>
+			</div>
 		</div>
 	);
 }
