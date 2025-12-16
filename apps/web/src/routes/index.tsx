@@ -14,12 +14,13 @@ import { LayoutManager } from "@/utils/layout";
 import { orpc } from "@/utils/orpc";
 
 const examples = [
-	"girls on the beach",
-	"white elf on pastel background",
-	"miku & teto",
-	"photographer with camera",
-	"sunrise winter landscape",
+	"mumei",
 	"hololive girls",
+	"green knight",
+	"white elf",
+	"miku & teto",
+	"mint maid",
+	"gremlin",
 	"sketch lineart",
 ];
 
