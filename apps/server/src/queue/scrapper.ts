@@ -8,6 +8,7 @@ import {
 } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import UserAgent from "user-agents";
+import { bot } from "@/bot";
 import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";
 import { Cookies, redis } from "@/storage";
@@ -66,7 +67,23 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 
 		if (!user_cookies) {
 			logger.error({ userId }, "User cookies not found");
-			throw new Error("User cookies not found");
+
+			try {
+				await job.remove();
+			} catch (error) {
+				logger.error({ userId, error }, "Failed to remove job");
+			}
+
+			await bot.api.sendPhoto(
+				user.telegramId.toString(),
+				`${env.BASE_CDN_URL}/moom.jpg`,
+				{
+					caption:
+						"Can't scrape your timeline, no cookies?. Please setup your them in settings again and send /scrapper command again.",
+				}
+			);
+
+			return;
 		}
 
 		// Decrypt cookies with migration support
