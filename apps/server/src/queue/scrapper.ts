@@ -69,9 +69,9 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			logger.error({ userId }, "User cookies not found");
 
 			try {
-				await job.remove();
+				await scrapperQueue.removeJobScheduler(`scrapper-${userId}`);
 			} catch (error) {
-				logger.error({ userId, error }, "Failed to remove job");
+				logger.error({ userId, error }, "Failed to remove job scheduler");
 			}
 
 			await bot.api.sendPhoto(
