@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as PublicationsRouteImport } from './routes/publications'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProfileSlugRouteImport } from './routes/profile/$slug'
@@ -18,11 +17,6 @@ import { Route as ProfileSlugRouteImport } from './routes/profile/$slug'
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PublicationsRoute = PublicationsRouteImport.update({
-  id: '/publications',
-  path: '/publications',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -44,14 +38,12 @@ const ProfileSlugRoute = ProfileSlugRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
-  '/publications': typeof PublicationsRoute
   '/settings': typeof SettingsRoute
   '/profile/$slug': typeof ProfileSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
-  '/publications': typeof PublicationsRoute
   '/settings': typeof SettingsRoute
   '/profile/$slug': typeof ProfileSlugRoute
 }
@@ -59,28 +51,20 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRoute
-  '/publications': typeof PublicationsRoute
   '/settings': typeof SettingsRoute
   '/profile/$slug': typeof ProfileSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/publications' | '/settings' | '/profile/$slug'
+  fullPaths: '/' | '/app' | '/settings' | '/profile/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/app' | '/publications' | '/settings' | '/profile/$slug'
-  id:
-    | '__root__'
-    | '/'
-    | '/app'
-    | '/publications'
-    | '/settings'
-    | '/profile/$slug'
+  to: '/' | '/app' | '/settings' | '/profile/$slug'
+  id: '__root__' | '/' | '/app' | '/settings' | '/profile/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRoute
-  PublicationsRoute: typeof PublicationsRoute
   SettingsRoute: typeof SettingsRoute
   ProfileSlugRoute: typeof ProfileSlugRoute
 }
@@ -92,13 +76,6 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/publications': {
-      id: '/publications'
-      path: '/publications'
-      fullPath: '/publications'
-      preLoaderRoute: typeof PublicationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app': {
@@ -128,7 +105,6 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRoute,
-  PublicationsRoute: PublicationsRoute,
   SettingsRoute: SettingsRoute,
   ProfileSlugRoute: ProfileSlugRoute,
 }

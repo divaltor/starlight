@@ -24,10 +24,7 @@ bot.use(
 	})
 );
 
-export const webAppKeyboard = (
-	page: "app" | "publications" | "settings",
-	text: string
-) =>
+export const webAppKeyboard = (page: "app" | "settings", text: string) =>
 	new InlineKeyboard().webApp(text, {
 		url: `${env.BASE_FRONTEND_URL}/${page}`,
 	});

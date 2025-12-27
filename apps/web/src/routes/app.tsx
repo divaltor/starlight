@@ -50,19 +50,6 @@ function TwitterArtViewer() {
 					},
 				},
 			});
-		} else if (profile?.postingChannel) {
-			updateButtons({
-				mainButton: {
-					state: "visible" as const,
-					text: "Publications" as const,
-					color: "#ffd6a7" as const,
-					textColor: "#9f2d00" as const,
-					action: {
-						type: "navigate" as const,
-						payload: "/publications" as const,
-					},
-				},
-			});
 		}
 
 		return () => {

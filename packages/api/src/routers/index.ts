@@ -3,25 +3,13 @@ import type {
 	InferRouterOutputs,
 	RouterClient,
 } from "@orpc/server";
-import { respondToWebAppData } from "./bot";
 import { deletePostingChannel } from "./channels";
 import { deleteCookies, saveCookies } from "./cookies";
 import { changeProfileVisibility, getUserProfile } from "./profiles";
-import {
-	addTweetToSlot,
-	createScheduledSlot,
-	deleteScheduledSlot,
-	getScheduledSlot,
-	scheduledSlotRemovePhoto,
-	shuffleTweet,
-} from "./scheduling";
 import { randomImages, searchImages } from "./search";
 import { listUserTweets } from "./tweets";
 
 export const appRouter = {
-	respond: {
-		send: respondToWebAppData,
-	},
 	profiles: {
 		visibility: changeProfileVisibility,
 		get: getUserProfile,
@@ -37,20 +25,6 @@ export const appRouter = {
 		list: listUserTweets,
 		search: searchImages,
 		random: randomImages,
-	},
-	scheduling: {
-		photos: {
-			remove: scheduledSlotRemovePhoto,
-		},
-		slots: {
-			get: getScheduledSlot,
-			create: createScheduledSlot,
-			delete: deleteScheduledSlot,
-		},
-		tweets: {
-			add: addTweetToSlot,
-			shuffle: shuffleTweet,
-		},
 	},
 };
 export type AppRouter = typeof appRouter;

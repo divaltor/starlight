@@ -1,10 +1,8 @@
-import { b, fmt } from "@grammyjs/parse-mode";
 import { CookieEncryption } from "@starlight/crypto";
 import { env, type Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { RateLimiterRedis } from "rate-limiter-flexible";
-import { channelKeyboard, webAppKeyboard } from "@/bot";
-import { schedulerFlow } from "@/queue/scheduler";
+import { webAppKeyboard } from "@/bot";
 import { scrapperQueue } from "@/queue/scrapper";
 import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
 import { Cookies, redis } from "@/storage";
@@ -54,126 +52,6 @@ privateChat.on("message:photo", async (ctx) => {
 
 	await ctx.reply(message);
 });
-
-privateChat.on(":text").filter(
-	(ctx) => ctx.msg.via_bot !== undefined && ctx.msg.text.startsWith("🪶"),
-	async (ctx) => {
-		const slotId = await redis.getdel(`${ctx.user?.telegramId}:publish`);
-
-		if (!slotId) {
-			return;
-		}
-
-		const slot = await prisma.scheduledSlot.findUnique({
-			where: {
-				id: slotId,
-				userId: ctx.user?.id as string,
-			},
-			include: {
-				postingChannel: {
-					include: {
-						chat: true,
-					},
-				},
-				scheduledSlotTweets: {
-					include: {
-						tweet: {
-							include: {
-								photos: true,
-							},
-						},
-					},
-				},
-			},
-		});
-
-		if (!slot) {
-			return;
-		}
-
-		if (slot.status === "PUBLISHING") {
-			await ctx.reply(
-				"Slot is already being published. While you waiting you can review your gallery ✨",
-				{
-					reply_markup: webAppKeyboard("app", "View gallery"),
-				}
-			);
-			return;
-		}
-
-		if (slot.status === "PUBLISHED") {
-			await ctx.reply("Slot is already published, create new one here 🪶.", {
-				reply_markup: webAppKeyboard("publications", "Manage publications"),
-			});
-			return;
-		}
-
-		await schedulerFlow.add({
-			name: "completed-slot",
-			queueName: "scheduled-slots",
-			data: {
-				userId: ctx.user?.id as string,
-				slotId,
-				status: "PUBLISHED",
-			},
-			opts: {
-				deduplication: {
-					id: `completed-slot-${slotId}`,
-				},
-			},
-			children: [
-				{
-					name: "publishing-slot",
-					queueName: "scheduled-slots",
-					data: {
-						userId: ctx.user?.id as string,
-						slotId,
-						status: "PUBLISHING",
-					},
-					opts: {
-						removeOnComplete: true,
-						removeOnFail: true,
-						deduplication: {
-							id: `publishing-slot-${slotId}`,
-						},
-					},
-				},
-				...slot.scheduledSlotTweets.map((tweet, index) => ({
-					name: "scheduled-tweet",
-					queueName: "scheduled-tweet",
-					data: {
-						userId: ctx.user?.id as string,
-						slotId,
-						tweetId: tweet.id,
-					},
-					opts: {
-						deduplication: {
-							id: `scheduled-tweet-${tweet.id}`,
-						},
-						attempts: 3,
-						backoff: 1500,
-						delay: index * 1500,
-						removeOnComplete: true,
-						priority: index,
-					},
-				})),
-			],
-		});
-
-		const title = fmt`We are publishing your photos to ${b}${slot.postingChannel.chat.title || "your"}${b} channel ✨.`;
-
-		if (slot.postingChannel.chat.username) {
-			await ctx.reply(title.text, {
-				reply_markup: channelKeyboard(slot.postingChannel.chat.username),
-				entities: title.entities,
-			});
-		} else {
-			await ctx.reply(title.text, {
-				entities: title.entities,
-			});
-		}
-	}
-);
 
 composer.on("inline_query", async (ctx) => {
 	const offset = ctx.inlineQuery.offset || "0";

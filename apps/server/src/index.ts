@@ -10,13 +10,11 @@ import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
 import { bot } from "@/bot";
 import imageHandler from "@/handlers/image";
-import publicationsHandler from "@/handlers/publications";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
 import { classificationWorker } from "@/queue/classification";
 import { embeddingsWorker } from "@/queue/embeddings";
 import { imagesWorker } from "@/queue/image-collector";
-import { scheduledSlotWorker, scheduledTweetWorker } from "@/queue/scheduler";
 import { scrapperWorker } from "@/queue/scrapper";
 
 const boundary = bot.errorBoundary((error) => {
@@ -30,7 +28,6 @@ const boundary = bot.errorBoundary((error) => {
 
 boundary.use(videoHandler);
 boundary.use(imageHandler);
-boundary.use(publicationsHandler);
 
 if (env.USE_WEBHOOK && env.BASE_WEBHOOK_URL) {
 	bot.api.setWebhook(env.BASE_WEBHOOK_URL);
@@ -56,8 +53,6 @@ process.on("SIGINT", async () => {
 	await imagesWorker.close();
 	await classificationWorker.close();
 	await scrapperWorker.close();
-	await scheduledTweetWorker.close();
-	await scheduledSlotWorker.close();
 	await embeddingsWorker.close();
 });
 
@@ -65,8 +60,6 @@ process.on("SIGTERM", async () => {
 	await imagesWorker.close();
 	await classificationWorker.close();
 	await scrapperWorker.close();
-	await scheduledTweetWorker.close();
-	await scheduledSlotWorker.close();
 	await embeddingsWorker.close();
 });
 
@@ -74,8 +67,6 @@ imagesWorker.run();
 classificationWorker.run();
 embeddingsWorker.run();
 scrapperWorker.run();
-scheduledTweetWorker.run();
-scheduledSlotWorker.run();
 
 const rpcHandler = new RPCHandler(appRouter, {
 	interceptors: [
@@ -92,7 +83,7 @@ app.use(
 	cors({
 		origin: env.CORS_ORIGIN,
 		allowMethods: ["GET", "POST", "OPTIONS"],
-		allowHeaders: ["Content-Type", "Authorization"],
+		allowHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
 		credentials: true,
 	})
 );

@@ -6,8 +6,10 @@ export type CreateContextOptions = {
 
 // biome-ignore lint/suspicious/useAwait: We don't need to await this function
 export async function createContext({ context }: CreateContextOptions) {
+	const requestId = context.req.header("X-Request-Id") || Bun.randomUUIDv7();
 	return {
 		request: context.req,
+		requestId,
 	};
 }
 

@@ -26,7 +26,7 @@
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
     "@the-convocation/twitter-scraper": "git+https://github.com/divaltor/twitter-scraper.git",
-    "bullmq": "^5.61.0",
+    "bullmq": "^5.66.4",
     "grammy": "catalog:",
     "hono": "catalog:",
     "ioredis": "catalog:",
@@ -39,11 +39,11 @@
     "user-agents": "^1.1.669",
     "uuid": "^13.0.0",
     "x-client-transaction-id": "^0.1.9",
-    "youtube-dl-exec": "^3.0.26",
+    "youtube-dl-exec": "^3.0.28",
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@types/bun": "1.3.0",
+    "@types/bun": "1.3.5",
     "@types/tmp": "^0.2.6",
     "@types/user-agents": "^1.0.4",
     "tsdown": "catalog:"

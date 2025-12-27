@@ -6,6 +6,7 @@ import { redis } from "@/storage";
 type ClassificationJobData = {
 	photoId: string;
 	userId: string;
+	requestId?: string;
 };
 
 type EmbeddingResponse = {
@@ -31,24 +32,24 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 			return;
 		}
 
-		const { photoId, userId } = job.data;
+		const { photoId, userId, requestId: incomingRequestId } = job.data;
+		const requestId = incomingRequestId || Bun.randomUUIDv7();
 
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
 			logger.warn(
-				{ photoId, userId },
+				{ photoId, userId, requestId },
 				"Embeddings skipped: service not configured"
 			);
 			return;
 		}
 
 		logger.info(
-			{ photoId, userId },
+			{ photoId, userId, requestId },
 			"Generating embeddings for photo %s for user %s",
 			photoId,
 			userId
 		);
 
-		// Fetch photo record to get URL
 		const photo = await prisma.photo.findUnique({
 			where: {
 				photoId: { id: photoId, userId },
@@ -62,7 +63,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 
 		if (!photo) {
 			logger.error(
-				{ photoId, userId },
+				{ photoId, userId, requestId },
 				"Photo %s not found for user %s",
 				photoId,
 				userId
@@ -71,7 +72,11 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		}
 
 		if (!photo.s3Url) {
-			logger.warn({ photoId, userId }, "Photo %s has no s3Url yet", photoId);
+			logger.warn(
+				{ photoId, userId, requestId },
+				"Photo %s has no s3Url yet",
+				photoId
+			);
 			throw new Error("Photo has no URL for embeddings");
 		}
 
@@ -80,6 +85,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
 			"X-API-Token": env.ML_API_TOKEN,
+			"X-Request-Id": requestId,
 		};
 
 		try {
@@ -96,7 +102,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 			);
 		} catch (error) {
 			logger.error(
-				{ photoId, userId, error },
+				{ photoId, userId, requestId, error },
 				"Failed request to embeddings service"
 			);
 			throw error;
@@ -105,7 +111,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		if (!response.ok) {
 			const text = await response.text();
 			logger.error(
-				{ photoId, userId, status: response.status, body: text },
+				{ photoId, userId, requestId, status: response.status, body: text },
 				"Embeddings service error"
 			);
 			throw new Error(`Classification service error: ${response.status}`);
@@ -117,7 +123,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 			data = await response.json();
 		} catch (error) {
 			logger.error(
-				{ photoId, userId, error },
+				{ photoId, userId, requestId, error },
 				"Failed to parse embeddings response"
 			);
 			throw error;
@@ -130,7 +136,11 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 			Prisma.sql`UPDATE photos SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE id = ${photoId} AND user_id = ${userId}`
 		);
 
-		logger.info({ photoId, userId }, "Photo %s embeddings generated", photoId);
+		logger.info(
+			{ photoId, userId, requestId },
+			"Photo %s embeddings generated",
+			photoId
+		);
 	},
 	{
 		connection: redis,

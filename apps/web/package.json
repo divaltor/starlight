@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "bun run .output/server/index.mjs",
-    "build": "vite build",
-    "dev": "vite dev --port=3001"
+    "build": "bunx --bun vite build",
+    "dev": "bunx --bun vite dev --port=3001"
   },
   "dependencies": {
     "@orpc/client": "catalog:",
@@ -39,10 +39,10 @@
     "nuqs": "^2.8.5",
     "photoswipe": "^5.4.4",
     "radix-ui": "^1.4.3",
-    "react": "19.2.1",
+    "react": "19.2.3",
     "react-aria": "^3.44.0",
     "react-aria-components": "^1.13.0",
-    "react-dom": "19.2.1",
+    "react-dom": "19.2.3",
     "react-photoswipe-gallery": "^4.0.0",
     "swiper": "^12.0.3",
     "tailwind-merge": "^3.3.1",
@@ -59,10 +59,10 @@
     "@tanstack/react-router-devtools": "^1.133.3",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.2.0",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.4",
-    "daisyui": "^5.3.7",
+    "daisyui": "^5.5.14",
     "jsdom": "^27.0.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.10",

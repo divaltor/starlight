@@ -1,17 +1,6 @@
-import {
-	env,
-	type Photo,
-	type ScheduledSlot,
-	type ScheduledSlotPhoto,
-	type ScheduledSlotTweet,
-	type Tweet,
-} from "@starlight/utils";
+import { env, type Photo, type Tweet } from "@starlight/utils";
 import { format } from "date-fns";
-import type {
-	ScheduledSlotData,
-	SearchResult,
-	TweetData,
-} from "../types/tweets";
+import type { SearchResult, TweetData } from "../types/tweets";
 
 function transformTweetsBase<
 	T extends Pick<Tweet, "id" | "createdAt" | "username">,
@@ -60,39 +49,6 @@ export const transformTweets = (
 		})[];
 	})[]
 ) => transformTweetsBase(tweets, (t) => t.photos);
-
-export const transformSlotTweets = (
-	tweets: (ScheduledSlotTweet & { tweet: Tweet } & {
-		scheduledSlotPhotos: (ScheduledSlotPhoto & {
-			photo: Photo & {
-				s3Url: string | undefined;
-				height?: number;
-				width?: number;
-			};
-		})[];
-	})[]
-) => {
-	const transformedTweets = tweets.map((t) => ({
-		...t.tweet,
-		scheduledSlotPhotos: t.scheduledSlotPhotos.map((s) => s.photo),
-	}));
-	return transformTweetsBase(transformedTweets, (t) => t.scheduledSlotPhotos);
-};
-
-export const transformScheduledSlot = (
-	slot: ScheduledSlot & {
-		postingChannel: {
-			chat: { title: string | null; username: string | null };
-		};
-	}
-): ScheduledSlotData => ({
-	id: slot.id,
-	status: slot.status,
-	chat: {
-		title: slot.postingChannel.chat.title || undefined,
-		username: slot.postingChannel.chat.username || undefined,
-	},
-});
 
 export const transformSearchResults = (
 	results: SearchResult[]

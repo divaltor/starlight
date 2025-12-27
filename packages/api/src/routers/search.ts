@@ -58,12 +58,13 @@ export const searchImages = maybeAuthProcedure
 		const hashedQuery = Bun.hash.xxHash3(query);
 		const ttlKey = `query:${hashedQuery}`;
 		let text: number[];
+		let memberExists: Buffer | null = null;
 
-		const memberExists = await redis.getexBuffer(
-			ttlKey,
-			"EX",
-			60 * 60 * 24 * 90
-		);
+		try {
+			memberExists = await redis.getexBuffer(ttlKey, "EX", 60 * 60 * 24 * 90);
+		} catch {
+			// Redis unavailable, proceed without cache
+		}
 
 		if (memberExists) {
 			text = decoder.decode(memberExists) as number[];
@@ -75,6 +76,7 @@ export const searchImages = maybeAuthProcedure
 					headers: {
 						"Content-Type": "application/json",
 						"X-API-Token": env.ML_API_TOKEN,
+						"X-Request-Id": context.requestId,
 					},
 					body: JSON.stringify({
 						tags: query,
@@ -95,11 +97,15 @@ export const searchImages = maybeAuthProcedure
 
 			text = data.text;
 
-			await redis.setex(
-				ttlKey,
-				60 * 60 * 24 * 7,
-				Buffer.from(encoder.encode(text))
-			);
+			try {
+				await redis.setex(
+					ttlKey,
+					60 * 60 * 24 * 7,
+					Buffer.from(encoder.encode(text))
+				);
+			} catch {
+				// Redis unavailable, skip caching
+			}
 		}
 
 		let cursorData: SearchCursorPayload | null = null;

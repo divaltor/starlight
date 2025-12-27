@@ -1,5 +1,3 @@
-import type { ScheduledSlotStatus } from "@starlight/utils";
-
 export type SearchResult = {
 	photo_id: string;
 	original_url: string;
@@ -29,20 +27,6 @@ export type TweetData = {
 	photos: PhotoData[];
 	hasMultipleImages: boolean;
 	sourceUrl?: string;
-};
-
-export type ScheduledSlotData = {
-	id: string;
-	status: ScheduledSlotStatus;
-	chat: {
-		title?: string;
-		username?: string;
-	};
-};
-
-export type ScheduledSlotResult = {
-	slot: ScheduledSlotData | null;
-	tweets: TweetData[];
 };
 
 export type TweetsPageResult = {

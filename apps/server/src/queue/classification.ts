@@ -7,6 +7,7 @@ import type { Classification } from "@/types";
 type ClassificationJobData = {
 	photoId: string;
 	userId: string;
+	requestId?: string;
 };
 
 export const classificationQueue = new Queue<ClassificationJobData>(
@@ -33,18 +34,19 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			return;
 		}
 
-		const { photoId, userId } = job.data;
+		const { photoId, userId, requestId: incomingRequestId } = job.data;
+		const requestId = incomingRequestId || Bun.randomUUIDv7();
 
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
 			logger.warn(
-				{ photoId, userId },
+				{ photoId, userId, requestId },
 				"Classification skipped: service not configured"
 			);
 			return;
 		}
 
 		logger.info(
-			{ photoId, userId },
+			{ photoId, userId, requestId },
 			"Classifying photo %s for user %s",
 			photoId,
 			userId
@@ -64,7 +66,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 
 		if (!photo) {
 			logger.error(
-				{ photoId, userId },
+				{ photoId, userId, requestId },
 				"Photo %s not found for user %s",
 				photoId,
 				userId
@@ -73,7 +75,11 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		}
 
 		if (!photo.s3Url) {
-			logger.warn({ photoId, userId }, "Photo %s has no s3Url yet", photoId);
+			logger.warn(
+				{ photoId, userId, requestId },
+				"Photo %s has no s3Url yet",
+				photoId
+			);
 			throw new Error("Photo has no URL for classification");
 		}
 
@@ -82,6 +88,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
 			"X-API-Token": env.ML_API_TOKEN,
+			"X-Request-Id": requestId,
 		};
 
 		try {
@@ -95,7 +102,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			);
 		} catch (error) {
 			logger.error(
-				{ photoId, userId, error },
+				{ photoId, userId, requestId, error },
 				"Failed request to classification service"
 			);
 			throw error;
@@ -104,7 +111,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		if (!response.ok) {
 			const text = await response.text();
 			logger.error(
-				{ photoId, userId, status: response.status, body: text },
+				{ photoId, userId, requestId, status: response.status, body: text },
 				"Classification service error"
 			);
 			throw new Error(`Classification service error: ${response.status}`);
@@ -116,7 +123,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			data = await response.json();
 		} catch (error) {
 			logger.error(
-				{ photoId, userId, error },
+				{ photoId, userId, requestId, error },
 				"Failed to parse classification response"
 			);
 			throw error;
@@ -127,7 +134,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			data: { classification: data },
 		});
 
-		logger.info({ photoId, userId }, "Photo %s classified", photoId);
+		logger.info({ photoId, userId, requestId }, "Photo %s classified", photoId);
 	},
 	{
 		connection: redis,
