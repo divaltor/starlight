@@ -74,6 +74,7 @@ feature.on(":text").filter(
 				await ctx.replyWithVideo(existingVideo.telegramFileId, {
 					width: existingVideo.width ?? undefined,
 					height: existingVideo.height ?? undefined,
+					supports_streaming: true,
 					reply_markup: existingVideo.tweetText
 						? createVideoKeyboard(existingVideo.id, false)
 						: undefined,
@@ -127,6 +128,7 @@ feature.on(":text").filter(
 					{
 						width: video.metadata?.width,
 						height: video.metadata?.height,
+						supports_streaming: true,
 						reply_markup: cleanedText
 							? createVideoKeyboard(videoId, false)
 							: undefined,
@@ -201,6 +203,7 @@ feature.callbackQuery(/^video:add_desc:(.+)$/, async (ctx) => {
 			await ctx.replyWithVideo(video.telegramFileId, {
 				width: video.width ?? undefined,
 				height: video.height ?? undefined,
+				supports_streaming: true,
 				caption: video.tweetText ?? undefined,
 				reply_markup: createVideoKeyboard(videoId, true),
 			});
@@ -243,6 +246,7 @@ feature.callbackQuery(/^video:remove_desc:(.+)$/, async (ctx) => {
 			await ctx.replyWithVideo(video.telegramFileId, {
 				width: video.width ?? undefined,
 				height: video.height ?? undefined,
+				supports_streaming: true,
 				reply_markup: createVideoKeyboard(videoId, false),
 			});
 		} else {
