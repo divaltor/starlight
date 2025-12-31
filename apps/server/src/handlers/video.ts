@@ -255,4 +255,35 @@ feature.callbackQuery(/^video:remove_desc:(.+)$/, async (ctx) => {
 	}
 });
 
+composer.command("source").filter(
+	(ctx) =>
+		ctx.msg.reply_to_message === undefined ||
+		ctx.msg.reply_to_message?.video === undefined,
+	(ctx) => {
+		ctx.reply("Please, reply to a message with a video.");
+	}
+);
+
+composer.command("source").filter(
+	(ctx) => ctx.msg.reply_to_message !== undefined,
+	async (ctx) => {
+		const video = await prisma.video.findFirst({
+			where: {
+				telegramFileUniqueId: ctx.msg.reply_to_message?.video
+					?.file_unique_id as string,
+			},
+			orderBy: {
+				createdAt: "desc",
+			},
+		});
+
+		if (!video) {
+			await ctx.reply("No source found, sorry.");
+			return;
+		}
+
+		await ctx.reply(`https://x.com/i/status/${video.tweetId}`);
+	}
+);
+
 export default composer;
