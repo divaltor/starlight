@@ -46,7 +46,7 @@ function createVideoKeyboard(
 }
 
 feature.on(":text").filter(
-	(ctx) => ctx.msg.text.startsWith("https://x.com"),
+	(ctx) => ctx.msg.text.startsWith("https://"),
 	async (ctx) => {
 		if (!ctx.user) {
 			await ctx.reply("You need to be registered to use this feature.");
@@ -57,37 +57,40 @@ feature.on(":text").filter(
 
 		const link = ctx.msg.text;
 		const tweetId = extractTweetId(link);
+		const isTwitterLink = Boolean(tweetId);
 
-		// Check if video already exists in database
-		const existingVideo = await prisma.video.findFirst({
-			where: { tweetId },
-			orderBy: { createdAt: "desc" },
-		});
+		// Check if video already exists in database (only for Twitter links)
+		if (isTwitterLink) {
+			const existingVideo = await prisma.video.findFirst({
+				where: { tweetId },
+				orderBy: { createdAt: "desc" },
+			});
 
-		if (existingVideo) {
-			ctx.logger.info(
-				"Found existing video for tweet %s, sending via file_id",
-				tweetId
-			);
-
-			try {
-				await ctx.replyWithVideo(existingVideo.telegramFileId, {
-					width: existingVideo.width ?? undefined,
-					height: existingVideo.height ?? undefined,
-					supports_streaming: true,
-					reply_markup: existingVideo.tweetText
-						? createVideoKeyboard(existingVideo.id, false)
-						: undefined,
-				});
-
-				ctx.logger.info("Existing video sent successfully to %s", ctx.chatId);
-				return;
-			} catch (error) {
-				ctx.logger.error(
-					{ error, videoId: existingVideo.id },
-					"Error sending existing video, will download fresh copy"
+			if (existingVideo) {
+				ctx.logger.info(
+					"Found existing video for tweet %s, sending via file_id",
+					tweetId
 				);
-				// Continue to download fresh copy if sending existing file fails
+
+				try {
+					await ctx.replyWithVideo(existingVideo.telegramFileId, {
+						width: existingVideo.width ?? undefined,
+						height: existingVideo.height ?? undefined,
+						supports_streaming: true,
+						reply_markup: existingVideo.tweetText
+							? createVideoKeyboard(existingVideo.id, false)
+							: undefined,
+					});
+
+					ctx.logger.info("Existing video sent successfully to %s", ctx.chatId);
+					return;
+				} catch (error) {
+					ctx.logger.error(
+						{ error, videoId: existingVideo.id },
+						"Error sending existing video, will download fresh copy"
+					);
+					// Continue to download fresh copy if sending existing file fails
+				}
 			}
 		}
 
@@ -96,18 +99,22 @@ feature.on(":text").filter(
 		let videos: VideoInformation[] = [];
 		let tweet: Tweet | null = null;
 
-		const scrapper = new Scraper({
-			experimental: { xClientTransactionId: true, xpff: true },
-		});
-
 		try {
-			[videos, tweet] = await Promise.all([
-				downloadVideo(link, tempDir.name),
-				scrapper.getTweet(tweetId).catch((error) => {
-					ctx.logger.error({ error }, "Error getting tweet");
-					return null;
-				}),
-			]);
+			if (isTwitterLink) {
+				const scrapper = new Scraper({
+					experimental: { xClientTransactionId: true, xpff: true },
+				});
+
+				[videos, tweet] = await Promise.all([
+					downloadVideo(link, tempDir.name),
+					scrapper.getTweet(tweetId).catch((error) => {
+						ctx.logger.error({ error }, "Error getting tweet");
+						return null;
+					}),
+				]);
+			} else {
+				videos = await downloadVideo(link, tempDir.name);
+			}
 		} catch (error) {
 			ctx.logger.error(error, "Error downloading video");
 
@@ -115,7 +122,9 @@ feature.on(":text").filter(
 			return;
 		}
 
-		const cleanedText = cleanupTweetText(tweet?.text);
+		const cleanedText = isTwitterLink
+			? cleanupTweetText(tweet?.text)
+			: undefined;
 
 		for (const video of videos) {
 			try {
@@ -135,18 +144,20 @@ feature.on(":text").filter(
 					}
 				);
 
-				await prisma.video.create({
-					data: {
-						id: videoId,
-						userId: ctx.user.id,
-						tweetId,
-						tweetText: cleanedText,
-						telegramFileId: sentMessage.video.file_id,
-						telegramFileUniqueId: sentMessage.video.file_unique_id,
-						width: sentMessage.video.width,
-						height: sentMessage.video.height,
-					},
-				});
+				if (isTwitterLink) {
+					await prisma.video.create({
+						data: {
+							id: videoId,
+							userId: ctx.user.id,
+							tweetId,
+							tweetText: cleanedText,
+							telegramFileId: sentMessage.video.file_id,
+							telegramFileUniqueId: sentMessage.video.file_unique_id,
+							width: sentMessage.video.width,
+							height: sentMessage.video.height,
+						},
+					});
+				}
 
 				ctx.logger.info(
 					"Video %s sent successfully to %s",
