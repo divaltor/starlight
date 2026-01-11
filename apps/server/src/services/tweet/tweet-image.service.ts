@@ -42,6 +42,12 @@ async function fetchReplyChain(
 		media: tweet.media
 			? {
 					photos: tweet.media.photos,
+					videos: tweet.media.videos?.map((v) => ({
+						thumbnailUrl: v.thumbnail_url,
+						width: v.width,
+						height: v.height,
+						type: v.type,
+					})),
 				}
 			: null,
 		likes: tweet.likes,
@@ -99,6 +105,12 @@ export async function generateTweetImage(
 		media: tweet.media
 			? {
 					photos: tweet.media.photos,
+					videos: tweet.media.videos?.map((v) => ({
+						thumbnailUrl: v.thumbnail_url,
+						width: v.width,
+						height: v.height,
+						type: v.type,
+					})),
 				}
 			: null,
 		likes: tweet.likes,
@@ -116,6 +128,12 @@ export async function generateTweetImage(
 					media: tweet.quote.media
 						? {
 								photos: tweet.quote.media.photos,
+								videos: tweet.quote.media.videos?.map((v) => ({
+									thumbnailUrl: v.thumbnail_url,
+									width: v.width,
+									height: v.height,
+									type: v.type,
+								})),
 							}
 						: null,
 					likes: tweet.quote.likes,

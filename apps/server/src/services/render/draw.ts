@@ -186,3 +186,39 @@ export function formatNumber(num: number | null | undefined): string {
 	}
 	return num.toString();
 }
+
+type DrawPlayButtonParams = {
+	ctx: SKRSContext2D;
+	centerX: number;
+	centerY: number;
+	size?: number;
+};
+
+export function drawPlayButton(params: DrawPlayButtonParams): void {
+	const { ctx, centerX, centerY, size = 48 } = params;
+
+	ctx.save();
+
+	ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+	ctx.beginPath();
+	ctx.arc(centerX, centerY, size / 2, 0, Math.PI * 2);
+	ctx.fill();
+
+	ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	ctx.arc(centerX, centerY, size / 2, 0, Math.PI * 2);
+	ctx.stroke();
+
+	const triangleSize = size * 0.4;
+	const offsetX = triangleSize * 0.15;
+	ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+	ctx.beginPath();
+	ctx.moveTo(centerX - triangleSize / 2 + offsetX, centerY - triangleSize / 2);
+	ctx.lineTo(centerX + triangleSize / 2 + offsetX, centerY);
+	ctx.lineTo(centerX - triangleSize / 2 + offsetX, centerY + triangleSize / 2);
+	ctx.closePath();
+	ctx.fill();
+
+	ctx.restore();
+}
