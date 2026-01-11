@@ -6,6 +6,11 @@ import { renderTweetImage, type TweetData } from "@/services/render";
 
 export type Theme = "light" | "dark";
 
+function stripLeadingMention(text: string, username: string): string {
+	const mentionPattern = new RegExp(`^@${username}\\s*`, "i");
+	return text.replace(mentionPattern, "").trim();
+}
+
 export type TweetImageResult = {
 	fileId: string;
 	fileUniqueId: string;
@@ -53,11 +58,16 @@ export async function generateTweetImage(
 		}
 	}
 
+	const tweetText =
+		tweet.replying_to && replyToData
+			? stripLeadingMention(tweet.text, tweet.replying_to)
+			: tweet.text;
+
 	const tweetData: TweetData = {
 		authorName: tweet.author.name,
 		authorUsername: tweet.author.screen_name,
 		authorAvatarUrl: tweet.author.avatar_url,
-		text: tweet.text,
+		text: tweetText,
 		media: tweet.media
 			? {
 					photos: tweet.media.photos,
