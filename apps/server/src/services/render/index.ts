@@ -181,12 +181,30 @@ export async function renderTweetImage(
 	const canvas = createCanvas(LAYOUT.WIDTH, totalHeight);
 	const ctx = canvas.getContext("2d");
 
+	const cardRadius = LAYOUT.MEDIA_BORDER_RADIUS;
+
 	ctx.fillStyle = colors.cardBackground;
-	ctx.fillRect(0, 0, LAYOUT.WIDTH, totalHeight);
+	roundedRect({
+		ctx,
+		x: 0,
+		y: 0,
+		width: LAYOUT.WIDTH,
+		height: totalHeight,
+		radius: cardRadius,
+	});
+	ctx.fill();
 
 	ctx.strokeStyle = colors.border;
 	ctx.lineWidth = 1;
-	ctx.strokeRect(0.5, 0.5, LAYOUT.WIDTH - 1, totalHeight - 1);
+	roundedRect({
+		ctx,
+		x: 0.5,
+		y: 0.5,
+		width: LAYOUT.WIDTH - 1,
+		height: totalHeight - 1,
+		radius: cardRadius,
+	});
+	ctx.stroke();
 
 	let yOffset = LAYOUT.PADDING;
 	const replyAvatarCenterX = LAYOUT.PADDING + REPLY_AVATAR_SIZE / 2;
