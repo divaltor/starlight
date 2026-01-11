@@ -1,5 +1,6 @@
 export const LAYOUT = {
-	WIDTH: 600,
+	SCALE_FACTOR: 2,
+	WIDTH: 550,
 	MAX_HEIGHT: 1200,
 
 	PADDING: 24,

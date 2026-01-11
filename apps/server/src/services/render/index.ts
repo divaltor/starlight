@@ -174,8 +174,12 @@ export async function renderTweetImage(
 		statsHeight +
 		LAYOUT.PADDING;
 
-	const canvas = createCanvas(LAYOUT.WIDTH, totalHeight);
+	const scale = LAYOUT.SCALE_FACTOR;
+	const canvas = createCanvas(LAYOUT.WIDTH * scale, totalHeight * scale);
 	const ctx = canvas.getContext("2d");
+	ctx.scale(scale, scale);
+	ctx.imageSmoothingEnabled = true;
+	ctx.imageSmoothingQuality = "high";
 
 	const cardRadius = LAYOUT.MEDIA_BORDER_RADIUS;
 
@@ -519,7 +523,7 @@ export async function renderTweetImage(
 
 	return {
 		buffer,
-		width: LAYOUT.WIDTH,
-		height: totalHeight,
+		width: LAYOUT.WIDTH * scale,
+		height: totalHeight * scale,
 	};
 }
