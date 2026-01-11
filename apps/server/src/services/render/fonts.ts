@@ -1,4 +1,4 @@
-import { registerFont } from "canvas";
+import { GlobalFonts } from "@napi-rs/canvas";
 import path from "node:path";
 import { logger } from "@/logger";
 
@@ -12,15 +12,15 @@ export function registerFonts(): void {
 	try {
 		const fontPath = path.join(process.cwd(), "assets", "fonts");
 
-		registerFont(path.join(fontPath, "Inter-Regular.ttf"), {
-			family: "Inter",
-			weight: "400",
-		});
+		GlobalFonts.registerFromPath(
+			path.join(fontPath, "Inter-Regular.ttf"),
+			"Inter"
+		);
 
-		registerFont(path.join(fontPath, "Inter-Bold.ttf"), {
-			family: "Inter",
-			weight: "700",
-		});
+		GlobalFonts.registerFromPath(
+			path.join(fontPath, "Inter-Bold.ttf"),
+			"Inter"
+		);
 
 		fontsRegistered = true;
 		logger.info("Registered Inter fonts");

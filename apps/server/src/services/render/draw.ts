@@ -1,7 +1,7 @@
-import type { CanvasRenderingContext2D, Image } from "canvas";
+import type { Image, SKRSContext2D } from "@napi-rs/canvas";
 
 type RoundedRectParams = {
-	ctx: CanvasRenderingContext2D;
+	ctx: SKRSContext2D;
 	x: number;
 	y: number;
 	width: number;
@@ -25,7 +25,7 @@ export function roundedRect(params: RoundedRectParams): void {
 }
 
 type DrawCircularImageParams = {
-	ctx: CanvasRenderingContext2D;
+	ctx: SKRSContext2D;
 	image: Image;
 	x: number;
 	y: number;
@@ -44,7 +44,7 @@ export function drawCircularImage(params: DrawCircularImageParams): void {
 }
 
 export function wrapText(
-	ctx: CanvasRenderingContext2D,
+	ctx: SKRSContext2D,
 	text: string,
 	maxWidth: number
 ): string[] {

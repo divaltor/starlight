@@ -1,4 +1,4 @@
-import { createCanvas, loadImage } from "canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { logger } from "@/logger";
 import { drawCircularImage, formatNumber, roundedRect, wrapText } from "./draw";
 import { getFontFamily, registerFonts } from "./fonts";
