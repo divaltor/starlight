@@ -29,12 +29,14 @@ privateChat.command("find").filter(
 	(ctx) => ctx.message.reply_to_message?.photo !== undefined,
 	async (ctx) => {
 		const photoArray = ctx.message.reply_to_message?.photo;
+
 		if (!photoArray || photoArray.length === 0) {
 			await ctx.reply("Please reply to a photo with /find command.");
 			return;
 		}
 
-		const largestPhoto = photoArray[photoArray.length - 1];
+		// biome-ignore lint/style/noNonNullAssertion: We know photo array is not empty if it's sent
+		const largestPhoto = photoArray.at(-1)!;
 		const telegramPhoto = await ctx.api.getFile(largestPhoto.file_id);
 		const file = await telegramPhoto.download();
 

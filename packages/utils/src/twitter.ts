@@ -10,13 +10,6 @@ export function isTwitterUrl(text: string): boolean {
 	return TWITTER_URL_REGEX.test(text);
 }
 
-export function normalizeTwitterUrl(
-	tweetId: string,
-	username?: string
-): string {
-	return `https://x.com/${username ?? "i"}/status/${tweetId}`;
-}
-
 export function cleanupTweetText(text: string | undefined): string | undefined {
 	if (!text) {
 		return;
