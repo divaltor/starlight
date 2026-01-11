@@ -1,5 +1,5 @@
 const TWITTER_URL_REGEX =
-	/(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com|fxtwitter\.com|fixupx\.com)\/\w+\/status\/(\d+)/i;
+	/(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com|fxtwitter\.com|fixupx\.com)\/\w+\/status\/(\d+).+/i;
 
 export function extractTweetId(url: string): string | null {
 	const match = url.match(TWITTER_URL_REGEX);
