@@ -4,6 +4,7 @@ import {
 	GrammyError,
 	InlineKeyboard,
 	InlineQueryResultBuilder,
+	InputFile,
 } from "grammy";
 import { RateLimiterRedis } from "rate-limiter-flexible";
 import { fetchTweet } from "@/services/fxembed/fxembed.service";
@@ -136,26 +137,16 @@ privateChat
 			await ctx.replyWithChatAction("upload_photo");
 
 			try {
-				const result = await generateTweetImage(
-					tweetId,
-					ctx.api,
-					ctx.chat.id,
-					"light"
-				);
+				const result = await generateTweetImage(tweetId, "light");
 
-				await tweetImageRateLimiter.consume(ctx.from.id);
-
-				await ctx.api.editMessageMedia(
-					ctx.chat.id,
-					result.messageId,
-					{
-						type: "photo",
-						media: result.fileId,
-					},
+				await ctx.replyWithPhoto(
+					new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
 					{
 						reply_markup: createThemeKeyboard(tweetId, "light"),
 					}
 				);
+
+				await tweetImageRateLimiter.consume(ctx.from.id);
 			} catch (error) {
 				ctx.logger.error({ error, tweetId }, "Failed to generate tweet image");
 
@@ -298,19 +289,14 @@ privateChat.callbackQuery(
 		});
 
 		try {
-			const result = await generateTweetImage(
-				tweetId,
-				ctx.api,
-				ctx.chat.id,
-				newTheme
-			);
+			const result = await generateTweetImage(tweetId, newTheme);
 
 			await tweetImageRateLimiter.consume(ctx.from.id);
 
 			await ctx.editMessageMedia(
 				{
 					type: "photo",
-					media: result.fileId,
+					media: new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
 				},
 				{
 					reply_markup: createThemeKeyboard(tweetId, newTheme),

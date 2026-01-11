@@ -1,8 +1,10 @@
-import type { Api, RawApi } from "grammy";
-import { InputFile } from "grammy";
 import { logger } from "@/logger";
 import { fetchTweet } from "@/services/fxembed/fxembed.service";
-import { renderTweetImage, type TweetData } from "@/services/render";
+import {
+	renderTweetImage,
+	type RenderResult,
+	type TweetData,
+} from "@/services/render";
 
 export type Theme = "light" | "dark";
 
@@ -60,18 +62,10 @@ async function fetchReplyChain(
 	return { chain: [tweetData], hasMore: false };
 }
 
-export type TweetImageResult = {
-	fileId: string;
-	fileUniqueId: string;
-	messageId: number;
-	width: number;
-	height: number;
-};
+export type TweetImageResult = RenderResult;
 
 export async function generateTweetImage(
 	tweetId: string,
-	api: Api<RawApi>,
-	chatId: string | number,
 	theme: Theme = "light"
 ): Promise<TweetImageResult> {
 	const tweet = await fetchTweet(tweetId);
@@ -114,27 +108,5 @@ export async function generateTweetImage(
 
 	logger.debug({ tweetId, theme }, "Rendering tweet image");
 
-	const renderResult = await renderTweetImage(tweetData, theme);
-
-	logger.debug({ tweetId, theme }, "Sending tweet image to Telegram");
-
-	const message = await api.sendPhoto(
-		chatId,
-		new InputFile(renderResult.buffer, `tweet-${tweetId}.jpg`)
-	);
-
-	const photo = message.photo;
-	const largest = photo.at(-1);
-
-	if (!largest) {
-		throw new Error("No photo in response");
-	}
-
-	return {
-		fileId: largest.file_id,
-		fileUniqueId: largest.file_unique_id,
-		messageId: message.message_id,
-		width: renderResult.width,
-		height: renderResult.height,
-	};
+	return renderTweetImage(tweetData, theme);
 }
