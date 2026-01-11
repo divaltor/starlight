@@ -92,16 +92,19 @@ export function wrapText(
 		}
 	}
 
-	if (lines.length >= 2) {
-		const lastLine = lines[lines.length - 1];
-		const secondLastLine = lines[lines.length - 2];
-		if (
-			lastLine &&
-			secondLastLine &&
-			isHashtagLine(lastLine.text) &&
-			!secondLastLine.isParagraphEnd
-		) {
-			secondLastLine.isParagraphEnd = true;
+	let firstHashtagLineIndex = -1;
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (line && isHashtagLine(line.text)) {
+			firstHashtagLineIndex = i;
+			break;
+		}
+	}
+
+	if (firstHashtagLineIndex > 0) {
+		const prevLine = lines[firstHashtagLineIndex - 1];
+		if (prevLine && !prevLine.isParagraphEnd) {
+			prevLine.isParagraphEnd = true;
 		}
 	}
 

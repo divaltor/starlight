@@ -28,6 +28,7 @@
     "@starlight/utils": "workspace:*",
     "@the-convocation/twitter-scraper": "git+https://github.com/divaltor/twitter-scraper.git",
     "bullmq": "^5.66.4",
+    "date-fns": "^4.1.0",
     "grammy": "catalog:",
     "hono": "catalog:",
     "ioredis": "catalog:",

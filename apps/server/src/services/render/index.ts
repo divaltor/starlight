@@ -1,4 +1,5 @@
 import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { format } from "date-fns";
 import { logger } from "@/logger";
 import { drawCircularImage, formatNumber, roundedRect, wrapText } from "./draw";
 import { getFontFamily, registerFonts } from "./fonts";
@@ -12,6 +13,7 @@ export type TweetData = {
 	authorUsername: string;
 	authorAvatarUrl: string;
 	text: string;
+	createdAt?: Date | null;
 	media?: {
 		photos?: Array<{ url: string; width: number; height: number }>;
 	} | null;
@@ -502,10 +504,11 @@ export async function renderTweetImage(
 	ctx.font = `${LAYOUT.FONT_SIZE_STATS}px ${fontFamily}`;
 
 	const stats = [
+		tweet.createdAt ? format(tweet.createdAt, "MMM d, yyyy") : null,
 		`${formatNumber(tweet.replies)} replies`,
 		`${formatNumber(tweet.retweets)} reposts`,
 		`${formatNumber(tweet.likes)} likes`,
-	];
+	].filter((s): s is string => s !== null);
 
 	ctx.fillText(
 		stats.join("  ·  "),

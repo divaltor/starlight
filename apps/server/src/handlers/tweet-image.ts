@@ -256,8 +256,8 @@ composer.on("inline_query").filter(
 			const darkS3Path = `tweets/${tweetId}/dark.jpg`;
 
 			await Promise.all([
-				s3.write(lightS3Path, lightResult.buffer),
-				s3.write(darkS3Path, darkResult.buffer),
+				s3.write(lightS3Path, lightResult.buffer, { type: "image/jpeg" }),
+				s3.write(darkS3Path, darkResult.buffer, { type: "image/jpeg" }),
 			]);
 
 			ctx.logger.debug(
