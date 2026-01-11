@@ -1,13 +1,7 @@
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { format } from "date-fns";
 import { logger } from "@/logger";
-import {
-	drawCircularImage,
-	drawImageCover,
-	formatNumber,
-	roundedRect,
-	wrapText,
-} from "./draw";
+import { drawCircularImage, formatNumber, roundedRect, wrapText } from "./draw";
 import { getFontFamily, registerFonts } from "./fonts";
 import { LAYOUT } from "./layout";
 import { type Theme, themes } from "./themes";
@@ -37,8 +31,6 @@ export type RenderResult = {
 	height: number;
 };
 
-const MAX_MEDIA_HEIGHT = 400;
-const QUOTE_MAX_MEDIA_HEIGHT = 200;
 const QUOTE_AVATAR_SIZE = 24;
 const QUOTE_FONT_SIZE_NAME = 13;
 const QUOTE_FONT_SIZE_TEXT = 14;
@@ -89,8 +81,7 @@ export async function renderTweetImage(
 		const firstPhoto = photos.at(0);
 		if (firstPhoto) {
 			const aspectRatio = firstPhoto.width / firstPhoto.height;
-			const computedHeight = contentWidth / aspectRatio;
-			mediaHeight = Math.floor(Math.min(computedHeight, MAX_MEDIA_HEIGHT));
+			mediaHeight = Math.floor(contentWidth / aspectRatio);
 		}
 	}
 
@@ -117,10 +108,7 @@ export async function renderTweetImage(
 			const firstQuotePhoto = quotePhotos.at(0);
 			if (firstQuotePhoto) {
 				const aspectRatio = firstQuotePhoto.width / firstQuotePhoto.height;
-				const computedHeight = quoteContentWidth / aspectRatio;
-				quoteMediaHeight = Math.floor(
-					Math.min(computedHeight, QUOTE_MAX_MEDIA_HEIGHT)
-				);
+				quoteMediaHeight = Math.floor(quoteContentWidth / aspectRatio);
 			}
 		}
 
@@ -374,14 +362,13 @@ export async function renderTweetImage(
 				ctx.fillStyle = colors.background;
 				ctx.fillRect(LAYOUT.PADDING, yOffset, contentWidth, mediaHeight);
 
-				drawImageCover({
-					ctx,
+				ctx.drawImage(
 					image,
-					x: LAYOUT.PADDING,
-					y: yOffset,
-					width: contentWidth,
-					height: mediaHeight,
-				});
+					LAYOUT.PADDING,
+					yOffset,
+					contentWidth,
+					mediaHeight
+				);
 				ctx.restore();
 
 				yOffset += mediaHeight;
@@ -488,14 +475,13 @@ export async function renderTweetImage(
 					ctx.fillStyle = colors.background;
 					ctx.fillRect(quoteX, quoteY, quoteContentWidth, quoteMediaHeight);
 
-					drawImageCover({
-						ctx,
-						image: quoteImage,
-						x: quoteX,
-						y: quoteY,
-						width: quoteContentWidth,
-						height: quoteMediaHeight,
-					});
+					ctx.drawImage(
+						quoteImage,
+						quoteX,
+						quoteY,
+						quoteContentWidth,
+						quoteMediaHeight
+					);
 					ctx.restore();
 				}
 			} catch (error) {
