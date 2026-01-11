@@ -46,8 +46,10 @@ export async function renderTweetImage(
 	measureCtx.font = `${LAYOUT.FONT_SIZE_TEXT}px ${fontFamily}`;
 
 	const textLines = wrapText(measureCtx, tweet.text, textWidth);
+	const paragraphCount = textLines.filter((line) => line.isParagraphEnd).length;
 	const textHeight =
-		textLines.length * LAYOUT.FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
+		textLines.length * LAYOUT.FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
+		paragraphCount * LAYOUT.PARAGRAPH_GAP;
 
 	let mediaHeight = 0;
 	const photos = tweet.media?.photos;
@@ -74,29 +76,6 @@ export async function renderTweetImage(
 
 	const canvas = createCanvas(LAYOUT.WIDTH, totalHeight);
 	const ctx = canvas.getContext("2d");
-
-	ctx.fillStyle = colors.cardBackground;
-	roundedRect({
-		ctx,
-		x: 0,
-		y: 0,
-		width: LAYOUT.WIDTH,
-		height: totalHeight,
-		radius: LAYOUT.CARD_BORDER_RADIUS,
-	});
-	ctx.fill();
-
-	ctx.strokeStyle = colors.border;
-	ctx.lineWidth = 1;
-	roundedRect({
-		ctx,
-		x: 0.5,
-		y: 0.5,
-		width: LAYOUT.WIDTH - 1,
-		height: totalHeight - 1,
-		radius: LAYOUT.CARD_BORDER_RADIUS,
-	});
-	ctx.stroke();
 
 	let yOffset = LAYOUT.PADDING;
 
@@ -137,8 +116,11 @@ export async function renderTweetImage(
 	ctx.font = `${LAYOUT.FONT_SIZE_TEXT}px ${fontFamily}`;
 
 	for (const line of textLines) {
-		ctx.fillText(line, LAYOUT.PADDING, yOffset + LAYOUT.FONT_SIZE_TEXT);
+		ctx.fillText(line.text, LAYOUT.PADDING, yOffset + LAYOUT.FONT_SIZE_TEXT);
 		yOffset += LAYOUT.FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
+		if (line.isParagraphEnd) {
+			yOffset += LAYOUT.PARAGRAPH_GAP;
+		}
 	}
 
 	if (photos && photos.length > 0 && mediaHeight > 0) {

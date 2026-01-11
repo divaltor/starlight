@@ -43,37 +43,55 @@ export function drawCircularImage(params: DrawCircularImageParams): void {
 	ctx.restore();
 }
 
+export type TextLine = {
+	text: string;
+	isParagraphEnd: boolean;
+};
+
 export function wrapText(
 	ctx: SKRSContext2D,
 	text: string,
 	maxWidth: number
-): string[] {
-	const words = text.split(/\s+/);
-	const lines: string[] = [];
-	let currentLine = "";
+): TextLine[] {
+	const paragraphs = text.split(/\n\n+/);
+	const lines: TextLine[] = [];
 
-	for (const word of words) {
-		const testLine = currentLine ? `${currentLine} ${word}` : word;
-		const metrics = ctx.measureText(testLine);
-
-		if (metrics.width > maxWidth && currentLine) {
-			lines.push(currentLine);
-			currentLine = word;
-		} else {
-			currentLine = testLine;
+	for (let pIndex = 0; pIndex < paragraphs.length; pIndex++) {
+		const rawParagraph = paragraphs[pIndex];
+		if (!rawParagraph) {
+			continue;
 		}
-	}
+		const paragraph = rawParagraph.replace(/\n/g, " ").trim();
+		if (!paragraph) {
+			continue;
+		}
 
-	if (currentLine) {
-		lines.push(currentLine);
+		const words = paragraph.split(/\s+/);
+		let currentLine = "";
+
+		for (const word of words) {
+			const testLine = currentLine ? `${currentLine} ${word}` : word;
+			const metrics = ctx.measureText(testLine);
+
+			if (metrics.width > maxWidth && currentLine) {
+				lines.push({ text: currentLine, isParagraphEnd: false });
+				currentLine = word;
+			} else {
+				currentLine = testLine;
+			}
+		}
+
+		if (currentLine) {
+			const isLastParagraph = pIndex === paragraphs.length - 1;
+			lines.push({ text: currentLine, isParagraphEnd: !isLastParagraph });
+		}
 	}
 
 	return lines;
 }
 
-// biome-ignore lint/style/useNumericSeparators: conflicting rule with 4-digit numbers
 const ONE_MILLION = 1_000_000;
-const ONE_THOUSAND = 1000;
+const ONE_THOUSAND = 1_000;
 
 export function formatNumber(num: number | null | undefined): string {
 	if (num == null) {
