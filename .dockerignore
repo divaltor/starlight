@@ -631,3 +631,6 @@ pyrightconfig.json
 .nitro
 generated/
 .tanstack
+.beans*
+.cursor*
+AGENTS.md
