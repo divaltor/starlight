@@ -228,7 +228,7 @@ export async function renderTweetImage(
 		(quoteHeight > 0
 			? (mediaHeight > 0 ? 0 : LAYOUT.AVATAR_GAP) + quoteHeight
 			: 0) +
-		(mediaHeight === 0 && quoteHeight === 0 ? LAYOUT.AVATAR_GAP : 0) +
+		LAYOUT.AVATAR_GAP +
 		statsHeight +
 		LAYOUT.PADDING;
 
@@ -620,11 +620,7 @@ export async function renderTweetImage(
 		yOffset += quoteHeight;
 	}
 
-	const hasNoMedia = !mainMedia;
-	const hasNoQuote = !tweet.quote;
-	if (hasNoMedia && hasNoQuote) {
-		yOffset += LAYOUT.AVATAR_GAP;
-	}
+	yOffset += LAYOUT.AVATAR_GAP;
 
 	ctx.fillStyle = colors.secondaryText;
 	ctx.font = `${LAYOUT.FONT_SIZE_STATS}px ${fontFamily}`;
