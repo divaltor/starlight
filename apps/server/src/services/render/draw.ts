@@ -48,6 +48,11 @@ export type TextLine = {
 	isParagraphEnd: boolean;
 };
 
+function isHashtagLine(text: string): boolean {
+	const words = text.trim().split(/\s+/);
+	return words.length > 0 && words.every((word) => word.startsWith("#"));
+}
+
 export function wrapText(
 	ctx: SKRSContext2D,
 	text: string,
@@ -84,6 +89,19 @@ export function wrapText(
 		if (currentLine) {
 			const isLastParagraph = pIndex === paragraphs.length - 1;
 			lines.push({ text: currentLine, isParagraphEnd: !isLastParagraph });
+		}
+	}
+
+	if (lines.length >= 2) {
+		const lastLine = lines[lines.length - 1];
+		const secondLastLine = lines[lines.length - 2];
+		if (
+			lastLine &&
+			secondLastLine &&
+			isHashtagLine(lastLine.text) &&
+			!secondLastLine.isParagraphEnd
+		) {
+			secondLastLine.isParagraphEnd = true;
 		}
 	}
 
