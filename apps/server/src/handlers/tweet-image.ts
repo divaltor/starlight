@@ -84,11 +84,17 @@ privateChat
 
 				await tweetImageRateLimiter.consume(ctx.from.id);
 
-				await ctx.api.deleteMessage(ctx.chat.id, result.messageId);
-
-				await ctx.replyWithPhoto(result.fileId, {
-					reply_markup: createThemeKeyboard(tweetId, "light"),
-				});
+				await ctx.api.editMessageMedia(
+					ctx.chat.id,
+					result.messageId,
+					{
+						type: "photo",
+						media: result.fileId,
+					},
+					{
+						reply_markup: createThemeKeyboard(tweetId, "light"),
+					}
+				);
 			} catch (error) {
 				ctx.logger.error({ error, tweetId }, "Failed to generate tweet image");
 
@@ -142,12 +148,6 @@ privateChat.callbackQuery(
 			);
 
 			await tweetImageRateLimiter.consume(ctx.from.id);
-
-			try {
-				await ctx.api.deleteMessage(ctx.chat.id, result.messageId);
-			} catch {
-				ctx.logger.debug({ tweetId }, "Failed to delete temp message");
-			}
 
 			await ctx.editMessageMedia(
 				{
