@@ -35,7 +35,7 @@ const QUOTE_AVATAR_SIZE = 24;
 const QUOTE_FONT_SIZE_NAME = 13;
 const QUOTE_FONT_SIZE_TEXT = 14;
 const QUOTE_PADDING = 12;
-const QUOTE_BORDER_WIDTH = 4;
+const QUOTE_BORDER_WIDTH = 3;
 
 const REPLY_AVATAR_SIZE = 32;
 const REPLY_FONT_SIZE_NAME = 13;
@@ -411,6 +411,7 @@ export async function renderTweetImage(
 
 		ctx.fillStyle = colors.text;
 		ctx.font = `bold ${QUOTE_FONT_SIZE_NAME}px ${fontFamily}`;
+		const nameWidth = ctx.measureText(tweet.quote.authorName).width;
 		ctx.fillText(
 			tweet.quote.authorName,
 			quoteTextX,
@@ -419,7 +420,6 @@ export async function renderTweetImage(
 
 		ctx.fillStyle = colors.secondaryText;
 		ctx.font = `${QUOTE_FONT_SIZE_NAME}px ${fontFamily}`;
-		const nameWidth = ctx.measureText(tweet.quote.authorName).width;
 		ctx.fillText(
 			` @${tweet.quote.authorUsername}`,
 			quoteTextX + nameWidth,
