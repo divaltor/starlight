@@ -19,7 +19,8 @@ export type TweetData = {
 	retweets?: number | null;
 	replies?: number | null;
 	quote?: TweetData | null;
-	replyTo?: TweetData | null;
+	replyChain?: TweetData[];
+	hasMoreInChain?: boolean;
 };
 
 export type RenderResult = {
@@ -38,6 +39,15 @@ const REPLY_AVATAR_SIZE = 32;
 const REPLY_FONT_SIZE_NAME = 13;
 const REPLY_FONT_SIZE_TEXT = 14;
 const REPLY_LINE_WIDTH = 2;
+const DOTS_INDICATOR_HEIGHT = 24;
+const DOT_SIZE = 4;
+const DOT_GAP = 6;
+
+type ReplyChainItem = {
+	tweet: TweetData;
+	textLines: ReturnType<typeof wrapText>;
+	height: number;
+};
 
 export async function renderTweetImage(
 	tweet: TweetData,
@@ -92,32 +102,40 @@ export async function renderTweetImage(
 		);
 	}
 
-	let replyToHeight = 0;
-	let replyToTextLines: ReturnType<typeof wrapText> = [];
+	const replyChainItems: ReplyChainItem[] = [];
 	const replyToTextX = LAYOUT.PADDING + REPLY_AVATAR_SIZE + LAYOUT.AVATAR_GAP;
 	const replyToTextWidth = contentWidth - REPLY_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
-	if (tweet.replyTo) {
-		measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
-		replyToTextLines = wrapText(measureCtx, tweet.replyTo.text, replyToTextWidth);
-		const replyToParagraphCount = replyToTextLines.filter(
-			(line) => line.isParagraphEnd
-		).length;
-		const replyToTextHeight =
-			replyToTextLines.length * REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
-			replyToParagraphCount * LAYOUT.PARAGRAPH_GAP;
-		replyToHeight = Math.floor(
-			REPLY_AVATAR_SIZE +
-				LAYOUT.AVATAR_GAP +
-				Math.max(0, replyToTextHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + 4) +
-				LAYOUT.AVATAR_GAP
-		);
+	let totalReplyChainHeight = 0;
+
+	if (tweet.replyChain && tweet.replyChain.length > 0) {
+		if (tweet.hasMoreInChain) {
+			totalReplyChainHeight += DOTS_INDICATOR_HEIGHT;
+		}
+
+		for (const chainTweet of tweet.replyChain) {
+			measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
+			const textLines = wrapText(measureCtx, chainTweet.text, replyToTextWidth);
+			const paragraphCount = textLines.filter((line) => line.isParagraphEnd).length;
+			const textHeight =
+				textLines.length * REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
+				paragraphCount * LAYOUT.PARAGRAPH_GAP;
+			const itemHeight = Math.floor(
+				REPLY_AVATAR_SIZE +
+					LAYOUT.AVATAR_GAP +
+					Math.max(0, textHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + 4) +
+					LAYOUT.AVATAR_GAP
+			);
+
+			replyChainItems.push({ tweet: chainTweet, textLines, height: itemHeight });
+			totalReplyChainHeight += itemHeight;
+		}
 	}
 
 	const headerHeight = LAYOUT.AVATAR_SIZE;
 	const statsHeight = 30;
 	const totalHeight =
 		LAYOUT.PADDING +
-		replyToHeight +
+		totalReplyChainHeight +
 		headerHeight +
 		LAYOUT.AVATAR_GAP +
 		textHeight +
@@ -138,72 +156,90 @@ export async function renderTweetImage(
 	ctx.strokeRect(0.5, 0.5, LAYOUT.WIDTH - 1, totalHeight - 1);
 
 	let yOffset = LAYOUT.PADDING;
+	const replyAvatarCenterX = LAYOUT.PADDING + REPLY_AVATAR_SIZE / 2;
 
-	if (tweet.replyTo && replyToHeight > 0) {
-		const replyAvatarCenterX = LAYOUT.PADDING + REPLY_AVATAR_SIZE / 2;
-
-		try {
-			const replyAvatar = await loadImage(tweet.replyTo.authorAvatarUrl);
-			drawCircularImage({
-				ctx,
-				image: replyAvatar,
-				x: LAYOUT.PADDING,
-				y: yOffset,
-				size: REPLY_AVATAR_SIZE,
-			});
-		} catch (error) {
-			logger.warn(
-				{ error, url: tweet.replyTo.authorAvatarUrl },
-				"Failed to load reply avatar"
-			);
+	if (replyChainItems.length > 0) {
+		if (tweet.hasMoreInChain) {
 			ctx.fillStyle = colors.secondaryText;
-			ctx.beginPath();
-			ctx.arc(
-				replyAvatarCenterX,
-				yOffset + REPLY_AVATAR_SIZE / 2,
-				REPLY_AVATAR_SIZE / 2,
-				0,
-				Math.PI * 2
-			);
-			ctx.fill();
-		}
-
-		ctx.fillStyle = colors.text;
-		ctx.font = `bold ${REPLY_FONT_SIZE_NAME}px ${fontFamily}`;
-		ctx.fillText(tweet.replyTo.authorName, replyToTextX, yOffset + REPLY_FONT_SIZE_NAME);
-
-		ctx.fillStyle = colors.secondaryText;
-		ctx.font = `${REPLY_FONT_SIZE_NAME}px ${fontFamily}`;
-		const replyNameWidth = ctx.measureText(tweet.replyTo.authorName).width;
-		ctx.fillText(
-			` @${tweet.replyTo.authorUsername}`,
-			replyToTextX + replyNameWidth,
-			yOffset + REPLY_FONT_SIZE_NAME
-		);
-
-		let replyTextY = yOffset + REPLY_FONT_SIZE_NAME + 4;
-
-		ctx.fillStyle = colors.text;
-		ctx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
-		for (const line of replyToTextLines) {
-			ctx.fillText(line.text, replyToTextX, replyTextY + REPLY_FONT_SIZE_TEXT);
-			replyTextY += REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
-			if (line.isParagraphEnd) {
-				replyTextY += LAYOUT.PARAGRAPH_GAP;
+			for (let i = 0; i < 3; i++) {
+				ctx.beginPath();
+				ctx.arc(
+					replyAvatarCenterX,
+					yOffset + DOTS_INDICATOR_HEIGHT / 2 + (i - 1) * (DOT_SIZE + DOT_GAP),
+					DOT_SIZE / 2,
+					0,
+					Math.PI * 2
+				);
+				ctx.fill();
 			}
+			yOffset += DOTS_INDICATOR_HEIGHT;
 		}
 
-		const lineStartY = yOffset + REPLY_AVATAR_SIZE;
-		const lineEndY = yOffset + replyToHeight - LAYOUT.AVATAR_GAP / 2;
+		for (const item of replyChainItems) {
 
-		ctx.strokeStyle = colors.border;
-		ctx.lineWidth = REPLY_LINE_WIDTH;
-		ctx.beginPath();
-		ctx.moveTo(replyAvatarCenterX, lineStartY);
-		ctx.lineTo(replyAvatarCenterX, lineEndY);
-		ctx.stroke();
+			try {
+				const replyAvatar = await loadImage(item.tweet.authorAvatarUrl);
+				drawCircularImage({
+					ctx,
+					image: replyAvatar,
+					x: LAYOUT.PADDING,
+					y: yOffset,
+					size: REPLY_AVATAR_SIZE,
+				});
+			} catch (error) {
+				logger.warn(
+					{ error, url: item.tweet.authorAvatarUrl },
+					"Failed to load reply avatar"
+				);
+				ctx.fillStyle = colors.secondaryText;
+				ctx.beginPath();
+				ctx.arc(
+					replyAvatarCenterX,
+					yOffset + REPLY_AVATAR_SIZE / 2,
+					REPLY_AVATAR_SIZE / 2,
+					0,
+					Math.PI * 2
+				);
+				ctx.fill();
+			}
 
-		yOffset += replyToHeight;
+			ctx.fillStyle = colors.text;
+			ctx.font = `bold ${REPLY_FONT_SIZE_NAME}px ${fontFamily}`;
+			ctx.fillText(item.tweet.authorName, replyToTextX, yOffset + REPLY_FONT_SIZE_NAME);
+
+			ctx.fillStyle = colors.secondaryText;
+			ctx.font = `${REPLY_FONT_SIZE_NAME}px ${fontFamily}`;
+			const replyNameWidth = ctx.measureText(item.tweet.authorName).width;
+			ctx.fillText(
+				` @${item.tweet.authorUsername}`,
+				replyToTextX + replyNameWidth,
+				yOffset + REPLY_FONT_SIZE_NAME
+			);
+
+			let replyTextY = yOffset + REPLY_FONT_SIZE_NAME + 4;
+
+			ctx.fillStyle = colors.text;
+			ctx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
+			for (const line of item.textLines) {
+				ctx.fillText(line.text, replyToTextX, replyTextY + REPLY_FONT_SIZE_TEXT);
+				replyTextY += REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
+				if (line.isParagraphEnd) {
+					replyTextY += LAYOUT.PARAGRAPH_GAP;
+				}
+			}
+
+			const lineStartY = yOffset + REPLY_AVATAR_SIZE;
+			const lineEndY = yOffset + item.height - LAYOUT.AVATAR_GAP / 2;
+
+			ctx.strokeStyle = colors.border;
+			ctx.lineWidth = REPLY_LINE_WIDTH;
+			ctx.beginPath();
+			ctx.moveTo(replyAvatarCenterX, lineStartY);
+			ctx.lineTo(replyAvatarCenterX, lineEndY);
+			ctx.stroke();
+
+			yOffset += item.height;
+		}
 	}
 
 	try {
