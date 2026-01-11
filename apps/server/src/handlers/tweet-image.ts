@@ -194,7 +194,10 @@ composer.on("inline_query").filter(
 		);
 
 		if (!tweetId) {
-			ctx.logger.debug({ query }, "Failed to extract tweet ID from inline query");
+			ctx.logger.debug(
+				{ query },
+				"Failed to extract tweet ID from inline query"
+			);
 			await ctx.answerInlineQuery([]);
 			return;
 		}
@@ -269,10 +272,14 @@ composer.on("inline_query").filter(
 				InlineQueryResultBuilder.photo(`tweet:${tweetId}:light`, lightUrl, {
 					thumbnail_url: lightUrl,
 					caption: `https://x.com/i/status/${tweetId}`,
+					photo_width: lightResult.width,
+					photo_height: lightResult.height,
 				}),
 				InlineQueryResultBuilder.photo(`tweet:${tweetId}:dark`, darkUrl, {
 					thumbnail_url: darkUrl,
 					caption: `https://x.com/i/status/${tweetId}`,
+					photo_width: darkResult.width,
+					photo_height: darkResult.height,
 				}),
 			];
 
