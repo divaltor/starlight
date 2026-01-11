@@ -104,6 +104,22 @@ export async function generateTweetImage(
 		replies: tweet.replies,
 		replyChain,
 		hasMoreInChain,
+		quote: tweet.quote
+			? {
+					authorName: tweet.quote.author.name,
+					authorUsername: tweet.quote.author.screen_name,
+					authorAvatarUrl: tweet.quote.author.avatar_url,
+					text: tweet.quote.text,
+					media: tweet.quote.media
+						? {
+								photos: tweet.quote.media.photos,
+							}
+						: null,
+					likes: tweet.quote.likes,
+					retweets: tweet.quote.retweets,
+					replies: tweet.quote.replies,
+				}
+			: null,
 	};
 
 	logger.debug({ tweetId, theme }, "Rendering tweet image");
