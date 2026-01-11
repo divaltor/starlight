@@ -91,7 +91,7 @@ export function wrapText(
 }
 
 const ONE_MILLION = 1_000_000;
-const ONE_THOUSAND = 1_000;
+const ONE_THOUSAND = 1000;
 
 export function formatNumber(num: number | null | undefined): string {
 	if (num == null) {

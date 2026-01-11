@@ -77,6 +77,13 @@ export async function renderTweetImage(
 	const canvas = createCanvas(LAYOUT.WIDTH, totalHeight);
 	const ctx = canvas.getContext("2d");
 
+	ctx.fillStyle = colors.cardBackground;
+	ctx.fillRect(0, 0, LAYOUT.WIDTH, totalHeight);
+
+	ctx.strokeStyle = colors.border;
+	ctx.lineWidth = 1;
+	ctx.strokeRect(0.5, 0.5, LAYOUT.WIDTH - 1, totalHeight - 1);
+
 	let yOffset = LAYOUT.PADDING;
 
 	try {
