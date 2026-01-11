@@ -58,7 +58,8 @@ export function wrapText(
 	text: string,
 	maxWidth: number
 ): TextLine[] {
-	const paragraphs = text.split(/\n\n+/);
+	const normalizedText = text.replace(/\n(#\S+(\s+#\S+)*\s*)$/, "\n\n$1");
+	const paragraphs = normalizedText.split(/\n\n+/);
 	const lines: TextLine[] = [];
 
 	for (let pIndex = 0; pIndex < paragraphs.length; pIndex++) {
