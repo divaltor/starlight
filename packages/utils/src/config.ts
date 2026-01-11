@@ -36,6 +36,10 @@ const env = createEnv({
 			.optional()
 			.default("development"),
 
+		LOG_LEVEL: z
+			.enum(["trace", "debug", "info", "warn", "error", "fatal"])
+			.optional(),
+
 		BASE_FRONTEND_URL: z.string().default(process.env.VERCEL_URL || ""),
 		BASE_CDN_URL: z
 			.string()
