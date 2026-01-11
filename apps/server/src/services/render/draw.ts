@@ -117,29 +117,38 @@ export function wrapText(
 		if (!rawParagraph) {
 			continue;
 		}
-		const paragraph = rawParagraph.replace(/\n/g, " ").trim();
-		if (!paragraph) {
-			continue;
-		}
 
-		const words = paragraph.split(/\s+/);
-		let currentLine = "";
+		const explicitLines = rawParagraph.split(/\n/);
 
-		for (const word of words) {
-			const testLine = currentLine ? `${currentLine} ${word}` : word;
-			const metrics = ctx.measureText(testLine);
-
-			if (metrics.width > maxWidth && currentLine) {
-				lines.push({ text: currentLine, isParagraphEnd: false });
-				currentLine = word;
-			} else {
-				currentLine = testLine;
+		for (let lineIndex = 0; lineIndex < explicitLines.length; lineIndex++) {
+			const explicitLine = explicitLines[lineIndex]?.trim();
+			if (!explicitLine) {
+				continue;
 			}
-		}
 
-		if (currentLine) {
-			const isLastParagraph = pIndex === paragraphs.length - 1;
-			lines.push({ text: currentLine, isParagraphEnd: !isLastParagraph });
+			const words = explicitLine.split(/\s+/);
+			let currentLine = "";
+
+			for (const word of words) {
+				const testLine = currentLine ? `${currentLine} ${word}` : word;
+				const metrics = ctx.measureText(testLine);
+
+				if (metrics.width > maxWidth && currentLine) {
+					lines.push({ text: currentLine, isParagraphEnd: false });
+					currentLine = word;
+				} else {
+					currentLine = testLine;
+				}
+			}
+
+			if (currentLine) {
+				const isLastParagraph = pIndex === paragraphs.length - 1;
+				const isLastLineInParagraph = lineIndex === explicitLines.length - 1;
+				lines.push({
+					text: currentLine,
+					isParagraphEnd: isLastLineInParagraph && !isLastParagraph,
+				});
+			}
 		}
 	}
 
