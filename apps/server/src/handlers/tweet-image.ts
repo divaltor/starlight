@@ -132,6 +132,7 @@ groupChat.command("q").filter(
 				{
 					caption: `https://x.com/i/status/${tweetId}`,
 					reply_markup: createThemeKeyboard(tweetId, "light", ctx.from.id),
+					message_thread_id: ctx.msg.message_thread_id,
 				}
 			);
 
