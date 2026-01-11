@@ -38,6 +38,7 @@ async function fetchReplyChain(
 		authorUsername: tweet.author.screen_name,
 		authorAvatarUrl: tweet.author.avatar_url,
 		text: tweet.text,
+		createdAt: new Date(tweet.created_timestamp * 1000),
 		media: tweet.media
 			? {
 					photos: tweet.media.photos,
@@ -94,6 +95,7 @@ export async function generateTweetImage(
 		authorUsername: tweet.author.screen_name,
 		authorAvatarUrl: tweet.author.avatar_url,
 		text: tweetText,
+		createdAt: new Date(tweet.created_timestamp * 1000),
 		media: tweet.media
 			? {
 					photos: tweet.media.photos,
@@ -110,6 +112,7 @@ export async function generateTweetImage(
 					authorUsername: tweet.quote.author.screen_name,
 					authorAvatarUrl: tweet.quote.author.avatar_url,
 					text: tweet.quote.text,
+					createdAt: new Date(tweet.quote.created_timestamp * 1000),
 					media: tweet.quote.media
 						? {
 								photos: tweet.quote.media.photos,

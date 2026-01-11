@@ -46,6 +46,7 @@ async function fetchReplyChain(
 		authorUsername: tweet.author.screen_name,
 		authorAvatarUrl: tweet.author.avatar_url,
 		text: tweet.text,
+		createdAt: new Date(tweet.created_timestamp * 1000),
 		media: tweet.media
 			? {
 					photos: tweet.media.photos,
@@ -235,6 +236,7 @@ composer.on("inline_query").filter(
 				authorUsername: tweet.author.screen_name,
 				authorAvatarUrl: tweet.author.avatar_url,
 				text: tweetText,
+				createdAt: new Date(tweet.created_timestamp * 1000),
 				media: tweet.media
 					? {
 							photos: tweet.media.photos,
