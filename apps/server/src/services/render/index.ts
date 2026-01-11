@@ -99,8 +99,12 @@ export async function renderTweetImage(
 	if (tweet.replyTo) {
 		measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
 		replyToTextLines = wrapText(measureCtx, tweet.replyTo.text, replyToTextWidth);
+		const replyToParagraphCount = replyToTextLines.filter(
+			(line) => line.isParagraphEnd
+		).length;
 		const replyToTextHeight =
-			replyToTextLines.length * REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
+			replyToTextLines.length * REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
+			replyToParagraphCount * LAYOUT.PARAGRAPH_GAP;
 		replyToHeight = Math.floor(
 			REPLY_AVATAR_SIZE +
 				LAYOUT.AVATAR_GAP +
@@ -184,6 +188,9 @@ export async function renderTweetImage(
 		for (const line of replyToTextLines) {
 			ctx.fillText(line.text, replyToTextX, replyTextY + REPLY_FONT_SIZE_TEXT);
 			replyTextY += REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
+			if (line.isParagraphEnd) {
+				replyTextY += LAYOUT.PARAGRAPH_GAP;
+			}
 		}
 
 		const lineStartY = yOffset + REPLY_AVATAR_SIZE;
