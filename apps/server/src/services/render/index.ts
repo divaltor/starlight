@@ -165,6 +165,9 @@ export async function renderTweetImage(
 				});
 				ctx.clip();
 
+				ctx.fillStyle = colors.background;
+				ctx.fillRect(LAYOUT.PADDING, yOffset, contentWidth, mediaHeight);
+
 				ctx.drawImage(
 					image,
 					LAYOUT.PADDING,
