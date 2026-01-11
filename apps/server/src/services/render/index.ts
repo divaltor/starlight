@@ -513,8 +513,15 @@ export async function renderTweetImage(
 		yOffset + LAYOUT.FONT_SIZE_STATS
 	);
 
+	const buffer = canvas.toBuffer("image/jpeg", 100);
+
+	logger.debug(
+		{ width: LAYOUT.WIDTH, height: totalHeight, size: buffer.length },
+		"Rendered tweet image"
+	);
+
 	return {
-		buffer: canvas.toBuffer("image/jpeg", 100),
+		buffer,
 		width: LAYOUT.WIDTH,
 		height: totalHeight,
 	};
