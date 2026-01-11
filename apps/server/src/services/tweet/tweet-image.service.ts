@@ -50,7 +50,7 @@ export async function generateTweetImage(
 
 	const message = await api.sendPhoto(
 		chatId,
-		new InputFile(renderResult.buffer, `tweet-${tweetId}.png`)
+		new InputFile(renderResult.buffer, `tweet-${tweetId}.jpg`)
 	);
 
 	const photo = message.photo;

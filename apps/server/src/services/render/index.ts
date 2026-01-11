@@ -183,7 +183,7 @@ export async function renderTweetImage(
 	);
 
 	return {
-		buffer: canvas.toBuffer("image/png"),
+		buffer: canvas.toBuffer("image/jpeg", 95),
 		width: LAYOUT.WIDTH,
 		height: totalHeight,
 	};

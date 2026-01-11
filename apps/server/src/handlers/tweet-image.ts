@@ -168,8 +168,8 @@ composer.on("inline_query").filter(
 				renderTweetImage(tweetData, "dark"),
 			]);
 
-			const lightS3Path = `tweets/${tweetId}/light.png`;
-			const darkS3Path = `tweets/${tweetId}/dark.png`;
+			const lightS3Path = `tweets/${tweetId}/light.jpg`;
+			const darkS3Path = `tweets/${tweetId}/dark.jpg`;
 
 			await Promise.all([
 				s3.write(lightS3Path, lightResult.buffer),
