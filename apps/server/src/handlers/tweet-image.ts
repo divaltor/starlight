@@ -102,6 +102,7 @@ async function hasRateLimitPoints(userId: number): Promise<boolean> {
 privateChat.command(["img", "i"]).filter(
 	(ctx) => ctx.match.trim() === "",
 	async (ctx) => {
+		ctx.logger.debug({ userId: ctx.from.id }, "Empty /img command received");
 		await ctx.reply("Usage: /img <twitter_url>");
 	}
 );
@@ -109,6 +110,10 @@ privateChat.command(["img", "i"]).filter(
 privateChat.command(["img", "i"]).filter(
 	(ctx) => ctx.match.trim() !== "" && extractTweetId(ctx.match.trim()) === null,
 	async (ctx) => {
+		ctx.logger.debug(
+			{ userId: ctx.from.id, input: ctx.match.trim() },
+			"Invalid tweet URL provided"
+		);
 		await ctx.reply("Please provide a valid tweet link");
 	}
 );
@@ -119,6 +124,7 @@ privateChat
 	.filter(
 		async (ctx) => !hasRateLimitPoints(ctx.from.id),
 		async (ctx) => {
+			ctx.logger.info({ userId: ctx.from.id }, "Rate limit exceeded for /img");
 			await ctx.reply(
 				"You've reached the limit of 15 image requests per minute.\n" +
 					"Please wait a moment before trying again."
@@ -134,10 +140,17 @@ privateChat
 		async (ctx) => {
 			const tweetId = extractTweetId(ctx.match.trim()) as string;
 
+			ctx.logger.info(
+				{ userId: ctx.from.id, tweetId },
+				"Processing /img command"
+			);
+
 			await ctx.replyWithChatAction("upload_photo");
 
 			try {
 				const result = await generateTweetImage(tweetId, "light");
+
+				ctx.logger.debug({ tweetId }, "Tweet image generated successfully");
 
 				await ctx.replyWithPhoto(
 					new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
@@ -175,7 +188,13 @@ composer.on("inline_query").filter(
 		const query = ctx.inlineQuery.query.trim();
 		const tweetId = extractTweetId(query);
 
+		ctx.logger.info(
+			{ userId: ctx.from.id, query, tweetId },
+			"Processing inline query for tweet"
+		);
+
 		if (!tweetId) {
+			ctx.logger.debug({ query }, "Failed to extract tweet ID from inline query");
 			await ctx.answerInlineQuery([]);
 			return;
 		}
@@ -184,6 +203,7 @@ composer.on("inline_query").filter(
 			const tweet = await fetchTweet(tweetId);
 
 			if (!tweet) {
+				ctx.logger.warn({ tweetId }, "Tweet not found for inline query");
 				await ctx.answerInlineQuery([
 					InlineQueryResultBuilder.article(
 						`tweet-not-found:${tweetId}`,
@@ -237,6 +257,11 @@ composer.on("inline_query").filter(
 				s3.write(darkS3Path, darkResult.buffer),
 			]);
 
+			ctx.logger.debug(
+				{ tweetId, lightS3Path, darkS3Path },
+				"Uploaded tweet images to S3"
+			);
+
 			const lightUrl = `${env.BASE_CDN_URL}/${lightS3Path}`;
 			const darkUrl = `${env.BASE_CDN_URL}/${darkS3Path}`;
 
@@ -256,6 +281,8 @@ composer.on("inline_query").filter(
 			await ctx.answerInlineQuery(results, {
 				cache_time: 300,
 			});
+
+			ctx.logger.info({ tweetId }, "Inline query answered successfully");
 		} catch (error) {
 			ctx.logger.error(
 				{ error, tweetId },
@@ -272,6 +299,7 @@ privateChat.callbackQuery(
 		const match = ctx.match;
 
 		if (!match) {
+			ctx.logger.debug("Callback query without match");
 			await ctx.answerCallbackQuery();
 			return;
 		}
@@ -280,9 +308,15 @@ privateChat.callbackQuery(
 		const newTheme = match.at(2) as Theme;
 
 		if (!tweetId) {
+			ctx.logger.debug("Callback query missing tweetId");
 			await ctx.answerCallbackQuery();
 			return;
 		}
+
+		ctx.logger.info(
+			{ userId: ctx.from.id, tweetId, newTheme },
+			"Processing theme toggle callback"
+		);
 
 		await ctx.answerCallbackQuery({
 			text: `Generating ${newTheme} theme...`,
@@ -290,6 +324,8 @@ privateChat.callbackQuery(
 
 		try {
 			const result = await generateTweetImage(tweetId, newTheme);
+
+			ctx.logger.debug({ tweetId, newTheme }, "Theme toggle image generated");
 
 			await tweetImageRateLimiter.consume(ctx.from.id);
 
