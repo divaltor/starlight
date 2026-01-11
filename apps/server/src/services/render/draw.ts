@@ -199,24 +199,31 @@ export function drawPlayButton(params: DrawPlayButtonParams): void {
 
 	ctx.save();
 
-	ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-	ctx.beginPath();
-	ctx.arc(centerX, centerY, size / 2, 0, Math.PI * 2);
-	ctx.fill();
+	const triangleWidth = size * 0.8;
+	const triangleHeight = size;
+	const cornerRadius = size * 0.15;
+	const offsetX = size * 0.08;
 
-	ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-	ctx.lineWidth = 2;
-	ctx.beginPath();
-	ctx.arc(centerX, centerY, size / 2, 0, Math.PI * 2);
-	ctx.stroke();
+	const x1 = centerX - triangleWidth / 2 + offsetX;
+	const y1 = centerY - triangleHeight / 2;
+	const x2 = centerX + triangleWidth / 2 + offsetX;
+	const y2 = centerY;
+	const x3 = centerX - triangleWidth / 2 + offsetX;
+	const y3 = centerY + triangleHeight / 2;
 
-	const triangleSize = size * 0.4;
-	const offsetX = triangleSize * 0.15;
-	ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+	ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
 	ctx.beginPath();
-	ctx.moveTo(centerX - triangleSize / 2 + offsetX, centerY - triangleSize / 2);
-	ctx.lineTo(centerX + triangleSize / 2 + offsetX, centerY);
-	ctx.lineTo(centerX - triangleSize / 2 + offsetX, centerY + triangleSize / 2);
+
+	const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+	const t = cornerRadius / Math.hypot(x2 - x1, y2 - y1);
+
+	ctx.moveTo(lerp(x1, x2, t), lerp(y1, y2, t));
+	ctx.lineTo(lerp(x2, x1, t), lerp(y2, y1, t));
+	ctx.quadraticCurveTo(x2, y2, lerp(x2, x3, t), lerp(y2, y3, t));
+	ctx.lineTo(lerp(x3, x2, t), lerp(y3, y2, t));
+	ctx.quadraticCurveTo(x3, y3, lerp(x3, x1, t * 0.5), lerp(y3, y1, t * 0.5));
+	ctx.lineTo(lerp(x1, x3, t * 0.5), lerp(y1, y3, t * 0.5));
+	ctx.quadraticCurveTo(x1, y1, lerp(x1, x2, t), lerp(y1, y2, t));
 	ctx.closePath();
 	ctx.fill();
 

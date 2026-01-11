@@ -216,15 +216,20 @@ export async function renderTweetImage(
 
 	const headerHeight = LAYOUT.AVATAR_SIZE;
 	const statsHeight = 30;
+	const mediaGapAfter = mainMediaIsVideo
+		? LAYOUT.MEDIA_GAP_BOTTOM
+		: LAYOUT.AVATAR_GAP;
 	const totalHeight =
 		LAYOUT.PADDING +
 		totalReplyChainHeight +
 		headerHeight +
 		LAYOUT.AVATAR_GAP +
 		textHeight +
-		(mediaHeight > 0 ? LAYOUT.AVATAR_GAP + mediaHeight : 0) +
-		(quoteHeight > 0 ? LAYOUT.AVATAR_GAP + quoteHeight : 0) +
-		LAYOUT.AVATAR_GAP +
+		(mediaHeight > 0 ? LAYOUT.AVATAR_GAP + mediaHeight + mediaGapAfter : 0) +
+		(quoteHeight > 0
+			? (mediaHeight > 0 ? 0 : LAYOUT.AVATAR_GAP) + quoteHeight
+			: 0) +
+		(mediaHeight === 0 && quoteHeight === 0 ? LAYOUT.AVATAR_GAP : 0) +
 		statsHeight +
 		LAYOUT.PADDING;
 
@@ -483,14 +488,16 @@ export async function renderTweetImage(
 				});
 			}
 
-			yOffset += mediaHeight;
+			yOffset += mediaHeight + mediaGapAfter;
 		} catch (error) {
 			logger.warn({ error }, "Failed to load media image");
 		}
 	}
 
 	if (tweet.quote && quoteHeight > 0) {
-		yOffset += LAYOUT.AVATAR_GAP;
+		if (!mainMedia) {
+			yOffset += LAYOUT.AVATAR_GAP;
+		}
 
 		ctx.strokeStyle = colors.border;
 		ctx.lineWidth = QUOTE_BORDER_WIDTH;
@@ -612,7 +619,11 @@ export async function renderTweetImage(
 		yOffset += quoteHeight;
 	}
 
-	yOffset += LAYOUT.AVATAR_GAP;
+	const hasNoMedia = !mainMedia;
+	const hasNoQuote = !tweet.quote;
+	if (hasNoMedia && hasNoQuote) {
+		yOffset += LAYOUT.AVATAR_GAP;
+	}
 
 	ctx.fillStyle = colors.secondaryText;
 	ctx.font = `${LAYOUT.FONT_SIZE_STATS}px ${fontFamily}`;
