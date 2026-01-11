@@ -18,6 +18,7 @@ export type TweetData = {
 	likes?: number | null;
 	retweets?: number | null;
 	replies?: number | null;
+	quote?: TweetData | null;
 };
 
 export type RenderResult = {
@@ -27,6 +28,10 @@ export type RenderResult = {
 };
 
 const MAX_MEDIA_HEIGHT = 400;
+const QUOTE_AVATAR_SIZE = 24;
+const QUOTE_FONT_SIZE_NAME = 13;
+const QUOTE_FONT_SIZE_TEXT = 14;
+const QUOTE_PADDING = 12;
 
 export async function renderTweetImage(
 	tweet: TweetData,
@@ -62,6 +67,16 @@ export async function renderTweetImage(
 		}
 	}
 
+	let quoteHeight = 0;
+	let quoteTextLines: ReturnType<typeof wrapText> = [];
+	const quoteContentWidth = contentWidth - QUOTE_PADDING * 2;
+	if (tweet.quote) {
+		measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
+		quoteTextLines = wrapText(measureCtx, tweet.quote.text, quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP);
+		const quoteTextHeight = quoteTextLines.length * QUOTE_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
+		quoteHeight = QUOTE_PADDING * 2 + Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + 4 + quoteTextHeight);
+	}
+
 	const headerHeight = LAYOUT.AVATAR_SIZE;
 	const statsHeight = 30;
 	const totalHeight =
@@ -70,6 +85,7 @@ export async function renderTweetImage(
 		LAYOUT.AVATAR_GAP +
 		textHeight +
 		(mediaHeight > 0 ? LAYOUT.AVATAR_GAP + mediaHeight : 0) +
+		(quoteHeight > 0 ? LAYOUT.AVATAR_GAP + quoteHeight : 0) +
 		LAYOUT.AVATAR_GAP +
 		statsHeight +
 		LAYOUT.PADDING;
@@ -163,6 +179,69 @@ export async function renderTweetImage(
 		} catch (error) {
 			logger.warn({ error }, "Failed to load media image");
 		}
+	}
+
+	if (tweet.quote && quoteHeight > 0) {
+		yOffset += LAYOUT.AVATAR_GAP;
+
+		ctx.strokeStyle = colors.border;
+		ctx.lineWidth = 1;
+		roundedRect({
+			ctx,
+			x: LAYOUT.PADDING,
+			y: yOffset,
+			width: contentWidth,
+			height: quoteHeight,
+			radius: LAYOUT.MEDIA_BORDER_RADIUS,
+		});
+		ctx.stroke();
+
+		const quoteX = LAYOUT.PADDING + QUOTE_PADDING;
+		const quoteTextX = quoteX + QUOTE_AVATAR_SIZE + LAYOUT.AVATAR_GAP;
+		let quoteY = yOffset + QUOTE_PADDING;
+
+		try {
+			const quoteAvatar = await loadImage(tweet.quote.authorAvatarUrl);
+			drawCircularImage({
+				ctx,
+				image: quoteAvatar,
+				x: quoteX,
+				y: quoteY,
+				size: QUOTE_AVATAR_SIZE,
+			});
+		} catch (error) {
+			logger.warn({ error, url: tweet.quote.authorAvatarUrl }, "Failed to load quote avatar");
+			ctx.fillStyle = colors.secondaryText;
+			ctx.beginPath();
+			ctx.arc(
+				quoteX + QUOTE_AVATAR_SIZE / 2,
+				quoteY + QUOTE_AVATAR_SIZE / 2,
+				QUOTE_AVATAR_SIZE / 2,
+				0,
+				Math.PI * 2
+			);
+			ctx.fill();
+		}
+
+		ctx.fillStyle = colors.text;
+		ctx.font = `bold ${QUOTE_FONT_SIZE_NAME}px ${fontFamily}`;
+		ctx.fillText(tweet.quote.authorName, quoteTextX, quoteY + QUOTE_FONT_SIZE_NAME);
+
+		ctx.fillStyle = colors.secondaryText;
+		ctx.font = `${QUOTE_FONT_SIZE_NAME}px ${fontFamily}`;
+		const nameWidth = ctx.measureText(tweet.quote.authorName).width;
+		ctx.fillText(` @${tweet.quote.authorUsername}`, quoteTextX + nameWidth, quoteY + QUOTE_FONT_SIZE_NAME);
+
+		quoteY += QUOTE_FONT_SIZE_NAME + 4;
+
+		ctx.fillStyle = colors.text;
+		ctx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
+		for (const line of quoteTextLines) {
+			ctx.fillText(line.text, quoteTextX, quoteY + QUOTE_FONT_SIZE_TEXT);
+			quoteY += QUOTE_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
+		}
+
+		yOffset += quoteHeight;
 	}
 
 	yOffset += LAYOUT.AVATAR_GAP;

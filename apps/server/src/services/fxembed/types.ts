@@ -37,6 +37,7 @@ export type FxEmbedTweet = {
 	replies: number;
 	views?: number;
 	media?: FxEmbedMedia;
+	quote?: FxEmbedTweet;
 };
 
 export type FxEmbedResponse = {
