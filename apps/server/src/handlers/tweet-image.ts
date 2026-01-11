@@ -148,6 +148,27 @@ composer.on("inline_query").filter(
 				return;
 			}
 
+			let replyToData: TweetData | null = null;
+			if (tweet.replying_to_status) {
+				const parentTweet = await fetchTweet(tweet.replying_to_status);
+				if (parentTweet) {
+					replyToData = {
+						authorName: parentTweet.author.name,
+						authorUsername: parentTweet.author.screen_name,
+						authorAvatarUrl: parentTweet.author.avatar_url,
+						text: parentTweet.text,
+						media: parentTweet.media
+							? {
+									photos: parentTweet.media.photos,
+								}
+							: null,
+						likes: parentTweet.likes,
+						retweets: parentTweet.retweets,
+						replies: parentTweet.replies,
+					};
+				}
+			}
+
 			const tweetData: TweetData = {
 				authorName: tweet.author.name,
 				authorUsername: tweet.author.screen_name,
@@ -161,6 +182,7 @@ composer.on("inline_query").filter(
 				likes: tweet.likes,
 				retweets: tweet.retweets,
 				replies: tweet.replies,
+				replyTo: replyToData,
 			};
 
 			const [lightResult, darkResult] = await Promise.all([

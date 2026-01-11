@@ -38,6 +38,8 @@ export type FxEmbedTweet = {
 	views?: number;
 	media?: FxEmbedMedia;
 	quote?: FxEmbedTweet;
+	replying_to?: string | null;
+	replying_to_status?: string | null;
 };
 
 export type FxEmbedResponse = {

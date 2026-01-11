@@ -27,6 +27,32 @@ export async function generateTweetImage(
 		throw new Error("Tweet not found");
 	}
 
+	let replyToData: TweetData | null = null;
+	if (tweet.replying_to_status) {
+		const parentTweet = await fetchTweet(tweet.replying_to_status);
+		if (parentTweet) {
+			replyToData = {
+				authorName: parentTweet.author.name,
+				authorUsername: parentTweet.author.screen_name,
+				authorAvatarUrl: parentTweet.author.avatar_url,
+				text: parentTweet.text,
+				media: parentTweet.media
+					? {
+							photos: parentTweet.media.photos,
+						}
+					: null,
+				likes: parentTweet.likes,
+				retweets: parentTweet.retweets,
+				replies: parentTweet.replies,
+			};
+		} else {
+			logger.warn(
+				{ parentTweetId: tweet.replying_to_status },
+				"Could not fetch parent tweet"
+			);
+		}
+	}
+
 	const tweetData: TweetData = {
 		authorName: tweet.author.name,
 		authorUsername: tweet.author.screen_name,
@@ -40,6 +66,7 @@ export async function generateTweetImage(
 		likes: tweet.likes,
 		retweets: tweet.retweets,
 		replies: tweet.replies,
+		replyTo: replyToData,
 	};
 
 	logger.debug({ tweetId, theme }, "Rendering tweet image");
