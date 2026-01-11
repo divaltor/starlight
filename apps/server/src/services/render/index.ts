@@ -200,7 +200,7 @@ export async function renderTweetImage(
 						textHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + 4
 					) +
 					(chainMediaHeight > 0
-						? LAYOUT.MEDIA_GAP + chainMediaHeight + LAYOUT.MEDIA_GAP
+						? LAYOUT.AVATAR_GAP + chainMediaHeight + LAYOUT.MEDIA_GAP_BOTTOM
 						: LAYOUT.AVATAR_GAP)
 			);
 
@@ -217,7 +217,7 @@ export async function renderTweetImage(
 
 	const headerHeight = LAYOUT.AVATAR_SIZE;
 	const statsHeight = 30;
-	const mediaGapAfter = LAYOUT.MEDIA_GAP;
+	const mediaGapAfter = LAYOUT.MEDIA_GAP_BOTTOM;
 	const totalHeight =
 		LAYOUT.PADDING +
 		totalReplyChainHeight +
@@ -346,7 +346,7 @@ export async function renderTweetImage(
 
 			const chainMedia = getFirstMedia(item.tweet.media);
 			if (chainMedia && item.mediaHeight > 0) {
-				replyTextY += LAYOUT.MEDIA_GAP;
+				replyTextY += LAYOUT.AVATAR_GAP;
 
 				try {
 					const chainImageUrl =
@@ -398,7 +398,7 @@ export async function renderTweetImage(
 			const lineMargin = 4;
 			const lineStartY = yOffset + REPLY_AVATAR_SIZE + lineMargin;
 			const bottomGap =
-				item.mediaHeight > 0 ? LAYOUT.MEDIA_GAP : LAYOUT.AVATAR_GAP;
+				item.mediaHeight > 0 ? LAYOUT.MEDIA_GAP_BOTTOM : LAYOUT.AVATAR_GAP;
 			const lineEndY = yOffset + item.height - bottomGap / 2;
 
 			ctx.strokeStyle = colors.border;
