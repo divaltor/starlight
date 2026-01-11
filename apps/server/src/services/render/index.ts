@@ -199,8 +199,9 @@ export async function renderTweetImage(
 						0,
 						textHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + 4
 					) +
-					(chainMediaHeight > 0 ? LAYOUT.AVATAR_GAP + chainMediaHeight : 0) +
-					LAYOUT.AVATAR_GAP
+					(chainMediaHeight > 0
+						? LAYOUT.MEDIA_GAP + chainMediaHeight + LAYOUT.MEDIA_GAP
+						: LAYOUT.AVATAR_GAP)
 			);
 
 			replyChainItems.push({
@@ -216,9 +217,7 @@ export async function renderTweetImage(
 
 	const headerHeight = LAYOUT.AVATAR_SIZE;
 	const statsHeight = 30;
-	const mediaGapAfter = mainMediaIsVideo
-		? LAYOUT.MEDIA_GAP_BOTTOM
-		: LAYOUT.AVATAR_GAP;
+	const mediaGapAfter = LAYOUT.MEDIA_GAP;
 	const totalHeight =
 		LAYOUT.PADDING +
 		totalReplyChainHeight +
@@ -347,7 +346,7 @@ export async function renderTweetImage(
 
 			const chainMedia = getFirstMedia(item.tweet.media);
 			if (chainMedia && item.mediaHeight > 0) {
-				replyTextY += LAYOUT.AVATAR_GAP;
+				replyTextY += LAYOUT.MEDIA_GAP;
 
 				try {
 					const chainImageUrl =
@@ -398,7 +397,9 @@ export async function renderTweetImage(
 
 			const lineMargin = 4;
 			const lineStartY = yOffset + REPLY_AVATAR_SIZE + lineMargin;
-			const lineEndY = yOffset + item.height - LAYOUT.AVATAR_GAP / 2;
+			const bottomGap =
+				item.mediaHeight > 0 ? LAYOUT.MEDIA_GAP : LAYOUT.AVATAR_GAP;
+			const lineEndY = yOffset + item.height - bottomGap / 2;
 
 			ctx.strokeStyle = colors.border;
 			ctx.lineWidth = REPLY_LINE_WIDTH;
