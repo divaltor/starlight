@@ -183,14 +183,14 @@ composer.on("inline_query").filter(
 				InlineQueryResultBuilder.photo(`tweet:${tweetId}:light`, lightUrl, {
 					thumbnail_url: lightUrl,
 					caption: `https://x.com/i/status/${tweetId}`,
-					photo_width: lightResult.width,
-					photo_height: lightResult.height,
+					photo_width: Math.round(lightResult.width),
+					photo_height: Math.round(lightResult.height),
 				}),
 				InlineQueryResultBuilder.photo(`tweet:${tweetId}:dark`, darkUrl, {
 					thumbnail_url: darkUrl,
 					caption: `https://x.com/i/status/${tweetId}`,
-					photo_width: darkResult.width,
-					photo_height: darkResult.height,
+					photo_width: Math.round(darkResult.width),
+					photo_height: Math.round(darkResult.height),
 				}),
 			];
 
