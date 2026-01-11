@@ -1,8 +1,10 @@
 /** biome-ignore-all lint/correctness/noUndeclaredVariables: <explanation> */
 import { cleanupTweetText, extractTweetId, prisma } from "@starlight/utils";
-import { Scraper, type Tweet } from "@the-convocation/twitter-scraper";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
+import { fetchTweet } from "@/services/fxembed/fxembed.service";
+import type { FxEmbedTweet } from "@/services/fxembed/types";
+import { generateTweetImage } from "@/services/tweet/tweet-image.service";
 import { downloadVideo, type VideoInformation } from "@/services/video";
 import type { Context } from "@/types";
 
@@ -75,21 +77,27 @@ feature.on(":text").filter(
 		const tempDir = tmp.dirSync({ unsafeCleanup: true });
 
 		let videos: VideoInformation[] = [];
-		let tweet: Tweet | null = null;
+		let tweet: FxEmbedTweet | null = null;
+		let videoDownloadFailed = false;
 
 		try {
 			if (isTwitterLink) {
-				const scrapper = new Scraper({
-					experimental: { xClientTransactionId: true, xpff: true },
-				});
-
-				[videos, tweet] = await Promise.all([
+				const [downloadResult, tweetResult] = await Promise.allSettled([
 					downloadVideo(link, tempDir.name),
-					scrapper.getTweet(tweetId).catch((error: unknown) => {
-						ctx.logger.error({ error }, "Error getting tweet");
-						return null;
-					}),
+					fetchTweet(tweetId),
 				]);
+
+				tweet = tweetResult.status === "fulfilled" ? tweetResult.value : null;
+
+				if (downloadResult.status === "fulfilled") {
+					videos = downloadResult.value;
+				} else {
+					videoDownloadFailed = true;
+					ctx.logger.warn(
+						{ error: downloadResult.reason },
+						"Video download failed, checking if tweet has media"
+					);
+				}
 			} else {
 				videos = await downloadVideo(link, tempDir.name);
 			}
@@ -97,6 +105,36 @@ feature.on(":text").filter(
 			ctx.logger.error(error, "Error downloading video");
 
 			await ctx.reply("Can't download video, sorry.");
+			return;
+		}
+
+		if (isTwitterLink && videoDownloadFailed && videos.length === 0) {
+			const hasVideo =
+				tweet?.media?.videos && tweet.media.videos.length > 0;
+
+			if (!hasVideo && tweet) {
+				ctx.logger.info(
+					{ tweetId },
+					"No video in tweet, generating image instead"
+				);
+
+				try {
+					const result = await generateTweetImage(tweetId, "light");
+					await ctx.replyWithPhoto(
+						new InputFile(result.buffer, `tweet-${tweetId}.jpg`)
+					);
+					tempDir.removeCallback();
+					return;
+				} catch (imgError) {
+					ctx.logger.error(imgError, "Error generating tweet image");
+					await ctx.reply("Can't process this tweet, sorry.");
+					tempDir.removeCallback();
+					return;
+				}
+			}
+
+			await ctx.reply("Can't download video, sorry.");
+			tempDir.removeCallback();
 			return;
 		}
 
