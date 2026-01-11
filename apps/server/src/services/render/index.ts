@@ -52,9 +52,10 @@ export async function renderTweetImage(
 
 	const textLines = wrapText(measureCtx, tweet.text, textWidth);
 	const paragraphCount = textLines.filter((line) => line.isParagraphEnd).length;
-	const textHeight =
+	const textHeight = Math.floor(
 		textLines.length * LAYOUT.FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
-		paragraphCount * LAYOUT.PARAGRAPH_GAP;
+		paragraphCount * LAYOUT.PARAGRAPH_GAP
+	);
 
 	let mediaHeight = 0;
 	const photos = tweet.media?.photos;
@@ -63,7 +64,7 @@ export async function renderTweetImage(
 		if (firstPhoto) {
 			const aspectRatio = firstPhoto.width / firstPhoto.height;
 			const computedHeight = contentWidth / aspectRatio;
-			mediaHeight = Math.min(computedHeight, MAX_MEDIA_HEIGHT);
+			mediaHeight = Math.floor(Math.min(computedHeight, MAX_MEDIA_HEIGHT));
 		}
 	}
 
@@ -74,7 +75,7 @@ export async function renderTweetImage(
 		measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
 		quoteTextLines = wrapText(measureCtx, tweet.quote.text, quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP);
 		const quoteTextHeight = quoteTextLines.length * QUOTE_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
-		quoteHeight = QUOTE_PADDING * 2 + Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + 4 + quoteTextHeight);
+		quoteHeight = Math.floor(QUOTE_PADDING * 2 + Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + 4 + quoteTextHeight));
 	}
 
 	const headerHeight = LAYOUT.AVATAR_SIZE;
