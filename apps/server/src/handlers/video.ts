@@ -1,5 +1,5 @@
 /** biome-ignore-all lint/correctness/noUndeclaredVariables: <explanation> */
-import { prisma } from "@starlight/utils";
+import { cleanupTweetText, extractTweetId, prisma } from "@starlight/utils";
 import { Scraper, type Tweet } from "@the-convocation/twitter-scraper";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
@@ -9,28 +9,6 @@ import type { Context } from "@/types";
 const composer = new Composer<Context>();
 
 const feature = composer.chatType("private");
-
-function extractTweetId(url: string): string {
-	const match = url.match(
-		/https?:\/\/(?:x\.com|twitter\.com)\/\w+\/status\/(\d+)/
-	);
-	return match?.[1] ?? "";
-}
-
-function cleanupTweetText(text: string | undefined): string | undefined {
-	if (!text) {
-		return;
-	}
-
-	return (
-		text
-			// Remove all hashtags
-			.replace(/#[\p{L}0-9_]+/gu, "")
-			// Remove all URLs
-			.replace(/https?:\/\/\S+/g, "")
-			.trim()
-	);
-}
 
 function createVideoKeyboard(
 	videoId: string,
@@ -57,7 +35,7 @@ feature.on(":text").filter(
 
 		const link = ctx.msg.text;
 		const tweetId = extractTweetId(link);
-		const isTwitterLink = Boolean(tweetId);
+		const isTwitterLink = tweetId !== null;
 
 		// Check if video already exists in database (only for Twitter links)
 		if (isTwitterLink) {
@@ -107,7 +85,7 @@ feature.on(":text").filter(
 
 				[videos, tweet] = await Promise.all([
 					downloadVideo(link, tempDir.name),
-					scrapper.getTweet(tweetId).catch((error) => {
+					scrapper.getTweet(tweetId).catch((error: unknown) => {
 						ctx.logger.error({ error }, "Error getting tweet");
 						return null;
 					}),

@@ -10,6 +10,7 @@ import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
 import { bot } from "@/bot";
 import imageHandler from "@/handlers/image";
+import tweetImageHandler from "@/handlers/tweet-image";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
 import { classificationWorker } from "@/queue/classification";
@@ -27,6 +28,7 @@ const boundary = bot.errorBoundary((error) => {
 });
 
 boundary.use(videoHandler);
+boundary.use(tweetImageHandler);
 boundary.use(imageHandler);
 
 if (env.USE_WEBHOOK && env.BASE_WEBHOOK_URL) {
