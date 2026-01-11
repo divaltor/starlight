@@ -337,7 +337,8 @@ export async function renderTweetImage(
 				}
 			}
 
-			const lineStartY = yOffset + REPLY_AVATAR_SIZE;
+			const lineMargin = 4;
+			const lineStartY = yOffset + REPLY_AVATAR_SIZE + lineMargin;
 			const lineEndY = yOffset + item.height - LAYOUT.AVATAR_GAP / 2;
 
 			ctx.strokeStyle = colors.border;
