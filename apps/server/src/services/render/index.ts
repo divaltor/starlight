@@ -30,10 +30,12 @@ export type RenderResult = {
 };
 
 const MAX_MEDIA_HEIGHT = 400;
+const QUOTE_MAX_MEDIA_HEIGHT = 200;
 const QUOTE_AVATAR_SIZE = 24;
 const QUOTE_FONT_SIZE_NAME = 13;
 const QUOTE_FONT_SIZE_TEXT = 14;
 const QUOTE_PADDING = 12;
+const QUOTE_BORDER_WIDTH = 3;
 
 const REPLY_AVATAR_SIZE = 32;
 const REPLY_FONT_SIZE_NAME = 13;
@@ -86,6 +88,7 @@ export async function renderTweetImage(
 
 	let quoteHeight = 0;
 	let quoteTextLines: ReturnType<typeof wrapText> = [];
+	let quoteMediaHeight = 0;
 	const quoteContentWidth = contentWidth - QUOTE_PADDING * 2;
 	if (tweet.quote) {
 		measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
@@ -94,11 +97,25 @@ export async function renderTweetImage(
 			tweet.quote.text,
 			quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP
 		);
+		const quoteParagraphCount = quoteTextLines.filter((line) => line.isParagraphEnd).length;
 		const quoteTextHeight =
-			quoteTextLines.length * QUOTE_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
+			quoteTextLines.length * QUOTE_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
+			quoteParagraphCount * LAYOUT.PARAGRAPH_GAP;
+
+		const quotePhotos = tweet.quote.media?.photos;
+		if (quotePhotos && quotePhotos.length > 0) {
+			const firstQuotePhoto = quotePhotos.at(0);
+			if (firstQuotePhoto) {
+				const aspectRatio = firstQuotePhoto.width / firstQuotePhoto.height;
+				const computedHeight = quoteContentWidth / aspectRatio;
+				quoteMediaHeight = Math.floor(Math.min(computedHeight, QUOTE_MAX_MEDIA_HEIGHT));
+			}
+		}
+
 		quoteHeight = Math.floor(
 			QUOTE_PADDING * 2 +
-				Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + 4 + quoteTextHeight)
+				Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + 4 + quoteTextHeight) +
+				(quoteMediaHeight > 0 ? LAYOUT.AVATAR_GAP + quoteMediaHeight : 0)
 		);
 	}
 
@@ -328,7 +345,7 @@ export async function renderTweetImage(
 		yOffset += LAYOUT.AVATAR_GAP;
 
 		ctx.strokeStyle = colors.border;
-		ctx.lineWidth = 2;
+		ctx.lineWidth = QUOTE_BORDER_WIDTH;
 		roundedRect({
 			ctx,
 			x: LAYOUT.PADDING,
@@ -393,6 +410,46 @@ export async function renderTweetImage(
 		for (const line of quoteTextLines) {
 			ctx.fillText(line.text, quoteTextX, quoteY + QUOTE_FONT_SIZE_TEXT);
 			quoteY += QUOTE_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
+			if (line.isParagraphEnd) {
+				quoteY += LAYOUT.PARAGRAPH_GAP;
+			}
+		}
+
+		const quotePhotos = tweet.quote.media?.photos;
+		if (quotePhotos && quotePhotos.length > 0 && quoteMediaHeight > 0) {
+			quoteY += LAYOUT.AVATAR_GAP;
+
+			try {
+				const firstQuotePhoto = quotePhotos.at(0);
+				if (firstQuotePhoto) {
+					const quoteImage = await loadImage(firstQuotePhoto.url);
+
+					ctx.save();
+					roundedRect({
+						ctx,
+						x: quoteX,
+						y: quoteY,
+						width: quoteContentWidth,
+						height: quoteMediaHeight,
+						radius: LAYOUT.MEDIA_BORDER_RADIUS,
+					});
+					ctx.clip();
+
+					ctx.fillStyle = colors.background;
+					ctx.fillRect(quoteX, quoteY, quoteContentWidth, quoteMediaHeight);
+
+					ctx.drawImage(
+						quoteImage,
+						quoteX,
+						quoteY,
+						quoteContentWidth,
+						quoteMediaHeight
+					);
+					ctx.restore();
+				}
+			} catch (error) {
+				logger.warn({ error }, "Failed to load quote media image");
+			}
 		}
 
 		yOffset += quoteHeight;
@@ -416,7 +473,7 @@ export async function renderTweetImage(
 	);
 
 	return {
-		buffer: canvas.toBuffer("image/jpeg", 95),
+		buffer: canvas.toBuffer("image/jpeg", 100),
 		width: LAYOUT.WIDTH,
 		height: totalHeight,
 	};
