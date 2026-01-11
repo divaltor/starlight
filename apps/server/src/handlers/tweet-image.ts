@@ -58,51 +58,58 @@ privateChat
 		async (ctx) => !hasRateLimitPoints(ctx.from.id),
 		async (ctx) => {
 			await ctx.reply(
-				"You've reached the limit of 10 image requests per minute.\n" +
+				"You've reached the limit of 15 image requests per minute.\n" +
 					"Please wait a moment before trying again."
 			);
 		}
-	)
-	.use(async (ctx) => {
-		const tweetId = extractTweetId(ctx.match.trim()) as string;
+	);
 
-		await ctx.replyWithChatAction("upload_photo");
+privateChat
+	.command(["img", "i"])
+	.filter((ctx) => extractTweetId(ctx.match.trim()) !== null)
+	.filter(
+		async (ctx) => hasRateLimitPoints(ctx.from.id),
+		async (ctx) => {
+			const tweetId = extractTweetId(ctx.match.trim()) as string;
 
-		try {
-			const result = await generateTweetImage(
-				tweetId,
-				ctx.api,
-				ctx.chat.id,
-				"light"
-			);
+			await ctx.replyWithChatAction("upload_photo");
 
-			await tweetImageRateLimiter.consume(ctx.from.id);
-
-			await ctx.api.deleteMessage(ctx.chat.id, result.messageId);
-
-			await ctx.replyWithPhoto(result.fileId, {
-				reply_markup: createThemeKeyboard(tweetId, "light"),
-			});
-		} catch (error) {
-			ctx.logger.error({ error, tweetId }, "Failed to generate tweet image");
-
-			if (error instanceof Error && error.message === "Tweet not found") {
-				await ctx.reply(
-					"Could not fetch this tweet. It may be:\n" +
-						"• Private or from a protected account\n" +
-						"• Deleted\n" +
-						"• Invalid URL"
+			try {
+				const result = await generateTweetImage(
+					tweetId,
+					ctx.api,
+					ctx.chat.id,
+					"light"
 				);
-				return;
-			}
 
-			if (error instanceof GrammyError) {
-				await ctx.reply("Failed to send image. Please try again.");
-			} else {
-				await ctx.reply("Something went wrong. Please try again later.");
+				await tweetImageRateLimiter.consume(ctx.from.id);
+
+				await ctx.api.deleteMessage(ctx.chat.id, result.messageId);
+
+				await ctx.replyWithPhoto(result.fileId, {
+					reply_markup: createThemeKeyboard(tweetId, "light"),
+				});
+			} catch (error) {
+				ctx.logger.error({ error, tweetId }, "Failed to generate tweet image");
+
+				if (error instanceof Error && error.message === "Tweet not found") {
+					await ctx.reply(
+						"Could not fetch this tweet. It may be:\n" +
+							"• Private or from a protected account\n" +
+							"• Deleted\n" +
+							"• Invalid URL"
+					);
+					return;
+				}
+
+				if (error instanceof GrammyError) {
+					await ctx.reply("Failed to send image. Please try again.");
+				} else {
+					await ctx.reply("Something went wrong. Please try again later.");
+				}
 			}
 		}
-	});
+	);
 
 privateChat.callbackQuery(
 	/^tweet_img:toggle:(\d+):(light|dark)$/,
