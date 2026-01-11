@@ -54,7 +54,7 @@ export async function renderTweetImage(
 	const paragraphCount = textLines.filter((line) => line.isParagraphEnd).length;
 	const textHeight = Math.floor(
 		textLines.length * LAYOUT.FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
-		paragraphCount * LAYOUT.PARAGRAPH_GAP
+			paragraphCount * LAYOUT.PARAGRAPH_GAP
 	);
 
 	let mediaHeight = 0;
@@ -73,9 +73,17 @@ export async function renderTweetImage(
 	const quoteContentWidth = contentWidth - QUOTE_PADDING * 2;
 	if (tweet.quote) {
 		measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
-		quoteTextLines = wrapText(measureCtx, tweet.quote.text, quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP);
-		const quoteTextHeight = quoteTextLines.length * QUOTE_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
-		quoteHeight = Math.floor(QUOTE_PADDING * 2 + Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + 4 + quoteTextHeight));
+		quoteTextLines = wrapText(
+			measureCtx,
+			tweet.quote.text,
+			quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP
+		);
+		const quoteTextHeight =
+			quoteTextLines.length * QUOTE_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
+		quoteHeight = Math.floor(
+			QUOTE_PADDING * 2 +
+				Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + 4 + quoteTextHeight)
+		);
 	}
 
 	const headerHeight = LAYOUT.AVATAR_SIZE;
@@ -214,7 +222,10 @@ export async function renderTweetImage(
 				size: QUOTE_AVATAR_SIZE,
 			});
 		} catch (error) {
-			logger.warn({ error, url: tweet.quote.authorAvatarUrl }, "Failed to load quote avatar");
+			logger.warn(
+				{ error, url: tweet.quote.authorAvatarUrl },
+				"Failed to load quote avatar"
+			);
 			ctx.fillStyle = colors.secondaryText;
 			ctx.beginPath();
 			ctx.arc(
@@ -229,12 +240,20 @@ export async function renderTweetImage(
 
 		ctx.fillStyle = colors.text;
 		ctx.font = `bold ${QUOTE_FONT_SIZE_NAME}px ${fontFamily}`;
-		ctx.fillText(tweet.quote.authorName, quoteTextX, quoteY + QUOTE_FONT_SIZE_NAME);
+		ctx.fillText(
+			tweet.quote.authorName,
+			quoteTextX,
+			quoteY + QUOTE_FONT_SIZE_NAME
+		);
 
 		ctx.fillStyle = colors.secondaryText;
 		ctx.font = `${QUOTE_FONT_SIZE_NAME}px ${fontFamily}`;
 		const nameWidth = ctx.measureText(tweet.quote.authorName).width;
-		ctx.fillText(` @${tweet.quote.authorUsername}`, quoteTextX + nameWidth, quoteY + QUOTE_FONT_SIZE_NAME);
+		ctx.fillText(
+			` @${tweet.quote.authorUsername}`,
+			quoteTextX + nameWidth,
+			quoteY + QUOTE_FONT_SIZE_NAME
+		);
 
 		quoteY += QUOTE_FONT_SIZE_NAME + 4;
 

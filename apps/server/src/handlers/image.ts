@@ -25,33 +25,50 @@ const composer = new Composer<Context>();
 const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
-privateChat.on("message:photo", async (ctx) => {
-	const telegramPhoto = await ctx.getFile();
-	const file = await telegramPhoto.download();
+privateChat.command("find").filter(
+	(ctx) => ctx.message.reply_to_message?.photo !== undefined,
+	async (ctx) => {
+		const photoArray = ctx.message.reply_to_message?.photo;
+		if (!photoArray || photoArray.length === 0) {
+			await ctx.reply("Please reply to a photo with /find command.");
+			return;
+		}
 
-	const similarPhotos = await findDuplicatesByImageContent(file);
+		const largestPhoto = photoArray[photoArray.length - 1];
+		const telegramPhoto = await ctx.api.getFile(largestPhoto.file_id);
+		const file = await telegramPhoto.download();
 
-	ctx.logger.debug({ similarPhotos }, "Found similar photos");
+		const similarPhotos = await findDuplicatesByImageContent(file);
 
-	if (similarPhotos.length === 0) {
-		await ctx.reply("No similar photos found, sorry 😔");
-		return;
+		ctx.logger.debug({ similarPhotos }, "Found similar photos");
+
+		if (similarPhotos.length === 0) {
+			await ctx.reply("No similar photos found, sorry 😔");
+			return;
+		}
+		if (similarPhotos.length === 1) {
+			await ctx.reply(`https://x.com/i/status/${similarPhotos[0]?.tweetId}`);
+			return;
+		}
+
+		const topMatches = similarPhotos.slice(0, 3);
+
+		let message = "Found similar photos:\n\n";
+		for (const [index, photo] of topMatches.entries()) {
+			message += `${index + 1}. Similarity: ${photo.distance}\n`;
+			message += `https://x.com/i/status/${photo.tweetId}\n\n`;
+		}
+
+		await ctx.reply(message);
 	}
-	if (similarPhotos.length === 1) {
-		await ctx.reply(`https://x.com/i/status/${similarPhotos[0]?.tweetId}`);
-		return;
+);
+
+privateChat.command("find").filter(
+	(ctx) => ctx.message.reply_to_message?.photo === undefined,
+	async (ctx) => {
+		await ctx.reply("Please reply to a photo with /find command.");
 	}
-
-	const topMatches = similarPhotos.slice(0, 3);
-
-	let message = "Found similar photos:\n\n";
-	for (const [index, photo] of topMatches.entries()) {
-		message += `${index + 1}. Similarity: ${photo.distance}\n`;
-		message += `https://x.com/i/status/${photo.tweetId}\n\n`;
-	}
-
-	await ctx.reply(message);
-});
+);
 
 composer.on("inline_query").filter(
 	(ctx) => !isTwitterUrl(ctx.inlineQuery.query.trim()),
