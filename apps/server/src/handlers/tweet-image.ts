@@ -6,14 +6,13 @@ import {
 	InlineQueryResultBuilder,
 	InputFile,
 } from "grammy";
-import { RateLimiterRedis } from "rate-limiter-flexible";
 import { fetchTweet } from "@/services/fxembed/fxembed.service";
 import { renderTweetImage, type TweetData } from "@/services/render";
 import {
 	generateTweetImage,
 	type Theme,
 } from "@/services/tweet/tweet-image.service";
-import { redis, s3 } from "@/storage";
+import { s3 } from "@/storage";
 import type { Context } from "@/types";
 
 function stripLeadingMention(text: string, username: string): string {
@@ -71,44 +70,39 @@ async function fetchReplyChain(
 	return { chain: [tweetData], hasMore: false };
 }
 
-const tweetImageRateLimiter = new RateLimiterRedis({
-	storeClient: redis,
-	points: 15,
-	duration: 60,
-	keyPrefix: "tweet-image",
-});
-
 const composer = new Composer<Context>();
-const privateChat = composer.chatType("private");
+const groupChat = composer.chatType(["group", "supergroup"]);
 
 function createThemeKeyboard(
 	tweetId: string,
-	currentTheme: Theme
+	currentTheme: Theme,
+	userId: number
 ): InlineKeyboard {
 	const nextTheme = currentTheme === "dark" ? "light" : "dark";
 	const buttonText = currentTheme === "dark" ? "☀️ Light" : "🌙 Dark";
 
 	return new InlineKeyboard().text(
 		buttonText,
-		`tweet_img:toggle:${tweetId}:${nextTheme}`
+		`tweet_img:toggle:${tweetId}:${nextTheme}:${userId}`
 	);
 }
 
-async function hasRateLimitPoints(userId: number): Promise<boolean> {
-	const rateLimitRes = await tweetImageRateLimiter.get(String(userId));
-	const consumed = rateLimitRes?.consumedPoints ?? 0;
-	return consumed < 15;
+async function tryDeleteMessage(ctx: Context): Promise<void> {
+	try {
+		await ctx.deleteMessage();
+	} catch (error) {
+		if (error instanceof GrammyError) {
+			ctx.logger.debug(
+				{ error: error.message },
+				"Could not delete user message (missing permissions)"
+			);
+		} else {
+			throw error;
+		}
+	}
 }
 
-privateChat.command(["img", "i"]).filter(
-	(ctx) => ctx.match.trim() === "",
-	async (ctx) => {
-		ctx.logger.debug({ userId: ctx.from.id }, "Empty /img command received");
-		await ctx.reply("Usage: /img <twitter_url>");
-	}
-);
-
-privateChat.command(["img", "i"]).filter(
+groupChat.command("q").filter(
 	(ctx) => ctx.match.trim() !== "" && extractTweetId(ctx.match.trim()) === null,
 	async (ctx) => {
 		ctx.logger.debug(
@@ -119,69 +113,50 @@ privateChat.command(["img", "i"]).filter(
 	}
 );
 
-privateChat
-	.command(["img", "i"])
-	.filter((ctx) => extractTweetId(ctx.match.trim()) !== null)
-	.filter(
-		async (ctx) => !hasRateLimitPoints(ctx.from.id),
-		async (ctx) => {
-			ctx.logger.info({ userId: ctx.from.id }, "Rate limit exceeded for /img");
-			await ctx.reply(
-				"You've reached the limit of 15 image requests per minute.\n" +
-					"Please wait a moment before trying again."
-			);
-		}
-	);
+groupChat.command("q").filter(
+	(ctx) => extractTweetId(ctx.match.trim()) !== null,
+	async (ctx) => {
+		const tweetId = extractTweetId(ctx.match.trim()) as string;
 
-privateChat
-	.command(["img", "i"])
-	.filter((ctx) => extractTweetId(ctx.match.trim()) !== null)
-	.filter(
-		async (ctx) => hasRateLimitPoints(ctx.from.id),
-		async (ctx) => {
-			const tweetId = extractTweetId(ctx.match.trim()) as string;
+		ctx.logger.info({ userId: ctx.from.id, tweetId }, "Processing /q command");
 
-			ctx.logger.info(
-				{ userId: ctx.from.id, tweetId },
-				"Processing /img command"
+		await ctx.replyWithChatAction("upload_photo");
+
+		try {
+			const result = await generateTweetImage(tweetId, "light");
+
+			ctx.logger.debug({ tweetId }, "Tweet image generated successfully");
+
+			await ctx.replyWithPhoto(
+				new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
+				{
+					caption: `https://x.com/i/status/${tweetId}`,
+					reply_markup: createThemeKeyboard(tweetId, "light", ctx.from.id),
+				}
 			);
 
-			await ctx.replyWithChatAction("upload_photo");
+			await tryDeleteMessage(ctx);
+		} catch (error) {
+			ctx.logger.error({ error, tweetId }, "Failed to generate tweet image");
 
-			try {
-				const result = await generateTweetImage(tweetId, "light");
-
-				ctx.logger.debug({ tweetId }, "Tweet image generated successfully");
-
-				await ctx.replyWithPhoto(
-					new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
-					{
-						reply_markup: createThemeKeyboard(tweetId, "light"),
-					}
+			if (error instanceof Error && error.message === "Tweet not found") {
+				await ctx.reply(
+					"Could not fetch this tweet. It may be:\n" +
+						"• Private or from a protected account\n" +
+						"• Deleted\n" +
+						"• Invalid URL"
 				);
+				return;
+			}
 
-				await tweetImageRateLimiter.consume(ctx.from.id);
-			} catch (error) {
-				ctx.logger.error({ error, tweetId }, "Failed to generate tweet image");
-
-				if (error instanceof Error && error.message === "Tweet not found") {
-					await ctx.reply(
-						"Could not fetch this tweet. It may be:\n" +
-							"• Private or from a protected account\n" +
-							"• Deleted\n" +
-							"• Invalid URL"
-					);
-					return;
-				}
-
-				if (error instanceof GrammyError) {
-					await ctx.reply("Failed to send image. Please try again.");
-				} else {
-					await ctx.reply("Something went wrong. Please try again later.");
-				}
+			if (error instanceof GrammyError) {
+				await ctx.reply("Failed to send image. Please try again.");
+			} else {
+				await ctx.reply("Something went wrong. Please try again later.");
 			}
 		}
-	);
+	}
+);
 
 composer.on("inline_query").filter(
 	(ctx) => isTwitterUrl(ctx.inlineQuery.query.trim()),
@@ -302,8 +277,6 @@ composer.on("inline_query").filter(
 				}),
 			];
 
-			await tweetImageRateLimiter.consume(ctx.from.id);
-
 			await ctx.answerInlineQuery(results, {
 				cache_time: 300,
 			});
@@ -319,8 +292,8 @@ composer.on("inline_query").filter(
 	}
 );
 
-privateChat.callbackQuery(
-	/^tweet_img:toggle:(\d+):(light|dark)$/,
+groupChat.callbackQuery(
+	/^tweet_img:toggle:(\d+):(light|dark):(\d+)$/,
 	async (ctx) => {
 		const match = ctx.match;
 
@@ -330,12 +303,16 @@ privateChat.callbackQuery(
 			return;
 		}
 
-		const tweetId = match.at(1);
+		// biome-ignore lint/style/noNonNullAssertion: We validate it on filter level
+		const tweetId = match.at(1)!;
 		const newTheme = match.at(2) as Theme;
+		const ownerId = match.at(3);
 
-		if (!tweetId) {
-			ctx.logger.debug("Callback query missing tweetId");
-			await ctx.answerCallbackQuery();
+		if (ctx.from.id !== Number(ownerId)) {
+			await ctx.answerCallbackQuery({
+				text: "Only the person who requested this image can change the theme",
+				show_alert: true,
+			});
 			return;
 		}
 
@@ -353,15 +330,13 @@ privateChat.callbackQuery(
 
 			ctx.logger.debug({ tweetId, newTheme }, "Theme toggle image generated");
 
-			await tweetImageRateLimiter.consume(ctx.from.id);
-
 			await ctx.editMessageMedia(
 				{
 					type: "photo",
 					media: new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
 				},
 				{
-					reply_markup: createThemeKeyboard(tweetId, newTheme),
+					reply_markup: createThemeKeyboard(tweetId, newTheme, ctx.from.id),
 				}
 			);
 		} catch (error) {

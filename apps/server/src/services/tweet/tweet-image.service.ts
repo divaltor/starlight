@@ -1,8 +1,8 @@
 import { logger } from "@/logger";
 import { fetchTweet } from "@/services/fxembed/fxembed.service";
 import {
-	renderTweetImage,
 	type RenderResult,
+	renderTweetImage,
 	type TweetData,
 } from "@/services/render";
 
