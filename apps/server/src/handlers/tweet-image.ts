@@ -334,6 +334,8 @@ groupChat.callbackQuery(
 				{
 					type: "photo",
 					media: new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
+					// biome-ignore lint/suspicious/noDuplicateObjectKeys: Man...
+					caption: ctx.msg?.caption,
 				},
 				{
 					reply_markup: createThemeKeyboard(tweetId, newTheme, ctx.from.id),
