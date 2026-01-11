@@ -35,7 +35,7 @@ const QUOTE_AVATAR_SIZE = 24;
 const QUOTE_FONT_SIZE_NAME = 13;
 const QUOTE_FONT_SIZE_TEXT = 14;
 const QUOTE_PADDING = 12;
-const QUOTE_BORDER_WIDTH = 3;
+const QUOTE_BORDER_WIDTH = 4;
 
 const REPLY_AVATAR_SIZE = 32;
 const REPLY_FONT_SIZE_NAME = 13;
@@ -97,7 +97,9 @@ export async function renderTweetImage(
 			tweet.quote.text,
 			quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP
 		);
-		const quoteParagraphCount = quoteTextLines.filter((line) => line.isParagraphEnd).length;
+		const quoteParagraphCount = quoteTextLines.filter(
+			(line) => line.isParagraphEnd
+		).length;
 		const quoteTextHeight =
 			quoteTextLines.length * QUOTE_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
 			quoteParagraphCount * LAYOUT.PARAGRAPH_GAP;
@@ -108,13 +110,18 @@ export async function renderTweetImage(
 			if (firstQuotePhoto) {
 				const aspectRatio = firstQuotePhoto.width / firstQuotePhoto.height;
 				const computedHeight = quoteContentWidth / aspectRatio;
-				quoteMediaHeight = Math.floor(Math.min(computedHeight, QUOTE_MAX_MEDIA_HEIGHT));
+				quoteMediaHeight = Math.floor(
+					Math.min(computedHeight, QUOTE_MAX_MEDIA_HEIGHT)
+				);
 			}
 		}
 
 		quoteHeight = Math.floor(
 			QUOTE_PADDING * 2 +
-				Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + 4 + quoteTextHeight) +
+				Math.max(
+					QUOTE_AVATAR_SIZE,
+					QUOTE_FONT_SIZE_NAME + 4 + quoteTextHeight
+				) +
 				(quoteMediaHeight > 0 ? LAYOUT.AVATAR_GAP + quoteMediaHeight : 0)
 		);
 	}
@@ -132,18 +139,27 @@ export async function renderTweetImage(
 		for (const chainTweet of tweet.replyChain) {
 			measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
 			const textLines = wrapText(measureCtx, chainTweet.text, replyToTextWidth);
-			const paragraphCount = textLines.filter((line) => line.isParagraphEnd).length;
+			const paragraphCount = textLines.filter(
+				(line) => line.isParagraphEnd
+			).length;
 			const textHeight =
 				textLines.length * REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
 				paragraphCount * LAYOUT.PARAGRAPH_GAP;
 			const itemHeight = Math.floor(
 				REPLY_AVATAR_SIZE +
 					LAYOUT.AVATAR_GAP +
-					Math.max(0, textHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + 4) +
+					Math.max(
+						0,
+						textHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + 4
+					) +
 					LAYOUT.AVATAR_GAP
 			);
 
-			replyChainItems.push({ tweet: chainTweet, textLines, height: itemHeight });
+			replyChainItems.push({
+				tweet: chainTweet,
+				textLines,
+				height: itemHeight,
+			});
 			totalReplyChainHeight += itemHeight;
 		}
 	}
@@ -193,7 +209,6 @@ export async function renderTweetImage(
 		}
 
 		for (const item of replyChainItems) {
-
 			try {
 				const replyAvatar = await loadImage(item.tweet.authorAvatarUrl);
 				drawCircularImage({
@@ -222,7 +237,11 @@ export async function renderTweetImage(
 
 			ctx.fillStyle = colors.text;
 			ctx.font = `bold ${REPLY_FONT_SIZE_NAME}px ${fontFamily}`;
-			ctx.fillText(item.tweet.authorName, replyToTextX, yOffset + REPLY_FONT_SIZE_NAME);
+			ctx.fillText(
+				item.tweet.authorName,
+				replyToTextX,
+				yOffset + REPLY_FONT_SIZE_NAME
+			);
 
 			ctx.fillStyle = colors.secondaryText;
 			ctx.font = `${REPLY_FONT_SIZE_NAME}px ${fontFamily}`;
@@ -238,7 +257,11 @@ export async function renderTweetImage(
 			ctx.fillStyle = colors.text;
 			ctx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
 			for (const line of item.textLines) {
-				ctx.fillText(line.text, replyToTextX, replyTextY + REPLY_FONT_SIZE_TEXT);
+				ctx.fillText(
+					line.text,
+					replyToTextX,
+					replyTextY + REPLY_FONT_SIZE_TEXT
+				);
 				replyTextY += REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
 				if (line.isParagraphEnd) {
 					replyTextY += LAYOUT.PARAGRAPH_GAP;
