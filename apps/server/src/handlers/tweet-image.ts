@@ -1,11 +1,18 @@
-import { extractTweetId } from "@starlight/utils";
-import { Composer, GrammyError, InlineKeyboard } from "grammy";
+import { env, extractTweetId, isTwitterUrl } from "@starlight/utils";
+import {
+	Composer,
+	GrammyError,
+	InlineKeyboard,
+	InlineQueryResultBuilder,
+} from "grammy";
 import { RateLimiterRedis } from "rate-limiter-flexible";
+import { fetchTweet } from "@/services/fxembed/fxembed.service";
+import { renderTweetImage, type TweetData } from "@/services/render";
 import {
 	generateTweetImage,
 	type Theme,
 } from "@/services/tweet/tweet-image.service";
-import { redis } from "@/storage";
+import { redis, s3 } from "@/storage";
 import type { Context } from "@/types";
 
 const tweetImageRateLimiter = new RateLimiterRedis({
@@ -116,6 +123,91 @@ privateChat
 			}
 		}
 	);
+
+composer.on("inline_query").filter(
+	(ctx) => isTwitterUrl(ctx.inlineQuery.query.trim()),
+	async (ctx) => {
+		const query = ctx.inlineQuery.query.trim();
+		const tweetId = extractTweetId(query);
+
+		if (!tweetId) {
+			await ctx.answerInlineQuery([]);
+			return;
+		}
+
+		try {
+			const tweet = await fetchTweet(tweetId);
+
+			if (!tweet) {
+				await ctx.answerInlineQuery([
+					InlineQueryResultBuilder.article(
+						`tweet-not-found:${tweetId}`,
+						"Tweet not found"
+					).text("Could not fetch this tweet. It may be private or deleted."),
+				]);
+				return;
+			}
+
+			const tweetData: TweetData = {
+				authorName: tweet.author.name,
+				authorUsername: tweet.author.screen_name,
+				authorAvatarUrl: tweet.author.avatar_url,
+				text: tweet.text,
+				media: tweet.media
+					? {
+							photos: tweet.media.photos,
+						}
+					: null,
+				likes: tweet.likes,
+				retweets: tweet.retweets,
+				replies: tweet.replies,
+			};
+
+			const [lightResult, darkResult] = await Promise.all([
+				renderTweetImage(tweetData, "light"),
+				renderTweetImage(tweetData, "dark"),
+			]);
+
+			const lightS3Path = `tweets/${tweetId}/light.png`;
+			const darkS3Path = `tweets/${tweetId}/dark.png`;
+
+			await Promise.all([
+				s3.write(lightS3Path, lightResult.buffer),
+				s3.write(darkS3Path, darkResult.buffer),
+			]);
+
+			const lightUrl = `${env.BASE_CDN_URL}/${lightS3Path}`;
+			const darkUrl = `${env.BASE_CDN_URL}/${darkS3Path}`;
+
+			const results = [
+				InlineQueryResultBuilder.photo(`tweet:${tweetId}:light`, lightUrl, {
+					thumbnail_url: lightUrl,
+					caption: `https://x.com/i/status/${tweetId}`,
+					photo_width: lightResult.width,
+					photo_height: lightResult.height,
+				}),
+				InlineQueryResultBuilder.photo(`tweet:${tweetId}:dark`, darkUrl, {
+					thumbnail_url: darkUrl,
+					caption: `https://x.com/i/status/${tweetId}`,
+					photo_width: darkResult.width,
+					photo_height: darkResult.height,
+				}),
+			];
+
+			await tweetImageRateLimiter.consume(ctx.from.id);
+
+			await ctx.answerInlineQuery(results, {
+				cache_time: 300,
+			});
+		} catch (error) {
+			ctx.logger.error(
+				{ error, tweetId },
+				"Failed to generate inline tweet images"
+			);
+			await ctx.answerInlineQuery([]);
+		}
+	}
+);
 
 privateChat.callbackQuery(
 	/^tweet_img:toggle:(\d+):(light|dark)$/,

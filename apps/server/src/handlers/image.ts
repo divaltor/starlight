@@ -1,5 +1,5 @@
 import { CookieEncryption } from "@starlight/crypto";
-import { env, type Prisma, prisma } from "@starlight/utils";
+import { env, isTwitterUrl, type Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { RateLimiterRedis } from "rate-limiter-flexible";
 import { webAppKeyboard } from "@/bot";
@@ -53,166 +53,169 @@ privateChat.on("message:photo", async (ctx) => {
 	await ctx.reply(message);
 });
 
-composer.on("inline_query", async (ctx) => {
-	const offset = ctx.inlineQuery.offset || "0";
-	const photoOffset = Number(offset) || 0;
-	const query = ctx.inlineQuery.query.trim();
+composer.on("inline_query").filter(
+	(ctx) => !isTwitterUrl(ctx.inlineQuery.query.trim()),
+	async (ctx) => {
+		const offset = ctx.inlineQuery.offset || "0";
+		const photoOffset = Number(offset) || 0;
+		const query = ctx.inlineQuery.query.trim();
 
-	// Fetch more tweets than we need to ensure we can find 50 photos
-	// We'll fetch in batches and keep going until we have enough photos
-	const allPhotos: Array<{
-		id: string;
-		externalId?: string;
-		s3Url: string | null;
-		tweetId: string;
-		height: number | null;
-		width: number | null;
-		username?: string;
-	}> = [];
+		// Fetch more tweets than we need to ensure we can find 50 photos
+		// We'll fetch in batches and keep going until we have enough photos
+		const allPhotos: Array<{
+			id: string;
+			externalId?: string;
+			s3Url: string | null;
+			tweetId: string;
+			height: number | null;
+			width: number | null;
+			username?: string;
+		}> = [];
 
-	let tweetSkip = 0;
-	let totalPhotosFound = 0;
+		let tweetSkip = 0;
+		let totalPhotosFound = 0;
 
-	// Keep fetching tweets until we have enough photos to satisfy the offset + 50 results
-	while (totalPhotosFound <= photoOffset + 50) {
-		const whereClause: Prisma.TweetWhereInput = {};
+		// Keep fetching tweets until we have enough photos to satisfy the offset + 50 results
+		while (totalPhotosFound <= photoOffset + 50) {
+			const whereClause: Prisma.TweetWhereInput = {};
 
-		if (query) {
-			// Extract author names from query (starting with @)
-			const authorMatches = query.match(/@(\w+)/g);
-			const authors = authorMatches?.map((match) => match.substring(1)) || [];
+			if (query) {
+				// Extract author names from query (starting with @)
+				const authorMatches = query.match(/@(\w+)/g);
+				const authors = authorMatches?.map((match) => match.substring(1)) || [];
 
-			// Remove author mentions from query for text search
-			const textQuery = query.replace(/@\w+/g, "").trim();
+				// Remove author mentions from query for text search
+				const textQuery = query.replace(/@\w+/g, "").trim();
 
-			// Build where clause
-			if (authors.length > 0 && textQuery) {
-				// Both author filter and text search
-				whereClause.AND = [
-					{
-						OR: authors.map((author) => ({
-							username: { contains: author, mode: "insensitive" },
-						})),
-					},
-					{ tweetText: { contains: textQuery, mode: "insensitive" } },
-				];
-			} else if (authors.length > 0) {
-				// Only author filter
-				whereClause.OR = authors.map((author) => ({
-					username: { contains: author, mode: "insensitive" },
-				}));
-			} else if (textQuery) {
-				// Only text search
-				whereClause.tweetText = { contains: textQuery, mode: "insensitive" };
+				// Build where clause
+				if (authors.length > 0 && textQuery) {
+					// Both author filter and text search
+					whereClause.AND = [
+						{
+							OR: authors.map((author) => ({
+								username: { contains: author, mode: "insensitive" },
+							})),
+						},
+						{ tweetText: { contains: textQuery, mode: "insensitive" } },
+					];
+				} else if (authors.length > 0) {
+					// Only author filter
+					whereClause.OR = authors.map((author) => ({
+						username: { contains: author, mode: "insensitive" },
+					}));
+				} else if (textQuery) {
+					// Only text search
+					whereClause.tweetText = { contains: textQuery, mode: "insensitive" };
+				}
 			}
-		}
 
-		const tweets = await prisma.tweet.findMany({
-			where: {
-				userId: ctx.user?.id as string,
-				photos: {
-					some: {
-						deletedAt: null,
-						s3Path: { not: null },
+			const tweets = await prisma.tweet.findMany({
+				where: {
+					userId: ctx.user?.id as string,
+					photos: {
+						some: {
+							deletedAt: null,
+							s3Path: { not: null },
+						},
+					},
+					...whereClause,
+				},
+				include: {
+					photos: {
+						where: {
+							deletedAt: null,
+							s3Path: { not: null },
+						},
+						orderBy: {
+							createdAt: "desc",
+						},
 					},
 				},
-				...whereClause,
-			},
-			include: {
-				photos: {
-					where: {
-						deletedAt: null,
-						s3Path: { not: null },
-					},
-					orderBy: {
-						createdAt: "desc",
-					},
+				orderBy: {
+					createdAt: "desc",
 				},
-			},
-			orderBy: {
-				createdAt: "desc",
-			},
-			take: 50,
-			skip: tweetSkip,
-		});
+				take: 50,
+				skip: tweetSkip,
+			});
 
-		if (tweets.length === 0) {
-			break; // No more tweets
+			if (tweets.length === 0) {
+				break; // No more tweets
+			}
+
+			// Flatten photos from this batch
+			for (const tweet of tweets) {
+				for (const photo of tweet.photos) {
+					allPhotos.push({
+						id: photo.id,
+						externalId: photo.externalId,
+						s3Url: photo.s3Url as string,
+						tweetId: tweet.id,
+						height: photo.height,
+						width: photo.width,
+						username: tweet.tweetData.username,
+					});
+					totalPhotosFound++;
+				}
+			}
+
+			tweetSkip += 50;
 		}
 
-		// Flatten photos from this batch
-		for (const tweet of tweets) {
-			for (const photo of tweet.photos) {
-				allPhotos.push({
-					id: photo.id,
-					externalId: photo.externalId,
-					s3Url: photo.s3Url as string,
-					tweetId: tweet.id,
-					height: photo.height,
-					width: photo.width,
-					username: tweet.tweetData.username,
-				});
-				totalPhotosFound++;
-			}
+		// Get the slice of photos for this page
+		const photosForThisPage = allPhotos.slice(photoOffset, photoOffset + 50);
+
+		if (photosForThisPage.length === 0 && ctx.session.cookies === null) {
+			// User didn't setup the bot yet
+			await ctx.answerInlineQuery(
+				[
+					InlineQueryResultBuilder.article(
+						`id:no-photos:${ctx.from?.id}`,
+						"Oops, no photos...",
+						{
+							reply_markup: new InlineKeyboard().url(
+								"Set cookies",
+								`${env.BASE_FRONTEND_URL}/settings`
+							),
+						}
+					).text("No photos found, did you setup the bot?"),
+				],
+				{
+					is_personal: true,
+				}
+			);
+
+			return;
 		}
 
-		tweetSkip += 50;
-	}
-
-	// Get the slice of photos for this page
-	const photosForThisPage = allPhotos.slice(photoOffset, photoOffset + 50);
-
-	if (photosForThisPage.length === 0 && ctx.session.cookies === null) {
-		// User didn't setup the bot yet
-		await ctx.answerInlineQuery(
-			[
-				InlineQueryResultBuilder.article(
-					`id:no-photos:${ctx.from?.id}`,
-					"Oops, no photos...",
-					{
-						reply_markup: new InlineKeyboard().url(
-							"Set cookies",
-							`${env.BASE_FRONTEND_URL}/settings`
-						),
-					}
-				).text("No photos found, did you setup the bot?"),
-			],
-			{
-				is_personal: true,
-			}
+		const results = photosForThisPage.map((photo) =>
+			InlineQueryResultBuilder.photo(
+				photo.externalId ?? photo.id,
+				photo.s3Url as string,
+				{
+					caption: photo.username
+						? `<a href="https://x.com/i/status/${photo.tweetId}">@${photo.username}</a>`
+						: `https://x.com/i/status/${photo.tweetId}`,
+					thumbnail_url: photo.s3Url as string,
+					photo_height: photo.height ?? undefined,
+					photo_width: photo.width ?? undefined,
+					parse_mode: "HTML",
+				}
+			)
 		);
 
-		return;
+		// Calculate next offset for pagination
+		let nextOffset = "";
+		if (results.length === 50 && photoOffset + 50 < allPhotos.length) {
+			nextOffset = String(photoOffset + 50);
+		}
+
+		await ctx.answerInlineQuery(results, {
+			next_offset: nextOffset,
+			is_personal: true,
+			cache_time: 30,
+		});
 	}
-
-	const results = photosForThisPage.map((photo) =>
-		InlineQueryResultBuilder.photo(
-			photo.externalId ?? photo.id,
-			photo.s3Url as string,
-			{
-				caption: photo.username
-					? `<a href="https://x.com/i/status/${photo.tweetId}">@${photo.username}</a>`
-					: `https://x.com/i/status/${photo.tweetId}`,
-				thumbnail_url: photo.s3Url as string,
-				photo_height: photo.height ?? undefined,
-				photo_width: photo.width ?? undefined,
-				parse_mode: "HTML",
-			}
-		)
-	);
-
-	// Calculate next offset for pagination
-	let nextOffset = "";
-	if (results.length === 50 && photoOffset + 50 < allPhotos.length) {
-		nextOffset = String(photoOffset + 50);
-	}
-
-	await ctx.answerInlineQuery(results, {
-		next_offset: nextOffset,
-		is_personal: true,
-		cache_time: 30,
-	});
-});
+);
 
 privateChat.command("cookies").filter(
 	async (ctx) => ctx.session.cookies === null,
