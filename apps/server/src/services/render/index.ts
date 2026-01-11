@@ -328,7 +328,7 @@ export async function renderTweetImage(
 		yOffset += LAYOUT.AVATAR_GAP;
 
 		ctx.strokeStyle = colors.border;
-		ctx.lineWidth = 1;
+		ctx.lineWidth = 2;
 		roundedRect({
 			ctx,
 			x: LAYOUT.PADDING,
