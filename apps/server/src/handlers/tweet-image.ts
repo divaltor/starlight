@@ -85,7 +85,7 @@ function createThemeKeyboard(
 	currentTheme: Theme
 ): InlineKeyboard {
 	const nextTheme = currentTheme === "dark" ? "light" : "dark";
-	const buttonText = currentTheme === "dark" ? "☀ Light" : "🌙 Dark";
+	const buttonText = currentTheme === "dark" ? "☀️ Light" : "🌙 Dark";
 
 	return new InlineKeyboard().text(
 		buttonText,
