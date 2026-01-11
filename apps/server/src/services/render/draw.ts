@@ -39,8 +39,58 @@ export function drawCircularImage(params: DrawCircularImageParams): void {
 	ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
 	ctx.closePath();
 	ctx.clip();
-	ctx.drawImage(image, x, y, size, size);
+	drawImageCover({ ctx, image, x, y, width: size, height: size });
 	ctx.restore();
+}
+
+type DrawImageCoverParams = {
+	ctx: SKRSContext2D;
+	image: Image;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+};
+
+export function drawImageCover(params: DrawImageCoverParams): void {
+	const {
+		ctx,
+		image,
+		x: destX,
+		y: destY,
+		width: destWidth,
+		height: destHeight,
+	} = params;
+	const srcWidth = image.width;
+	const srcHeight = image.height;
+
+	const srcAspect = srcWidth / srcHeight;
+	const destAspect = destWidth / destHeight;
+
+	let cropX = 0;
+	let cropY = 0;
+	let cropWidth = srcWidth;
+	let cropHeight = srcHeight;
+
+	if (srcAspect > destAspect) {
+		cropWidth = srcHeight * destAspect;
+		cropX = (srcWidth - cropWidth) / 2;
+	} else {
+		cropHeight = srcWidth / destAspect;
+		cropY = (srcHeight - cropHeight) / 2;
+	}
+
+	ctx.drawImage(
+		image,
+		cropX,
+		cropY,
+		cropWidth,
+		cropHeight,
+		destX,
+		destY,
+		destWidth,
+		destHeight
+	);
 }
 
 export type TextLine = {

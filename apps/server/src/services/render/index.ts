@@ -1,7 +1,13 @@
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { format } from "date-fns";
 import { logger } from "@/logger";
-import { drawCircularImage, formatNumber, roundedRect, wrapText } from "./draw";
+import {
+	drawCircularImage,
+	drawImageCover,
+	formatNumber,
+	roundedRect,
+	wrapText,
+} from "./draw";
 import { getFontFamily, registerFonts } from "./fonts";
 import { LAYOUT } from "./layout";
 import { type Theme, themes } from "./themes";
@@ -368,13 +374,14 @@ export async function renderTweetImage(
 				ctx.fillStyle = colors.background;
 				ctx.fillRect(LAYOUT.PADDING, yOffset, contentWidth, mediaHeight);
 
-				ctx.drawImage(
+				drawImageCover({
+					ctx,
 					image,
-					LAYOUT.PADDING,
-					yOffset,
-					contentWidth,
-					mediaHeight
-				);
+					x: LAYOUT.PADDING,
+					y: yOffset,
+					width: contentWidth,
+					height: mediaHeight,
+				});
 				ctx.restore();
 
 				yOffset += mediaHeight;
@@ -481,13 +488,14 @@ export async function renderTweetImage(
 					ctx.fillStyle = colors.background;
 					ctx.fillRect(quoteX, quoteY, quoteContentWidth, quoteMediaHeight);
 
-					ctx.drawImage(
-						quoteImage,
-						quoteX,
-						quoteY,
-						quoteContentWidth,
-						quoteMediaHeight
-					);
+					drawImageCover({
+						ctx,
+						image: quoteImage,
+						x: quoteX,
+						y: quoteY,
+						width: quoteContentWidth,
+						height: quoteMediaHeight,
+					});
 					ctx.restore();
 				}
 			} catch (error) {
