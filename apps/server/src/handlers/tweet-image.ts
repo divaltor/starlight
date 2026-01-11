@@ -10,7 +10,7 @@ import type { Context } from "@/types";
 
 const tweetImageRateLimiter = new RateLimiterRedis({
 	storeClient: redis,
-	points: 10,
+	points: 15,
 	duration: 60,
 	keyPrefix: "tweet-image",
 });
@@ -34,28 +34,20 @@ function createThemeKeyboard(
 async function hasRateLimitPoints(userId: number): Promise<boolean> {
 	const rateLimitRes = await tweetImageRateLimiter.get(String(userId));
 	const consumed = rateLimitRes?.consumedPoints ?? 0;
-	return consumed < 10;
+	return consumed < 15;
 }
 
 privateChat.command(["img", "i"]).filter(
 	(ctx) => ctx.match.trim() === "",
 	async (ctx) => {
-		await ctx.reply(
-			"Usage: /img <twitter_url>\n\n" +
-				"Example: /img https://x.com/user/status/1234567890"
-		);
+		await ctx.reply("Usage: /img <twitter_url>");
 	}
 );
 
 privateChat.command(["img", "i"]).filter(
 	(ctx) => ctx.match.trim() !== "" && extractTweetId(ctx.match.trim()) === null,
 	async (ctx) => {
-		await ctx.reply(
-			"Invalid Twitter/X URL. Please provide a valid tweet link.\n\n" +
-				"Supported formats:\n" +
-				"• https://twitter.com/user/status/123\n" +
-				"• https://x.com/user/status/123"
-		);
+		await ctx.reply("Please provide a valid tweet link");
 	}
 );
 
