@@ -49,6 +49,7 @@ type ReplyChainItem = {
 	tweet: TweetData;
 	textLines: ReturnType<typeof wrapText>;
 	height: number;
+	mediaHeight: number;
 };
 
 export async function renderTweetImage(
@@ -141,6 +142,17 @@ export async function renderTweetImage(
 			const textHeight =
 				textLines.length * REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
 				paragraphCount * LAYOUT.PARAGRAPH_GAP;
+
+			let chainMediaHeight = 0;
+			const chainPhotos = chainTweet.media?.photos;
+			if (chainPhotos && chainPhotos.length > 0) {
+				const firstPhoto = chainPhotos.at(0);
+				if (firstPhoto) {
+					const aspectRatio = firstPhoto.width / firstPhoto.height;
+					chainMediaHeight = Math.floor(replyToTextWidth / aspectRatio);
+				}
+			}
+
 			const itemHeight = Math.floor(
 				REPLY_AVATAR_SIZE +
 					LAYOUT.AVATAR_GAP +
@@ -148,6 +160,7 @@ export async function renderTweetImage(
 						0,
 						textHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + 4
 					) +
+					(chainMediaHeight > 0 ? LAYOUT.AVATAR_GAP + chainMediaHeight : 0) +
 					LAYOUT.AVATAR_GAP
 			);
 
@@ -155,6 +168,7 @@ export async function renderTweetImage(
 				tweet: chainTweet,
 				textLines,
 				height: itemHeight,
+				mediaHeight: chainMediaHeight,
 			});
 			totalReplyChainHeight += itemHeight;
 		}
@@ -283,6 +297,43 @@ export async function renderTweetImage(
 				replyTextY += REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
 				if (line.isParagraphEnd) {
 					replyTextY += LAYOUT.PARAGRAPH_GAP;
+				}
+			}
+
+			const chainPhotos = item.tweet.media?.photos;
+			if (chainPhotos && chainPhotos.length > 0 && item.mediaHeight > 0) {
+				replyTextY += LAYOUT.AVATAR_GAP;
+
+				try {
+					const firstPhoto = chainPhotos.at(0);
+					if (firstPhoto) {
+						const chainImage = await loadImage(firstPhoto.url);
+
+						ctx.save();
+						roundedRect({
+							ctx,
+							x: replyToTextX,
+							y: replyTextY,
+							width: replyToTextWidth,
+							height: item.mediaHeight,
+							radius: LAYOUT.MEDIA_BORDER_RADIUS,
+						});
+						ctx.clip();
+
+						ctx.fillStyle = colors.background;
+						ctx.fillRect(replyToTextX, replyTextY, replyToTextWidth, item.mediaHeight);
+
+						ctx.drawImage(
+							chainImage,
+							replyToTextX,
+							replyTextY,
+							replyToTextWidth,
+							item.mediaHeight
+						);
+						ctx.restore();
+					}
+				} catch (error) {
+					logger.warn({ error }, "Failed to load reply chain media image");
 				}
 			}
 
