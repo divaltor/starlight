@@ -63,7 +63,7 @@ privateChat
 	.command(["img", "i"])
 	.filter((ctx) => extractTweetId(ctx.match.trim()) !== null)
 	.filter(
-		async (ctx) => hasRateLimitPoints(ctx.from.id),
+		async (ctx) => !hasRateLimitPoints(ctx.from.id),
 		async (ctx) => {
 			await ctx.reply(
 				"You've reached the limit of 10 image requests per minute.\n" +
