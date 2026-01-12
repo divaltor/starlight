@@ -53,7 +53,7 @@ const REPLY_AVATAR_SIZE = LAYOUT.AVATAR_SIZE;
 const REPLY_FONT_SIZE_NAME = 13;
 const REPLY_FONT_SIZE_TEXT = 14;
 const REPLY_LINE_WIDTH = 2;
-const DOTS_INDICATOR_HEIGHT = 24;
+const DOTS_INDICATOR_HEIGHT = 32;
 const DOT_SIZE = 4;
 const DOT_GAP = 6;
 
@@ -269,12 +269,12 @@ export async function renderTweetImage(
 
 	if (replyChainItems.length > 0) {
 		if (tweet.hasMoreInChain) {
-			ctx.fillStyle = colors.secondaryText;
+			ctx.fillStyle = colors.border;
 			for (let i = 0; i < 3; i++) {
 				ctx.beginPath();
 				ctx.arc(
 					replyAvatarCenterX,
-					yOffset + DOTS_INDICATOR_HEIGHT / 2 + (i - 1) * (DOT_SIZE + DOT_GAP),
+					yOffset + 12 + (i - 1) * (DOT_SIZE + DOT_GAP),
 					DOT_SIZE / 2,
 					0,
 					Math.PI * 2
