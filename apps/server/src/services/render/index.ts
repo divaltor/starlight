@@ -217,7 +217,7 @@ export async function renderTweetImage(
 
 	const headerHeight = LAYOUT.AVATAR_SIZE;
 	const statsHeight = 30;
-	const mediaGapAfter = LAYOUT.MEDIA_GAP;
+	const mediaGapAfter = LAYOUT.MEDIA_GAP_BOTTOM;
 	const totalHeight =
 		LAYOUT.PADDING +
 		totalReplyChainHeight +
