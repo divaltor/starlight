@@ -71,7 +71,7 @@ async function fetchReplyChain(
 }
 
 const composer = new Composer<Context>();
-const groupChat = composer.chatType(["group", "supergroup"]);
+const chats = composer.chatType(["private", "group", "supergroup"]);
 
 function createThemeKeyboard(
 	tweetId: string,
@@ -102,7 +102,7 @@ async function tryDeleteMessage(ctx: Context): Promise<void> {
 	}
 }
 
-groupChat.command("q").filter(
+chats.command("q").filter(
 	(ctx) => ctx.match.trim() !== "" && extractTweetId(ctx.match.trim()) === null,
 	async (ctx) => {
 		ctx.logger.debug(
@@ -113,7 +113,7 @@ groupChat.command("q").filter(
 	}
 );
 
-groupChat.command("q").filter(
+chats.command("q").filter(
 	(ctx) => extractTweetId(ctx.match.trim()) !== null,
 	async (ctx) => {
 		const tweetId = extractTweetId(ctx.match.trim()) as string;
@@ -293,7 +293,7 @@ composer.on("inline_query").filter(
 	}
 );
 
-groupChat.callbackQuery(
+chats.callbackQuery(
 	/^tweet_img:toggle:(\d+):(light|dark):(\d+)$/,
 	async (ctx) => {
 		const match = ctx.match;
@@ -335,7 +335,6 @@ groupChat.callbackQuery(
 				{
 					type: "photo",
 					media: new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
-					// biome-ignore lint/suspicious/noDuplicateObjectKeys: Man...
 					caption: ctx.msg?.caption,
 				},
 				{
