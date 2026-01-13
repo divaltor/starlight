@@ -71,10 +71,7 @@ async function fetchReplyChain(
 
 export type TweetImageResult = RenderResult;
 
-export async function generateTweetImage(
-	tweetId: string,
-	theme: Theme = "light"
-): Promise<TweetImageResult> {
+export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 	const tweet = await fetchTweet(tweetId);
 
 	if (!tweet) {
@@ -96,7 +93,7 @@ export async function generateTweetImage(
 			? stripLeadingMention(tweet.text, tweet.replying_to)
 			: tweet.text;
 
-	const tweetData: TweetData = {
+	return {
 		authorName: tweet.author.name,
 		authorUsername: tweet.author.screen_name,
 		authorAvatarUrl: tweet.author.avatar_url,
@@ -142,6 +139,13 @@ export async function generateTweetImage(
 				}
 			: null,
 	};
+}
+
+export async function generateTweetImage(
+	tweetId: string,
+	theme: Theme = "light"
+): Promise<TweetImageResult> {
+	const tweetData = await prepareTweetData(tweetId);
 
 	logger.debug({ tweetId, theme }, "Rendering tweet image");
 

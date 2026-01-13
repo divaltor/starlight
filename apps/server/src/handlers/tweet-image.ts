@@ -6,75 +6,14 @@ import {
 	InlineQueryResultBuilder,
 	InputFile,
 } from "grammy";
-import { fetchTweet } from "@/services/fxembed/fxembed.service";
-import { renderTweetImage, type TweetData } from "@/services/render";
+import { renderTweetImage } from "@/services/render";
 import {
 	generateTweetImage,
+	prepareTweetData,
 	type Theme,
 } from "@/services/tweet/tweet-image.service";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
-
-function stripLeadingMention(text: string, username: string): string {
-	const mentionPattern = new RegExp(`^@${username}\\s*`, "i");
-	return text.replace(mentionPattern, "").trim();
-}
-
-const MAX_REPLY_CHAIN_DEPTH = 3;
-
-type ReplyChainResult = {
-	chain: TweetData[];
-	hasMore: boolean;
-};
-
-async function fetchReplyChain(
-	tweetId: string,
-	depth = 0
-): Promise<ReplyChainResult> {
-	if (depth >= MAX_REPLY_CHAIN_DEPTH) {
-		return { chain: [], hasMore: true };
-	}
-
-	const tweet = await fetchTweet(tweetId);
-	if (!tweet) {
-		return { chain: [], hasMore: false };
-	}
-
-	const tweetData: TweetData = {
-		authorName: tweet.author.name,
-		authorUsername: tweet.author.screen_name,
-		authorAvatarUrl: tweet.author.avatar_url,
-		text: tweet.text,
-		createdAt: new Date(tweet.created_timestamp * 1000),
-		media: tweet.media
-			? {
-					photos: tweet.media.photos,
-					videos: tweet.media.videos?.map((v) => ({
-						thumbnailUrl: v.thumbnail_url,
-						width: v.width,
-						height: v.height,
-						type: v.type,
-					})),
-				}
-			: null,
-		likes: tweet.likes,
-		retweets: tweet.retweets,
-		replies: tweet.replies,
-	};
-
-	if (tweet.replying_to_status) {
-		const parentResult = await fetchReplyChain(
-			tweet.replying_to_status,
-			depth + 1
-		);
-		return {
-			chain: [...parentResult.chain, tweetData],
-			hasMore: parentResult.hasMore,
-		};
-	}
-
-	return { chain: [tweetData], hasMore: false };
-}
 
 const composer = new Composer<Context>();
 const chats = composer.chatType(["private", "group", "supergroup"]);
@@ -186,79 +125,7 @@ composer.on("inline_query").filter(
 		}
 
 		try {
-			const tweet = await fetchTweet(tweetId);
-
-			if (!tweet) {
-				ctx.logger.warn({ tweetId }, "Tweet not found for inline query");
-				await ctx.answerInlineQuery([
-					InlineQueryResultBuilder.article(
-						`tweet-not-found:${tweetId}`,
-						"Tweet not found"
-					).text("Could not fetch this tweet. It may be private or deleted."),
-				]);
-				return;
-			}
-
-			let replyChain: TweetData[] = [];
-			let hasMoreInChain = false;
-
-			if (tweet.replying_to_status) {
-				const chainResult = await fetchReplyChain(tweet.replying_to_status);
-				replyChain = chainResult.chain;
-				hasMoreInChain = chainResult.hasMore;
-			}
-
-			const tweetText =
-				tweet.replying_to && replyChain.length > 0
-					? stripLeadingMention(tweet.text, tweet.replying_to)
-					: tweet.text;
-
-			const tweetData: TweetData = {
-				authorName: tweet.author.name,
-				authorUsername: tweet.author.screen_name,
-				authorAvatarUrl: tweet.author.avatar_url,
-				text: tweetText,
-				createdAt: new Date(tweet.created_timestamp * 1000),
-				media: tweet.media
-					? {
-							photos: tweet.media.photos,
-							videos: tweet.media.videos?.map((v) => ({
-								thumbnailUrl: v.thumbnail_url,
-								width: v.width,
-								height: v.height,
-								type: v.type,
-							})),
-						}
-					: null,
-				likes: tweet.likes,
-				retweets: tweet.retweets,
-				replies: tweet.replies,
-				replyChain,
-				hasMoreInChain,
-				quote: tweet.quote
-					? {
-							authorName: tweet.quote.author.name,
-							authorUsername: tweet.quote.author.screen_name,
-							authorAvatarUrl: tweet.quote.author.avatar_url,
-							text: tweet.quote.text,
-							createdAt: new Date(tweet.quote.created_timestamp * 1000),
-							media: tweet.quote.media
-								? {
-										photos: tweet.quote.media.photos,
-										videos: tweet.quote.media.videos?.map((v) => ({
-											thumbnailUrl: v.thumbnail_url,
-											width: v.width,
-											height: v.height,
-											type: v.type,
-										})),
-									}
-								: null,
-							likes: tweet.quote.likes,
-							retweets: tweet.quote.retweets,
-							replies: tweet.quote.replies,
-						}
-					: null,
-			};
+			const tweetData = await prepareTweetData(tweetId);
 
 			const [lightResult, darkResult] = await Promise.all([
 				renderTweetImage(tweetData, "light"),
@@ -306,6 +173,17 @@ composer.on("inline_query").filter(
 				{ error, tweetId },
 				"Failed to generate inline tweet images"
 			);
+
+			if (error instanceof Error && error.message === "Tweet not found") {
+				await ctx.answerInlineQuery([
+					InlineQueryResultBuilder.article(
+						`tweet-not-found:${tweetId}`,
+						"Tweet not found"
+					).text("Could not fetch this tweet. It may be private or deleted."),
+				]);
+				return;
+			}
+
 			await ctx.answerInlineQuery([]);
 		}
 	}
