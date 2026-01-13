@@ -7,6 +7,7 @@ let fontsRegistered = false;
 const EMOJI_FONT_FAMILY = "Noto Color Emoji";
 const UNICODE_FALLBACK_FAMILY = "Noto Sans";
 const TAGALOG_FONT_FAMILY = "Noto Sans Tagalog";
+const SYMBOLS_FONT_FAMILY = "Noto Sans Symbols 2";
 
 export function registerFonts(): void {
 	if (fontsRegistered) {
@@ -37,13 +38,18 @@ export function registerFonts(): void {
 		);
 
 		GlobalFonts.registerFromPath(
+			path.join(fontPath, "NotoSansSymbols2-Regular.ttf"),
+			SYMBOLS_FONT_FAMILY
+		);
+
+		GlobalFonts.registerFromPath(
 			path.join(fontPath, "NotoColorEmoji.ttf"),
 			EMOJI_FONT_FAMILY
 		);
 
 		fontsRegistered = true;
 		logger.info(
-			"Registered Inter, Noto Sans Unicode fallback, and emoji fonts"
+			"Registered Inter, Noto Sans Unicode fallback, symbols, and emoji fonts"
 		);
 	} catch {
 		logger.warn("Could not register fonts, using system fallback");
@@ -52,5 +58,5 @@ export function registerFonts(): void {
 }
 
 export function getFontFamily(): string {
-	return `Inter, '${UNICODE_FALLBACK_FAMILY}', '${TAGALOG_FONT_FAMILY}', '${EMOJI_FONT_FAMILY}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+	return `Inter, '${UNICODE_FALLBACK_FAMILY}', '${TAGALOG_FONT_FAMILY}', '${SYMBOLS_FONT_FAMILY}', '${EMOJI_FONT_FAMILY}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
 }
