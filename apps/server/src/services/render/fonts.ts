@@ -4,10 +4,9 @@ import { logger } from "@/logger";
 
 let fontsRegistered = false;
 
-const EMOJI_FONT_FAMILY = "Noto Color Emoji";
 const UNICODE_FALLBACK_FAMILY = "Noto Sans";
-const TAGALOG_FONT_FAMILY = "Noto Sans Tagalog";
-const SYMBOLS_FONT_FAMILY = "Noto Sans Symbols 2";
+const CJK_FONT_FAMILY = "Noto Sans CJK";
+const EMOJI_FONT_FAMILY = "Noto Color Emoji";
 
 export function registerFonts(): void {
 	if (fontsRegistered) {
@@ -33,13 +32,8 @@ export function registerFonts(): void {
 		);
 
 		GlobalFonts.registerFromPath(
-			path.join(fontPath, "NotoSansTagalog-Regular.ttf"),
-			TAGALOG_FONT_FAMILY
-		);
-
-		GlobalFonts.registerFromPath(
-			path.join(fontPath, "NotoSansSymbols2-Regular.ttf"),
-			SYMBOLS_FONT_FAMILY
+			path.join(fontPath, "NotoSansCJKsc-Regular.otf"),
+			CJK_FONT_FAMILY
 		);
 
 		GlobalFonts.registerFromPath(
@@ -48,9 +42,7 @@ export function registerFonts(): void {
 		);
 
 		fontsRegistered = true;
-		logger.info(
-			"Registered Inter, Noto Sans Unicode fallback, symbols, and emoji fonts"
-		);
+		logger.info("Registered Inter, Noto Sans, Noto Sans CJK, and emoji fonts");
 	} catch {
 		logger.warn("Could not register fonts, using system fallback");
 		fontsRegistered = true;
@@ -58,5 +50,5 @@ export function registerFonts(): void {
 }
 
 export function getFontFamily(): string {
-	return `Inter, '${UNICODE_FALLBACK_FAMILY}', '${TAGALOG_FONT_FAMILY}', '${SYMBOLS_FONT_FAMILY}', '${EMOJI_FONT_FAMILY}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+	return `Inter, '${UNICODE_FALLBACK_FAMILY}', '${CJK_FONT_FAMILY}', '${EMOJI_FONT_FAMILY}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
 }
