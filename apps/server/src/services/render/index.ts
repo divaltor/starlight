@@ -1,16 +1,18 @@
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { type SKRSContext2D, createCanvas } from "@napi-rs/canvas";
 import { format } from "date-fns";
 import { logger } from "@/logger";
 import {
-	drawCircularImage,
-	drawPlayButton,
+	drawAuthorInfo,
+	drawAvatarWithFallback,
+	drawMediaBlock,
+	drawTextLines,
 	formatNumber,
 	roundedRect,
 	wrapText,
 } from "./draw";
 import { getFontFamily, registerFonts } from "./fonts";
 import { LAYOUT } from "./layout";
-import { type Theme, themes } from "./themes";
+import { type Theme, type ThemeColors, themes } from "./themes";
 
 export type { Theme } from "./themes";
 
@@ -74,6 +76,33 @@ type MediaItem =
 			height: number;
 	  };
 
+type TweetLayout = {
+	totalHeight: number;
+	contentWidth: number;
+	textX: number;
+	textWidth: number;
+
+	mainTweet: {
+		textLines: ReturnType<typeof wrapText>;
+		textHeight: number;
+		mediaHeight: number;
+		isVideo: boolean;
+	};
+
+	quote: {
+		textLines: ReturnType<typeof wrapText>;
+		textHeight: number;
+		mediaHeight: number;
+		isVideo: boolean;
+		height: number;
+		contentWidth: number;
+	} | null;
+
+	replyChain: ReplyChainItem[];
+	totalReplyChainHeight: number;
+	hasMoreInChain: boolean;
+};
+
 function getFirstMedia(media: TweetData["media"]): MediaItem | null {
 	if (!media) {
 		return null;
@@ -92,79 +121,94 @@ function getFirstMedia(media: TweetData["media"]): MediaItem | null {
 	return null;
 }
 
-export async function renderTweetImage(
-	tweet: TweetData,
-	theme: Theme
-): Promise<RenderResult> {
-	registerFonts();
+function calculateTextHeight(
+	lines: { isParagraphEnd: boolean }[],
+	fontSize: number,
+	lineHeight: number,
+	paragraphGap: number
+): number {
+	const paragraphCount = lines.filter((line) => line.isParagraphEnd).length;
+	return Math.floor(
+		lines.length * fontSize * lineHeight + paragraphCount * paragraphGap
+	);
+}
 
-	const colors = themes[theme];
-	const fontFamily = getFontFamily();
+function calculateMediaHeight(
+	media: MediaItem | null,
+	containerWidth: number
+): { height: number; isVideo: boolean } {
+	if (!media) {
+		return { height: 0, isVideo: false };
+	}
+	const aspectRatio = media.width / media.height;
+	const height = Math.floor(containerWidth / aspectRatio);
+	const isVideo = media.type === "video" || media.type === "gif";
+	return { height, isVideo };
+}
 
+function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 	const contentWidth = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
 	const textX = LAYOUT.PADDING + LAYOUT.AVATAR_SIZE + LAYOUT.AVATAR_GAP;
 	const textWidth = contentWidth - LAYOUT.AVATAR_SIZE - LAYOUT.AVATAR_GAP;
+	const replyToTextWidth = contentWidth - REPLY_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
 
 	const measureCanvas = createCanvas(LAYOUT.WIDTH, 100);
 	const measureCtx = measureCanvas.getContext("2d");
-	measureCtx.font = `${LAYOUT.FONT_SIZE_TEXT}px ${fontFamily}`;
 
-	const textLines = wrapText(measureCtx, tweet.text, textWidth);
-	const paragraphCount = textLines.filter((line) => line.isParagraphEnd).length;
-	const textHeight = Math.floor(
-		textLines.length * LAYOUT.FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
-			paragraphCount * LAYOUT.PARAGRAPH_GAP
+	measureCtx.font = `${LAYOUT.FONT_SIZE_TEXT}px ${fontFamily}`;
+	const mainTextLines = wrapText(measureCtx, tweet.text, textWidth);
+	const mainTextHeight = calculateTextHeight(
+		mainTextLines,
+		LAYOUT.FONT_SIZE_TEXT,
+		LAYOUT.LINE_HEIGHT,
+		LAYOUT.PARAGRAPH_GAP
 	);
 
-	let mediaHeight = 0;
-	let mainMediaIsVideo = false;
 	const mainMedia = getFirstMedia(tweet.media);
-	if (mainMedia) {
-		const aspectRatio = mainMedia.width / mainMedia.height;
-		mediaHeight = Math.floor(contentWidth / aspectRatio);
-		mainMediaIsVideo = mainMedia.type === "video" || mainMedia.type === "gif";
-	}
+	const { height: mainMediaHeight, isVideo: mainMediaIsVideo } =
+		calculateMediaHeight(mainMedia, contentWidth);
 
-	let quoteHeight = 0;
-	let quoteTextLines: ReturnType<typeof wrapText> = [];
-	let quoteMediaHeight = 0;
-	let quoteMediaIsVideo = false;
+	let quoteLayout: TweetLayout["quote"] = null;
 	const quoteContentWidth = contentWidth - QUOTE_PADDING * 2;
+
 	if (tweet.quote) {
 		measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
-		quoteTextLines = wrapText(
+		const quoteTextLines = wrapText(
 			measureCtx,
 			tweet.quote.text,
 			quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP
 		);
-		const quoteParagraphCount = quoteTextLines.filter(
-			(line) => line.isParagraphEnd
-		).length;
-		const quoteTextHeight =
-			quoteTextLines.length * QUOTE_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
-			quoteParagraphCount * LAYOUT.PARAGRAPH_GAP;
+		const quoteTextHeight = calculateTextHeight(
+			quoteTextLines,
+			QUOTE_FONT_SIZE_TEXT,
+			LAYOUT.LINE_HEIGHT,
+			LAYOUT.PARAGRAPH_GAP
+		);
 
 		const quoteMedia = getFirstMedia(tweet.quote.media);
-		if (quoteMedia) {
-			const aspectRatio = quoteMedia.width / quoteMedia.height;
-			quoteMediaHeight = Math.floor(quoteContentWidth / aspectRatio);
-			quoteMediaIsVideo =
-				quoteMedia.type === "video" || quoteMedia.type === "gif";
-		}
+		const { height: quoteMediaHeight, isVideo: quoteMediaIsVideo } =
+			calculateMediaHeight(quoteMedia, quoteContentWidth);
 
-		quoteHeight = Math.floor(
+		const quoteHeight = Math.floor(
 			QUOTE_PADDING * 2 +
 				Math.max(
 					QUOTE_AVATAR_SIZE,
-					QUOTE_FONT_SIZE_NAME + 4 + quoteTextHeight
+					QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + quoteTextHeight
 				) +
 				(quoteMediaHeight > 0 ? LAYOUT.AVATAR_GAP + quoteMediaHeight : 0)
 		);
+
+		quoteLayout = {
+			textLines: quoteTextLines,
+			textHeight: quoteTextHeight,
+			mediaHeight: quoteMediaHeight,
+			isVideo: quoteMediaIsVideo,
+			height: quoteHeight,
+			contentWidth: quoteContentWidth,
+		};
 	}
 
 	const replyChainItems: ReplyChainItem[] = [];
-	const replyToTextX = LAYOUT.PADDING + REPLY_AVATAR_SIZE + LAYOUT.AVATAR_GAP;
-	const replyToTextWidth = contentWidth - REPLY_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
 	let totalReplyChainHeight = 0;
 
 	if (tweet.replyChain && tweet.replyChain.length > 0) {
@@ -174,30 +218,31 @@ export async function renderTweetImage(
 
 		for (const chainTweet of tweet.replyChain) {
 			measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
-			const textLines = wrapText(measureCtx, chainTweet.text, replyToTextWidth);
-			const paragraphCount = textLines.filter(
-				(line) => line.isParagraphEnd
-			).length;
-			const textHeight =
-				textLines.length * REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT +
-				paragraphCount * LAYOUT.PARAGRAPH_GAP;
+			const chainTextLines = wrapText(
+				measureCtx,
+				chainTweet.text,
+				replyToTextWidth
+			);
+			const chainTextHeight = calculateTextHeight(
+				chainTextLines,
+				REPLY_FONT_SIZE_TEXT,
+				LAYOUT.LINE_HEIGHT,
+				LAYOUT.PARAGRAPH_GAP
+			);
 
-			let chainMediaHeight = 0;
-			let chainMediaIsVideo = false;
 			const chainMedia = getFirstMedia(chainTweet.media);
-			if (chainMedia) {
-				const aspectRatio = chainMedia.width / chainMedia.height;
-				chainMediaHeight = Math.floor(replyToTextWidth / aspectRatio);
-				chainMediaIsVideo =
-					chainMedia.type === "video" || chainMedia.type === "gif";
-			}
+			const { height: chainMediaHeight, isVideo: chainMediaIsVideo } =
+				calculateMediaHeight(chainMedia, replyToTextWidth);
 
 			const itemHeight = Math.floor(
 				REPLY_AVATAR_SIZE +
 					LAYOUT.AVATAR_GAP +
 					Math.max(
 						0,
-						textHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + 4
+						chainTextHeight -
+							REPLY_AVATAR_SIZE +
+							REPLY_FONT_SIZE_NAME +
+							LAYOUT.TEXT_GAP
 					) +
 					(chainMediaHeight > 0
 						? LAYOUT.AVATAR_GAP + chainMediaHeight + LAYOUT.MEDIA_GAP
@@ -206,7 +251,7 @@ export async function renderTweetImage(
 
 			replyChainItems.push({
 				tweet: chainTweet,
-				textLines,
+				textLines: chainTextLines,
 				height: itemHeight,
 				mediaHeight: chainMediaHeight,
 				isVideo: chainMediaIsVideo,
@@ -216,29 +261,247 @@ export async function renderTweetImage(
 	}
 
 	const headerHeight = LAYOUT.AVATAR_SIZE;
-	const statsHeight = 30;
+	const statsHeight = LAYOUT.STATS_HEIGHT;
 	const mediaGapAfter = LAYOUT.MEDIA_GAP_BOTTOM;
+
 	const totalHeight =
 		LAYOUT.PADDING +
 		totalReplyChainHeight +
 		headerHeight +
 		LAYOUT.AVATAR_GAP +
-		textHeight +
-		(mediaHeight > 0 ? LAYOUT.AVATAR_GAP + mediaHeight + mediaGapAfter : 0) +
-		(quoteHeight > 0
-			? (mediaHeight > 0 ? 0 : LAYOUT.AVATAR_GAP) + quoteHeight
+		mainTextHeight +
+		(mainMediaHeight > 0
+			? LAYOUT.AVATAR_GAP + mainMediaHeight + mediaGapAfter
+			: 0) +
+		(quoteLayout
+			? (mainMediaHeight > 0 ? 0 : LAYOUT.AVATAR_GAP) + quoteLayout.height
 			: 0) +
 		LAYOUT.AVATAR_GAP +
 		statsHeight +
 		LAYOUT.PADDING;
 
-	const scale = LAYOUT.SCALE_FACTOR;
-	const canvas = createCanvas(LAYOUT.WIDTH * scale, totalHeight * scale);
-	const ctx = canvas.getContext("2d");
-	ctx.scale(scale, scale);
-	ctx.imageSmoothingEnabled = true;
-	ctx.imageSmoothingQuality = "high";
+	return {
+		totalHeight,
+		contentWidth,
+		textX,
+		textWidth,
+		mainTweet: {
+			textLines: mainTextLines,
+			textHeight: mainTextHeight,
+			mediaHeight: mainMediaHeight,
+			isVideo: mainMediaIsVideo,
+		},
+		quote: quoteLayout,
+		replyChain: replyChainItems,
+		totalReplyChainHeight,
+		hasMoreInChain: tweet.hasMoreInChain ?? false,
+	};
+}
 
+type DrawReplyChainParams = {
+	ctx: SKRSContext2D;
+	items: ReplyChainItem[];
+	hasMoreInChain: boolean;
+	startY: number;
+	colors: ThemeColors;
+	fontFamily: string;
+	replyToTextX: number;
+	replyToTextWidth: number;
+};
+
+async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
+	const {
+		ctx,
+		items,
+		hasMoreInChain,
+		startY,
+		colors,
+		fontFamily,
+		replyToTextX,
+		replyToTextWidth,
+	} = params;
+
+	let yOffset = startY;
+	const replyAvatarCenterX = LAYOUT.PADDING + REPLY_AVATAR_SIZE / 2;
+
+	if (hasMoreInChain) {
+		ctx.fillStyle = colors.border;
+		for (let i = 0; i < 3; i++) {
+			ctx.beginPath();
+			ctx.arc(
+				replyAvatarCenterX,
+				yOffset + 12 + (i - 1) * (DOT_SIZE + DOT_GAP),
+				DOT_SIZE / 2,
+				0,
+				Math.PI * 2
+			);
+			ctx.fill();
+		}
+		yOffset += DOTS_INDICATOR_HEIGHT;
+	}
+
+	for (const item of items) {
+		await drawAvatarWithFallback({
+			ctx,
+			url: item.tweet.authorAvatarUrl,
+			x: LAYOUT.PADDING,
+			y: yOffset,
+			size: REPLY_AVATAR_SIZE,
+			fallbackColor: colors.secondaryText,
+		});
+
+		drawAuthorInfo({
+			ctx,
+			name: item.tweet.authorName,
+			username: item.tweet.authorUsername,
+			x: replyToTextX,
+			y: yOffset,
+			fontSize: REPLY_FONT_SIZE_NAME,
+			fontFamily,
+			textColor: colors.text,
+			secondaryColor: colors.secondaryText,
+			inline: true,
+		});
+
+		const replyTextY = drawTextLines({
+			ctx,
+			lines: item.textLines,
+			x: replyToTextX,
+			startY: yOffset + REPLY_FONT_SIZE_NAME + LAYOUT.TEXT_GAP,
+			fontSize: REPLY_FONT_SIZE_TEXT,
+			lineHeight: LAYOUT.LINE_HEIGHT,
+			paragraphGap: LAYOUT.PARAGRAPH_GAP,
+			color: colors.text,
+			fontFamily,
+		});
+
+		const chainMedia = getFirstMedia(item.tweet.media);
+		if (chainMedia && item.mediaHeight > 0) {
+			const chainImageUrl =
+				chainMedia.type === "photo" ? chainMedia.url : chainMedia.thumbnailUrl;
+			await drawMediaBlock({
+				ctx,
+				imageUrl: chainImageUrl,
+				x: replyToTextX,
+				y: replyTextY + LAYOUT.AVATAR_GAP,
+				width: replyToTextWidth,
+				height: item.mediaHeight,
+				isVideo: item.isVideo,
+				backgroundColor: colors.background,
+				borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
+			});
+		}
+
+		const lineMargin = 4;
+		const lineStartY = yOffset + REPLY_AVATAR_SIZE + lineMargin;
+		const bottomGap =
+			item.mediaHeight > 0 ? LAYOUT.MEDIA_GAP : LAYOUT.AVATAR_GAP;
+		const lineEndY = yOffset + item.height - bottomGap / 2;
+
+		ctx.strokeStyle = colors.border;
+		ctx.lineWidth = REPLY_LINE_WIDTH;
+		ctx.beginPath();
+		ctx.moveTo(replyAvatarCenterX, lineStartY);
+		ctx.lineTo(replyAvatarCenterX, lineEndY);
+		ctx.stroke();
+
+		yOffset += item.height;
+	}
+
+	return yOffset;
+}
+
+type DrawQuoteTweetParams = {
+	ctx: SKRSContext2D;
+	quote: TweetData;
+	quoteLayout: NonNullable<TweetLayout["quote"]>;
+	x: number;
+	y: number;
+	contentWidth: number;
+	colors: ThemeColors;
+	fontFamily: string;
+};
+
+async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
+	const { ctx, quote, quoteLayout, x, y, contentWidth, colors, fontFamily } =
+		params;
+
+	ctx.strokeStyle = colors.border;
+	ctx.lineWidth = QUOTE_BORDER_WIDTH;
+	roundedRect({
+		ctx,
+		x,
+		y,
+		width: contentWidth,
+		height: quoteLayout.height,
+		radius: LAYOUT.MEDIA_BORDER_RADIUS,
+	});
+	ctx.stroke();
+
+	const quoteX = x + QUOTE_PADDING;
+	const quoteTextX = quoteX + QUOTE_AVATAR_SIZE + LAYOUT.AVATAR_GAP;
+	let quoteY = y + QUOTE_PADDING;
+
+	await drawAvatarWithFallback({
+		ctx,
+		url: quote.authorAvatarUrl,
+		x: quoteX,
+		y: quoteY,
+		size: QUOTE_AVATAR_SIZE,
+		fallbackColor: colors.secondaryText,
+	});
+
+	drawAuthorInfo({
+		ctx,
+		name: quote.authorName,
+		username: quote.authorUsername,
+		x: quoteTextX,
+		y: quoteY,
+		fontSize: QUOTE_FONT_SIZE_NAME,
+		fontFamily,
+		textColor: colors.text,
+		secondaryColor: colors.secondaryText,
+		inline: true,
+	});
+
+	quoteY = drawTextLines({
+		ctx,
+		lines: quoteLayout.textLines,
+		x: quoteTextX,
+		startY: quoteY + QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP,
+		fontSize: QUOTE_FONT_SIZE_TEXT,
+		lineHeight: LAYOUT.LINE_HEIGHT,
+		paragraphGap: LAYOUT.PARAGRAPH_GAP,
+		color: colors.text,
+		fontFamily,
+	});
+
+	const quoteMedia = getFirstMedia(quote.media);
+	if (quoteMedia && quoteLayout.mediaHeight > 0) {
+		const quoteImageUrl =
+			quoteMedia.type === "photo" ? quoteMedia.url : quoteMedia.thumbnailUrl;
+		await drawMediaBlock({
+			ctx,
+			imageUrl: quoteImageUrl,
+			x: quoteX,
+			y: quoteY + LAYOUT.AVATAR_GAP,
+			width: quoteLayout.contentWidth,
+			height: quoteLayout.mediaHeight,
+			isVideo: quoteLayout.isVideo,
+			backgroundColor: colors.background,
+			borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
+		});
+	}
+}
+
+type DrawCardBackgroundParams = {
+	ctx: SKRSContext2D;
+	totalHeight: number;
+	colors: ThemeColors;
+};
+
+function drawCardBackground(params: DrawCardBackgroundParams): void {
+	const { ctx, totalHeight, colors } = params;
 	const cardRadius = LAYOUT.MEDIA_BORDER_RADIUS;
 
 	ctx.fillStyle = colors.cardBackground;
@@ -263,364 +526,18 @@ export async function renderTweetImage(
 		radius: cardRadius,
 	});
 	ctx.stroke();
+}
 
-	let yOffset = LAYOUT.PADDING;
-	const replyAvatarCenterX = LAYOUT.PADDING + REPLY_AVATAR_SIZE / 2;
+type DrawStatsParams = {
+	ctx: SKRSContext2D;
+	tweet: TweetData;
+	y: number;
+	colors: ThemeColors;
+	fontFamily: string;
+};
 
-	if (replyChainItems.length > 0) {
-		if (tweet.hasMoreInChain) {
-			ctx.fillStyle = colors.border;
-			for (let i = 0; i < 3; i++) {
-				ctx.beginPath();
-				ctx.arc(
-					replyAvatarCenterX,
-					yOffset + 12 + (i - 1) * (DOT_SIZE + DOT_GAP),
-					DOT_SIZE / 2,
-					0,
-					Math.PI * 2
-				);
-				ctx.fill();
-			}
-			yOffset += DOTS_INDICATOR_HEIGHT;
-		}
-
-		for (const item of replyChainItems) {
-			try {
-				const replyAvatar = await loadImage(item.tweet.authorAvatarUrl);
-				drawCircularImage({
-					ctx,
-					image: replyAvatar,
-					x: LAYOUT.PADDING,
-					y: yOffset,
-					size: REPLY_AVATAR_SIZE,
-				});
-			} catch (error) {
-				logger.warn(
-					{ error, url: item.tweet.authorAvatarUrl },
-					"Failed to load reply avatar"
-				);
-				ctx.fillStyle = colors.secondaryText;
-				ctx.beginPath();
-				ctx.arc(
-					replyAvatarCenterX,
-					yOffset + REPLY_AVATAR_SIZE / 2,
-					REPLY_AVATAR_SIZE / 2,
-					0,
-					Math.PI * 2
-				);
-				ctx.fill();
-			}
-
-			ctx.fillStyle = colors.text;
-			ctx.font = `bold ${REPLY_FONT_SIZE_NAME}px ${fontFamily}`;
-			ctx.fillText(
-				item.tweet.authorName,
-				replyToTextX,
-				yOffset + REPLY_FONT_SIZE_NAME
-			);
-
-			ctx.fillStyle = colors.secondaryText;
-			ctx.font = `${REPLY_FONT_SIZE_NAME}px ${fontFamily}`;
-			const replyNameWidth = ctx.measureText(item.tweet.authorName).width;
-			ctx.fillText(
-				` @${item.tweet.authorUsername}`,
-				replyToTextX + replyNameWidth,
-				yOffset + REPLY_FONT_SIZE_NAME
-			);
-
-			let replyTextY = yOffset + REPLY_FONT_SIZE_NAME + 4;
-
-			ctx.fillStyle = colors.text;
-			ctx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
-			for (const line of item.textLines) {
-				ctx.fillText(
-					line.text,
-					replyToTextX,
-					replyTextY + REPLY_FONT_SIZE_TEXT
-				);
-				replyTextY += REPLY_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
-				if (line.isParagraphEnd) {
-					replyTextY += LAYOUT.PARAGRAPH_GAP;
-				}
-			}
-
-			const chainMedia = getFirstMedia(item.tweet.media);
-			if (chainMedia && item.mediaHeight > 0) {
-				replyTextY += LAYOUT.AVATAR_GAP;
-
-				try {
-					const chainImageUrl =
-						chainMedia.type === "photo"
-							? chainMedia.url
-							: chainMedia.thumbnailUrl;
-					const chainImage = await loadImage(chainImageUrl);
-
-					ctx.save();
-					roundedRect({
-						ctx,
-						x: replyToTextX,
-						y: replyTextY,
-						width: replyToTextWidth,
-						height: item.mediaHeight,
-						radius: LAYOUT.MEDIA_BORDER_RADIUS,
-					});
-					ctx.clip();
-
-					ctx.fillStyle = colors.background;
-					ctx.fillRect(
-						replyToTextX,
-						replyTextY,
-						replyToTextWidth,
-						item.mediaHeight
-					);
-
-					ctx.drawImage(
-						chainImage,
-						replyToTextX,
-						replyTextY,
-						replyToTextWidth,
-						item.mediaHeight
-					);
-					ctx.restore();
-
-					if (item.isVideo) {
-						drawPlayButton({
-							ctx,
-							centerX: replyToTextX + replyToTextWidth / 2,
-							centerY: replyTextY + item.mediaHeight / 2,
-						});
-					}
-				} catch (error) {
-					logger.warn({ error }, "Failed to load reply chain media image");
-				}
-			}
-
-			const lineMargin = 4;
-			const lineStartY = yOffset + REPLY_AVATAR_SIZE + lineMargin;
-			const bottomGap =
-				item.mediaHeight > 0 ? LAYOUT.MEDIA_GAP : LAYOUT.AVATAR_GAP;
-			const lineEndY = yOffset + item.height - bottomGap / 2;
-
-			ctx.strokeStyle = colors.border;
-			ctx.lineWidth = REPLY_LINE_WIDTH;
-			ctx.beginPath();
-			ctx.moveTo(replyAvatarCenterX, lineStartY);
-			ctx.lineTo(replyAvatarCenterX, lineEndY);
-			ctx.stroke();
-
-			yOffset += item.height;
-		}
-	}
-
-	try {
-		const avatar = await loadImage(tweet.authorAvatarUrl);
-		drawCircularImage({
-			ctx,
-			image: avatar,
-			x: LAYOUT.PADDING,
-			y: yOffset,
-			size: LAYOUT.AVATAR_SIZE,
-		});
-	} catch (error) {
-		logger.warn({ error, url: tweet.authorAvatarUrl }, "Failed to load avatar");
-		ctx.fillStyle = colors.secondaryText;
-		ctx.beginPath();
-		ctx.arc(
-			LAYOUT.PADDING + LAYOUT.AVATAR_SIZE / 2,
-			yOffset + LAYOUT.AVATAR_SIZE / 2,
-			LAYOUT.AVATAR_SIZE / 2,
-			0,
-			Math.PI * 2
-		);
-		ctx.fill();
-	}
-
-	ctx.fillStyle = colors.text;
-	ctx.font = `bold ${LAYOUT.FONT_SIZE_NAME}px ${fontFamily}`;
-	ctx.fillText(tweet.authorName, textX, yOffset + 18);
-
-	ctx.fillStyle = colors.secondaryText;
-	ctx.font = `${LAYOUT.FONT_SIZE_USERNAME}px ${fontFamily}`;
-	ctx.fillText(`@${tweet.authorUsername}`, textX, yOffset + 38);
-
-	yOffset += headerHeight + LAYOUT.AVATAR_GAP;
-
-	ctx.fillStyle = colors.text;
-	ctx.font = `${LAYOUT.FONT_SIZE_TEXT}px ${fontFamily}`;
-
-	for (const line of textLines) {
-		ctx.fillText(line.text, LAYOUT.PADDING, yOffset + LAYOUT.FONT_SIZE_TEXT);
-		yOffset += LAYOUT.FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
-		if (line.isParagraphEnd) {
-			yOffset += LAYOUT.PARAGRAPH_GAP;
-		}
-	}
-
-	if (mainMedia && mediaHeight > 0) {
-		yOffset += LAYOUT.AVATAR_GAP;
-
-		try {
-			const imageUrl =
-				mainMedia.type === "photo" ? mainMedia.url : mainMedia.thumbnailUrl;
-			const image = await loadImage(imageUrl);
-
-			ctx.save();
-			roundedRect({
-				ctx,
-				x: LAYOUT.PADDING,
-				y: yOffset,
-				width: contentWidth,
-				height: mediaHeight,
-				radius: LAYOUT.MEDIA_BORDER_RADIUS,
-			});
-			ctx.clip();
-
-			ctx.fillStyle = colors.background;
-			ctx.fillRect(LAYOUT.PADDING, yOffset, contentWidth, mediaHeight);
-
-			ctx.drawImage(image, LAYOUT.PADDING, yOffset, contentWidth, mediaHeight);
-			ctx.restore();
-
-			if (mainMediaIsVideo) {
-				drawPlayButton({
-					ctx,
-					centerX: LAYOUT.PADDING + contentWidth / 2,
-					centerY: yOffset + mediaHeight / 2,
-				});
-			}
-
-			yOffset += mediaHeight + mediaGapAfter;
-		} catch (error) {
-			logger.warn({ error }, "Failed to load media image");
-		}
-	}
-
-	if (tweet.quote && quoteHeight > 0) {
-		if (!mainMedia) {
-			yOffset += LAYOUT.AVATAR_GAP;
-		}
-
-		ctx.strokeStyle = colors.border;
-		ctx.lineWidth = QUOTE_BORDER_WIDTH;
-		roundedRect({
-			ctx,
-			x: LAYOUT.PADDING,
-			y: yOffset,
-			width: contentWidth,
-			height: quoteHeight,
-			radius: LAYOUT.MEDIA_BORDER_RADIUS,
-		});
-		ctx.stroke();
-
-		const quoteX = LAYOUT.PADDING + QUOTE_PADDING;
-		const quoteTextX = quoteX + QUOTE_AVATAR_SIZE + LAYOUT.AVATAR_GAP;
-		let quoteY = yOffset + QUOTE_PADDING;
-
-		try {
-			const quoteAvatar = await loadImage(tweet.quote.authorAvatarUrl);
-			drawCircularImage({
-				ctx,
-				image: quoteAvatar,
-				x: quoteX,
-				y: quoteY,
-				size: QUOTE_AVATAR_SIZE,
-			});
-		} catch (error) {
-			logger.warn(
-				{ error, url: tweet.quote.authorAvatarUrl },
-				"Failed to load quote avatar"
-			);
-			ctx.fillStyle = colors.secondaryText;
-			ctx.beginPath();
-			ctx.arc(
-				quoteX + QUOTE_AVATAR_SIZE / 2,
-				quoteY + QUOTE_AVATAR_SIZE / 2,
-				QUOTE_AVATAR_SIZE / 2,
-				0,
-				Math.PI * 2
-			);
-			ctx.fill();
-		}
-
-		ctx.fillStyle = colors.text;
-		ctx.font = `bold ${QUOTE_FONT_SIZE_NAME}px ${fontFamily}`;
-		const nameWidth = ctx.measureText(tweet.quote.authorName).width;
-		ctx.fillText(
-			tweet.quote.authorName,
-			quoteTextX,
-			quoteY + QUOTE_FONT_SIZE_NAME
-		);
-
-		ctx.fillStyle = colors.secondaryText;
-		ctx.font = `${QUOTE_FONT_SIZE_NAME}px ${fontFamily}`;
-		ctx.fillText(
-			` @${tweet.quote.authorUsername}`,
-			quoteTextX + nameWidth,
-			quoteY + QUOTE_FONT_SIZE_NAME
-		);
-
-		quoteY += QUOTE_FONT_SIZE_NAME + 4;
-
-		ctx.fillStyle = colors.text;
-		ctx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
-		for (const line of quoteTextLines) {
-			ctx.fillText(line.text, quoteTextX, quoteY + QUOTE_FONT_SIZE_TEXT);
-			quoteY += QUOTE_FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT;
-			if (line.isParagraphEnd) {
-				quoteY += LAYOUT.PARAGRAPH_GAP;
-			}
-		}
-
-		const quoteMedia = getFirstMedia(tweet.quote.media);
-		if (quoteMedia && quoteMediaHeight > 0) {
-			quoteY += LAYOUT.AVATAR_GAP;
-
-			try {
-				const quoteImageUrl =
-					quoteMedia.type === "photo"
-						? quoteMedia.url
-						: quoteMedia.thumbnailUrl;
-				const quoteImage = await loadImage(quoteImageUrl);
-
-				ctx.save();
-				roundedRect({
-					ctx,
-					x: quoteX,
-					y: quoteY,
-					width: quoteContentWidth,
-					height: quoteMediaHeight,
-					radius: LAYOUT.MEDIA_BORDER_RADIUS,
-				});
-				ctx.clip();
-
-				ctx.fillStyle = colors.background;
-				ctx.fillRect(quoteX, quoteY, quoteContentWidth, quoteMediaHeight);
-
-				ctx.drawImage(
-					quoteImage,
-					quoteX,
-					quoteY,
-					quoteContentWidth,
-					quoteMediaHeight
-				);
-				ctx.restore();
-
-				if (quoteMediaIsVideo) {
-					drawPlayButton({
-						ctx,
-						centerX: quoteX + quoteContentWidth / 2,
-						centerY: quoteY + quoteMediaHeight / 2,
-					});
-				}
-			} catch (error) {
-				logger.warn({ error }, "Failed to load quote media image");
-			}
-		}
-
-		yOffset += quoteHeight;
-	}
-
-	yOffset += LAYOUT.AVATAR_GAP;
+function drawStats(params: DrawStatsParams): void {
+	const { ctx, tweet, y, colors, fontFamily } = params;
 
 	ctx.fillStyle = colors.secondaryText;
 	ctx.font = `${LAYOUT.FONT_SIZE_STATS}px ${fontFamily}`;
@@ -632,22 +549,140 @@ export async function renderTweetImage(
 		`${formatNumber(tweet.likes)} likes`,
 	].filter((s): s is string => s !== null);
 
+	ctx.fillText(stats.join("  ·  "), LAYOUT.PADDING, y + LAYOUT.FONT_SIZE_STATS);
+}
+
+export async function renderTweetImage(
+	tweet: TweetData,
+	theme: Theme
+): Promise<RenderResult> {
+	registerFonts();
+
+	const colors = themes[theme];
+	const fontFamily = getFontFamily();
+
+	const layout = measureTweetLayout(tweet, fontFamily);
+
+	const mainMedia = getFirstMedia(tweet.media);
+	const replyToTextX = LAYOUT.PADDING + REPLY_AVATAR_SIZE + LAYOUT.AVATAR_GAP;
+	const replyToTextWidth =
+		layout.contentWidth - REPLY_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
+
+	const headerHeight = LAYOUT.AVATAR_SIZE;
+	const mediaGapAfter = LAYOUT.MEDIA_GAP_BOTTOM;
+
+	const scale = LAYOUT.SCALE_FACTOR;
+	const canvas = createCanvas(LAYOUT.WIDTH * scale, layout.totalHeight * scale);
+	const ctx = canvas.getContext("2d");
+	ctx.scale(scale, scale);
+	ctx.imageSmoothingEnabled = true;
+	ctx.imageSmoothingQuality = "high";
+
+	drawCardBackground({ ctx, totalHeight: layout.totalHeight, colors });
+
+	let yOffset: number = LAYOUT.PADDING;
+
+	if (layout.replyChain.length > 0) {
+		yOffset = await drawReplyChain({
+			ctx,
+			items: layout.replyChain,
+			hasMoreInChain: layout.hasMoreInChain,
+			startY: yOffset,
+			colors,
+			fontFamily,
+			replyToTextX,
+			replyToTextWidth,
+		});
+	}
+
+	await drawAvatarWithFallback({
+		ctx,
+		url: tweet.authorAvatarUrl,
+		x: LAYOUT.PADDING,
+		y: yOffset,
+		size: LAYOUT.AVATAR_SIZE,
+		fallbackColor: colors.secondaryText,
+	});
+
+	ctx.fillStyle = colors.text;
+	ctx.font = `bold ${LAYOUT.FONT_SIZE_NAME}px ${fontFamily}`;
+	ctx.fillText(tweet.authorName, layout.textX, yOffset + LAYOUT.NAME_OFFSET_Y);
+
+	ctx.fillStyle = colors.secondaryText;
+	ctx.font = `${LAYOUT.FONT_SIZE_USERNAME}px ${fontFamily}`;
 	ctx.fillText(
-		stats.join("  ·  "),
-		LAYOUT.PADDING,
-		yOffset + LAYOUT.FONT_SIZE_STATS
+		`@${tweet.authorUsername}`,
+		layout.textX,
+		yOffset + LAYOUT.USERNAME_OFFSET_Y
 	);
+
+	yOffset += headerHeight + LAYOUT.AVATAR_GAP;
+
+	yOffset = drawTextLines({
+		ctx,
+		lines: layout.mainTweet.textLines,
+		x: LAYOUT.PADDING,
+		startY: yOffset,
+		fontSize: LAYOUT.FONT_SIZE_TEXT,
+		lineHeight: LAYOUT.LINE_HEIGHT,
+		paragraphGap: LAYOUT.PARAGRAPH_GAP,
+		color: colors.text,
+		fontFamily,
+	});
+
+	if (mainMedia && layout.mainTweet.mediaHeight > 0) {
+		yOffset += LAYOUT.AVATAR_GAP;
+
+		const imageUrl =
+			mainMedia.type === "photo" ? mainMedia.url : mainMedia.thumbnailUrl;
+		await drawMediaBlock({
+			ctx,
+			imageUrl,
+			x: LAYOUT.PADDING,
+			y: yOffset,
+			width: layout.contentWidth,
+			height: layout.mainTweet.mediaHeight,
+			isVideo: layout.mainTweet.isVideo,
+			backgroundColor: colors.background,
+			borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
+		});
+
+		yOffset += layout.mainTweet.mediaHeight + mediaGapAfter;
+	}
+
+	if (tweet.quote && layout.quote) {
+		if (!mainMedia) {
+			yOffset += LAYOUT.AVATAR_GAP;
+		}
+
+		await drawQuoteTweet({
+			ctx,
+			quote: tweet.quote,
+			quoteLayout: layout.quote,
+			x: LAYOUT.PADDING,
+			y: yOffset,
+			contentWidth: layout.contentWidth,
+			colors,
+			fontFamily,
+		});
+
+		yOffset += layout.quote.height;
+	}
+
+	yOffset += LAYOUT.AVATAR_GAP;
+
+	drawStats({ ctx, tweet, y: yOffset, colors, fontFamily });
 
 	const buffer = canvas.toBuffer("image/jpeg", 100);
 
 	logger.debug(
-		{ width: LAYOUT.WIDTH, height: totalHeight, size: buffer.length },
+		{ width: LAYOUT.WIDTH, height: layout.totalHeight, size: buffer.length },
 		"Rendered tweet image"
 	);
 
 	return {
 		buffer,
 		width: LAYOUT.WIDTH * scale,
-		height: totalHeight * scale,
+		height: layout.totalHeight * scale,
 	};
 }

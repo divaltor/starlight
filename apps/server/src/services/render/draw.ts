@@ -1,4 +1,6 @@
 import type { Image, SKRSContext2D } from "@napi-rs/canvas";
+import { loadImage } from "@napi-rs/canvas";
+import { logger } from "@/logger";
 
 type RoundedRectParams = {
 	ctx: SKRSContext2D;
@@ -228,4 +230,169 @@ export function drawPlayButton(params: DrawPlayButtonParams): void {
 	ctx.fill();
 
 	ctx.restore();
+}
+
+type DrawAvatarParams = {
+	ctx: SKRSContext2D;
+	url: string;
+	x: number;
+	y: number;
+	size: number;
+	fallbackColor: string;
+};
+
+export async function drawAvatarWithFallback(
+	params: DrawAvatarParams
+): Promise<void> {
+	const { ctx, url, x, y, size, fallbackColor } = params;
+
+	try {
+		const avatar = await loadImage(url);
+		drawCircularImage({ ctx, image: avatar, x, y, size });
+	} catch (error) {
+		logger.warn({ error, url }, "Failed to load avatar");
+		ctx.fillStyle = fallbackColor;
+		ctx.beginPath();
+		ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+		ctx.fill();
+	}
+}
+
+type DrawMediaBlockParams = {
+	ctx: SKRSContext2D;
+	imageUrl: string;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	isVideo: boolean;
+	backgroundColor: string;
+	borderRadius: number;
+};
+
+export async function drawMediaBlock(
+	params: DrawMediaBlockParams
+): Promise<void> {
+	const {
+		ctx,
+		imageUrl,
+		x,
+		y,
+		width,
+		height,
+		isVideo,
+		backgroundColor,
+		borderRadius,
+	} = params;
+
+	try {
+		const image = await loadImage(imageUrl);
+
+		ctx.save();
+		roundedRect({ ctx, x, y, width, height, radius: borderRadius });
+		ctx.clip();
+
+		ctx.fillStyle = backgroundColor;
+		ctx.fillRect(x, y, width, height);
+
+		ctx.drawImage(image, x, y, width, height);
+		ctx.restore();
+
+		if (isVideo) {
+			drawPlayButton({
+				ctx,
+				centerX: x + width / 2,
+				centerY: y + height / 2,
+			});
+		}
+	} catch (error) {
+		logger.warn({ error, imageUrl }, "Failed to load media image");
+	}
+}
+
+type DrawAuthorInfoParams = {
+	ctx: SKRSContext2D;
+	name: string;
+	username: string;
+	x: number;
+	y: number;
+	fontSize: number;
+	fontFamily: string;
+	textColor: string;
+	secondaryColor: string;
+	inline?: boolean;
+};
+
+export function drawAuthorInfo(params: DrawAuthorInfoParams): void {
+	const {
+		ctx,
+		name,
+		username,
+		x,
+		y,
+		fontSize,
+		fontFamily,
+		textColor,
+		secondaryColor,
+		inline = true,
+	} = params;
+
+	ctx.fillStyle = textColor;
+	ctx.font = `bold ${fontSize}px ${fontFamily}`;
+
+	if (inline) {
+		const nameWidth = ctx.measureText(name).width;
+		ctx.fillText(name, x, y + fontSize);
+
+		ctx.fillStyle = secondaryColor;
+		ctx.font = `${fontSize}px ${fontFamily}`;
+		ctx.fillText(` @${username}`, x + nameWidth, y + fontSize);
+	} else {
+		ctx.fillText(name, x, y + fontSize);
+
+		ctx.fillStyle = secondaryColor;
+		ctx.font = `${fontSize}px ${fontFamily}`;
+		ctx.fillText(`@${username}`, x, y + fontSize + fontSize + 2);
+	}
+}
+
+type DrawTextLinesParams = {
+	ctx: SKRSContext2D;
+	lines: TextLine[];
+	x: number;
+	startY: number;
+	fontSize: number;
+	lineHeight: number;
+	paragraphGap: number;
+	color: string;
+	fontFamily: string;
+};
+
+export function drawTextLines(params: DrawTextLinesParams): number {
+	const {
+		ctx,
+		lines,
+		x,
+		startY,
+		fontSize,
+		lineHeight,
+		paragraphGap,
+		color,
+		fontFamily,
+	} = params;
+
+	let y = startY;
+
+	ctx.fillStyle = color;
+	ctx.font = `${fontSize}px ${fontFamily}`;
+
+	for (const line of lines) {
+		ctx.fillText(line.text, x, y + fontSize);
+		y += fontSize * lineHeight;
+		if (line.isParagraphEnd) {
+			y += paragraphGap;
+		}
+	}
+
+	return y;
 }
