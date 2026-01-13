@@ -1,4 +1,4 @@
-import { type SKRSContext2D, createCanvas } from "@napi-rs/canvas";
+import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
 import { format } from "date-fns";
 import { logger } from "@/logger";
 import {
@@ -65,6 +65,7 @@ type ReplyChainItem = {
 	height: number;
 	mediaHeight: number;
 	isVideo: boolean;
+	quoteLayout: TweetLayout["quote"];
 };
 
 type MediaItem =
@@ -216,6 +217,8 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 			totalReplyChainHeight += DOTS_INDICATOR_HEIGHT;
 		}
 
+		const chainQuoteContentWidth = replyToTextWidth - QUOTE_PADDING * 2;
+
 		for (const chainTweet of tweet.replyChain) {
 			measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
 			const chainTextLines = wrapText(
@@ -234,6 +237,48 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 			const { height: chainMediaHeight, isVideo: chainMediaIsVideo } =
 				calculateMediaHeight(chainMedia, replyToTextWidth);
 
+			let chainQuoteLayout: TweetLayout["quote"] = null;
+			if (chainTweet.quote) {
+				measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
+				const chainQuoteTextLines = wrapText(
+					measureCtx,
+					chainTweet.quote.text,
+					chainQuoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP
+				);
+				const chainQuoteTextHeight = calculateTextHeight(
+					chainQuoteTextLines,
+					QUOTE_FONT_SIZE_TEXT,
+					LAYOUT.LINE_HEIGHT,
+					LAYOUT.PARAGRAPH_GAP
+				);
+
+				const chainQuoteMedia = getFirstMedia(chainTweet.quote.media);
+				const {
+					height: chainQuoteMediaHeight,
+					isVideo: chainQuoteMediaIsVideo,
+				} = calculateMediaHeight(chainQuoteMedia, chainQuoteContentWidth);
+
+				const chainQuoteHeight = Math.floor(
+					QUOTE_PADDING * 2 +
+						Math.max(
+							QUOTE_AVATAR_SIZE,
+							QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + chainQuoteTextHeight
+						) +
+						(chainQuoteMediaHeight > 0
+							? LAYOUT.AVATAR_GAP + chainQuoteMediaHeight
+							: 0)
+				);
+
+				chainQuoteLayout = {
+					textLines: chainQuoteTextLines,
+					textHeight: chainQuoteTextHeight,
+					mediaHeight: chainQuoteMediaHeight,
+					isVideo: chainQuoteMediaIsVideo,
+					height: chainQuoteHeight,
+					contentWidth: chainQuoteContentWidth,
+				};
+			}
+
 			const itemHeight = Math.floor(
 				REPLY_AVATAR_SIZE +
 					LAYOUT.AVATAR_GAP +
@@ -246,7 +291,12 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 					) +
 					(chainMediaHeight > 0
 						? LAYOUT.AVATAR_GAP + chainMediaHeight + LAYOUT.MEDIA_GAP
-						: LAYOUT.AVATAR_GAP)
+						: 0) +
+					(chainQuoteLayout
+						? (chainMediaHeight > 0 ? 0 : LAYOUT.AVATAR_GAP) +
+							chainQuoteLayout.height
+						: 0) +
+					LAYOUT.AVATAR_GAP
 			);
 
 			replyChainItems.push({
@@ -255,6 +305,7 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 				height: itemHeight,
 				mediaHeight: chainMediaHeight,
 				isVideo: chainMediaIsVideo,
+				quoteLayout: chainQuoteLayout,
 			});
 			totalReplyChainHeight += itemHeight;
 		}
@@ -375,6 +426,7 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 			fontFamily,
 		});
 
+		let mediaEndY = replyTextY;
 		const chainMedia = getFirstMedia(item.tweet.media);
 		if (chainMedia && item.mediaHeight > 0) {
 			const chainImageUrl =
@@ -390,12 +442,33 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 				backgroundColor: colors.background,
 				borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
 			});
+			mediaEndY = replyTextY + LAYOUT.AVATAR_GAP + item.mediaHeight;
+		}
+
+		if (item.tweet.quote && item.quoteLayout) {
+			const quoteY =
+				chainMedia && item.mediaHeight > 0
+					? mediaEndY + LAYOUT.MEDIA_GAP
+					: replyTextY + LAYOUT.AVATAR_GAP;
+
+			await drawQuoteTweet({
+				ctx,
+				quote: item.tweet.quote,
+				quoteLayout: item.quoteLayout,
+				x: replyToTextX,
+				y: quoteY,
+				contentWidth: replyToTextWidth,
+				colors,
+				fontFamily,
+			});
 		}
 
 		const lineMargin = 4;
 		const lineStartY = yOffset + REPLY_AVATAR_SIZE + lineMargin;
 		const bottomGap =
-			item.mediaHeight > 0 ? LAYOUT.MEDIA_GAP : LAYOUT.AVATAR_GAP;
+			item.quoteLayout || item.mediaHeight > 0
+				? LAYOUT.MEDIA_GAP
+				: LAYOUT.AVATAR_GAP;
 		const lineEndY = yOffset + item.height - bottomGap / 2;
 
 		ctx.strokeStyle = colors.border;

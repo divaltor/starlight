@@ -22,7 +22,8 @@ type ReplyChainResult = {
 
 async function fetchReplyChain(
 	tweetId: string,
-	depth = 0
+	depth = 0,
+	childReplyingTo?: string
 ): Promise<ReplyChainResult> {
 	if (depth >= MAX_REPLY_CHAIN_DEPTH) {
 		return { chain: [], hasMore: true };
@@ -33,11 +34,15 @@ async function fetchReplyChain(
 		return { chain: [], hasMore: false };
 	}
 
+	const tweetText = childReplyingTo
+		? stripLeadingMention(tweet.text, childReplyingTo)
+		: tweet.text;
+
 	const tweetData: TweetData = {
 		authorName: tweet.author.name,
 		authorUsername: tweet.author.screen_name,
 		authorAvatarUrl: tweet.author.avatar_url,
-		text: tweet.text,
+		text: tweetText,
 		createdAt: new Date(tweet.created_timestamp * 1000),
 		media: tweet.media
 			? {
@@ -53,12 +58,36 @@ async function fetchReplyChain(
 		likes: tweet.likes,
 		retweets: tweet.retweets,
 		replies: tweet.replies,
+		quote: tweet.quote
+			? {
+					authorName: tweet.quote.author.name,
+					authorUsername: tweet.quote.author.screen_name,
+					authorAvatarUrl: tweet.quote.author.avatar_url,
+					text: tweet.quote.text,
+					createdAt: new Date(tweet.quote.created_timestamp * 1000),
+					media: tweet.quote.media
+						? {
+								photos: tweet.quote.media.photos,
+								videos: tweet.quote.media.videos?.map((v) => ({
+									thumbnailUrl: v.thumbnail_url,
+									width: v.width,
+									height: v.height,
+									type: v.type,
+								})),
+							}
+						: null,
+					likes: tweet.quote.likes,
+					retweets: tweet.quote.retweets,
+					replies: tweet.quote.replies,
+				}
+			: null,
 	};
 
 	if (tweet.replying_to_status) {
 		const parentResult = await fetchReplyChain(
 			tweet.replying_to_status,
-			depth + 1
+			depth + 1,
+			tweet.replying_to ?? undefined
 		);
 		return {
 			chain: [...parentResult.chain, tweetData],
