@@ -105,12 +105,17 @@ function isHashtagLine(text: string): boolean {
 	return words.length > 0 && words.every((word) => word.startsWith("#"));
 }
 
+function stripLeadingMentions(text: string): string {
+	return text.replace(/^(@\w+\s*)+/, "").trimStart();
+}
+
 export function wrapText(
 	ctx: SKRSContext2D,
 	text: string,
 	maxWidth: number
 ): TextLine[] {
-	const normalizedText = text.replace(/\n(#\S+(\s+#\S+)*\s*)$/, "\n\n$1");
+	const cleanedText = stripLeadingMentions(text);
+	const normalizedText = cleanedText.replace(/\n(#\S+(\s+#\S+)*\s*)$/, "\n\n$1");
 	const paragraphs = normalizedText.split(/\n\n+/);
 	const lines: TextLine[] = [];
 
