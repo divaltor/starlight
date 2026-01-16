@@ -105,6 +105,31 @@ function isHashtagLine(text: string): boolean {
 	return words.length > 0 && words.every((word) => word.startsWith("#"));
 }
 
+function breakLongWord(
+	ctx: SKRSContext2D,
+	word: string,
+	maxWidth: number
+): string[] {
+	const chunks: string[] = [];
+	let current = "";
+
+	for (const char of word) {
+		const test = current + char;
+		if (ctx.measureText(test).width > maxWidth && current) {
+			chunks.push(current);
+			current = char;
+		} else {
+			current = test;
+		}
+	}
+
+	if (current) {
+		chunks.push(current);
+	}
+
+	return chunks;
+}
+
 function stripLeadingMentions(text: string): string {
 	return text.replace(/^(@\w+\s*)+/, "").trimStart();
 }
@@ -137,6 +162,30 @@ export function wrapText(
 			let currentLine = "";
 
 			for (const word of words) {
+				const wordWidth = ctx.measureText(word).width;
+
+				if (wordWidth > maxWidth) {
+					if (currentLine) {
+						lines.push({ text: currentLine, isParagraphEnd: false });
+						currentLine = "";
+					}
+
+					const chunks = breakLongWord(ctx, word, maxWidth);
+					for (let i = 0; i < chunks.length; i++) {
+						const chunk = chunks[i];
+						if (!chunk) {
+							continue;
+						}
+
+						if (i < chunks.length - 1) {
+							lines.push({ text: chunk, isParagraphEnd: false });
+						} else {
+							currentLine = chunk;
+						}
+					}
+					continue;
+				}
+
 				const testLine = currentLine ? `${currentLine} ${word}` : word;
 				const metrics = ctx.measureText(testLine);
 
