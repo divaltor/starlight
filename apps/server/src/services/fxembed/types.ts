@@ -25,6 +25,23 @@ export type FxEmbedMedia = {
 	videos?: FxEmbedVideo[];
 };
 
+export type FxEmbedArticleCoverMedia = {
+	media_key: string;
+	media_id: string;
+	media_info: {
+		__typename: "ApiImage";
+		original_img_height: number;
+		original_img_width: number;
+		original_img_url: string;
+	};
+};
+
+export type FxEmbedArticle = {
+	title: string;
+	preview_text: string;
+	cover_media?: FxEmbedArticleCoverMedia;
+};
+
 export type FxEmbedTweet = {
 	id: string;
 	url: string;
@@ -37,6 +54,7 @@ export type FxEmbedTweet = {
 	replies: number;
 	views?: number;
 	media?: FxEmbedMedia;
+	article?: FxEmbedArticle;
 	quote?: FxEmbedTweet;
 	replying_to?: string | null;
 	replying_to_status?: string | null;

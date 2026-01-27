@@ -1,12 +1,34 @@
 import { logger } from "@/logger";
 import { fetchTweet } from "@/services/fxembed/fxembed.service";
+import type { FxEmbedArticle } from "@/services/fxembed/types";
 import {
+	type ArticleData,
 	type RenderResult,
 	renderTweetImage,
 	type TweetData,
 } from "@/services/render";
 
 export type Theme = "light" | "dark";
+
+function mapArticleData(
+	article: FxEmbedArticle | undefined
+): ArticleData | null {
+	if (!article) {
+		return null;
+	}
+
+	return {
+		title: article.title,
+		previewText: article.preview_text,
+		coverMedia: article.cover_media
+			? {
+					url: article.cover_media.media_info.original_img_url,
+					width: article.cover_media.media_info.original_img_width,
+					height: article.cover_media.media_info.original_img_height,
+				}
+			: null,
+	};
+}
 
 function stripLeadingMention(text: string, username: string): string {
 	const mentionPattern = new RegExp(`^@${username}\\s*`, "i");
@@ -55,6 +77,7 @@ async function fetchReplyChain(
 					})),
 				}
 			: null,
+		article: mapArticleData(tweet.article),
 		likes: tweet.likes,
 		retweets: tweet.retweets,
 		replies: tweet.replies,
@@ -76,6 +99,7 @@ async function fetchReplyChain(
 								})),
 							}
 						: null,
+					article: mapArticleData(tweet.quote.article),
 					likes: tweet.quote.likes,
 					retweets: tweet.quote.retweets,
 					replies: tweet.quote.replies,
@@ -139,6 +163,7 @@ export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 					})),
 				}
 			: null,
+		article: mapArticleData(tweet.article),
 		likes: tweet.likes,
 		retweets: tweet.retweets,
 		replies: tweet.replies,
@@ -162,6 +187,7 @@ export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 								})),
 							}
 						: null,
+					article: mapArticleData(tweet.quote.article),
 					likes: tweet.quote.likes,
 					retweets: tweet.quote.retweets,
 					replies: tweet.quote.replies,

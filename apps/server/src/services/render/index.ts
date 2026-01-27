@@ -16,6 +16,18 @@ import { type Theme, type ThemeColors, themes } from "./themes";
 
 export type { Theme } from "./themes";
 
+export type ArticleCoverMedia = {
+	url: string;
+	width: number;
+	height: number;
+};
+
+export type ArticleData = {
+	title: string;
+	previewText: string;
+	coverMedia?: ArticleCoverMedia | null;
+};
+
 export type TweetData = {
 	authorName: string;
 	authorUsername: string;
@@ -31,6 +43,7 @@ export type TweetData = {
 			type: "video" | "gif";
 		}>;
 	} | null;
+	article?: ArticleData | null;
 	likes?: number | null;
 	retweets?: number | null;
 	replies?: number | null;
@@ -59,6 +72,11 @@ const DOTS_INDICATOR_HEIGHT = 32;
 const DOT_SIZE = 4;
 const DOT_GAP = 6;
 
+const ARTICLE_PADDING = 12;
+const ARTICLE_BORDER_WIDTH = 1;
+const ARTICLE_TITLE_FONT_SIZE = 15;
+const ARTICLE_PREVIEW_FONT_SIZE = 14;
+
 type ReplyChainItem = {
 	tweet: TweetData;
 	textLines: ReturnType<typeof wrapText>;
@@ -77,6 +95,15 @@ type MediaItem =
 			height: number;
 	  };
 
+type ArticleLayout = {
+	titleLines: ReturnType<typeof wrapText>;
+	previewLines: ReturnType<typeof wrapText>;
+	height: number;
+	contentWidth: number;
+	coverMedia: ArticleCoverMedia | null;
+	coverMediaHeight: number;
+};
+
 type TweetLayout = {
 	totalHeight: number;
 	contentWidth: number;
@@ -88,6 +115,7 @@ type TweetLayout = {
 		textHeight: number;
 		mediaHeight: number;
 		isVideo: boolean;
+		articleLayout: ArticleLayout | null;
 	};
 
 	quote: {
@@ -97,6 +125,7 @@ type TweetLayout = {
 		isVideo: boolean;
 		height: number;
 		contentWidth: number;
+		articleLayout: ArticleLayout | null;
 	} | null;
 
 	replyChain: ReplyChainItem[];
@@ -147,6 +176,61 @@ function calculateMediaHeight(
 	return { height, isVideo };
 }
 
+function calculateArticleLayout(
+	ctx: SKRSContext2D,
+	article: ArticleData | null | undefined,
+	containerWidth: number,
+	fontFamily: string
+): ArticleLayout | null {
+	if (!article) {
+		return null;
+	}
+
+	const articleContentWidth = containerWidth - ARTICLE_PADDING * 2;
+
+	let coverMediaHeight = 0;
+	const coverMedia = article.coverMedia ?? null;
+	if (coverMedia) {
+		const aspectRatio = coverMedia.width / coverMedia.height;
+		coverMediaHeight = Math.floor(containerWidth / aspectRatio);
+	}
+
+	ctx.font = `bold ${ARTICLE_TITLE_FONT_SIZE}px ${fontFamily}`;
+	const titleLines = wrapText(ctx, article.title, articleContentWidth);
+	const titleHeight = calculateTextHeight(
+		titleLines,
+		ARTICLE_TITLE_FONT_SIZE,
+		LAYOUT.LINE_HEIGHT,
+		0
+	);
+
+	ctx.font = `${ARTICLE_PREVIEW_FONT_SIZE}px ${fontFamily}`;
+	const previewLines = wrapText(ctx, article.previewText, articleContentWidth);
+	const previewHeight = calculateTextHeight(
+		previewLines,
+		ARTICLE_PREVIEW_FONT_SIZE,
+		LAYOUT.LINE_HEIGHT,
+		0
+	);
+
+	const height = Math.floor(
+		(coverMediaHeight > 0 ? coverMediaHeight : 0) +
+			ARTICLE_PADDING * 2 +
+			titleHeight +
+			LAYOUT.TEXT_GAP +
+			previewHeight
+	);
+
+	return {
+		titleLines,
+		previewLines,
+		height,
+		contentWidth: articleContentWidth,
+		coverMedia,
+		coverMediaHeight,
+	};
+}
+
 function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 	const contentWidth = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
 	const textX = LAYOUT.PADDING + LAYOUT.AVATAR_SIZE + LAYOUT.AVATAR_GAP;
@@ -169,6 +253,13 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 	const { height: mainMediaHeight, isVideo: mainMediaIsVideo } =
 		calculateMediaHeight(mainMedia, contentWidth);
 
+	const mainArticleLayout = calculateArticleLayout(
+		measureCtx,
+		tweet.article,
+		contentWidth,
+		fontFamily
+	);
+
 	let quoteLayout: TweetLayout["quote"] = null;
 	const quoteContentWidth = contentWidth - QUOTE_PADDING * 2;
 
@@ -190,13 +281,21 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 		const { height: quoteMediaHeight, isVideo: quoteMediaIsVideo } =
 			calculateMediaHeight(quoteMedia, quoteContentWidth);
 
+		const quoteArticleLayout = calculateArticleLayout(
+			measureCtx,
+			tweet.quote.article,
+			quoteContentWidth,
+			fontFamily
+		);
+
 		const quoteHeight = Math.floor(
 			QUOTE_PADDING * 2 +
 				Math.max(
 					QUOTE_AVATAR_SIZE,
 					QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + quoteTextHeight
 				) +
-				(quoteMediaHeight > 0 ? LAYOUT.AVATAR_GAP + quoteMediaHeight : 0)
+				(quoteMediaHeight > 0 ? LAYOUT.AVATAR_GAP + quoteMediaHeight : 0) +
+				(quoteArticleLayout ? LAYOUT.AVATAR_GAP + quoteArticleLayout.height : 0)
 		);
 
 		quoteLayout = {
@@ -206,6 +305,7 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 			isVideo: quoteMediaIsVideo,
 			height: quoteHeight,
 			contentWidth: quoteContentWidth,
+			articleLayout: quoteArticleLayout,
 		};
 	}
 
@@ -258,6 +358,13 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 					isVideo: chainQuoteMediaIsVideo,
 				} = calculateMediaHeight(chainQuoteMedia, chainQuoteContentWidth);
 
+				const chainQuoteArticleLayout = calculateArticleLayout(
+					measureCtx,
+					chainTweet.quote.article,
+					chainQuoteContentWidth,
+					fontFamily
+				);
+
 				const chainQuoteHeight = Math.floor(
 					QUOTE_PADDING * 2 +
 						Math.max(
@@ -266,6 +373,9 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 						) +
 						(chainQuoteMediaHeight > 0
 							? LAYOUT.AVATAR_GAP + chainQuoteMediaHeight
+							: 0) +
+						(chainQuoteArticleLayout
+							? LAYOUT.AVATAR_GAP + chainQuoteArticleLayout.height
 							: 0)
 				);
 
@@ -276,6 +386,7 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 					isVideo: chainQuoteMediaIsVideo,
 					height: chainQuoteHeight,
 					contentWidth: chainQuoteContentWidth,
+					articleLayout: chainQuoteArticleLayout,
 				};
 			}
 
@@ -315,6 +426,8 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 	const statsHeight = LAYOUT.STATS_HEIGHT;
 	const mediaGapAfter = LAYOUT.MEDIA_GAP_BOTTOM;
 
+	const hasMainMediaOrArticle = mainMediaHeight > 0 || mainArticleLayout;
+
 	const totalHeight =
 		LAYOUT.PADDING +
 		totalReplyChainHeight +
@@ -324,8 +437,11 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 		(mainMediaHeight > 0
 			? LAYOUT.AVATAR_GAP + mainMediaHeight + mediaGapAfter
 			: 0) +
+		(mainArticleLayout
+			? LAYOUT.AVATAR_GAP + mainArticleLayout.height + mediaGapAfter
+			: 0) +
 		(quoteLayout
-			? (mainMediaHeight > 0 ? 0 : LAYOUT.AVATAR_GAP) + quoteLayout.height
+			? (hasMainMediaOrArticle ? 0 : LAYOUT.AVATAR_GAP) + quoteLayout.height
 			: 0) +
 		LAYOUT.AVATAR_GAP +
 		statsHeight +
@@ -341,6 +457,7 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 			textHeight: mainTextHeight,
 			mediaHeight: mainMediaHeight,
 			isVideo: mainMediaIsVideo,
+			articleLayout: mainArticleLayout,
 		},
 		quote: quoteLayout,
 		replyChain: replyChainItems,
@@ -484,6 +601,81 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 	return yOffset;
 }
 
+type DrawArticleBlockParams = {
+	ctx: SKRSContext2D;
+	articleLayout: ArticleLayout;
+	x: number;
+	y: number;
+	containerWidth: number;
+	colors: ThemeColors;
+	fontFamily: string;
+};
+
+async function drawArticleBlock(params: DrawArticleBlockParams): Promise<void> {
+	const { ctx, articleLayout, x, y, containerWidth, colors, fontFamily } =
+		params;
+
+	ctx.strokeStyle = colors.border;
+	ctx.lineWidth = ARTICLE_BORDER_WIDTH;
+	roundedRect({
+		ctx,
+		x,
+		y,
+		width: containerWidth,
+		height: articleLayout.height,
+		radius: LAYOUT.MEDIA_BORDER_RADIUS,
+	});
+	ctx.stroke();
+
+	let contentY = y;
+
+	if (articleLayout.coverMedia && articleLayout.coverMediaHeight > 0) {
+		await drawMediaBlock({
+			ctx,
+			imageUrl: articleLayout.coverMedia.url,
+			x,
+			y: contentY,
+			width: containerWidth,
+			height: articleLayout.coverMediaHeight,
+			isVideo: false,
+			backgroundColor: colors.background,
+			borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
+		});
+		contentY += articleLayout.coverMediaHeight;
+	}
+
+	const contentX = x + ARTICLE_PADDING;
+	contentY += ARTICLE_PADDING;
+
+	ctx.fillStyle = colors.text;
+	ctx.font = `bold ${ARTICLE_TITLE_FONT_SIZE}px ${fontFamily}`;
+	contentY = drawTextLines({
+		ctx,
+		lines: articleLayout.titleLines,
+		x: contentX,
+		startY: contentY,
+		fontSize: ARTICLE_TITLE_FONT_SIZE,
+		lineHeight: LAYOUT.LINE_HEIGHT,
+		paragraphGap: 0,
+		color: colors.text,
+		fontFamily,
+	});
+
+	contentY += LAYOUT.TEXT_GAP;
+
+	drawTextLines({
+		ctx,
+		lines: articleLayout.previewLines,
+		x: contentX,
+		startY: contentY,
+		fontSize: ARTICLE_PREVIEW_FONT_SIZE,
+		lineHeight: LAYOUT.LINE_HEIGHT,
+		paragraphGap: 0,
+		color: colors.secondaryText,
+		fontFamily,
+	});
+}
+
 type DrawQuoteTweetParams = {
 	ctx: SKRSContext2D;
 	quote: TweetData;
@@ -563,6 +755,19 @@ async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
 			isVideo: quoteLayout.isVideo,
 			backgroundColor: colors.background,
 			borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
+		});
+		quoteY += LAYOUT.AVATAR_GAP + quoteLayout.mediaHeight;
+	}
+
+	if (quoteLayout.articleLayout) {
+		await drawArticleBlock({
+			ctx,
+			articleLayout: quoteLayout.articleLayout,
+			x: quoteX,
+			y: quoteY + LAYOUT.AVATAR_GAP,
+			containerWidth: quoteLayout.contentWidth,
+			colors,
+			fontFamily,
 		});
 	}
 }
@@ -723,8 +928,26 @@ export async function renderTweetImage(
 		yOffset += layout.mainTweet.mediaHeight + mediaGapAfter;
 	}
 
+	if (layout.mainTweet.articleLayout) {
+		yOffset += LAYOUT.AVATAR_GAP;
+
+		await drawArticleBlock({
+			ctx,
+			articleLayout: layout.mainTweet.articleLayout,
+			x: LAYOUT.PADDING,
+			y: yOffset,
+			containerWidth: layout.contentWidth,
+			colors,
+			fontFamily,
+		});
+
+		yOffset += layout.mainTweet.articleLayout.height + mediaGapAfter;
+	}
+
+	const hasMainMediaOrArticle = mainMedia || layout.mainTweet.articleLayout;
+
 	if (tweet.quote && layout.quote) {
-		if (!mainMedia) {
+		if (!hasMainMediaOrArticle) {
 			yOffset += LAYOUT.AVATAR_GAP;
 		}
 
