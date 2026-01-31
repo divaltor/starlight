@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { logger } from "@/logger";
 import { fetchTweet } from "@/services/fxembed/fxembed.service";
 import type { FxEmbedArticle } from "@/services/fxembed/types";
@@ -7,6 +8,7 @@ import {
 	renderTweetImage,
 	type TweetData,
 } from "@/services/render";
+import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";
 
@@ -200,9 +202,50 @@ export async function generateTweetImage(
 	tweetId: string,
 	theme: Theme = "light"
 ): Promise<TweetImageResult> {
+	const s3Path = `tweets/${tweetId}/${theme}.jpg`;
+	const s3File = s3.file(s3Path);
+
+	try {
+		if (await s3File.exists()) {
+			logger.debug(
+				{ tweetId, theme, s3Path },
+				"Found cached tweet image in S3"
+			);
+
+			const cachedBuffer = Buffer.from(await s3File.arrayBuffer());
+			const metadata = await sharp(cachedBuffer).metadata();
+
+			return {
+				buffer: cachedBuffer,
+				width: metadata.width ?? 1100,
+				height: metadata.height ?? 1200,
+			};
+		}
+	} catch (error) {
+		logger.warn(
+			{ error, tweetId, theme, s3Path },
+			"Failed to read cached image from S3, falling back to API"
+		);
+	}
+
 	const tweetData = await prepareTweetData(tweetId);
 
 	logger.debug({ tweetId, theme }, "Rendering tweet image");
 
-	return renderTweetImage(tweetData, theme);
+	const result = await renderTweetImage(tweetData, theme);
+
+	try {
+		await s3.write(s3Path, result.buffer, { type: "image/jpeg" });
+		logger.debug(
+			{ tweetId, theme, s3Path },
+			"Uploaded rendered tweet image to S3"
+		);
+	} catch (error) {
+		logger.warn(
+			{ error, tweetId, theme, s3Path },
+			"Failed to upload rendered image to S3"
+		);
+	}
+
+	return result;
 }
