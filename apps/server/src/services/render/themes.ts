@@ -12,7 +12,7 @@ export type ThemeColors = {
 export const themes: Record<Theme, ThemeColors> = {
 	light: {
 		background: "#ffffff",
-		cardBackground: "#f7f9f9",
+		cardBackground: "#FAF4ED",
 		text: "#0f1419",
 		secondaryText: "#536471",
 		accent: "#1d9bf0",
