@@ -281,6 +281,22 @@ feature.callbackQuery(/^video:remove_desc:(.+)$/, async (ctx) => {
 	}
 });
 
+feature.on(":video", async (ctx) => {
+	const fileUniqueId = ctx.msg.video.file_unique_id;
+
+	const video = await prisma.video.findFirst({
+		where: { telegramFileUniqueId: fileUniqueId },
+		orderBy: { createdAt: "desc" },
+	});
+
+	if (!video) {
+		await ctx.reply("Can't find a source, sorry.");
+		return;
+	}
+
+	await ctx.reply(`https://x.com/i/status/${video.tweetId}`);
+});
+
 composer.command("source").filter(
 	(ctx) =>
 		ctx.msg.reply_to_message === undefined ||
