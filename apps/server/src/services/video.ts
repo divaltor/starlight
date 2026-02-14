@@ -45,6 +45,29 @@ async function createVideoInformation(
 
 const youtubedl = create(env.YOUTUBE_DL_PATH);
 
+export async function downloadVideoFromUrl(
+	url: string,
+	folder: string,
+	metadata: VideoMetadata = {}
+): Promise<VideoInformation> {
+	// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
+	const uuid = Bun.randomUUIDv7();
+	const filePath = path.join(folder, `${uuid}.mp4`);
+
+	logger.debug("Downloading video directly from URL %s", url);
+
+	const response = await fetch(url);
+
+	if (!response.ok || !response.body) {
+		throw new Error(`Failed to download video from ${url}: ${response.status}`);
+	}
+
+	// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
+	await Bun.write(filePath, response);
+
+	return { filePath, metadata };
+}
+
 export async function downloadVideo(
 	url: string,
 	folder: string

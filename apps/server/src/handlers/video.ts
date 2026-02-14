@@ -5,7 +5,11 @@ import tmp from "tmp";
 import { fetchTweet } from "@/services/fxembed/fxembed.service";
 import type { FxEmbedTweet } from "@/services/fxembed/types";
 import { generateTweetImage } from "@/services/tweet/tweet-image.service";
-import { downloadVideo, type VideoInformation } from "@/services/video";
+import {
+	downloadVideo,
+	downloadVideoFromUrl,
+	type VideoInformation,
+} from "@/services/video";
 import type { Context } from "@/types";
 
 const composer = new Composer<Context>();
@@ -92,11 +96,32 @@ feature.on(":text").filter(
 				if (downloadResult.status === "fulfilled") {
 					videos = downloadResult.value;
 				} else {
-					videoDownloadFailed = true;
 					ctx.logger.warn(
 						{ error: downloadResult.reason },
-						"Video download failed, checking if tweet has media"
+						"yt-dlp download failed, trying fxtwitter API fallback"
 					);
+
+					const apiVideos = tweet?.media?.videos;
+					if (apiVideos && apiVideos.length > 0) {
+						try {
+							for (const apiVideo of apiVideos) {
+								const info = await downloadVideoFromUrl(
+									apiVideo.url,
+									tempDir.name,
+									{ width: apiVideo.width, height: apiVideo.height }
+								);
+								videos.push(info);
+							}
+						} catch (fallbackError) {
+							ctx.logger.error(
+								{ error: fallbackError },
+								"Fallback video download also failed"
+							);
+							videoDownloadFailed = true;
+						}
+					} else {
+						videoDownloadFailed = true;
+					}
 				}
 			} else {
 				videos = await downloadVideo(link, tempDir.name);
