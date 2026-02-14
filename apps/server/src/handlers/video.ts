@@ -1,4 +1,4 @@
-/** biome-ignore-all lint/correctness/noUndeclaredVariables: <explanation> */
+/** biome-ignore-all lint/correctness/noUndeclaredVariables: Global Bun */
 import { cleanupTweetText, extractTweetId, prisma } from "@starlight/utils";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
@@ -109,8 +109,7 @@ feature.on(":text").filter(
 		}
 
 		if (isTwitterLink && videoDownloadFailed && videos.length === 0) {
-			const hasVideo =
-				tweet?.media?.videos && tweet.media.videos.length > 0;
+			const hasVideo = tweet?.media?.videos && tweet.media.videos.length > 0;
 
 			if (!hasVideo && tweet) {
 				ctx.logger.info(
