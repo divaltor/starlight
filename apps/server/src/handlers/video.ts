@@ -12,15 +12,37 @@ const composer = new Composer<Context>();
 
 const feature = composer.chatType("private");
 
+function buildCaption(
+	tweetText: string | undefined | null,
+	tweetId: string | null,
+	hasDescription: boolean,
+	hasSource: boolean
+): string | undefined {
+	const parts: string[] = [];
+	if (hasDescription && tweetText) {
+		parts.push(tweetText);
+	}
+	if (hasSource && tweetId) {
+		parts.push(`[Source](https://x.com/i/status/${tweetId})`);
+	}
+	return parts.length > 0 ? parts.join("\n\n") : undefined;
+}
+
 function createVideoKeyboard(
 	videoId: string,
-	hasDescription: boolean
+	hasDescription: boolean,
+	hasSource: boolean
 ): InlineKeyboard {
 	const keyboard = new InlineKeyboard();
 	if (hasDescription) {
 		keyboard.text("Remove description", `video:remove_desc:${videoId}`);
 	} else {
 		keyboard.text("Add description", `video:add_desc:${videoId}`);
+	}
+	if (hasSource) {
+		keyboard.text("Remove source", `video:remove_source:${videoId}`);
+	} else {
+		keyboard.text("Source", `video:add_source:${videoId}`);
 	}
 	return keyboard;
 }
@@ -58,7 +80,7 @@ feature.on(":text").filter(
 						height: existingVideo.height ?? undefined,
 						supports_streaming: true,
 						reply_markup: existingVideo.tweetText
-							? createVideoKeyboard(existingVideo.id, false)
+							? createVideoKeyboard(existingVideo.id, false, false)
 							: undefined,
 					});
 
@@ -155,7 +177,7 @@ feature.on(":text").filter(
 						height: video.metadata?.height,
 						supports_streaming: true,
 						reply_markup: cleanedText
-							? createVideoKeyboard(videoId, false)
+							? createVideoKeyboard(videoId, false, false)
 							: undefined,
 					}
 				);
@@ -215,10 +237,15 @@ feature.callbackQuery(/^video:add_desc:(.+)$/, async (ctx) => {
 		return;
 	}
 
+	const currentCaption = ctx.callbackQuery.message?.caption ?? "";
+	const hasSource = currentCaption.includes("[Source](");
+
 	try {
+		const caption = buildCaption(video.tweetText, video.tweetId, true, hasSource);
 		await ctx.editMessageCaption({
-			caption: video.tweetText ?? undefined,
-			reply_markup: createVideoKeyboard(videoId, true),
+			caption,
+			parse_mode: hasSource ? "MarkdownV2" : undefined,
+			reply_markup: createVideoKeyboard(videoId, true, hasSource),
 		});
 	} catch (error) {
 		if (error instanceof GrammyError) {
@@ -227,12 +254,14 @@ feature.callbackQuery(/^video:add_desc:(.+)$/, async (ctx) => {
 				"Failed to edit message, resending video"
 			);
 
+			const caption = buildCaption(video.tweetText, video.tweetId, true, hasSource);
 			await ctx.replyWithVideo(video.telegramFileId, {
 				width: video.width ?? undefined,
 				height: video.height ?? undefined,
 				supports_streaming: true,
-				caption: video.tweetText ?? undefined,
-				reply_markup: createVideoKeyboard(videoId, true),
+				caption,
+				parse_mode: hasSource ? "MarkdownV2" : undefined,
+				reply_markup: createVideoKeyboard(videoId, true, hasSource),
 			});
 		} else {
 			throw error;
@@ -258,10 +287,15 @@ feature.callbackQuery(/^video:remove_desc:(.+)$/, async (ctx) => {
 		return;
 	}
 
+	const currentCaption = ctx.callbackQuery.message?.caption ?? "";
+	const hasSource = currentCaption.includes("[Source](");
+
 	try {
+		const caption = buildCaption(video.tweetText, video.tweetId, false, hasSource);
 		await ctx.editMessageCaption({
-			caption: undefined,
-			reply_markup: createVideoKeyboard(videoId, false),
+			caption,
+			parse_mode: hasSource ? "MarkdownV2" : undefined,
+			reply_markup: createVideoKeyboard(videoId, false, hasSource),
 		});
 	} catch (error) {
 		if (error instanceof GrammyError) {
@@ -270,11 +304,113 @@ feature.callbackQuery(/^video:remove_desc:(.+)$/, async (ctx) => {
 				"Failed to edit message, resending video"
 			);
 
+			const caption = buildCaption(video.tweetText, video.tweetId, false, hasSource);
 			await ctx.replyWithVideo(video.telegramFileId, {
 				width: video.width ?? undefined,
 				height: video.height ?? undefined,
 				supports_streaming: true,
-				reply_markup: createVideoKeyboard(videoId, false),
+				caption,
+				parse_mode: hasSource ? "MarkdownV2" : undefined,
+				reply_markup: createVideoKeyboard(videoId, false, hasSource),
+			});
+		} else {
+			throw error;
+		}
+	}
+});
+
+// Callback query handler for adding source
+feature.callbackQuery(/^video:add_source:(.+)$/, async (ctx) => {
+	await ctx.answerCallbackQuery();
+
+	const videoId = ctx.match[1];
+
+	if (!videoId) {
+		return;
+	}
+
+	const video = await prisma.video.findUnique({
+		where: { id: videoId },
+	});
+
+	if (!video) {
+		return;
+	}
+
+	const currentCaption = ctx.callbackQuery.message?.caption ?? "";
+	const hasDescription = currentCaption.length > 0 && !currentCaption.startsWith("[Source](");
+
+	try {
+		const caption = buildCaption(video.tweetText, video.tweetId, hasDescription, true);
+		await ctx.editMessageCaption({
+			caption,
+			parse_mode: "MarkdownV2",
+			reply_markup: createVideoKeyboard(videoId, hasDescription, true),
+		});
+	} catch (error) {
+		if (error instanceof GrammyError) {
+			ctx.logger.warn(
+				{ error, videoId },
+				"Failed to edit message, resending video"
+			);
+
+			const caption = buildCaption(video.tweetText, video.tweetId, hasDescription, true);
+			await ctx.replyWithVideo(video.telegramFileId, {
+				width: video.width ?? undefined,
+				height: video.height ?? undefined,
+				supports_streaming: true,
+				caption,
+				parse_mode: "MarkdownV2",
+				reply_markup: createVideoKeyboard(videoId, hasDescription, true),
+			});
+		} else {
+			throw error;
+		}
+	}
+});
+
+// Callback query handler for removing source
+feature.callbackQuery(/^video:remove_source:(.+)$/, async (ctx) => {
+	await ctx.answerCallbackQuery();
+
+	const videoId = ctx.match[1];
+
+	if (!videoId) {
+		return;
+	}
+
+	const video = await prisma.video.findUnique({
+		where: { id: videoId },
+	});
+
+	if (!video) {
+		return;
+	}
+
+	const currentCaption = ctx.callbackQuery.message?.caption ?? "";
+	const hasDescription =
+		currentCaption.replace(/\n\n?\[Source\]\(.*?\)/, "").trim().length > 0;
+
+	try {
+		const caption = buildCaption(video.tweetText, video.tweetId, hasDescription, false);
+		await ctx.editMessageCaption({
+			caption,
+			reply_markup: createVideoKeyboard(videoId, hasDescription, false),
+		});
+	} catch (error) {
+		if (error instanceof GrammyError) {
+			ctx.logger.warn(
+				{ error, videoId },
+				"Failed to edit message, resending video"
+			);
+
+			const caption = buildCaption(video.tweetText, video.tweetId, hasDescription, false);
+			await ctx.replyWithVideo(video.telegramFileId, {
+				width: video.width ?? undefined,
+				height: video.height ?? undefined,
+				supports_streaming: true,
+				caption,
+				reply_markup: createVideoKeyboard(videoId, hasDescription, false),
 			});
 		} else {
 			throw error;
