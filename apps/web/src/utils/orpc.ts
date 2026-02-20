@@ -11,6 +11,7 @@ import {
 	QueryClient,
 } from "@tanstack/react-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { retrieveRawInitData } from "@telegram-apps/sdk-react";
 
 const serializer = new StandardRPCJsonSerializer({
@@ -48,7 +49,10 @@ export const queryClient = createQueryClient();
 const getORPCClient = createIsomorphicFn()
 	.server(() =>
 		createRouterClient(appRouter, {
-			context: async ({ context }) => createContext({ context }),
+			context: () => {
+				const request = getRequest();
+				return createContext({ request });
+			},
 		})
 	)
 	.client((): RouterClient<typeof appRouter> => {
@@ -62,7 +66,7 @@ const getORPCClient = createIsomorphicFn()
 
 		return createORPCClient(
 			new RPCLink({
-				url: `${import.meta.env.VITE_SERVER_URL}/rpc`,
+				url: `${window.location.origin}/api/rpc`,
 				headers: {
 					Authorization: rawInitData,
 				},

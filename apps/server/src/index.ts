@@ -1,12 +1,4 @@
 import { run } from "@grammyjs/runner";
-import { onError } from "@orpc/server";
-import { RPCHandler } from "@orpc/server/fetch";
-import { createContext } from "@starlight/api/context";
-import { appRouter } from "@starlight/api/routers/index";
-import { env } from "@starlight/utils";
-import { Hono } from "hono";
-import { cors } from "hono/cors";
-import { logger as honoLogger } from "hono/logger";
 import { bot } from "@/bot";
 import imageHandler from "@/handlers/image";
 import tweetImageHandler from "@/handlers/tweet-image";
@@ -64,40 +56,3 @@ imagesWorker.run();
 classificationWorker.run();
 embeddingsWorker.run();
 scrapperWorker.run();
-
-const rpcHandler = new RPCHandler(appRouter, {
-	interceptors: [
-		onError((error) => {
-			logger.error({ error }, "Error in RPC handler");
-		}),
-	],
-});
-
-const app = new Hono();
-
-app.use(honoLogger());
-app.use(
-	cors({
-		origin: env.CORS_ORIGIN,
-		allowMethods: ["GET", "POST", "OPTIONS"],
-		allowHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
-		credentials: true,
-	})
-);
-
-app.all("/rpc*", async (ctx) => {
-	const context = await createContext({ context: ctx });
-
-	const rpcResult = await rpcHandler.handle(ctx.req.raw, {
-		prefix: "/rpc",
-		context,
-	});
-
-	if (rpcResult.matched) {
-		return ctx.newResponse(rpcResult.response.body, rpcResult.response);
-	}
-});
-
-app.get("/", (c) => c.text("OK"));
-
-export default app;

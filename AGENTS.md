@@ -18,7 +18,7 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 
 | Path              | Purpose                                                             |
 | ----------------- | ------------------------------------------------------------------- |
-| `apps/server`     | Hono API, Grammy Telegram bot, and BullMQ worker implementations.   |
+| `apps/server`     | Grammy Telegram bot, and BullMQ worker implementations.             |
 | `apps/web`        | React 19 Telegram Mini App dashboard (Uber-style aesthetics).       |
 | `packages/api`    | API Layer: oRPC router definitions and shared contract types.       |
 | `packages/utils`  | Infrastructure: Prisma schema, database client, and business logic. |

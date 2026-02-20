@@ -30,7 +30,6 @@
     "bullmq": "^5.69.3",
     "date-fns": "^4.1.0",
     "grammy": "catalog:",
-    "hono": "catalog:",
     "ioredis": "catalog:",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",

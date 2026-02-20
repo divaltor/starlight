@@ -32,7 +32,6 @@
     "@telegram-apps/init-data-node": "^2.0.10",
     "date-fns": "^4.1.0",
     "grammy": "catalog:",
-    "hono": "catalog:",
     "ioredis": "catalog:",
     "zod": "catalog:"
   }

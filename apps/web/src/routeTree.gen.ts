@@ -13,6 +13,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProfileSlugRouteImport } from './routes/profile/$slug'
+import { Route as ApiRpcSplatRouteImport } from './routes/api/rpc.$'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -34,18 +35,25 @@ const ProfileSlugRoute = ProfileSlugRouteImport.update({
   path: '/profile/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRpcSplatRoute = ApiRpcSplatRouteImport.update({
+  id: '/api/rpc/$',
+  path: '/api/rpc/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
   '/settings': typeof SettingsRoute
   '/profile/$slug': typeof ProfileSlugRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
   '/settings': typeof SettingsRoute
   '/profile/$slug': typeof ProfileSlugRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/app': typeof AppRoute
   '/settings': typeof SettingsRoute
   '/profile/$slug': typeof ProfileSlugRoute
+  '/api/rpc/$': typeof ApiRpcSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/settings' | '/profile/$slug'
+  fullPaths: '/' | '/app' | '/settings' | '/profile/$slug' | '/api/rpc/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/app' | '/settings' | '/profile/$slug'
-  id: '__root__' | '/' | '/app' | '/settings' | '/profile/$slug'
+  to: '/' | '/app' | '/settings' | '/profile/$slug' | '/api/rpc/$'
+  id: '__root__' | '/' | '/app' | '/settings' | '/profile/$slug' | '/api/rpc/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +76,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRoute
   SettingsRoute: typeof SettingsRoute
   ProfileSlugRoute: typeof ProfileSlugRoute
+  ApiRpcSplatRoute: typeof ApiRpcSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfileSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/rpc/$': {
+      id: '/api/rpc/$'
+      path: '/api/rpc/$'
+      fullPath: '/api/rpc/$'
+      preLoaderRoute: typeof ApiRpcSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRoute,
   SettingsRoute: SettingsRoute,
   ProfileSlugRoute: ProfileSlugRoute,
+  ApiRpcSplatRoute: ApiRpcSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -19,7 +19,7 @@ export type AuthContext = {
 };
 
 export const authMiddleware = o.middleware(async ({ next, context }) => {
-	const auth = context.request.header("Authorization");
+	const auth = context.request.headers.get("Authorization");
 
 	if (!auth) {
 		throw new ORPCError("UNAUTHORIZED", {
@@ -73,7 +73,7 @@ export const authMiddleware = o.middleware(async ({ next, context }) => {
 export const optionalAuthMiddleware = o.middleware(({ next, context }) => {
 	let user: AuthContextUser | undefined;
 
-	const auth = context.request.header("Authorization");
+	const auth = context.request.headers.get("Authorization");
 
 	if (auth) {
 		try {

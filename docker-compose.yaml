@@ -17,30 +17,6 @@ services:
     volumes:
       - postgresql_data:/var/lib/postgresql/data
 
-  starlight-server:
-    build:
-      context: .
-      dockerfile: apps/server/Dockerfile
-    env_file:
-      - apps/server/.env
-    depends_on:
-      - postgresql
-      - redis
-    restart: unless-stopped
-
-  starlight-web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-    env_file:
-      - apps/web/.env
-    ports:
-      - "3001:3001"
-    depends_on:
-      - postgresql
-      - redis
-    restart: unless-stopped
-
 volumes:
   redis_data:
   postgresql_data:
