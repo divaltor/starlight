@@ -221,90 +221,56 @@ feature.on(":text").filter(
 	}
 );
 
-// Callback query handler for adding description
-feature.callbackQuery(/^video:add_desc:(.+)$/, async (ctx) => {
-	await ctx.answerCallbackQuery();
+feature.callbackQuery(
+	/^video:(add_desc|remove_desc):(.+)$/,
+	async (ctx) => {
+		await ctx.answerCallbackQuery();
 
-	const videoId = ctx.match[1];
+		const action = ctx.match[1];
+		const videoId = ctx.match[2];
 
-	if (!videoId) {
-		return;
-	}
-
-	const video = await prisma.video.findUnique({
-		where: { id: videoId },
-	});
-
-	if (!video) {
-		return;
-	}
-
-	try {
-		await ctx.editMessageCaption({
-			caption: video.tweetText ?? undefined,
-			reply_markup: createVideoKeyboard(videoId, true),
-		});
-	} catch (error) {
-		if (error instanceof GrammyError) {
-			ctx.logger.warn(
-				{ error, videoId },
-				"Failed to edit message, resending video"
-			);
-
-			await ctx.replyWithVideo(video.telegramFileId, {
-				width: video.width ?? undefined,
-				height: video.height ?? undefined,
-				supports_streaming: true,
-				caption: video.tweetText ?? undefined,
-				reply_markup: createVideoKeyboard(videoId, true),
-			});
-		} else {
-			throw error;
+		if (!videoId) {
+			return;
 		}
-	}
-});
 
-// Callback query handler for removing description
-feature.callbackQuery(/^video:remove_desc:(.+)$/, async (ctx) => {
-	await ctx.answerCallbackQuery();
-
-	const videoId = ctx.match[1];
-
-	if (!videoId) {
-		return;
-	}
-
-	const video = await prisma.video.findUnique({
-		where: { id: videoId },
-	});
-
-	if (!video) {
-		return;
-	}
-
-	try {
-		await ctx.editMessageCaption({
-			caption: undefined,
-			reply_markup: createVideoKeyboard(videoId, false),
+		const video = await prisma.video.findUnique({
+			where: { id: videoId },
 		});
-	} catch (error) {
-		if (error instanceof GrammyError) {
-			ctx.logger.warn(
-				{ error, videoId },
-				"Failed to edit message, resending video"
-			);
 
-			await ctx.replyWithVideo(video.telegramFileId, {
-				width: video.width ?? undefined,
-				height: video.height ?? undefined,
-				supports_streaming: true,
-				reply_markup: createVideoKeyboard(videoId, false),
-			});
-		} else {
-			throw error;
+		if (!video) {
+			return;
 		}
-	}
-});
+
+		const showDescription = action === "add_desc";
+		const caption = showDescription
+			? (video.tweetText ?? undefined)
+			: undefined;
+
+		try {
+			await ctx.editMessageCaption({
+				caption,
+				reply_markup: createVideoKeyboard(videoId, showDescription),
+			});
+		} catch (error) {
+			if (error instanceof GrammyError) {
+				ctx.logger.warn(
+					{ error, videoId },
+					"Failed to edit message, resending video",
+				);
+
+				await ctx.replyWithVideo(video.telegramFileId, {
+					width: video.width ?? undefined,
+					height: video.height ?? undefined,
+					supports_streaming: true,
+					caption,
+					reply_markup: createVideoKeyboard(videoId, showDescription),
+				});
+			} else {
+				throw error;
+			}
+		}
+	},
+);
 
 feature.on(":video", async (ctx) => {
 	const fileUniqueId = ctx.msg.video.file_unique_id;
