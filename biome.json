@@ -27,18 +27,6 @@
       "!**/.tanstack",
       "!**/.nitro",
       "!**/out"
-    ],
-    "experimentalScannerIgnores": [
-      "node_modules",
-      ".git",
-      ".turbo",
-      ".nitro",
-      "out",
-      "packages/api/node_modules",
-      "packages/crypto/node_modules",
-      "packages/utils/node_modules",
-      "apps/server/node_modules",
-      "apps/web/node_modules"
     ]
   },
   "formatter": {
@@ -73,7 +61,6 @@
             "functions": ["clsx", "cva", "cn"]
           }
         },
-        "useImageSize": "off",
         "noShadow": "off"
       },
       "performance": {
@@ -104,5 +91,5 @@
       "quoteStyle": "double"
     }
   },
-  "extends": ["ultracite"]
+  "extends": ["ultracite/biome/core", "ultracite/biome/react"]
 }
