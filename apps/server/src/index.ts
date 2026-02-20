@@ -4,7 +4,6 @@ import { RPCHandler } from "@orpc/server/fetch";
 import { createContext } from "@starlight/api/context";
 import { appRouter } from "@starlight/api/routers/index";
 import { env } from "@starlight/utils";
-import { webhookCallback } from "grammy";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
@@ -31,25 +30,21 @@ boundary.use(videoHandler);
 boundary.use(tweetImageHandler);
 boundary.use(imageHandler);
 
-if (env.USE_WEBHOOK && env.BASE_WEBHOOK_URL) {
-	bot.api.setWebhook(env.BASE_WEBHOOK_URL);
-} else {
-	const runner = run(bot);
+const runner = run(bot);
 
-	process.on("SIGINT", async () => {
-		logger.info("Stopping bot...");
-		if (runner.isRunning()) {
-			await runner.stop();
-		}
-	});
+process.on("SIGINT", async () => {
+	logger.info("Stopping bot...");
+	if (runner.isRunning()) {
+		await runner.stop();
+	}
+});
 
-	process.on("SIGTERM", async () => {
-		logger.info("Stopping bot...");
-		if (runner.isRunning()) {
-			await runner.stop();
-		}
-	});
-}
+process.on("SIGTERM", async () => {
+	logger.info("Stopping bot...");
+	if (runner.isRunning()) {
+		await runner.stop();
+	}
+});
 
 process.on("SIGINT", async () => {
 	await imagesWorker.close();
@@ -90,9 +85,6 @@ app.use(
 	})
 );
 
-if (env.USE_WEBHOOK && env.BASE_WEBHOOK_URL) {
-	app.use("/webhook*", webhookCallback(bot, "hono"));
-}
 app.all("/rpc*", async (ctx) => {
 	const context = await createContext({ context: ctx });
 

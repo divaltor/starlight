@@ -5,9 +5,6 @@ const env = createEnv({
 	server: {
 		BOT_TOKEN: z.string(),
 
-		USE_WEBHOOK: z.boolean().default(false),
-		BASE_WEBHOOK_URL: z.string().optional(),
-
 		REDIS_URL: z.url({ protocol: /^rediss?$/ }),
 		DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
 
