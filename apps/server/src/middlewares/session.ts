@@ -32,7 +32,7 @@ export async function attachUser(ctx: Context, next: NextFunction) {
 }
 
 export async function attachChat(ctx: Context, next: NextFunction) {
-	if (!ctx.chat || ctx.chat.type === "private") {
+	if (!ctx.chat) {
 		return await next();
 	}
 
