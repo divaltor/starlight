@@ -5,10 +5,13 @@ import messageHandler from "@/handlers/message";
 import tweetImageHandler from "@/handlers/tweet-image";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
+import { registerTelemetry } from "@/otel";
 import { classificationWorker } from "@/queue/classification";
 import { embeddingsWorker } from "@/queue/embeddings";
 import { imagesWorker } from "@/queue/image-collector";
 import { scrapperWorker } from "@/queue/scrapper";
+
+registerTelemetry();
 
 const boundary = bot.errorBoundary((error) => {
 	const { ctx } = error;
@@ -25,6 +28,8 @@ boundary.use(imageHandler);
 boundary.use(messageHandler);
 
 const runner = run(bot);
+
+logger.info("Bot is running...");
 
 process.on("SIGINT", async () => {
 	logger.info("Stopping bot...");

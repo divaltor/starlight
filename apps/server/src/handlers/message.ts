@@ -2,6 +2,7 @@ import { env, prisma } from "@starlight/utils";
 import { generateText } from "ai";
 import { Composer } from "grammy";
 import type { Context } from "@/bot";
+import { getLangfuseTelemetry } from "@/otel";
 import {
 	type ConversationMessage,
 	formatSenderName,
@@ -72,6 +73,7 @@ groupChat.on("message").filter(
 			model: openrouter(env.OPENROUTER_MODEL),
 			system: SYSTEM_PROMPT,
 			messages,
+			experimental_telemetry: getLangfuseTelemetry(ctx),
 		});
 
 		const reply = text.trim();

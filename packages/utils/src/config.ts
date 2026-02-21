@@ -40,6 +40,11 @@ const env = createEnv({
 		OPENROUTER_API_KEY: z.string().optional(),
 		OPENROUTER_MODEL: z.string().default("google/gemini-3-flash-preview"),
 
+		LANGFUSE_PUBLIC_KEY: z.string().optional(),
+		LANGFUSE_SECRET_KEY: z.string().optional(),
+		LANGFUSE_BASEURL: z.url().default("https://cloud.langfuse.com"),
+		LANGFUSE_TRACING_ENVIRONMENT: z.string().default("development"),
+
 		HISTORY_LIMIT: z.number().default(30),
 
 		BASE_FRONTEND_URL: z.string().default(""),
