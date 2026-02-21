@@ -1,8 +1,5 @@
-import type {
-	ScheduledSlotData,
-	TweetData,
-} from "@starlight/api/src/types/tweets";
-import { Shuffle, X } from "lucide-react";
+import type { TweetData } from "@starlight/api/src/types/tweets";
+import { X } from "lucide-react";
 import type { UIElementData } from "photoswipe";
 import type { PhotoSwipe } from "photoswipe/lightbox";
 import { useState } from "react";
@@ -12,19 +9,15 @@ import { Carousel } from "@/components/ui/skiper-ui/carousel";
 
 type TweetImageGridProps = {
 	tweet: TweetData;
-	slot?: ScheduledSlotData;
 	showActions?: boolean;
-	onShuffleTweet?: (tweetId: string) => void;
 	onDeleteImage?: (photoId: string) => void;
 	showArtistOnHover?: boolean;
 };
 
 export function TweetImageGrid({
 	tweet,
-	slot,
 	showActions = false,
 	showArtistOnHover = false,
-	onShuffleTweet,
 	onDeleteImage,
 }: TweetImageGridProps) {
 	const [isImageLoading, setIsImageLoading] = useState<{
@@ -154,45 +147,28 @@ export function TweetImageGrid({
 												{tweet.artist}
 											</button>
 										</div>
-										{showActions && slot && (
-											<div className="flex items-center gap-1">
-												{onShuffleTweet && (
-													<Button
-														className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-primary"
-														onClick={(e) => {
-															e.stopPropagation();
-															onShuffleTweet(tweet.id);
-														}}
-														size="sm"
-														variant="ghost"
-													>
-														<Shuffle className="h-3 w-3" />
-													</Button>
-												)}
-												{onDeleteImage && (
-													<Button
-														className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
-														onClick={(e) => {
-															e.stopPropagation();
-															onDeleteImage(photo.id);
-														}}
-														size="sm"
-														variant="ghost"
-													>
-														<X className="h-3 w-3" />
-													</Button>
-												)}
-											</div>
-										)}
-									</div>
+									{showActions && onDeleteImage && (
+										<Button
+											className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+											onClick={(e) => {
+												e.stopPropagation();
+												onDeleteImage(photo.id);
+											}}
+											size="sm"
+											variant="ghost"
+										>
+											<X className="h-3 w-3" />
+										</Button>
+									)}
 								</div>
 							</div>
 						</div>
-					)}
-				</Item>
-			</Gallery>
-		);
-	}
+					</div>
+				)}
+			</Item>
+		</Gallery>
+	);
+}
 
 	const convertedPhotos = tweet.photos.map((photo) => ({
 		src: photo.url,
@@ -267,35 +243,18 @@ export function TweetImageGrid({
 													{tweet.artist}
 												</button>
 											</div>
-											{showActions && slot && (
-												<div className="flex items-center gap-1">
-													{onShuffleTweet && (
-														<Button
-															className="flex h-6 w-6 flex-shrink-0 items-center justify-center p-0 text-white hover:bg-white/20 hover:text-primary"
-															onClick={(e) => {
-																e.stopPropagation();
-																onShuffleTweet(tweet.id);
-															}}
-															size="sm"
-															variant="ghost"
-														>
-															<Shuffle className="h-3 w-3" />
-														</Button>
-													)}
-													{onDeleteImage && (
-														<Button
-															className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
-															onClick={(e) => {
-																e.stopPropagation();
-																onDeleteImage(item.id || "");
-															}}
-															size="sm"
-															variant="ghost"
-														>
-															<X className="h-3 w-3" />
-														</Button>
-													)}
-												</div>
+											{showActions && onDeleteImage && (
+												<Button
+													className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+													onClick={(e) => {
+														e.stopPropagation();
+														onDeleteImage(item.id || "");
+													}}
+													size="sm"
+													variant="ghost"
+												>
+													<X className="h-3 w-3" />
+												</Button>
 											)}
 										</div>
 									</div>

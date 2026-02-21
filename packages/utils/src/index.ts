@@ -2,9 +2,6 @@
 export { default as env, getRandomProxy } from "./config";
 export { prisma, toUniqueId } from "./db";
 export * from "./generated/prisma/client";
-export {
-	CollectionShareVisibility,
-	ScheduledSlotStatus,
-} from "./generated/prisma/enums";
+
 export { DbNull, JsonNull } from "./generated/prisma/internal/prismaNamespace";
 export * from "./twitter";

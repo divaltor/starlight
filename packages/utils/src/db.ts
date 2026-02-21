@@ -97,7 +97,6 @@ export const prisma = new PrismaClient({
 				deletedAt: null,
 				s3Path: { not: null },
 				publishedPhotos: { none: { chatId: Number(chatId) } },
-				scheduledSlotPhotos: { none: {} },
 			}),
 		} satisfies Record<
 			string,
