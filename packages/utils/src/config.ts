@@ -40,9 +40,9 @@ const env = createEnv({
 		OPENROUTER_API_KEY: z.string().optional(),
 		OPENROUTER_MODEL: z.string().default("google/gemini-3-flash-preview"),
 
-		HISTORY_LIMIT: z.number().default(30)
+		HISTORY_LIMIT: z.number().default(30),
 
-		BASE_FRONTEND_URL: z.string().default(process.env.VERCEL_URL || ""),
+		BASE_FRONTEND_URL: z.string().default(""),
 		BASE_CDN_URL: z
 			.string()
 			.transform((val) => {
