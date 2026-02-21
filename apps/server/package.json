@@ -7,7 +7,7 @@
     "start": "bun run src/index.ts",
     "build": "bun run -b tsdown",
     "lint": "biome check .",
-    "format": "biome format --write .",
+    "format": "biome check --write .",
     "test": "bun test",
     "queue:classify": "bun run src/scripts/classification.ts",
     "queue:embeddings": "bun run src/scripts/embeddings.ts"

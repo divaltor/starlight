@@ -1,5 +1,4 @@
-import { env, prisma } from "@starlight/utils";
-import type { TelemetrySettings } from "ai";
+import { prisma } from "@starlight/utils";
 import type { NextFunction } from "grammy";
 import type { Message } from "grammy/types";
 import type { Context } from "@/types";
