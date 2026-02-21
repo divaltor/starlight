@@ -221,56 +221,51 @@ feature.on(":text").filter(
 	}
 );
 
-feature.callbackQuery(
-	/^video:(add_desc|remove_desc):(.+)$/,
-	async (ctx) => {
-		await ctx.answerCallbackQuery();
+feature.callbackQuery(/^video:(add_desc|remove_desc):(.+)$/, async (ctx) => {
+	await ctx.answerCallbackQuery();
 
-		const action = ctx.match[1];
-		const videoId = ctx.match[2];
+	const action = ctx.match[1];
+	const videoId = ctx.match[2];
 
-		if (!videoId) {
-			return;
-		}
+	if (!videoId) {
+		return;
+	}
 
-		const video = await prisma.video.findUnique({
-			where: { id: videoId },
+	const video = await prisma.video.findUnique({
+		where: { id: videoId },
+	});
+
+	if (!video) {
+		return;
+	}
+
+	const showDescription = action === "add_desc";
+	const caption = showDescription ? (video.tweetText ?? undefined) : undefined;
+
+	try {
+		await ctx.editMessageCaption({
+			caption,
+			reply_markup: createVideoKeyboard(videoId, showDescription),
 		});
+	} catch (error) {
+		if (error instanceof GrammyError) {
+			ctx.logger.warn(
+				{ error, videoId },
+				"Failed to edit message, resending video"
+			);
 
-		if (!video) {
-			return;
-		}
-
-		const showDescription = action === "add_desc";
-		const caption = showDescription
-			? (video.tweetText ?? undefined)
-			: undefined;
-
-		try {
-			await ctx.editMessageCaption({
+			await ctx.replyWithVideo(video.telegramFileId, {
+				width: video.width ?? undefined,
+				height: video.height ?? undefined,
+				supports_streaming: true,
 				caption,
 				reply_markup: createVideoKeyboard(videoId, showDescription),
 			});
-		} catch (error) {
-			if (error instanceof GrammyError) {
-				ctx.logger.warn(
-					{ error, videoId },
-					"Failed to edit message, resending video",
-				);
-
-				await ctx.replyWithVideo(video.telegramFileId, {
-					width: video.width ?? undefined,
-					height: video.height ?? undefined,
-					supports_streaming: true,
-					caption,
-					reply_markup: createVideoKeyboard(videoId, showDescription),
-				});
-			} else {
-				throw error;
-			}
+		} else {
+			throw error;
 		}
-	},
-);
+	}
+});
 
 feature.on(":video", async (ctx) => {
 	const fileUniqueId = ctx.msg.video.file_unique_id;

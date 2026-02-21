@@ -4,18 +4,18 @@ import { parse, validate } from "@telegram-apps/init-data-node";
 import { o, publicProcedure } from "../index";
 
 export interface AuthContextUser {
-	id: number;
 	first_name: string;
+	id: number;
+	is_premium?: boolean;
+	language_code?: string;
 	last_name?: string;
 	username?: string;
-	language_code?: string;
-	is_premium?: boolean;
 }
 
 export interface AuthContext {
-	user?: AuthContextUser;
 	databaseUserId?: string;
 	queryId?: string;
+	user?: AuthContextUser;
 }
 
 export const authMiddleware = o.middleware(async ({ next, context }) => {

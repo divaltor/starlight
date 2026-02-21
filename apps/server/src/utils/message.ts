@@ -1,23 +1,21 @@
 import type { Message, MessageEntity } from "@grammyjs/types";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { env, prisma } from "@starlight/utils";
-import { generateText } from "ai";
+import { env } from "@starlight/utils";
 import type { Context } from "@/bot";
 
 const REPLY_CHANCE = 0.1;
-const HISTORY_LIMIT = 16;
 
-const SYSTEM_PROMPT = `You are Starlight, a concise Telegram assistant in a group chat.
+export const SYSTEM_PROMPT = `You are Starlight, a concise Telegram assistant in a group chat.
 Keep answers short and useful.
 Use plain text only.
 If message context is not enough, ask one short clarifying question.`;
 
-interface ConversationMessage {
+export interface ConversationMessage {
 	content: string;
 	role: "user" | "assistant";
 }
 
-const openrouter = env.OPENROUTER_API_KEY
+export const openrouter = env.OPENROUTER_API_KEY
 	? createOpenRouter({ apiKey: env.OPENROUTER_API_KEY })
 	: null;
 
@@ -98,7 +96,7 @@ export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
 	return hasDirectBotMention(ctx, msg) || Math.random() < REPLY_CHANCE;
 }
 
-function formatSenderName(data: {
+export function formatSenderName(data: {
 	fromUsername: string | null;
 	fromFirstName: string | null;
 	fromId: bigint | null;
@@ -118,7 +116,7 @@ function formatSenderName(data: {
 	return "unknown";
 }
 
-function toConversationMessage(
+export function toConversationMessage(
 	entry: {
 		fromId: bigint | null;
 		fromUsername: string | null;
@@ -146,79 +144,4 @@ function toConversationMessage(
 		role: "user",
 		content: `${sender}: ${content}`,
 	};
-}
-
-export async function handleAutoReply(
-	ctx: Context,
-	msg: Message
-): Promise<void> {
-	if (!openrouter) {
-		ctx.logger.debug("OPENROUTER_API_KEY is not set, skipping AI reply");
-		return;
-	}
-
-	if (!ctx.chat) {
-		return;
-	}
-
-	const chatId = ctx.chat.id;
-	const messageThreadId = msg.message_thread_id ?? null;
-
-	const history = await prisma.message.findMany({
-		where: {
-			chatId: BigInt(chatId),
-			messageThreadId,
-			messageId: {
-				not: msg.message_id,
-			},
-			OR: [{ text: { not: null } }, { caption: { not: null } }],
-		},
-		select: {
-			fromId: true,
-			fromUsername: true,
-			fromFirstName: true,
-			text: true,
-			caption: true,
-		},
-		orderBy: {
-			date: "desc",
-		},
-		take: HISTORY_LIMIT,
-	});
-
-	const botId = BigInt(ctx.me.id);
-	const messages: ConversationMessage[] = history
-		.reverse()
-		.map((entry) => toConversationMessage(entry, botId))
-		.filter((entry): entry is ConversationMessage => entry !== null);
-
-	const currentMessageContent = getMessageContent(msg);
-	if (!currentMessageContent) {
-		return;
-	}
-
-	messages.push({
-		role: "user",
-		content: `${formatSenderName({
-			fromUsername: msg.from?.username ?? null,
-			fromFirstName: msg.from?.first_name ?? null,
-			fromId: msg.from ? BigInt(msg.from.id) : null,
-		})}: ${currentMessageContent}`,
-	});
-
-	const { text } = await generateText({
-		model: openrouter(env.OPENROUTER_MODEL),
-		system: SYSTEM_PROMPT,
-		messages,
-	});
-
-	const reply = text.trim();
-	if (!reply) {
-		return;
-	}
-
-	await ctx.api.sendMessage(chatId, reply, {
-		reply_to_message_id: msg.message_id,
-		message_thread_id: msg.message_thread_id,
-	});
 }

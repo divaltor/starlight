@@ -12,12 +12,12 @@ export type BaseButtonConfig = {
 };
 
 export interface MainButtonConfig extends BaseButtonConfig {
-	text?: string;
 	color?: `#${string}`;
-	textColor?: `#${string}`;
-	isLoading?: boolean;
-	isEnabled?: boolean;
 	hasShineEffect?: boolean;
+	isEnabled?: boolean;
+	isLoading?: boolean;
+	text?: string;
+	textColor?: `#${string}`;
 }
 
 export interface SettingsButtonConfig extends BaseButtonConfig {

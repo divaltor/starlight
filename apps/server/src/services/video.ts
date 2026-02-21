@@ -58,7 +58,7 @@ export async function downloadVideoFromUrl(
 
 	const response = await fetch(url);
 
-	if (!response.ok || !response.body) {
+	if (!(response.ok && response.body)) {
 		throw new Error(`Failed to download video from ${url}: ${response.status}`);
 	}
 

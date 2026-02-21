@@ -21,7 +21,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@the-convocation/twitter-scraper": ["../../node_modules/@the-convocation/twitter-scraper/src/_module.ts"]
+      "@the-convocation/twitter-scraper": [
+        "../../node_modules/@the-convocation/twitter-scraper/src/_module.ts"
+      ]
     },
     "types": ["bun"],
     "composite": true

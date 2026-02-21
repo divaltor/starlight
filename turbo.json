@@ -12,6 +12,9 @@
     "lint": {
       "dependsOn": ["^lint"]
     },
+    "format": {
+      "dependsOn": ["^format"]
+    },
     "start": {
       "cache": false,
       "persistent": true

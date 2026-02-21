@@ -147,28 +147,28 @@ export function TweetImageGrid({
 												{tweet.artist}
 											</button>
 										</div>
-									{showActions && onDeleteImage && (
-										<Button
-											className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
-											onClick={(e) => {
-												e.stopPropagation();
-												onDeleteImage(photo.id);
-											}}
-											size="sm"
-											variant="ghost"
-										>
-											<X className="h-3 w-3" />
-										</Button>
-									)}
+										{showActions && onDeleteImage && (
+											<Button
+												className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+												onClick={(e) => {
+													e.stopPropagation();
+													onDeleteImage(photo.id);
+												}}
+												size="sm"
+												variant="ghost"
+											>
+												<X className="h-3 w-3" />
+											</Button>
+										)}
+									</div>
 								</div>
 							</div>
 						</div>
-					</div>
-				)}
-			</Item>
-		</Gallery>
-	);
-}
+					)}
+				</Item>
+			</Gallery>
+		);
+	}
 
 	const convertedPhotos = tweet.photos.map((photo) => ({
 		src: photo.url,

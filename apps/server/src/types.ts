@@ -1,6 +1,6 @@
 import type { FileFlavor } from "@grammyjs/files";
 import type { HydrateFlavor } from "@grammyjs/hydrate";
-import type { Message, MessageOrigin, MessageEntity } from "@grammyjs/types";
+import type { Message, MessageEntity, MessageOrigin } from "@grammyjs/types";
 import type { Chat, User } from "@starlight/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import type { Context as BaseContext, SessionFlavor } from "grammy";

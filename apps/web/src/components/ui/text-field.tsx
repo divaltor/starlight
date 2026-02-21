@@ -30,12 +30,12 @@ const textFieldVariants = cva("form-control", {
 interface TextFieldProps
 	extends Omit<React.ComponentProps<typeof AriaTextField>, "className">,
 		VariantProps<typeof textFieldVariants> {
-	label?: string;
-	description?: string;
-	placeholder?: string;
 	className?: string;
+	description?: string;
 	inputRef?: React.Ref<HTMLInputElement | HTMLTextAreaElement>;
+	label?: string;
 	multiline?: boolean;
+	placeholder?: string;
 }
 
 function TextField({

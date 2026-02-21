@@ -1,5 +1,5 @@
-import { GlobalFonts } from "@napi-rs/canvas";
 import path from "node:path";
+import { GlobalFonts } from "@napi-rs/canvas";
 import { logger } from "@/logger";
 
 let fontsRegistered = false;
@@ -48,7 +48,9 @@ export function registerFonts(): void {
 		);
 
 		fontsRegistered = true;
-		logger.info("Registered Inter, Noto Sans, Noto Sans CJK, Noto Sans Math, and emoji fonts");
+		logger.info(
+			"Registered Inter, Noto Sans, Noto Sans CJK, Noto Sans Math, and emoji fonts"
+		);
 	} catch {
 		logger.warn("Could not register fonts, using system fallback");
 		fontsRegistered = true;

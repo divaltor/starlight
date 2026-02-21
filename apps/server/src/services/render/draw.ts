@@ -140,7 +140,10 @@ export function wrapText(
 	maxWidth: number
 ): TextLine[] {
 	const cleanedText = stripLeadingMentions(text);
-	const normalizedText = cleanedText.replace(/\n(#\S+(\s+#\S+)*\s*)$/, "\n\n$1");
+	const normalizedText = cleanedText.replace(
+		/\n(#\S+(\s+#\S+)*\s*)$/,
+		"\n\n$1"
+	);
 	const paragraphs = normalizedText.split(/\n\n+/);
 	const lines: TextLine[] = [];
 

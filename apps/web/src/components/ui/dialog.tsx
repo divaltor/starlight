@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils";
 
 interface DialogContentProps
 	extends Omit<React.ComponentProps<typeof AriaDialog>, "children"> {
-	showCloseButton?: boolean;
-	className?: string;
 	children?: React.ReactNode | ((props: DialogProps) => React.ReactNode);
+	className?: string;
+	showCloseButton?: boolean;
 }
 
 function DialogTrigger({

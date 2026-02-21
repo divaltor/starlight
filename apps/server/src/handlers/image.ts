@@ -1,6 +1,6 @@
+import { FormattedString } from "@grammyjs/parse-mode";
 import { CookieEncryption } from "@starlight/crypto";
 import { env, isTwitterUrl, type Prisma, prisma } from "@starlight/utils";
-import { FormattedString } from "@grammyjs/parse-mode";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { RateLimiterRedis } from "rate-limiter-flexible";
 import { webAppKeyboard } from "@/bot";
@@ -211,11 +211,9 @@ composer.on("inline_query").filter(
 			const caption = photo.username
 				? FormattedString.link(
 						`@${photo.username}`,
-						`https://x.com/i/status/${photo.tweetId}`,
+						`https://x.com/i/status/${photo.tweetId}`
 					)
-				: new FormattedString(
-						`https://x.com/i/status/${photo.tweetId}`,
-					);
+				: new FormattedString(`https://x.com/i/status/${photo.tweetId}`);
 
 			return InlineQueryResultBuilder.photo(
 				photo.externalId ?? photo.id,
@@ -226,7 +224,7 @@ composer.on("inline_query").filter(
 					thumbnail_url: photo.s3Url as string,
 					photo_height: photo.height ?? undefined,
 					photo_width: photo.width ?? undefined,
-				},
+				}
 			);
 		});
 
