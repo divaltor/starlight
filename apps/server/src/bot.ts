@@ -5,7 +5,7 @@ import { env } from "@starlight/utils";
 import { Bot, InlineKeyboard, session } from "grammy";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
-import storeMessage from "@/middlewares/message";
+import { storeMessage } from "@/middlewares/message";
 import { attachChat, attachUser } from "@/middlewares/session";
 import { RedisAdapter, redis } from "@/storage";
 // biome-ignore lint/style/noExportedImports: Don't care

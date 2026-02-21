@@ -20,7 +20,7 @@ function detectMediaType(msg: Message): string | null {
 	return null;
 }
 
-export default async function storeMessage(ctx: Context, next: NextFunction) {
+export async function storeMessage(ctx: Context, next: NextFunction) {
 	if (!(ctx.chat && ctx.message)) {
 		return await next();
 	}

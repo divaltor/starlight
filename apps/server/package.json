@@ -18,6 +18,7 @@
     "@grammyjs/parse-mode": "^2.2.1",
     "@grammyjs/runner": "^2.0.3",
     "@napi-rs/canvas": "^0.1.94",
+    "@openrouter/ai-sdk-provider": "^2.2.3",
     "@roziscoding/grammy-autoquote": "^2.0.9",
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",

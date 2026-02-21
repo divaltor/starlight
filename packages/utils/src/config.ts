@@ -37,6 +37,9 @@ const env = createEnv({
 			.enum(["trace", "debug", "info", "warn", "error", "fatal"])
 			.optional(),
 
+		OPENROUTER_API_KEY: z.string().optional(),
+		OPENROUTER_MODEL: z.string().default("google/gemini-3-flash-preview"),
+
 		BASE_FRONTEND_URL: z.string().default(process.env.VERCEL_URL || ""),
 		BASE_CDN_URL: z
 			.string()
