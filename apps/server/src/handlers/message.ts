@@ -85,3 +85,5 @@ groupChat.on("message").filter(
 		});
 	}
 );
+
+export default composer;

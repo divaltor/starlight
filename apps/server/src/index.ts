@@ -1,6 +1,7 @@
 import { run } from "@grammyjs/runner";
 import { bot } from "@/bot";
 import imageHandler from "@/handlers/image";
+import messageHandler from "@/handlers/message";
 import tweetImageHandler from "@/handlers/tweet-image";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
@@ -21,6 +22,7 @@ const boundary = bot.errorBoundary((error) => {
 boundary.use(videoHandler);
 boundary.use(tweetImageHandler);
 boundary.use(imageHandler);
+boundary.use(messageHandler);
 
 const runner = run(bot);
 
