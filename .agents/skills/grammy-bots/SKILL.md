@@ -216,4 +216,4 @@ try {
 
 ## Reference
 
-If something falls outside the scope of this skill or you encounter an unfamiliar grammY API, consult the official documentation at https://grammy.dev for examples, plugin guides, and API reference.
+If something falls outside the scope of this skill or you encounter an unfamiliar grammY API, consult the official documentation at <https://grammy.dev> for examples, plugin guides, and API reference from Telegram (<https://core.telegram.org/bots/api>).

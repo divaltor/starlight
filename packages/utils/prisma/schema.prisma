@@ -1,188 +1,146 @@
 datasource db {
-    provider   = "postgresql"
-    extensions = [pgvector(map: "vector")]
+  provider   = "postgresql"
+  extensions = [pgvector(map: "vector")]
 }
 
 generator client {
-    provider        = "prisma-client"
-    output          = "../src/generated/prisma"
-    previewFeatures = ["postgresqlExtensions"]
-    runtime         = "bun"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+  runtime         = "bun"
 }
 
 generator json {
-    provider = "prisma-json-types-generator"
+  provider = "prisma-json-types-generator"
 }
 
 model User {
-    id         String  @id @default(uuid(7)) @db.Uuid
-    telegramId BigInt  @unique @map("telegram_id")
-    username   String? @unique
-    firstName  String  @map("first_name")
-    lastName   String? @map("last_name")
-    isActive   Boolean @default(true) @map("is_active")
-    isBot      Boolean @default(false) @map("is_bot")
-    isPublic   Boolean @default(false) @map("is_public")
+  id         String  @id @default(uuid(7)) @db.Uuid
+  telegramId BigInt  @unique @map("telegram_id")
+  username   String? @unique
+  firstName  String  @map("first_name")
+  lastName   String? @map("last_name")
+  isActive   Boolean @default(true) @map("is_active")
+  isBot      Boolean @default(false) @map("is_bot")
+  isPublic   Boolean @default(false) @map("is_public")
 
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    // Relations
-    tweets           Tweet[]
-    photos           Photo[]
-    publishedPhotos  PublishedPhoto[]
-    postingChannels  PostingChannel?
-    videos           Video[]
+  // Relations
+  tweets Tweet[]
+  photos Photo[]
+  videos Video[]
 
-    @@map("users")
+  @@map("users")
 }
 
 model Chat {
-    // Telegram ID
-    id       BigInt  @id
-    title    String?
-    username String?
+  // Telegram ID
+  id       BigInt  @id
+  title    String?
+  username String?
 
-    photoThumbnail String? @map("photo_thumbnail")
-    photoBig       String? @map("photo_big")
+  photoThumbnail String? @map("photo_thumbnail")
+  photoBig       String? @map("photo_big")
 
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    // Relations
-    publishedPhotos PublishedPhoto[]
-    postingChannels PostingChannel[]
-
-    @@map("chats")
-}
-
-model PostingChannel {
-    userId String @unique @map("user_id") @db.Uuid
-    chatId BigInt @map("chat_id")
-
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
-
-    // Relations
-    user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-    chat           Chat            @relation(fields: [chatId], references: [id], onDelete: Cascade)
-    @@index([userId])
-    @@index([chatId])
-    @@map("posting_channels")
+  @@map("chats")
 }
 
 model Tweet {
-    id     String
-    userId String @map("user_id") @db.Uuid
+  id     String
+  userId String @map("user_id") @db.Uuid
 
-    /// [TweetType]
-    tweetData Json @map("tweet_data")
+  /// [TweetType]
+  tweetData Json @map("tweet_data")
 
-    // Virtual columns, manually generated in SQL migration
-    tweetText String? @default(dbgenerated()) @map("tweet_text") @db.Text
-    username  String? @default(dbgenerated()) @map("username") @db.Text
+  // Virtual columns, manually generated in SQL migration
+  tweetText String? @default(dbgenerated()) @map("tweet_text") @db.Text
+  username  String? @default(dbgenerated()) @map("username") @db.Text
 
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    // Relations
-    photos                Photo[]
-    user                  User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
-    @@id(name: "tweetId", [id, userId])
-    @@index([userId, createdAt(sort: Desc)])
-    @@index([tweetText])
-    @@index([username])
-    @@map("tweets")
+  // Relations
+  photos Photo[]
+  user   User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id(name: "tweetId", [id, userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([tweetText])
+  @@index([username])
+  @@map("tweets")
 }
 
 model Photo {
-    // Twitter ID
-    id             String
-    tweetId        String  @map("tweet_id")
-    userId         String  @map("user_id") @db.Uuid
-    s3Path         String? @map("s3_path")
-    originalUrl    String  @map("original_url")
-    perceptualHash String? @map("perceptual_hash")
+  // Twitter ID
+  id             String
+  tweetId        String  @map("tweet_id")
+  userId         String  @map("user_id") @db.Uuid
+  s3Path         String? @map("s3_path")
+  originalUrl    String  @map("original_url")
+  perceptualHash String? @map("perceptual_hash")
 
-    /// [ClassificationType]
-    classification Json? @map("classification")
+  /// [ClassificationType]
+  classification Json? @map("classification")
 
-    imageVec Unsupported("vector(1024)")? @map("image_vec")
-    tagVec   Unsupported("vector(1024)")? @map("tag_vec")
+  imageVec Unsupported("vector(1024)")? @map("image_vec")
+  tagVec   Unsupported("vector(1024)")? @map("tag_vec")
 
-    height Int? @map("height")
-    width  Int? @map("width")
+  height Int? @map("height")
+  width  Int? @map("width")
 
-    // Generated hash bucket columns for similarity search
-    hashBucket4  String? @default(dbgenerated()) @map("hash_bucket_4")
-    hashBucket8  String? @default(dbgenerated()) @map("hash_bucket_8")
-    hashBucket12 String? @default(dbgenerated()) @map("hash_bucket_12")
+  // Generated hash bucket columns for similarity search
+  hashBucket4  String? @default(dbgenerated()) @map("hash_bucket_4")
+  hashBucket8  String? @default(dbgenerated()) @map("hash_bucket_8")
+  hashBucket12 String? @default(dbgenerated()) @map("hash_bucket_12")
 
-    createdAt DateTime  @default(now()) @map("created_at")
-    updatedAt DateTime  @updatedAt @map("updated_at")
-    deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-    // Relations
-    tweet               Tweet                @relation(fields: [tweetId, userId], references: [id, userId], onDelete: Restrict)
-    user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
-    publishedPhotos     PublishedPhoto[]
+  // Relations
+  tweet Tweet @relation(fields: [tweetId, userId], references: [id, userId], onDelete: Restrict)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-    @@id(name: "photoId", [id, userId])
-    @@index([tweetId])
-    @@index([perceptualHash])
-    @@index([hashBucket4])
-    @@index([hashBucket8])
-    @@index([hashBucket12])
-    @@index([s3Path])
-    @@index([deletedAt])
-    @@index([createdAt(sort: Desc)])
-    @@map("photos")
-}
-
-model PublishedPhoto {
-    photoId         String  @map("photo_id")
-    userId          String  @map("user_id") @db.Uuid
-    chatId          BigInt  @map("chat_id")
-    mediaGroupId         String? @map("media_group_id")
-    messageId            BigInt  @map("message_id")
-    telegramFileId       String  @map("telegram_file_id")
-    telegramFileUniqueId String  @map("telegram_file_unique_id")
-
-    publishedAt DateTime @default(now()) @map("published_at")
-
-    // Relations
-    photo         Photo          @relation(fields: [photoId, userId], references: [id, userId], onDelete: Restrict)
-    user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
-    chat          Chat           @relation(fields: [chatId], references: [id], onDelete: Restrict)
-
-    @@id([photoId, userId, chatId])
-    @@index([messageId])
-    @@map("published_photos")
+  @@id(name: "photoId", [id, userId])
+  @@index([tweetId])
+  @@index([perceptualHash])
+  @@index([hashBucket4])
+  @@index([hashBucket8])
+  @@index([hashBucket12])
+  @@index([s3Path])
+  @@index([deletedAt])
+  @@index([createdAt(sort: Desc)])
+  @@map("photos")
 }
 
 model Video {
-    id     String @id @default(uuid(7)) @db.Uuid
-    userId String @map("user_id") @db.Uuid
+  id     String @id @default(uuid(7)) @db.Uuid
+  userId String @map("user_id") @db.Uuid
 
-    tweetId   String  @map("tweet_id")
-    tweetText String? @map("tweet_text") @db.Text
+  tweetId   String  @map("tweet_id")
+  tweetText String? @map("tweet_text") @db.Text
 
-    telegramFileId       String @map("telegram_file_id")
-    telegramFileUniqueId String @map("telegram_file_unique_id")
+  telegramFileId       String @map("telegram_file_id")
+  telegramFileUniqueId String @map("telegram_file_unique_id")
 
-    width  Int?
-    height Int?
+  width  Int?
+  height Int?
 
-    description String? @db.Text
+  description String? @db.Text
 
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    // Relations
-    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@unique([telegramFileUniqueId, userId])
-    @@index([userId])
-    @@index([tweetId])
-    @@map("videos")
+  @@unique([telegramFileUniqueId, userId])
+  @@index([userId])
+  @@index([tweetId])
+  @@map("videos")
 }

@@ -8,7 +8,6 @@ export async function attachUser(ctx: Context, next: NextFunction) {
 		return await next();
 	}
 
-	// PERF: Cache via Redis
 	const user = await prisma.user.upsert({
 		where: {
 			telegramId: ctx.from.id,

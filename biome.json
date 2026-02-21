@@ -78,7 +78,8 @@
         "useNumberNamespace": "error",
         "noInferrableTypes": "error",
         "noUselessElse": "error",
-        "noMagicNumbers": "off"
+        "noMagicNumbers": "off",
+        "noNonNullAssertion": "info"
       },
       "suspicious": {
         "noConsole": "off",
