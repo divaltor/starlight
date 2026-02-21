@@ -5,6 +5,7 @@ import { env } from "@starlight/utils";
 import { Bot, InlineKeyboard, session } from "grammy";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
+import storeMessage from "@/middlewares/message";
 import { attachChat, attachUser } from "@/middlewares/session";
 import { RedisAdapter, redis } from "@/storage";
 // biome-ignore lint/style/noExportedImports: Don't care
@@ -48,6 +49,7 @@ bot.api.config.use(
 bot.api.config.use(hydrateFiles(bot.token));
 bot.use(attachUser);
 bot.use(attachChat);
+bot.use(storeMessage);
 bot.use(logUpdates);
 
 export { bot, type Context };

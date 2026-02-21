@@ -47,6 +47,9 @@ model Chat {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Relations
+  messages Message[]
+
   @@map("chats")
 }
 
@@ -143,4 +146,57 @@ model Video {
   @@index([userId])
   @@index([tweetId])
   @@map("videos")
+}
+
+model Message {
+  id        String @id @default(uuid(7)) @db.Uuid
+  messageId Int    @map("message_id")
+  chatId    BigInt @map("chat_id")
+
+  // Sender info
+  fromId        BigInt? @map("from_id")
+  fromUsername  String? @map("from_username")
+  fromFirstName String? @map("from_first_name")
+
+  // Message content
+  text    String? @db.Text
+  caption String? @db.Text
+
+  // Entities for LLM context
+  /// [MessageEntitiesType]
+  entities        Json? @map("entities")
+  /// [MessageEntitiesType]
+  captionEntities Json? @map("caption_entities")
+
+  // Media type: photo, video, document, audio, voice, video_note, sticker, animation, poll, etc.
+  mediaType String? @map("media_type")
+
+  // Threading / Reply context
+  replyToMessageId Int? @map("reply_to_message_id")
+  messageThreadId  Int? @map("message_thread_id")
+
+  // Forward origin as JSON
+  /// [ForwardOriginType]
+  forwardOrigin Json? @map("forward_origin")
+
+  // Full raw message for complete data preservation (LLM processing)
+  /// [TelegramMessageType]
+  rawData Json @map("raw_data")
+
+  // Telegram timestamps
+  date     DateTime  @map("date")
+  editDate DateTime? @map("edit_date")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, chatId])
+  @@index([chatId, date(sort: Desc)])
+  @@index([fromId])
+  @@index([mediaType])
+  @@index([text])
+  @@map("messages")
 }

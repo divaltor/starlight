@@ -3,20 +3,20 @@ import { env, prisma } from "@starlight/utils";
 import { parse, validate } from "@telegram-apps/init-data-node";
 import { o, publicProcedure } from "../index";
 
-export type AuthContextUser = {
+export interface AuthContextUser {
 	id: number;
 	first_name: string;
 	last_name?: string;
 	username?: string;
 	language_code?: string;
 	is_premium?: boolean;
-};
+}
 
-export type AuthContext = {
+export interface AuthContext {
 	user?: AuthContextUser;
 	databaseUserId?: string;
 	queryId?: string;
-};
+}
 
 export const authMiddleware = o.middleware(async ({ next, context }) => {
 	const auth = context.request.headers.get("Authorization");

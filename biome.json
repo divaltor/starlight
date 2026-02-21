@@ -79,7 +79,8 @@
         "noInferrableTypes": "error",
         "noUselessElse": "error",
         "noMagicNumbers": "off",
-        "noNonNullAssertion": "info"
+        "noNonNullAssertion": "info",
+        "useBlockStatements": "off"
       },
       "suspicious": {
         "noConsole": "off",

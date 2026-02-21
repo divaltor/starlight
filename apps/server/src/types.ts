@@ -1,26 +1,20 @@
 import type { FileFlavor } from "@grammyjs/files";
 import type { HydrateFlavor } from "@grammyjs/hydrate";
+import type { Message, MessageOrigin, MessageEntity } from "@grammyjs/types";
 import type { Chat, User } from "@starlight/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import type { Context as BaseContext, SessionFlavor } from "grammy";
 import type { Logger } from "@/logger";
 import type { SessionData } from "@/storage";
 
-type ExtendedContext = {
+interface ExtendedContext {
 	logger: Logger;
 	user?: User;
 	userChat?: Chat;
-};
+}
 
-export type Classification = {
+export interface Classification {
 	aesthetic: number;
-	style: {
-		anime: number;
-		other: number;
-		third_dimension: number;
-		real_life: number;
-		manga_like: number;
-	};
 	nsfw: {
 		is_nsfw: boolean;
 		scores: {
@@ -30,8 +24,15 @@ export type Classification = {
 			high: number;
 		};
 	};
+	style: {
+		anime: number;
+		other: number;
+		third_dimension: number;
+		real_life: number;
+		manga_like: number;
+	};
 	tags: string[];
-};
+}
 
 export type Context = FileFlavor<
 	HydrateFlavor<BaseContext & ExtendedContext & SessionFlavor<SessionData>>
@@ -42,5 +43,8 @@ declare global {
 	namespace PrismaJson {
 		type TweetType = Tweet;
 		type ClassificationType = Classification;
+		type MessageEntitiesType = MessageEntity[];
+		type ForwardOriginType = MessageOrigin;
+		type TelegramMessageType = Message;
 	}
 }
