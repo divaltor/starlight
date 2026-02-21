@@ -43,7 +43,7 @@ export const getUserProfile = protectedProcedure
 	.handler(async ({ context }) => {
 		const userId = context.databaseUserId;
 
-		const [userProfile, hasValidCookies, postingChannel] = await Promise.all([
+		const [userProfile, hasValidCookies] = await Promise.all([
 			prisma.user.findUnique({
 				where: { id: userId },
 				select: {
@@ -55,10 +55,6 @@ export const getUserProfile = protectedProcedure
 				},
 			}),
 			verifyCookies({ context }),
-			prisma.postingChannel.findUnique({
-				where: { userId },
-				include: { chat: true },
-			}),
 		]);
 
 		if (!userProfile) {
@@ -68,17 +64,6 @@ export const getUserProfile = protectedProcedure
 			});
 		}
 
-		if (!postingChannel) {
-			return {
-				user: {
-					id: userProfile.id,
-					username: userProfile.username ?? "",
-					isPublic: userProfile.isPublic,
-				},
-				hasValidCookies: hasValidCookies.hasValidCookies,
-			};
-		}
-
 		return {
 			user: {
 				id: userProfile.id,
@@ -86,12 +71,5 @@ export const getUserProfile = protectedProcedure
 				isPublic: userProfile.isPublic,
 			},
 			hasValidCookies: hasValidCookies.hasValidCookies,
-			postingChannel: {
-				id: postingChannel?.chat.id,
-				title: postingChannel?.chat.title,
-				username: postingChannel?.chat.username,
-				photoThumbnail: postingChannel?.chat.thumbnailUrl,
-				photoBig: postingChannel?.chat.bigUrl,
-			},
 		};
 	});
