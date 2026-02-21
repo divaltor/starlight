@@ -3,7 +3,6 @@ import type {
 	InferRouterOutputs,
 	RouterClient,
 } from "@orpc/server";
-import { deletePostingChannel } from "./channels";
 import { deleteCookies, saveCookies } from "./cookies";
 import { changeProfileVisibility, getUserProfile } from "./profiles";
 import { randomImages, searchImages } from "./search";
@@ -17,9 +16,6 @@ export const appRouter = {
 	cookies: {
 		save: saveCookies,
 		delete: deleteCookies,
-	},
-	channels: {
-		disconnect: deletePostingChannel,
 	},
 	tweets: {
 		list: listUserTweets,

@@ -79,17 +79,6 @@ function RouteComponent() {
 		})
 	);
 
-	const disconnectChannelMutation = useMutation(
-		orpc.channels.disconnect.mutationOptions({
-			onSuccess: () => {
-				queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
-					...old,
-					postingChannel: undefined,
-				}));
-			},
-		})
-	);
-
 	const visibilityMutation = useMutation(
 		orpc.profiles.visibility.mutationOptions({
 			onSuccess: (
@@ -166,7 +155,6 @@ function RouteComponent() {
 	const isSubmitting =
 		saveCookiesMutation.isPending ||
 		deleteCookiesMutation.isPending ||
-		disconnectChannelMutation.isPending ||
 		visibilityMutation.isPending;
 
 	return (
@@ -264,63 +252,6 @@ function RouteComponent() {
 									</div>
 								</form>
 							</div>
-						)}
-					</section>
-
-					<h2 className="-mt-2 font-semibold text-base-content text-sm uppercase tracking-wide">
-						Advanced settings
-					</h2>
-					{/* Posting Channel Section */}
-					<section className="space-y-4">
-						{profile?.postingChannel && (
-							<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-								<div className="flex items-center gap-3">
-									<div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-base-200">
-										{profile?.postingChannel.photoThumbnail ? (
-											// biome-ignore lint/nursery/useImageSize: Don't care
-											<img
-												alt={profile?.postingChannel.title || "Channel"}
-												className="h-full w-full object-cover"
-												src={profile?.postingChannel.photoThumbnail}
-											/>
-										) : (
-											<div className="flex h-full w-full items-center justify-center bg-base-200 font-medium text-base-content/70 text-sm">
-												{profile?.postingChannel.title?.charAt(0) || "C"}
-											</div>
-										)}
-									</div>
-									<div className="min-w-0 flex-1">
-										<p className="font-medium text-base-content text-sm">
-											{profile?.postingChannel.title || "Unknown Channel"}
-										</p>
-										<p className="prose prose-sm text-base-content/70">
-											{profile?.postingChannel.username
-												? `@${profile?.postingChannel.username}`
-												: `ID: ${profile?.postingChannel.id}`}
-										</p>
-									</div>
-								</div>
-								<Button
-									className="w-full sm:w-auto"
-									disabled={disconnectChannelMutation.isPending}
-									isSoft={true}
-									onClick={() => {
-										disconnectChannelMutation.mutate({});
-									}}
-									size="sm"
-									variant="destructive"
-								>
-									Disconnect
-								</Button>
-							</div>
-						)}
-						{!profile?.postingChannel && (
-							<Alert variant="default">
-								<AlertCircle className="h-4 w-4" />
-								<AlertDescription>
-									Send /connect command to a bot to connect a channel.
-								</AlertDescription>
-							</Alert>
 						)}
 					</section>
 
