@@ -1,4 +1,4 @@
-import { env, prisma } from "@starlight/utils";
+import { env, type Prisma, prisma } from "@starlight/utils";
 import { generateText } from "ai";
 import { Composer } from "grammy";
 import type { Context } from "@/bot";
@@ -6,8 +6,6 @@ import { upsertStoredMessage } from "@/middlewares/message";
 import { getLangfuseTelemetry } from "@/otel";
 import {
 	type ConversationMessage,
-	formatSenderName,
-	getMessageContent,
 	openrouter,
 	SYSTEM_PROMPT,
 	shouldReplyToMessage,
@@ -17,6 +15,25 @@ import {
 const composer = new Composer<Context>();
 
 const groupChat = composer.chatType(["group", "supergroup"]);
+
+const messageHistorySelect = {
+	messageId: true,
+	fromId: true,
+	fromUsername: true,
+	fromFirstName: true,
+	text: true,
+	caption: true,
+	attachments: {
+		select: {
+			id: true,
+			s3Path: true,
+			mimeType: true,
+		},
+		orderBy: {
+			id: "asc",
+		},
+	},
+} satisfies Prisma.MessageSelect;
 
 const isAdminOrCreator = async (ctx: Context) => {
 	if (!(ctx.from && ctx.chat)) {
@@ -72,16 +89,13 @@ groupChat.on("message").filter(
 				messageId: {
 					not: ctx.message.message_id,
 				},
-				OR: [{ text: { not: null } }, { caption: { not: null } }],
+				OR: [
+					{ text: { not: null } },
+					{ caption: { not: null } },
+					{ attachments: { some: {} } },
+				],
 			},
-			select: {
-				messageId: true,
-				fromId: true,
-				fromUsername: true,
-				fromFirstName: true,
-				text: true,
-				caption: true,
-			},
+			select: messageHistorySelect,
 			orderBy: {
 				date: "desc",
 			},
@@ -97,13 +111,24 @@ groupChat.on("message").filter(
 
 		const repliedMessage = ctx.message.reply_to_message;
 		if (repliedMessage && !historyMessageIds.has(repliedMessage.message_id)) {
+			const repliedStoredMessage = await prisma.message.findUnique({
+				where: {
+					messageId_chatId: {
+						messageId: repliedMessage.message_id,
+						chatId: BigInt(ctx.chat.id),
+					},
+				},
+				select: messageHistorySelect,
+			});
+
 			const repliedConversationMessage = toConversationMessage(
-				{
+				repliedStoredMessage ?? {
 					fromId: repliedMessage.from ? BigInt(repliedMessage.from.id) : null,
 					fromUsername: repliedMessage.from?.username ?? null,
 					fromFirstName: repliedMessage.from?.first_name ?? null,
 					text: repliedMessage.text ?? null,
 					caption: repliedMessage.caption ?? null,
+					attachments: [],
 				},
 				botId
 			);
@@ -113,19 +138,33 @@ groupChat.on("message").filter(
 			}
 		}
 
-		const currentMessageContent = getMessageContent(ctx.message);
-		if (!currentMessageContent) {
+		const currentStoredMessage = await prisma.message.findUnique({
+			where: {
+				messageId_chatId: {
+					messageId: ctx.message.message_id,
+					chatId: BigInt(ctx.chat.id),
+				},
+			},
+			select: messageHistorySelect,
+		});
+
+		const currentConversationMessage = toConversationMessage(
+			currentStoredMessage ?? {
+				fromId: ctx.message.from ? BigInt(ctx.message.from.id) : null,
+				fromUsername: ctx.message.from?.username ?? null,
+				fromFirstName: ctx.message.from?.first_name ?? null,
+				text: ctx.message.text ?? null,
+				caption: ctx.message.caption ?? null,
+				attachments: [],
+			},
+			botId
+		);
+
+		if (!currentConversationMessage) {
 			return;
 		}
 
-		messages.push({
-			role: "user",
-			content: `${formatSenderName({
-				fromUsername: ctx.message.from?.username ?? null,
-				fromFirstName: ctx.message.from?.first_name ?? null,
-				fromId: ctx.message.from ? BigInt(ctx.message.from.id) : null,
-			})}: ${currentMessageContent}`,
-		});
+		messages.push(currentConversationMessage);
 
 		const { text } = await generateText({
 			model: openrouter(env.OPENROUTER_MODEL),
@@ -146,7 +185,7 @@ groupChat.on("message").filter(
 			message_thread_id: ctx.message.message_thread_id,
 		});
 
-		await upsertStoredMessage(ctx.chat.id, sentMessage);
+		await upsertStoredMessage(ctx, sentMessage);
 	}
 );
 

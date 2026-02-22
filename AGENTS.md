@@ -30,6 +30,7 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 2. Use strict typing and oRPC inference capabilities.
 3. All client-server communication MUST use oRPC routers in `packages/api`.
 4. Uber-style design via DaisyUI + React Aria. Use semantic HTML and alt text.
+5. Prefer Bun APIs (`Bun.file`, `Bun.write`, etc.) over Node.js `fs` equivalents.
 
 - DON'T run typechecks and build scripts.
 
@@ -37,4 +38,5 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 
 - Use `bun add <pkg> --filter <workspace>`. Never edit `package.json` manually.
 - Run `bun run format` to apply Biome formatting for `apps/web` and `apps/server`.
+- Database migrations: use `bun run db:migrate` to create and apply migrations via Prisma. Never write migration files manually.
 - Keep this file updated; it is the primary source of truth for agents.

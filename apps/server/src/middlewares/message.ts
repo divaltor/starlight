@@ -2,6 +2,7 @@ import { prisma } from "@starlight/utils";
 import type { NextFunction } from "grammy";
 import type { Message } from "grammy/types";
 import type { Context } from "@/types";
+import { prepareMessageAttachments } from "@/utils/attachment";
 
 function detectMediaType(msg: Message): string | null {
 	if (msg.photo) return "photo";
@@ -71,22 +72,46 @@ async function syncUserFromMessage(
 	});
 }
 
-export async function upsertStoredMessage(
-	chatId: number | bigint,
-	msg: Message
-) {
-	const parsedChatId = typeof chatId === "bigint" ? chatId : BigInt(chatId);
+export async function upsertStoredMessage(ctx: Context, msg: Message) {
+	const parsedChatId = BigInt(msg.chat.id);
 	const data = buildMessageData(parsedChatId, msg);
+	const attachments = await prepareMessageAttachments(
+		parsedChatId,
+		msg,
+		ctx.api,
+		ctx.logger
+	);
 
-	await prisma.message.upsert({
-		where: {
-			messageId_chatId: {
+	await prisma.$transaction(async (tx) => {
+		await tx.message.upsert({
+			where: {
+				messageId_chatId: {
+					messageId: msg.message_id,
+					chatId: parsedChatId,
+				},
+			},
+			create: data,
+			update: data,
+		});
+
+		await tx.attachment.deleteMany({
+			where: {
 				messageId: msg.message_id,
 				chatId: parsedChatId,
 			},
-		},
-		create: data,
-		update: data,
+		});
+
+		if (attachments.length > 0) {
+			await tx.attachment.createMany({
+				data: attachments.map((attachment) => ({
+					messageId: msg.message_id,
+					chatId: parsedChatId,
+					attachmentType: attachment.attachmentType,
+					mimeType: attachment.mimeType,
+					s3Path: attachment.s3Path,
+				})),
+			});
+		}
 	});
 }
 
@@ -96,15 +121,14 @@ export async function storeMessage(ctx: Context, next: NextFunction) {
 	}
 
 	const msg = ctx.message;
-	const chatId = BigInt(ctx.chat.id);
 
-	await upsertStoredMessage(chatId, msg);
+	await upsertStoredMessage(ctx, msg);
 
 	const repliedMessage = msg.reply_to_message;
 	if (repliedMessage) {
 		const sender = await syncUserFromMessage(repliedMessage);
 		if (sender?.isBot) {
-			await upsertStoredMessage(chatId, repliedMessage);
+			await upsertStoredMessage(ctx, repliedMessage);
 		}
 	}
 

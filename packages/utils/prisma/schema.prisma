@@ -214,7 +214,8 @@ model Message {
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  chat        Chat         @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
 
   @@id([messageId, chatId])
   @@index([chatId, date(sort: Desc)])
@@ -223,4 +224,26 @@ model Message {
   @@index([text])
   @@index([deletedAt])
   @@map("messages")
+}
+
+model Attachment {
+  id Int @id @default(autoincrement())
+
+  messageId Int    @map("message_id")
+  chatId    BigInt @map("chat_id")
+
+  attachmentType String @map("attachment_type")
+  mimeType       String @map("mime_type")
+  s3Path         String @map("s3_path")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  message Message @relation(fields: [messageId, chatId], references: [messageId, chatId], onDelete: Cascade)
+
+  @@index([chatId, messageId])
+  @@index([attachmentType])
+  @@index([mimeType])
+  @@index([s3Path])
+  @@map("attachments")
 }
