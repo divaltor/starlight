@@ -54,6 +54,7 @@ export const SYSTEM_PROMPT = `
 export type ConversationMessage = ModelMessage;
 
 export interface ConversationAttachment {
+	base64Data?: string;
 	mimeType: string;
 	s3Path: string;
 }
@@ -245,16 +246,17 @@ export function toConversationMessage(
 	];
 
 	for (const attachment of attachments) {
-		const attachmentUrl = toAttachmentUrl(attachment.s3Path);
+		const attachmentData =
+			attachment.base64Data ?? toAttachmentUrl(attachment.s3Path);
 
-		if (!attachmentUrl) {
+		if (!attachmentData) {
 			continue;
 		}
 
 		if (attachment.mimeType.startsWith("image/")) {
 			parts.push({
 				type: "image",
-				image: attachmentUrl,
+				image: attachmentData,
 				mediaType: attachment.mimeType,
 			});
 			continue;
@@ -262,7 +264,7 @@ export function toConversationMessage(
 
 		parts.push({
 			type: "file",
-			data: attachmentUrl,
+			data: attachmentData,
 			mediaType: attachment.mimeType,
 		});
 	}

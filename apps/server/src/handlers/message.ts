@@ -4,6 +4,7 @@ import { Composer } from "grammy";
 import type { Context } from "@/bot";
 import { upsertStoredMessage } from "@/middlewares/message";
 import { getLangfuseTelemetry } from "@/otel";
+import { s3 } from "@/storage";
 import {
 	type ConversationMessage,
 	openrouter,
@@ -34,6 +35,62 @@ const messageHistorySelect = {
 		},
 	},
 } satisfies Prisma.MessageSelect;
+
+type StoredConversationMessage = Prisma.MessageGetPayload<{
+	select: typeof messageHistorySelect;
+}>;
+
+type StoredConversationMessageWithInlineVideo = Omit<
+	StoredConversationMessage,
+	"attachments"
+> & {
+	attachments: Array<
+		StoredConversationMessage["attachments"][number] & { base64Data?: string }
+	>;
+};
+
+async function inlineVideoAttachments(
+	ctx: Context,
+	entry: StoredConversationMessage
+): Promise<StoredConversationMessageWithInlineVideo> {
+	if (entry.attachments.length === 0) {
+		return entry;
+	}
+
+	const attachments = await Promise.all(
+		entry.attachments.map(async (attachment) => {
+			if (!attachment.mimeType.startsWith("video/")) {
+				return attachment;
+			}
+
+			try {
+				const payload = await s3.file(attachment.s3Path).arrayBuffer();
+
+				return {
+					...attachment,
+					base64Data: Buffer.from(payload).toString("base64"),
+				};
+			} catch (error) {
+				ctx.logger.warn(
+					{
+						error,
+						messageId: entry.messageId,
+						s3Path: attachment.s3Path,
+						mimeType: attachment.mimeType,
+					},
+					"Failed to inline video attachment for provider payload"
+				);
+
+				return attachment;
+			}
+		})
+	);
+
+	return {
+		...entry,
+		attachments,
+	};
+}
 
 const isAdminOrCreator = async (ctx: Context) => {
 	if (!(ctx.from && ctx.chat)) {
@@ -102,9 +159,15 @@ groupChat.on("message").filter(
 			take: env.HISTORY_LIMIT,
 		});
 
+		const historyWithInlineVideo = await Promise.all(
+			history.map((entry) => inlineVideoAttachments(ctx, entry))
+		);
+
 		const botId = BigInt(ctx.me.id);
-		const historyMessageIds = new Set(history.map((entry) => entry.messageId));
-		const messages: ConversationMessage[] = history
+		const historyMessageIds = new Set(
+			historyWithInlineVideo.map((entry) => entry.messageId)
+		);
+		const messages: ConversationMessage[] = historyWithInlineVideo
 			.reverse()
 			.map((entry) => toConversationMessage(entry, botId))
 			.filter((entry): entry is ConversationMessage => entry !== null);
@@ -121,15 +184,19 @@ groupChat.on("message").filter(
 				select: messageHistorySelect,
 			});
 
+			const repliedMessageEntry = repliedStoredMessage
+				? await inlineVideoAttachments(ctx, repliedStoredMessage)
+				: {
+						fromId: repliedMessage.from ? BigInt(repliedMessage.from.id) : null,
+						fromUsername: repliedMessage.from?.username ?? null,
+						fromFirstName: repliedMessage.from?.first_name ?? null,
+						text: repliedMessage.text ?? null,
+						caption: repliedMessage.caption ?? null,
+						attachments: [],
+					};
+
 			const repliedConversationMessage = toConversationMessage(
-				repliedStoredMessage ?? {
-					fromId: repliedMessage.from ? BigInt(repliedMessage.from.id) : null,
-					fromUsername: repliedMessage.from?.username ?? null,
-					fromFirstName: repliedMessage.from?.first_name ?? null,
-					text: repliedMessage.text ?? null,
-					caption: repliedMessage.caption ?? null,
-					attachments: [],
-				},
+				repliedMessageEntry,
 				botId
 			);
 
@@ -148,15 +215,19 @@ groupChat.on("message").filter(
 			select: messageHistorySelect,
 		});
 
+		const currentMessageEntry = currentStoredMessage
+			? await inlineVideoAttachments(ctx, currentStoredMessage)
+			: {
+					fromId: ctx.message.from ? BigInt(ctx.message.from.id) : null,
+					fromUsername: ctx.message.from?.username ?? null,
+					fromFirstName: ctx.message.from?.first_name ?? null,
+					text: ctx.message.text ?? null,
+					caption: ctx.message.caption ?? null,
+					attachments: [],
+				};
+
 		const currentConversationMessage = toConversationMessage(
-			currentStoredMessage ?? {
-				fromId: ctx.message.from ? BigInt(ctx.message.from.id) : null,
-				fromUsername: ctx.message.from?.username ?? null,
-				fromFirstName: ctx.message.from?.first_name ?? null,
-				text: ctx.message.text ?? null,
-				caption: ctx.message.caption ?? null,
-				attachments: [],
-			},
+			currentMessageEntry,
 			botId
 		);
 
