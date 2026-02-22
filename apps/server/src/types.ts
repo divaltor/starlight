@@ -35,6 +35,15 @@ export interface Classification {
 	tags: string[];
 }
 
+export interface ChatSettings {
+	botAliases: string[];
+	botName: string | null;
+	ignoreUserChance: number;
+	inferenceUnavailableAliases: string[];
+	personalityTraits: string[];
+	randomResponseChance: number;
+}
+
 export type Context = FileFlavor<
 	HydrateFlavor<BaseContext & ExtendedContext & SessionFlavor<SessionData>>
 >;
@@ -47,5 +56,6 @@ declare global {
 		type MessageEntitiesType = MessageEntity[];
 		type ForwardOriginType = MessageOrigin;
 		type TelegramMessageType = Message;
+		type ChatSettingsType = ChatSettings;
 	}
 }

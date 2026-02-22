@@ -132,6 +132,8 @@ groupChat.on("message").filter(
 			system: SYSTEM_PROMPT,
 			messages,
 			experimental_telemetry: getLangfuseTelemetry(ctx),
+			temperature: 0.75,
+			topK: 80,
 		});
 
 		const reply = text.trim();
