@@ -2,7 +2,10 @@ import { prisma } from "@starlight/utils";
 import type { NextFunction } from "grammy";
 import type { Message } from "grammy/types";
 import type { Context } from "@/types";
-import { prepareMessageAttachments } from "@/utils/attachment";
+import {
+	prepareMessageAttachments,
+	type StoredMessageAttachment,
+} from "@/utils/attachment";
 
 function detectMediaType(msg: Message): string | null {
 	if (msg.photo) return "photo";
@@ -72,7 +75,10 @@ async function syncUserFromMessage(
 	});
 }
 
-export async function upsertStoredMessage(ctx: Context, msg: Message) {
+export async function upsertStoredMessage(
+	ctx: Context,
+	msg: Message
+): Promise<StoredMessageAttachment[]> {
 	const parsedChatId = BigInt(msg.chat.id);
 	const data = buildMessageData(parsedChatId, msg);
 	const attachments = await prepareMessageAttachments(
@@ -113,16 +119,27 @@ export async function upsertStoredMessage(ctx: Context, msg: Message) {
 			});
 		}
 	});
+
+	return attachments;
 }
 
 export async function storeMessage(ctx: Context, next: NextFunction) {
+	ctx.currentMessageAttachments = [];
+
 	if (!(ctx.chat && ctx.message) || ctx.chat.type === "private") {
 		return await next();
 	}
 
 	const msg = ctx.message;
 
-	await upsertStoredMessage(ctx, msg);
+	const currentMessageAttachments = await upsertStoredMessage(ctx, msg);
+	ctx.currentMessageAttachments = currentMessageAttachments.map(
+		(attachment) => ({
+			base64Data: attachment.base64Data,
+			mimeType: attachment.mimeType,
+			s3Path: attachment.s3Path,
+		})
+	);
 
 	const repliedMessage = msg.reply_to_message;
 	if (repliedMessage) {

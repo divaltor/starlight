@@ -205,26 +205,16 @@ groupChat.on("message").filter(
 			}
 		}
 
-		const currentStoredMessage = await prisma.message.findUnique({
-			where: {
-				messageId_chatId: {
-					messageId: ctx.message.message_id,
-					chatId: BigInt(ctx.chat.id),
-				},
-			},
-			select: messageHistorySelect,
-		});
+		const currentMessageAttachments = ctx.currentMessageAttachments;
 
-		const currentMessageEntry = currentStoredMessage
-			? await inlineVideoAttachments(ctx, currentStoredMessage)
-			: {
-					fromId: ctx.message.from ? BigInt(ctx.message.from.id) : null,
-					fromUsername: ctx.message.from?.username ?? null,
-					fromFirstName: ctx.message.from?.first_name ?? null,
-					text: ctx.message.text ?? null,
-					caption: ctx.message.caption ?? null,
-					attachments: [],
-				};
+		const currentMessageEntry = {
+			fromId: ctx.message.from ? BigInt(ctx.message.from.id) : null,
+			fromUsername: ctx.message.from?.username ?? null,
+			fromFirstName: ctx.message.from?.first_name ?? null,
+			text: ctx.message.text ?? null,
+			caption: ctx.message.caption ?? null,
+			attachments: currentMessageAttachments,
+		};
 
 		const currentConversationMessage = toConversationMessage(
 			currentMessageEntry,

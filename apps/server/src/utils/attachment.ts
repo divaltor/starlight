@@ -25,6 +25,13 @@ interface PreparedAttachment {
 	payload: Uint8Array;
 }
 
+export interface StoredMessageAttachment {
+	attachmentType: string;
+	base64Data: string;
+	mimeType: string;
+	s3Path: string;
+}
+
 function extensionFromMimeType(mimeType: string, fallback: string): string {
 	if (MIME_TYPE_EXTENSION[mimeType]) {
 		return MIME_TYPE_EXTENSION[mimeType];
@@ -222,9 +229,7 @@ export async function prepareMessageAttachments(
 	msg: Message,
 	api: Context["api"],
 	logger?: Context["logger"]
-): Promise<
-	Array<{ attachmentType: string; mimeType: string; s3Path: string }>
-> {
+): Promise<StoredMessageAttachment[]> {
 	const preparedAttachments: PreparedAttachment[] = [];
 
 	for (const handler of handlers) {
@@ -250,11 +255,13 @@ export async function prepareMessageAttachments(
 			const normalizedExtension =
 				attachment.extension.replace(/[^a-z0-9]/gi, "").toLowerCase() || "bin";
 			const s3Path = `attachments/${chatId.toString()}/${msg.message_id}-${index}.${normalizedExtension}`;
+			const base64Data = Buffer.from(attachment.payload).toString("base64");
 
 			await s3.write(s3Path, attachment.payload, { type: attachment.mimeType });
 
 			return {
 				attachmentType: attachment.attachmentType,
+				base64Data,
 				mimeType: attachment.mimeType,
 				s3Path,
 			};

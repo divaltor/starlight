@@ -8,6 +8,11 @@ import type { Logger } from "@/logger";
 import type { SessionData } from "@/storage";
 
 interface ExtendedContext {
+	currentMessageAttachments: Array<{
+		base64Data: string;
+		mimeType: string;
+		s3Path: string;
+	}>;
 	logger: Logger;
 	user?: User;
 	userChat?: Chat;
