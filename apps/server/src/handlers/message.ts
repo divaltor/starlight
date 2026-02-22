@@ -2,6 +2,7 @@ import { env, prisma } from "@starlight/utils";
 import { generateText } from "ai";
 import { Composer } from "grammy";
 import type { Context } from "@/bot";
+import { upsertStoredMessage } from "@/middlewares/message";
 import { getLangfuseTelemetry } from "@/otel";
 import {
 	type ConversationMessage,
@@ -74,6 +75,7 @@ groupChat.on("message").filter(
 				OR: [{ text: { not: null } }, { caption: { not: null } }],
 			},
 			select: {
+				messageId: true,
 				fromId: true,
 				fromUsername: true,
 				fromFirstName: true,
@@ -87,10 +89,29 @@ groupChat.on("message").filter(
 		});
 
 		const botId = BigInt(ctx.me.id);
+		const historyMessageIds = new Set(history.map((entry) => entry.messageId));
 		const messages: ConversationMessage[] = history
 			.reverse()
 			.map((entry) => toConversationMessage(entry, botId))
 			.filter((entry): entry is ConversationMessage => entry !== null);
+
+		const repliedMessage = ctx.message.reply_to_message;
+		if (repliedMessage && !historyMessageIds.has(repliedMessage.message_id)) {
+			const repliedConversationMessage = toConversationMessage(
+				{
+					fromId: repliedMessage.from ? BigInt(repliedMessage.from.id) : null,
+					fromUsername: repliedMessage.from?.username ?? null,
+					fromFirstName: repliedMessage.from?.first_name ?? null,
+					text: repliedMessage.text ?? null,
+					caption: repliedMessage.caption ?? null,
+				},
+				botId
+			);
+
+			if (repliedConversationMessage) {
+				messages.push(repliedConversationMessage);
+			}
+		}
 
 		const currentMessageContent = getMessageContent(ctx.message);
 		if (!currentMessageContent) {
@@ -118,10 +139,12 @@ groupChat.on("message").filter(
 			return;
 		}
 
-		await ctx.api.sendMessage(ctx.chat.id, reply, {
+		const sentMessage = await ctx.api.sendMessage(ctx.chat.id, reply, {
 			reply_to_message_id: ctx.message.message_id,
 			message_thread_id: ctx.message.message_thread_id,
 		});
+
+		await upsertStoredMessage(ctx.chat.id, sentMessage);
 	}
 );
 
