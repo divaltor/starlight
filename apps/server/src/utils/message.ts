@@ -199,18 +199,6 @@ function toAttachmentUrl(s3Path: string): URL | null {
 	}
 }
 
-function formatAttachmentLabels(attachments: ConversationAttachment[]): string {
-	const labels = attachments
-		.map((attachment) => attachment.mimeType.trim())
-		.filter((label) => label.length > 0);
-
-	if (labels.length === 0) {
-		return "";
-	}
-
-	return ` [media: ${labels.join(", ")}]`;
-}
-
 export function toConversationMessage(
 	entry: {
 		fromId: bigint | null;
@@ -241,7 +229,6 @@ export function toConversationMessage(
 	}
 
 	const sender = formatSenderName(entry);
-	const attachmentLabels = formatAttachmentLabels(attachments);
 
 	if (attachments.length === 0) {
 		return {
@@ -250,17 +237,16 @@ export function toConversationMessage(
 		};
 	}
 
-	const baseTextContent = content
-		? `${sender}: ${content}`
-		: `${sender}: [attachment]`;
-	const textContent = `${baseTextContent}${attachmentLabels}`;
-
 	const parts: Array<TextPart | ImagePart | FilePart> = [
-		{ type: "text", text: textContent },
+		{
+			type: "text",
+			text: content ? `${sender}: ${content}` : `${sender}:`,
+		},
 	];
 
 	for (const attachment of attachments) {
 		const attachmentUrl = toAttachmentUrl(attachment.s3Path);
+
 		if (!attachmentUrl) {
 			continue;
 		}

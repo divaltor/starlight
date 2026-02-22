@@ -141,13 +141,13 @@ async function prepareVideoAttachment(
 		};
 	}
 
-	const mimeType = msg.video.mime_type ?? "video/mp4";
+	const mimeType = msg.video.mime_type ?? "video/webm";
 	const payload = await downloadFilePayload(api, msg.video.file_id);
 
 	return {
 		attachmentType: "video",
 		mimeType,
-		extension: extensionFromMimeType(mimeType, "mp4"),
+		extension: extensionFromMimeType(mimeType, "webm"),
 		payload,
 	};
 }

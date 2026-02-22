@@ -171,6 +171,7 @@ groupChat.on("message").filter(
 			system: SYSTEM_PROMPT,
 			messages,
 			experimental_telemetry: getLangfuseTelemetry(ctx),
+			experimental_download: async (downloads) => downloads.map(() => null),
 			temperature: 0.75,
 			topK: 80,
 		});
