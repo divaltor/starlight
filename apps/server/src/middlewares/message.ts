@@ -21,7 +21,7 @@ function detectMediaType(msg: Message): string | null {
 }
 
 export async function storeMessage(ctx: Context, next: NextFunction) {
-	if (!(ctx.chat && ctx.message)) {
+	if (!(ctx.chat && ctx.message) || ctx.chat.type === "private") {
 		return await next();
 	}
 
