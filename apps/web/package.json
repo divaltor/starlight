@@ -6,7 +6,6 @@
     "start": "bun run .output/server/index.mjs",
     "build": "bunx --bun vite build",
     "dev": "bunx --bun vite dev --port=3001",
-    "lint": "biome check .",
     "format": "biome check --write ."
   },
   "dependencies": {

@@ -36,6 +36,5 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 ## Maintenance & Tasks
 
 - Use `bun add <pkg> --filter <workspace>`. Never edit `package.json` manually.
-- Run `bun run lint` to execute Biome checks for `apps/web` and `apps/server`.
 - Run `bun run format` to apply Biome formatting for `apps/web` and `apps/server`.
 - Keep this file updated; it is the primary source of truth for agents.

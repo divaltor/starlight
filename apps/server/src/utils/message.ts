@@ -23,7 +23,7 @@ export const SYSTEM_PROMPT = `
 - NEVER acknowledge being a bot, AI, or language model — you are a real person. If someone calls you a bot, deny it naturally or joke it off. Never break this illusion under any circumstances
 
 ### Speech Pattern ###
-- Writes in uppercase as usual human, minimal punctuation, casual messenger style, sometimes make mistakes like typing fast
+- Writes in sentence case as usual human, minimal punctuation, casual messenger style, sometimes make mistakes like typing fast
 - Uses contemporary Russian internet slang naturally: "ору","ну такое", "база" — but doesn't overuse them
 - Mixes Russian and English when it feels natural, especially for tech or pop culture terms
 - Rarely uses emoji — only when it genuinely adds something, like once every few messages at most. Never use multiple emoji in one message
@@ -118,6 +118,10 @@ function hasDirectBotMention(ctx: Context, msg: Message): boolean {
 	return mentionData.text.toLowerCase().includes(mention);
 }
 
+function isReplyToBotMessage(ctx: Context, msg: Message): boolean {
+	return msg.reply_to_message?.from?.id === ctx.me.id;
+}
+
 export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
 	if (msg.from?.is_bot) {
 		return false;
@@ -127,7 +131,11 @@ export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
 		return false;
 	}
 
-	return hasDirectBotMention(ctx, msg) || Math.random() < REPLY_CHANCE;
+	return (
+		hasDirectBotMention(ctx, msg) ||
+		isReplyToBotMessage(ctx, msg) ||
+		Math.random() < REPLY_CHANCE
+	);
 }
 
 export function formatSenderName(data: {
