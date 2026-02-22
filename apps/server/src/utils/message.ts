@@ -3,7 +3,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { env } from "@starlight/utils";
 import type { Context } from "@/bot";
 
-const REPLY_CHANCE = 0.1;
+const REPLY_CHANCE = 0.01;
 
 export const SYSTEM_PROMPT = `
 ### Character: Starlight (Звездочка) ###
