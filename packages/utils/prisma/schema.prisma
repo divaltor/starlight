@@ -169,7 +169,6 @@ model Video {
 }
 
 model Message {
-  id        String @id @default(uuid(7)) @db.Uuid
   messageId Int    @map("message_id")
   chatId    BigInt @map("chat_id")
 
@@ -214,7 +213,7 @@ model Message {
   // Relations
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
-  @@unique([messageId, chatId])
+  @@id([messageId, chatId])
   @@index([chatId, date(sort: Desc)])
   @@index([fromId])
   @@index([mediaType])
