@@ -30,13 +30,13 @@ export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
 	},
 });
 
-type ScrapperJobData = {
-	userId: string;
+interface ScrapperJobData {
 	count: number;
-	limit: number;
 	cursor?: string;
 	force?: boolean;
-};
+	limit: number;
+	userId: string;
+}
 
 export const scrapperWorker = new Worker<ScrapperJobData>(
 	"feed-scrapper",

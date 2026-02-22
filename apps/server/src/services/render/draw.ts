@@ -2,14 +2,14 @@ import type { Image, SKRSContext2D } from "@napi-rs/canvas";
 import { loadImage } from "@napi-rs/canvas";
 import { logger } from "@/logger";
 
-type RoundedRectParams = {
+interface RoundedRectParams {
 	ctx: SKRSContext2D;
-	x: number;
-	y: number;
-	width: number;
 	height: number;
 	radius: number;
-};
+	width: number;
+	x: number;
+	y: number;
+}
 
 export function roundedRect(params: RoundedRectParams): void {
 	const { ctx, x, y, width, height, radius } = params;
@@ -26,13 +26,13 @@ export function roundedRect(params: RoundedRectParams): void {
 	ctx.closePath();
 }
 
-type DrawCircularImageParams = {
+interface DrawCircularImageParams {
 	ctx: SKRSContext2D;
 	image: Image;
+	size: number;
 	x: number;
 	y: number;
-	size: number;
-};
+}
 
 export function drawCircularImage(params: DrawCircularImageParams): void {
 	const { ctx, image, x, y, size } = params;
@@ -45,14 +45,14 @@ export function drawCircularImage(params: DrawCircularImageParams): void {
 	ctx.restore();
 }
 
-type DrawImageCoverParams = {
+interface DrawImageCoverParams {
 	ctx: SKRSContext2D;
+	height: number;
 	image: Image;
+	width: number;
 	x: number;
 	y: number;
-	width: number;
-	height: number;
-};
+}
 
 export function drawImageCover(params: DrawImageCoverParams): void {
 	const {
@@ -95,10 +95,10 @@ export function drawImageCover(params: DrawImageCoverParams): void {
 	);
 }
 
-export type TextLine = {
-	text: string;
+export interface TextLine {
 	isParagraphEnd: boolean;
-};
+	text: string;
+}
 
 function isHashtagLine(text: string): boolean {
 	const words = text.trim().split(/\s+/);
@@ -246,12 +246,12 @@ export function formatNumber(num: number | null | undefined): string {
 	return num.toString();
 }
 
-type DrawPlayButtonParams = {
-	ctx: SKRSContext2D;
+interface DrawPlayButtonParams {
 	centerX: number;
 	centerY: number;
+	ctx: SKRSContext2D;
 	size?: number;
-};
+}
 
 export function drawPlayButton(params: DrawPlayButtonParams): void {
 	const { ctx, centerX, centerY, size = 48 } = params;
@@ -289,14 +289,14 @@ export function drawPlayButton(params: DrawPlayButtonParams): void {
 	ctx.restore();
 }
 
-type DrawAvatarParams = {
+interface DrawAvatarParams {
 	ctx: SKRSContext2D;
+	fallbackColor: string;
+	size: number;
 	url: string;
 	x: number;
 	y: number;
-	size: number;
-	fallbackColor: string;
-};
+}
 
 export async function drawAvatarWithFallback(
 	params: DrawAvatarParams
@@ -315,17 +315,17 @@ export async function drawAvatarWithFallback(
 	}
 }
 
-type DrawMediaBlockParams = {
-	ctx: SKRSContext2D;
-	imageUrl: string;
-	x: number;
-	y: number;
-	width: number;
-	height: number;
-	isVideo: boolean;
+interface DrawMediaBlockParams {
 	backgroundColor: string;
 	borderRadius: number;
-};
+	ctx: SKRSContext2D;
+	height: number;
+	imageUrl: string;
+	isVideo: boolean;
+	width: number;
+	x: number;
+	y: number;
+}
 
 export async function drawMediaBlock(
 	params: DrawMediaBlockParams
@@ -367,18 +367,18 @@ export async function drawMediaBlock(
 	}
 }
 
-type DrawAuthorInfoParams = {
+interface DrawAuthorInfoParams {
 	ctx: SKRSContext2D;
+	fontFamily: string;
+	fontSize: number;
+	inline?: boolean;
 	name: string;
+	secondaryColor: string;
+	textColor: string;
 	username: string;
 	x: number;
 	y: number;
-	fontSize: number;
-	fontFamily: string;
-	textColor: string;
-	secondaryColor: string;
-	inline?: boolean;
-};
+}
 
 export function drawAuthorInfo(params: DrawAuthorInfoParams): void {
 	const {
@@ -413,17 +413,17 @@ export function drawAuthorInfo(params: DrawAuthorInfoParams): void {
 	}
 }
 
-type DrawTextLinesParams = {
+interface DrawTextLinesParams {
+	color: string;
 	ctx: SKRSContext2D;
-	lines: TextLine[];
-	x: number;
-	startY: number;
+	fontFamily: string;
 	fontSize: number;
 	lineHeight: number;
+	lines: TextLine[];
 	paragraphGap: number;
-	color: string;
-	fontFamily: string;
-};
+	startY: number;
+	x: number;
+}
 
 export function drawTextLines(params: DrawTextLinesParams): number {
 	const {

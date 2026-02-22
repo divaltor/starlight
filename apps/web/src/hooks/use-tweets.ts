@@ -5,10 +5,10 @@ import type {
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { orpc } from "@/utils/orpc";
 
-type UseTweetsOptions = {
-	username?: string;
+interface UseTweetsOptions {
 	limit?: number;
-};
+	username?: string;
+}
 
 export function useTweets(options: UseTweetsOptions = {}) {
 	const { username, limit = 30 } = options;

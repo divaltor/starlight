@@ -148,6 +148,7 @@ function TwitterArtViewer() {
 			{/* Loading State */}
 			{displayLoading && (
 				<div className="flex flex-1 items-center justify-center">
+					{/** biome-ignore lint/correctness/useImageSize: animated loader GIF uses CSS sizing intentionally */}
 					<img
 						alt="Searching for cute anime girls..."
 						className="mx-auto h-auto w-64"

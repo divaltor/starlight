@@ -1,32 +1,31 @@
-export type FxEmbedAuthor = {
+export interface FxEmbedAuthor {
+	avatar_url: string;
 	id: string;
 	name: string;
 	screen_name: string;
-	avatar_url: string;
-};
+}
 
-export type FxEmbedPhoto = {
+export interface FxEmbedPhoto {
+	height: number;
 	type: "photo";
 	url: string;
 	width: number;
-	height: number;
-};
+}
 
-export type FxEmbedVideo = {
+export interface FxEmbedVideo {
+	height: number;
+	thumbnail_url: string;
 	type: "video" | "gif";
 	url: string;
-	thumbnail_url: string;
 	width: number;
-	height: number;
-};
+}
 
-export type FxEmbedMedia = {
+export interface FxEmbedMedia {
 	photos?: FxEmbedPhoto[];
 	videos?: FxEmbedVideo[];
-};
+}
 
-export type FxEmbedArticleCoverMedia = {
-	media_key: string;
+export interface FxEmbedArticleCoverMedia {
 	media_id: string;
 	media_info: {
 		__typename: "ApiImage";
@@ -34,42 +33,43 @@ export type FxEmbedArticleCoverMedia = {
 		original_img_width: number;
 		original_img_url: string;
 	};
-};
+	media_key: string;
+}
 
-export type FxEmbedArticle = {
-	title: string;
-	preview_text: string;
+export interface FxEmbedArticle {
 	cover_media?: FxEmbedArticleCoverMedia;
-};
+	preview_text: string;
+	title: string;
+}
 
-export type FxEmbedTweet = {
-	id: string;
-	url: string;
-	text: string;
+export interface FxEmbedTweet {
+	article?: FxEmbedArticle;
+	author: FxEmbedAuthor;
 	created_at: string;
 	created_timestamp: number;
-	author: FxEmbedAuthor;
+	id: string;
 	likes: number;
-	retweets: number;
-	replies: number;
-	views?: number;
 	media?: FxEmbedMedia;
-	article?: FxEmbedArticle;
 	quote?: FxEmbedTweet;
+	replies: number;
 	replying_to?: string | null;
 	replying_to_status?: string | null;
-};
+	retweets: number;
+	text: string;
+	url: string;
+	views?: number;
+}
 
-export type FxEmbedResponse = {
+export interface FxEmbedResponse {
 	code: number;
 	message: string;
 	tweet?: FxEmbedTweet;
-};
+}
 
 export type FxEmbedErrorCode = 401 | 404 | 500;
 export type FxEmbedErrorMessage = "PRIVATE_TWEET" | "NOT_FOUND" | "API_FAIL";
 
-export type FxEmbedError = {
+export interface FxEmbedError {
 	code: FxEmbedErrorCode;
 	message: FxEmbedErrorMessage;
-};
+}

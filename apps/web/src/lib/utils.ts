@@ -27,11 +27,11 @@ const Base64StringSchema = z.string().refine(
 	{ message: "Invalid base64 string" }
 );
 
-type Cookie = {
+interface Cookie {
+	domain: string;
 	key: string;
 	value: string;
-	domain: string;
-};
+}
 
 /**
  * Parse cookies from various formats using tough-cookie library

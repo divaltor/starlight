@@ -2,15 +2,15 @@ import { prisma } from "@starlight/utils";
 import { logger } from "@/logger";
 import { calculateHashDistance, calculatePerceptualHash } from "./image";
 
-type SimilarPhoto = {
-	id: string;
-	userId: string;
-	perceptualHash: string;
+interface SimilarPhoto {
 	distance: number;
-	s3Path?: string;
+	id: string;
 	originalUrl: string;
+	perceptualHash: string;
+	s3Path?: string;
 	tweetId: string;
-};
+	userId: string;
+}
 
 export async function findSimilarPhotos(
 	targetHash: string,

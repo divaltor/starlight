@@ -23,11 +23,11 @@ export const imagesQueue = new Queue<ImageCollectorJobData>(
 	}
 );
 
-type ImageCollectorJobData = {
+interface ImageCollectorJobData {
 	tweet: Tweet;
 	// From database
 	userId: string;
-};
+}
 
 export const imagesWorker = new Worker<ImageCollectorJobData>(
 	"images-collector",

@@ -12,16 +12,16 @@ import type {
 	RouteButtonConfig,
 } from "@/types/telegram-buttons";
 
-type ButtonManager = {
-	updateConfig: (config: Partial<RouteButtonConfig>) => void;
-	resetToDefaults: () => void;
+interface ButtonManager {
 	getButtonState: (buttonType: keyof RouteButtonConfig) => ButtonState;
-};
+	resetToDefaults: () => void;
+	updateConfig: (config: Partial<RouteButtonConfig>) => void;
+}
 
-type UseTelegramButtonsOptions = {
+interface UseTelegramButtonsOptions {
 	autoCleanup?: boolean;
 	debounceMs?: number;
-};
+}
 
 export function useTelegramButtons(
 	initialConfig?: RouteButtonConfig,

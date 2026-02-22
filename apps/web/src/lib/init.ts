@@ -18,10 +18,10 @@ import {
 	viewport,
 } from "@telegram-apps/sdk-react";
 
-export type InitOptions = {
+export interface InitOptions {
 	debug?: boolean;
 	mockForMacOS?: boolean;
-};
+}
 
 /**
  * Initializes the Telegram Mini App and configures its dependencies.

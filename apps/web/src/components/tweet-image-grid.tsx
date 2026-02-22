@@ -7,12 +7,12 @@ import { Gallery, Item } from "react-photoswipe-gallery";
 import { Button } from "@/components/ui/button";
 import { Carousel } from "@/components/ui/skiper-ui/carousel";
 
-type TweetImageGridProps = {
-	tweet: TweetData;
-	showActions?: boolean;
+interface TweetImageGridProps {
 	onDeleteImage?: (photoId: string) => void;
+	showActions?: boolean;
 	showArtistOnHover?: boolean;
-};
+	tweet: TweetData;
+}
 
 export function TweetImageGrid({
 	tweet,
@@ -32,6 +32,15 @@ export function TweetImageGrid({
 		e.stopPropagation();
 
 		window.open(tweet.sourceUrl, "_blank", "noopener,noreferrer");
+	};
+
+	const handleGalleryOpenKeyDown = (
+		event: React.KeyboardEvent<HTMLElement>
+	) => {
+		if (event.key === "Enter" || event.key === " ") {
+			event.preventDefault();
+			event.currentTarget.click();
+		}
 	};
 
 	const uiElements: UIElementData[] = [
@@ -103,20 +112,21 @@ export function TweetImageGrid({
 					width={photo.width}
 				>
 					{({ ref, open }) => (
-						// biome-ignore lint/a11y/useKeyWithClickEvents: don't care
-						// biome-ignore lint/a11y/noNoninteractiveElementInteractions: don't care
-						// biome-ignore lint/a11y/noStaticElementInteractions: don't care
+						// biome-ignore lint/a11y/useSemanticElements: wrapper must stay a non-button container because it contains nested interactive controls
 						<div
 							className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md"
 							onClick={open}
+							onKeyDown={handleGalleryOpenKeyDown}
 							ref={ref}
+							role="button"
+							tabIndex={0}
 						>
 							{isImageLoading[photo.id] && (
 								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
 									<div className="loading loading-spinner loading-sm" />
 								</div>
 							)}
-							{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: Fuck off */}
+							{/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
 							<img
 								alt={photo.alt}
 								className={`${
@@ -198,11 +208,11 @@ export function TweetImageGrid({
 						width={item.width || 400}
 					>
 						{({ ref, open }) => (
-							// biome-ignore lint/a11y/useKeyWithClickEvents: don't care
-							// biome-ignore lint/a11y/useSemanticElements: don't care
+							// biome-ignore lint/a11y/useSemanticElements: wrapper must stay a non-button container because it contains nested interactive controls
 							<div
 								className="group relative h-full w-full cursor-pointer overflow-hidden rounded-box transition-all duration-300 hover:z-10"
 								onClick={open}
+								onKeyDown={handleGalleryOpenKeyDown}
 								ref={ref}
 								role="button"
 								tabIndex={0}
@@ -212,7 +222,7 @@ export function TweetImageGrid({
 										<div className="loading loading-spinner loading-sm" />
 									</div>
 								)}
-								{/** biome-ignore lint/a11y/noNoninteractiveElementInteractions: don't care */}
+								{/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
 								<img
 									alt={item.alt}
 									className={`${

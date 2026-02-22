@@ -66,11 +66,11 @@ export class RedisAdapter<T> implements StorageAdapter<T> {
 	}
 }
 
-export type RFC6265Cookie = {
+export interface RFC6265Cookie {
+	domain: string;
 	key: string;
 	value: string;
-	domain: string;
-};
+}
 
 const TWID_REGEX = /u=(\d+)/;
 const DOMAIN_REGEX = /https?:\/\/(.+?)\//;
@@ -111,9 +111,9 @@ export class Cookies {
 	}
 }
 
-type SessionData = {
+interface SessionData {
 	cookies: RFC6265Cookie[] | null;
-};
+}
 
 // biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 export const s3 = new Bun.S3Client({

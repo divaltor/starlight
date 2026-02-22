@@ -6,15 +6,15 @@ import { logger } from "@/logger";
 // biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 const filesGlob = new Bun.Glob("*.mp4");
 
-type VideoMetadata = {
+interface VideoMetadata {
 	height?: number;
 	width?: number;
-};
+}
 
-export type VideoInformation = {
+export interface VideoInformation {
 	filePath: string;
 	metadata: VideoMetadata;
-};
+}
 
 async function createVideoInformation(
 	filePath: string

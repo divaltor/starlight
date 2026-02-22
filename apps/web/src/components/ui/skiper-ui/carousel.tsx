@@ -1,6 +1,7 @@
 "use client";
 
 import { domAnimation, LazyMotion } from "motion/react";
+// biome-ignore lint/performance/noNamespaceImport: motion/react-m is designed for namespace component access like m.div
 import * as m from "motion/react-m";
 import { EffectCards } from "swiper/modules";
 import { Swiper, SwiperSlide } from "swiper/react";

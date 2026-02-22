@@ -1,13 +1,13 @@
 export type Theme = "light" | "dark";
 
-export type ThemeColors = {
-	background: string;
-	cardBackground: string;
-	text: string;
-	secondaryText: string;
+export interface ThemeColors {
 	accent: string;
+	background: string;
 	border: string;
-};
+	cardBackground: string;
+	secondaryText: string;
+	text: string;
+}
 
 export const themes: Record<Theme, ThemeColors> = {
 	light: {

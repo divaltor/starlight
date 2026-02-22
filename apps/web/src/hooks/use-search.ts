@@ -5,11 +5,11 @@ import type {
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { orpc } from "@/utils/orpc";
 
-type UseSearchOptions = {
-	query: string;
+interface UseSearchOptions {
 	limit?: number;
 	ownOnly?: boolean;
-};
+	query: string;
+}
 
 export function useSearch(options: UseSearchOptions) {
 	const { query, limit = 30, ownOnly = false } = options;

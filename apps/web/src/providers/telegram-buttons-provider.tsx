@@ -1,16 +1,16 @@
 import { useCanGoBack, useRouter } from "@tanstack/react-router";
-import { useRawInitData } from "@telegram-apps/sdk-react";
+import { retrieveRawInitData } from "@telegram-apps/sdk-react";
 import { createContext, useContext, useEffect, useMemo } from "react";
 import { useTelegramButtons } from "@/hooks/use-telegram-buttons";
 import type { ButtonState, RouteButtonConfig } from "@/types/telegram-buttons";
 
-type TelegramButtonsContextValue = {
-	updateButtons: (config: Partial<RouteButtonConfig>) => void;
-	resetButtons: () => void;
+interface TelegramButtonsContextValue {
 	getButtonState: (buttonType: keyof RouteButtonConfig) => ButtonState;
-	setMainButton: (text: string, visible?: boolean, action?: () => void) => void;
 	rawInitData: string | undefined;
-};
+	resetButtons: () => void;
+	setMainButton: (text: string, visible?: boolean, action?: () => void) => void;
+	updateButtons: (config: Partial<RouteButtonConfig>) => void;
+}
 
 const TelegramButtonsContext =
 	createContext<TelegramButtonsContextValue | null>(null);
@@ -77,10 +77,10 @@ export function TelegramButtonsProvider({
 	let rawInitData: string | undefined;
 
 	try {
-		// biome-ignore lint/correctness/useHookAtTopLevel: We can't use it in SSR because `window` is not presented and we fail
-		rawInitData = useRawInitData();
-		// biome-ignore lint/suspicious/noEmptyBlockStatements: We can't use it in SSR because `window` is not presented and we fail
-	} catch {}
+		rawInitData = retrieveRawInitData() ?? undefined;
+	} catch {
+		rawInitData = undefined;
+	}
 
 	// Helper function for main button
 	const setMainButton = (text: string, visible = true, action?: () => void) => {

@@ -16,24 +16,26 @@ import { type Theme, type ThemeColors, themes } from "./themes";
 
 export type { Theme } from "./themes";
 
-export type ArticleCoverMedia = {
+export interface ArticleCoverMedia {
+	height: number;
 	url: string;
 	width: number;
-	height: number;
-};
+}
 
-export type ArticleData = {
-	title: string;
-	previewText: string;
+export interface ArticleData {
 	coverMedia?: ArticleCoverMedia | null;
-};
+	previewText: string;
+	title: string;
+}
 
-export type TweetData = {
+export interface TweetData {
+	article?: ArticleData | null;
+	authorAvatarUrl: string;
 	authorName: string;
 	authorUsername: string;
-	authorAvatarUrl: string;
-	text: string;
 	createdAt?: Date | null;
+	hasMoreInChain?: boolean;
+	likes?: number | null;
 	media?: {
 		photos?: Array<{ url: string; width: number; height: number }>;
 		videos?: Array<{
@@ -43,20 +45,18 @@ export type TweetData = {
 			type: "video" | "gif";
 		}>;
 	} | null;
-	article?: ArticleData | null;
-	likes?: number | null;
-	retweets?: number | null;
-	replies?: number | null;
 	quote?: TweetData | null;
+	replies?: number | null;
 	replyChain?: TweetData[];
-	hasMoreInChain?: boolean;
-};
+	retweets?: number | null;
+	text: string;
+}
 
-export type RenderResult = {
+export interface RenderResult {
 	buffer: Buffer;
-	width: number;
 	height: number;
-};
+	width: number;
+}
 
 const QUOTE_AVATAR_SIZE = 24;
 const QUOTE_FONT_SIZE_NAME = 13;
@@ -77,14 +77,14 @@ const ARTICLE_BORDER_WIDTH = 1;
 const ARTICLE_TITLE_FONT_SIZE = 15;
 const ARTICLE_PREVIEW_FONT_SIZE = 14;
 
-type ReplyChainItem = {
-	tweet: TweetData;
-	textLines: ReturnType<typeof wrapText>;
+interface ReplyChainItem {
 	height: number;
-	mediaHeight: number;
 	isVideo: boolean;
+	mediaHeight: number;
 	quoteLayout: TweetLayout["quote"];
-};
+	textLines: ReturnType<typeof wrapText>;
+	tweet: TweetData;
+}
 
 type MediaItem =
 	| { type: "photo"; url: string; width: number; height: number }
@@ -95,20 +95,18 @@ type MediaItem =
 			height: number;
 	  };
 
-type ArticleLayout = {
-	titleLines: ReturnType<typeof wrapText>;
-	previewLines: ReturnType<typeof wrapText>;
-	height: number;
+interface ArticleLayout {
 	contentWidth: number;
 	coverMedia: ArticleCoverMedia | null;
 	coverMediaHeight: number;
-};
+	height: number;
+	previewLines: ReturnType<typeof wrapText>;
+	titleLines: ReturnType<typeof wrapText>;
+}
 
-type TweetLayout = {
-	totalHeight: number;
+interface TweetLayout {
 	contentWidth: number;
-	textX: number;
-	textWidth: number;
+	hasMoreInChain: boolean;
 
 	mainTweet: {
 		textLines: ReturnType<typeof wrapText>;
@@ -129,9 +127,11 @@ type TweetLayout = {
 	} | null;
 
 	replyChain: ReplyChainItem[];
+	textWidth: number;
+	textX: number;
+	totalHeight: number;
 	totalReplyChainHeight: number;
-	hasMoreInChain: boolean;
-};
+}
 
 function getFirstMedia(media: TweetData["media"]): MediaItem | null {
 	if (!media) {
@@ -466,16 +466,16 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 	};
 }
 
-type DrawReplyChainParams = {
-	ctx: SKRSContext2D;
-	items: ReplyChainItem[];
-	hasMoreInChain: boolean;
-	startY: number;
+interface DrawReplyChainParams {
 	colors: ThemeColors;
+	ctx: SKRSContext2D;
 	fontFamily: string;
-	replyToTextX: number;
+	hasMoreInChain: boolean;
+	items: ReplyChainItem[];
 	replyToTextWidth: number;
-};
+	replyToTextX: number;
+	startY: number;
+}
 
 async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 	const {
@@ -601,15 +601,15 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 	return yOffset;
 }
 
-type DrawArticleBlockParams = {
-	ctx: SKRSContext2D;
+interface DrawArticleBlockParams {
 	articleLayout: ArticleLayout;
+	colors: ThemeColors;
+	containerWidth: number;
+	ctx: SKRSContext2D;
+	fontFamily: string;
 	x: number;
 	y: number;
-	containerWidth: number;
-	colors: ThemeColors;
-	fontFamily: string;
-};
+}
 
 async function drawArticleBlock(params: DrawArticleBlockParams): Promise<void> {
 	const { ctx, articleLayout, x, y, containerWidth, colors, fontFamily } =
@@ -676,16 +676,16 @@ async function drawArticleBlock(params: DrawArticleBlockParams): Promise<void> {
 	});
 }
 
-type DrawQuoteTweetParams = {
+interface DrawQuoteTweetParams {
+	colors: ThemeColors;
+	contentWidth: number;
 	ctx: SKRSContext2D;
+	fontFamily: string;
 	quote: TweetData;
 	quoteLayout: NonNullable<TweetLayout["quote"]>;
 	x: number;
 	y: number;
-	contentWidth: number;
-	colors: ThemeColors;
-	fontFamily: string;
-};
+}
 
 async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
 	const { ctx, quote, quoteLayout, x, y, contentWidth, colors, fontFamily } =
@@ -772,11 +772,11 @@ async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
 	}
 }
 
-type DrawCardBackgroundParams = {
+interface DrawCardBackgroundParams {
+	colors: ThemeColors;
 	ctx: SKRSContext2D;
 	totalHeight: number;
-	colors: ThemeColors;
-};
+}
 
 function drawCardBackground(params: DrawCardBackgroundParams): void {
 	const { ctx, totalHeight, colors } = params;
@@ -806,13 +806,13 @@ function drawCardBackground(params: DrawCardBackgroundParams): void {
 	ctx.stroke();
 }
 
-type DrawStatsParams = {
+interface DrawStatsParams {
+	colors: ThemeColors;
 	ctx: SKRSContext2D;
+	fontFamily: string;
 	tweet: TweetData;
 	y: number;
-	colors: ThemeColors;
-	fontFamily: string;
-};
+}
 
 function drawStats(params: DrawStatsParams): void {
 	const { ctx, tweet, y, colors, fontFamily } = params;

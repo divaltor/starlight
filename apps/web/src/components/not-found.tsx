@@ -2,22 +2,22 @@ import { Ghost } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 
-type ActionConfig = {
+interface ActionConfig {
+	href?: string;
 	label: string;
 	onClick?: () => void;
-	href?: string;
-	variant?: ComponentProps<typeof Button>["variant"];
 	onMouseEnter?: () => void;
-};
+	variant?: ComponentProps<typeof Button>["variant"];
+}
 
-type NotFoundProps = {
-	title?: string;
+interface NotFoundProps {
+	className?: string;
 	description?: string;
 	icon?: ReactNode;
 	primaryAction?: ActionConfig;
 	secondaryAction?: ActionConfig;
-	className?: string;
-};
+	title?: string;
+}
 
 export function NotFound({
 	title = "Page not found",

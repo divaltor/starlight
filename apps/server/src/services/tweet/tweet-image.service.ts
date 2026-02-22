@@ -39,10 +39,10 @@ function stripLeadingMention(text: string, username: string): string {
 
 const MAX_REPLY_CHAIN_DEPTH = 3;
 
-type ReplyChainResult = {
+interface ReplyChainResult {
 	chain: TweetData[];
 	hasMore: boolean;
-};
+}
 
 async function fetchReplyChain(
 	tweetId: string,
