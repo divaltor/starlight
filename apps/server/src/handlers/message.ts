@@ -27,39 +27,32 @@ const isAdminOrCreator = async (ctx: Context) => {
 	return member.status === "administrator" || member.status === "creator";
 };
 
-groupChat.command("clear").filter(
-	(ctx) => ctx.message.message_thread_id === undefined,
-	async (ctx) => {
-		await ctx.reply("This command works only inside a topic.");
-	}
-);
-
-groupChat.command("clear").filter(
-	async (ctx) =>
-		ctx.message.message_thread_id !== undefined &&
-		!(await isAdminOrCreator(ctx)),
-	async (ctx) => {
+groupChat.command("clear", async (ctx) => {
+	if (!(await isAdminOrCreator(ctx))) {
 		await ctx.reply("Only admins and creators can use this command.");
+		return;
 	}
-);
 
-groupChat.command("clear").filter(
-	async (ctx) =>
-		ctx.message.message_thread_id !== undefined &&
-		(await isAdminOrCreator(ctx)),
-	async (ctx) => {
-		const messageThreadId = ctx.message.message_thread_id;
+	const messageThreadId = ctx.message.message_thread_id ?? null;
 
-		const { count } = await prisma.message.deleteMany({
-			where: {
-				chatId: BigInt(ctx.chat.id),
-				messageThreadId,
-			},
-		});
+	const { count } = await prisma.message.updateMany({
+		where: {
+			chatId: BigInt(ctx.chat.id),
+			messageThreadId,
+			deletedAt: null,
+		},
+		data: {
+			deletedAt: new Date(),
+		},
+	});
 
-		await ctx.reply(`Cleared ${count} messages from this topic history.`);
+	if (messageThreadId === null) {
+		await ctx.reply(`Cleared ${count} messages without topic history.`);
+		return;
 	}
-);
+
+	await ctx.reply(`Cleared ${count} messages from this topic history.`);
+});
 
 groupChat.on("message").filter(
 	(ctx) => shouldReplyToMessage(ctx, ctx.message),

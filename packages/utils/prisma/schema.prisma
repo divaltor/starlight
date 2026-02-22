@@ -209,6 +209,7 @@ model Message {
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   // Relations
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
@@ -218,5 +219,6 @@ model Message {
   @@index([fromId])
   @@index([mediaType])
   @@index([text])
+  @@index([deletedAt])
   @@map("messages")
 }

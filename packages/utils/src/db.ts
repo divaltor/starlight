@@ -17,6 +17,39 @@ const adapter = new PrismaPg({
 	connectionString: env.DATABASE_URL,
 });
 
+const onlyNotDeletedMessages = <
+	T extends {
+		where?: PrismaGenerated.MessageWhereInput;
+	},
+>(
+	args: T
+): T => {
+	const where = args.where as Record<string, unknown> | undefined;
+	if (where?.deletedAt !== undefined) {
+		return args;
+	}
+
+	args.where = {
+		...(args.where ?? {}),
+		deletedAt: null,
+	} as PrismaGenerated.MessageWhereInput;
+
+	return args;
+};
+
+const isMessageReadOperation = (operation: string) => {
+	return (
+		operation === "findUnique" ||
+		operation === "findUniqueOrThrow" ||
+		operation === "findMany" ||
+		operation === "findFirst" ||
+		operation === "findFirstOrThrow" ||
+		operation === "count" ||
+		operation === "aggregate" ||
+		operation === "groupBy"
+	);
+};
+
 export const prisma = new PrismaClient({
 	log:
 		env.NODE_ENV === "production"
@@ -24,6 +57,23 @@ export const prisma = new PrismaClient({
 			: ["info", "warn", "error"],
 	adapter,
 }).$extends({
+	query: {
+		message: {
+			$allOperations({ operation, args, query }) {
+				if (isMessageReadOperation(operation)) {
+					return query(
+						onlyNotDeletedMessages(
+							args as {
+								where?: PrismaGenerated.MessageWhereInput;
+							}
+						)
+					);
+				}
+
+				return query(args);
+			},
+		},
+	},
 	result: {
 		photo: {
 			externalId: {
