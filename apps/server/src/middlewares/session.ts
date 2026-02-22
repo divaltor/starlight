@@ -55,3 +55,63 @@ export async function attachChat(ctx: Context, next: NextFunction) {
 
 	await next();
 }
+
+export async function attachChatMember(ctx: Context, next: NextFunction) {
+	if (
+		!(ctx.chat && ctx.from && ctx.user) ||
+		(ctx.chat.type !== "group" && ctx.chat.type !== "supergroup")
+	) {
+		return await next();
+	}
+
+	const chatId = BigInt(ctx.chat.id);
+
+	try {
+		const existingMember = await prisma.chatMember.findUnique({
+			where: {
+				chatId_userId: {
+					chatId,
+					userId: ctx.user.id,
+				},
+			},
+		});
+
+		if (existingMember) {
+			ctx.userChatMember = existingMember;
+			return await next();
+		}
+
+		const telegramMember = await ctx.api.getChatMember(
+			ctx.chat.id,
+			ctx.from.id
+		);
+
+		ctx.userChatMember = await prisma.chatMember.upsert({
+			where: {
+				chatId_userId: {
+					chatId,
+					userId: ctx.user.id,
+				},
+			},
+			create: {
+				chatId,
+				userId: ctx.user.id,
+				status: telegramMember.status,
+			},
+			update: {
+				status: telegramMember.status,
+			},
+		});
+	} catch (error) {
+		ctx.logger.warn(
+			{
+				error,
+				chatId: ctx.chat.id,
+				userId: ctx.from.id,
+			},
+			"Failed to attach chat member."
+		);
+	}
+
+	await next();
+}

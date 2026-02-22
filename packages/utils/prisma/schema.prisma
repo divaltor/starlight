@@ -28,9 +28,10 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  tweets Tweet[]
-  photos Photo[]
-  videos Video[]
+  tweets      Tweet[]
+  photos      Photo[]
+  videos      Video[]
+  chatMembers ChatMember[]
 
   @@map("users")
 }
@@ -48,9 +49,28 @@ model Chat {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  messages Message[]
+  messages    Message[]
+  chatMembers ChatMember[]
 
   @@map("chats")
+}
+
+model ChatMember {
+  chatId BigInt @map("chat_id")
+  userId String @map("user_id") @db.Uuid
+
+  status String
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, userId])
+  @@index([userId])
+  @@index([status])
+  @@map("chat_members")
 }
 
 model Tweet {

@@ -1,7 +1,7 @@
 import type { FileFlavor } from "@grammyjs/files";
 import type { HydrateFlavor } from "@grammyjs/hydrate";
 import type { Message, MessageEntity, MessageOrigin } from "@grammyjs/types";
-import type { Chat, User } from "@starlight/utils";
+import type { Chat, ChatMember, User } from "@starlight/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import type { Context as BaseContext, SessionFlavor } from "grammy";
 import type { Logger } from "@/logger";
@@ -11,6 +11,7 @@ interface ExtendedContext {
 	logger: Logger;
 	user?: User;
 	userChat?: Chat;
+	userChatMember?: ChatMember;
 }
 
 export interface Classification {

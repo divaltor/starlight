@@ -6,7 +6,11 @@ import { Bot, InlineKeyboard, session } from "grammy";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
 import { storeMessage } from "@/middlewares/message";
-import { attachChat, attachUser } from "@/middlewares/session";
+import {
+	attachChat,
+	attachChatMember,
+	attachUser,
+} from "@/middlewares/session";
 import { RedisAdapter, redis } from "@/storage";
 // biome-ignore lint/style/noExportedImports: Don't care
 import type { Context } from "@/types";
@@ -49,6 +53,7 @@ bot.api.config.use(
 bot.api.config.use(hydrateFiles(bot.token));
 bot.use(attachUser);
 bot.use(attachChat);
+bot.use(attachChatMember);
 bot.use(storeMessage);
 bot.use(logUpdates);
 

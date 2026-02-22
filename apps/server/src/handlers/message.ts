@@ -17,6 +17,50 @@ const composer = new Composer<Context>();
 
 const groupChat = composer.chatType(["group", "supergroup"]);
 
+const isAdminOrCreator = async (ctx: Context) => {
+	if (!(ctx.from && ctx.chat)) {
+		return false;
+	}
+
+	const member = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+
+	return member.status === "administrator" || member.status === "creator";
+};
+
+groupChat.command("clear").filter(
+	(ctx) => ctx.message.message_thread_id === undefined,
+	async (ctx) => {
+		await ctx.reply("This command works only inside a topic.");
+	}
+);
+
+groupChat.command("clear").filter(
+	async (ctx) =>
+		ctx.message.message_thread_id !== undefined &&
+		!(await isAdminOrCreator(ctx)),
+	async (ctx) => {
+		await ctx.reply("Only admins and creators can use this command.");
+	}
+);
+
+groupChat.command("clear").filter(
+	async (ctx) =>
+		ctx.message.message_thread_id !== undefined &&
+		(await isAdminOrCreator(ctx)),
+	async (ctx) => {
+		const messageThreadId = ctx.message.message_thread_id;
+
+		const { count } = await prisma.message.deleteMany({
+			where: {
+				chatId: BigInt(ctx.chat.id),
+				messageThreadId,
+			},
+		});
+
+		await ctx.reply(`Cleared ${count} messages from this topic history.`);
+	}
+);
+
 groupChat.on("message").filter(
 	(ctx) => shouldReplyToMessage(ctx, ctx.message),
 	async (ctx) => {
