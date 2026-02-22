@@ -41,12 +41,14 @@ function buildMessageData(chatId: bigint, msg: Message) {
 	};
 }
 
-function syncUserFromMessage(msg: Message): Promise<{ isBot: boolean } | null> {
+async function syncUserFromMessage(
+	msg: Message
+): Promise<{ isBot: boolean } | null> {
 	if (!msg.from) {
-		return Promise.resolve(null);
+		return null;
 	}
 
-	return prisma.user.upsert({
+	return await prisma.user.upsert({
 		where: {
 			telegramId: msg.from.id,
 		},
