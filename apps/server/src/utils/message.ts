@@ -59,6 +59,15 @@ export interface ConversationAttachment {
 	s3Path: string;
 }
 
+export interface ConversationReplyReference {
+	attachments?: Array<{ mimeType: string }>;
+	caption: string | null;
+	fromFirstName: string | null;
+	fromId: bigint | null;
+	fromUsername: string | null;
+	text: string | null;
+}
+
 export const openrouter = env.OPENROUTER_API_KEY
 	? createOpenRouter({ apiKey: env.OPENROUTER_API_KEY })
 	: null;
@@ -184,6 +193,40 @@ export function formatSenderName(data: {
 	return "unknown";
 }
 
+function attachmentLabelFromMimeType(mimeType: string): string {
+	if (mimeType.startsWith("image/")) return "photo";
+	if (mimeType.startsWith("video/")) return "video";
+	if (mimeType.startsWith("audio/")) return "voice message";
+	return "file";
+}
+
+function formatReplyReference(replyTo: ConversationReplyReference): string {
+	const sender = formatSenderName(replyTo);
+	const normalizedContent = (replyTo.text ?? replyTo.caption)?.trim() ?? "";
+
+	if (normalizedContent.length > 0) {
+		const singleLineContent = normalizedContent.replace(/\s+/g, " ");
+		const previewLimit = 140;
+		const preview =
+			singleLineContent.length > previewLimit
+				? `${singleLineContent.slice(0, previewLimit - 3)}...`
+				: singleLineContent;
+
+		return `${sender}: "${preview}"`;
+	}
+
+	const attachments = replyTo.attachments ?? [];
+	if (attachments.length > 0) {
+		const attachmentLabels = attachments.map((attachment) =>
+			attachmentLabelFromMimeType(attachment.mimeType)
+		);
+
+		return `${sender}: [sent ${attachmentLabels.join(", ")}]`;
+	}
+
+	return sender;
+}
+
 function toAttachmentUrl(s3Path: string): URL | null {
 	if (!env.BASE_CDN_URL) {
 		return null;
@@ -208,6 +251,7 @@ export function toConversationMessage(
 		text: string | null;
 		caption: string | null;
 		attachments?: ConversationAttachment[];
+		replyTo?: ConversationReplyReference | null;
 	},
 	botId: bigint
 ): ConversationMessage | null {
@@ -222,35 +266,43 @@ export function toConversationMessage(
 		return null;
 	}
 
+	const replyRefStr = entry.replyTo
+		? formatReplyReference(entry.replyTo)
+		: null;
+
 	if (entry.fromId !== null && entry.fromId === botId) {
+		const assistantReplyContext = replyRefStr
+			? `\n[reply to ${replyRefStr}]`
+			: "";
+
 		return {
 			role: "assistant",
-			content: content ?? "[attachment]",
+			content: `${content ?? "[attachment]"}${assistantReplyContext}`,
 		};
 	}
 
 	const sender = formatSenderName(entry);
+	const replyContext = replyRefStr ? ` <reply to ${replyRefStr}>` : "";
 
 	if (attachments.length === 0) {
 		return {
 			role: "user",
-			content: `${sender}: ${content}`,
+			content: `${sender}${replyContext}: ${content}`,
 		};
 	}
 
 	let textPrefix: string;
 
 	if (content) {
-		textPrefix = `${sender}: ${content}`;
+		textPrefix = `${sender}${replyContext}: ${content}`;
 	} else {
-		const attachmentLabels = attachments.map((a) => {
-			if (a.mimeType.startsWith("image/")) return "photo";
-			if (a.mimeType.startsWith("video/")) return "video";
-			if (a.mimeType.startsWith("audio/")) return "voice message";
-			return "file";
-		});
+		const attachmentLabels = attachments.map((attachment) =>
+			attachmentLabelFromMimeType(attachment.mimeType)
+		);
 
-		textPrefix = `${sender}: [sent ${attachmentLabels.join(", ")}]`;
+		textPrefix = `${sender}${replyContext}: [sent ${attachmentLabels.join(
+			", "
+		)}]`;
 	}
 
 	const parts: Array<TextPart | ImagePart | FilePart> = [

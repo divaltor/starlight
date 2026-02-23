@@ -7,6 +7,7 @@ import { getLangfuseTelemetry } from "@/otel";
 import { s3 } from "@/storage";
 import {
 	type ConversationMessage,
+	type ConversationReplyReference,
 	openrouter,
 	SYSTEM_PROMPT,
 	shouldReplyToMessage,
@@ -24,6 +25,7 @@ const messageHistorySelect = {
 	fromFirstName: true,
 	text: true,
 	caption: true,
+	replyToMessageId: true,
 	attachments: {
 		select: {
 			id: true,
@@ -48,6 +50,10 @@ type StoredConversationMessageWithInlineVideo = Omit<
 		StoredConversationMessage["attachments"][number] & { base64Data?: string }
 	>;
 };
+
+type ReplyToMessage = NonNullable<
+	NonNullable<Context["message"]>["reply_to_message"]
+>;
 
 async function inlineVideoAttachments(
 	ctx: Context,
@@ -89,6 +95,98 @@ async function inlineVideoAttachments(
 	return {
 		...entry,
 		attachments,
+	};
+}
+
+function toReplyReferenceFromStoredMessage(
+	entry: Pick<
+		StoredConversationMessageWithInlineVideo,
+		| "fromId"
+		| "fromUsername"
+		| "fromFirstName"
+		| "text"
+		| "caption"
+		| "attachments"
+	>
+): ConversationReplyReference {
+	return {
+		fromId: entry.fromId,
+		fromUsername: entry.fromUsername,
+		fromFirstName: entry.fromFirstName,
+		text: entry.text,
+		caption: entry.caption,
+		attachments: entry.attachments.map((attachment) => ({
+			mimeType: attachment.mimeType,
+		})),
+	};
+}
+
+const MEDIA_MIME_EXTRACTORS: Array<{
+	key: keyof ReplyToMessage;
+	getMime: (msg: ReplyToMessage) => string;
+}> = [
+	{ key: "photo", getMime: () => "image/jpeg" },
+	{
+		key: "sticker",
+		getMime: (msg) =>
+			(msg.sticker as { is_video?: boolean })?.is_video
+				? "video/webm"
+				: "image/webp",
+	},
+	{
+		key: "video",
+		getMime: (msg) =>
+			(msg.video as { mime_type?: string })?.mime_type ?? "video/mp4",
+	},
+	{
+		key: "animation",
+		getMime: (msg) =>
+			(msg.animation as { mime_type?: string })?.mime_type ?? "video/mp4",
+	},
+	{ key: "video_note", getMime: () => "video/mp4" },
+	{
+		key: "voice",
+		getMime: (msg) =>
+			(msg.voice as { mime_type?: string })?.mime_type ?? "audio/ogg",
+	},
+	{
+		key: "audio",
+		getMime: (msg) =>
+			(msg.audio as { mime_type?: string })?.mime_type ?? "audio/mpeg",
+	},
+	{
+		key: "document",
+		getMime: (msg) =>
+			(msg.document as { mime_type?: string })?.mime_type ??
+			"application/octet-stream",
+	},
+];
+
+function extractReplyAttachmentMimeTypes(
+	message: ReplyToMessage
+): Array<{ mimeType: string }> {
+	const attachments: Array<{ mimeType: string }> = [];
+
+	for (const { key, getMime } of MEDIA_MIME_EXTRACTORS) {
+		const value = message[key];
+		if (key === "photo" ? Array.isArray(value) && value.length > 0 : value) {
+			attachments.push({ mimeType: getMime(message) });
+		}
+	}
+
+	return attachments;
+}
+
+function toReplyReferenceFromTelegramMessage(
+	message: ReplyToMessage
+): ConversationReplyReference {
+	return {
+		fromId: message.from ? BigInt(message.from.id) : null,
+		fromUsername: message.from?.username ?? null,
+		fromFirstName: message.from?.first_name ?? null,
+		text: message.text ?? null,
+		caption: message.caption ?? null,
+		attachments: extractReplyAttachmentMimeTypes(message),
 	};
 }
 
@@ -138,10 +236,11 @@ groupChat.on("message").filter(
 		}
 
 		const messageThreadId = ctx.message.message_thread_id ?? null;
+		const chatId = BigInt(ctx.chat.id);
 
 		const history = await prisma.message.findMany({
 			where: {
-				chatId: BigInt(ctx.chat.id),
+				chatId,
 				messageThreadId,
 				messageId: {
 					not: ctx.message.message_id,
@@ -164,45 +263,75 @@ groupChat.on("message").filter(
 		);
 
 		const botId = BigInt(ctx.me.id);
-		const historyMessageIds = new Set(
-			historyWithInlineVideo.map((entry) => entry.messageId)
-		);
-		const messages: ConversationMessage[] = historyWithInlineVideo
-			.reverse()
-			.map((entry) => toConversationMessage(entry, botId))
-			.filter((entry): entry is ConversationMessage => entry !== null);
+		const storedMessageById = new Map<
+			number,
+			StoredConversationMessageWithInlineVideo
+		>(historyWithInlineVideo.map((entry) => [entry.messageId, entry]));
 
 		const repliedMessage = ctx.message.reply_to_message;
-		if (repliedMessage && !historyMessageIds.has(repliedMessage.message_id)) {
-			const repliedStoredMessage = await prisma.message.findUnique({
+
+		const missingReplyIds: number[] = [];
+		for (const entry of historyWithInlineVideo) {
+			if (
+				entry.replyToMessageId !== null &&
+				!storedMessageById.has(entry.replyToMessageId)
+			) {
+				missingReplyIds.push(entry.replyToMessageId);
+			}
+		}
+		if (repliedMessage && !storedMessageById.has(repliedMessage.message_id)) {
+			missingReplyIds.push(repliedMessage.message_id);
+		}
+
+		if (missingReplyIds.length > 0) {
+			const referencedMessages = await prisma.message.findMany({
 				where: {
-					messageId_chatId: {
-						messageId: repliedMessage.message_id,
-						chatId: BigInt(ctx.chat.id),
-					},
+					chatId,
+					messageId: { in: missingReplyIds },
 				},
 				select: messageHistorySelect,
 			});
 
-			const repliedMessageEntry = repliedStoredMessage
-				? await inlineVideoAttachments(ctx, repliedStoredMessage)
-				: {
-						fromId: repliedMessage.from ? BigInt(repliedMessage.from.id) : null,
-						fromUsername: repliedMessage.from?.username ?? null,
-						fromFirstName: repliedMessage.from?.first_name ?? null,
-						text: repliedMessage.text ?? null,
-						caption: repliedMessage.caption ?? null,
-						attachments: [],
-					};
-
-			const repliedConversationMessage = toConversationMessage(
-				repliedMessageEntry,
-				botId
+			const referencedWithInlineVideo = await Promise.all(
+				referencedMessages.map((entry) => inlineVideoAttachments(ctx, entry))
 			);
 
-			if (repliedConversationMessage) {
-				messages.push(repliedConversationMessage);
+			for (const entry of referencedWithInlineVideo) {
+				storedMessageById.set(entry.messageId, entry);
 			}
+		}
+
+		const messages: ConversationMessage[] = historyWithInlineVideo
+			.reverse()
+			.map((entry) => {
+				const replyToEntry =
+					entry.replyToMessageId !== null
+						? (storedMessageById.get(entry.replyToMessageId) ?? null)
+						: null;
+
+				return toConversationMessage(
+					{
+						...entry,
+						replyTo: replyToEntry
+							? toReplyReferenceFromStoredMessage(replyToEntry)
+							: null,
+					},
+					botId
+				);
+			})
+			.filter((entry): entry is ConversationMessage => entry !== null);
+
+		const storedRepliedMessage = repliedMessage
+			? (storedMessageById.get(repliedMessage.message_id) ?? null)
+			: null;
+
+		let currentReplyReference: ConversationReplyReference | null = null;
+		if (storedRepliedMessage) {
+			currentReplyReference =
+				toReplyReferenceFromStoredMessage(storedRepliedMessage);
+		} else if (repliedMessage) {
+			currentReplyReference =
+				toReplyReferenceFromTelegramMessage(repliedMessage);
 		}
 
 		const currentMessageAttachments = ctx.currentMessageAttachments;
@@ -214,6 +343,7 @@ groupChat.on("message").filter(
 			text: ctx.message.text ?? null,
 			caption: ctx.message.caption ?? null,
 			attachments: currentMessageAttachments,
+			replyTo: currentReplyReference,
 		};
 
 		const currentConversationMessage = toConversationMessage(
