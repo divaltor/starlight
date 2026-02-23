@@ -62,7 +62,8 @@ model ChatMember {
   chatId BigInt @map("chat_id")
   userId String @map("user_id") @db.Uuid
 
-  status String
+  status     String
+  supervisor Boolean @default(false)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -71,6 +72,7 @@ model ChatMember {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([chatId, userId])
+  @@index([chatId, supervisor])
   @@index([userId])
   @@index([status])
   @@map("chat_members")
