@@ -2,6 +2,7 @@ import { run } from "@grammyjs/runner";
 import { bot } from "@/bot";
 import chatMemberHandler from "@/handlers/chat-member";
 import imageHandler from "@/handlers/image";
+import memoryHandler from "@/handlers/memory";
 import messageHandler from "@/handlers/message";
 import tweetImageHandler from "@/handlers/tweet-image";
 import videoHandler from "@/handlers/video";
@@ -10,6 +11,7 @@ import { registerTelemetry } from "@/otel";
 import { classificationWorker } from "@/queue/classification";
 import { embeddingsWorker } from "@/queue/embeddings";
 import { imagesWorker } from "@/queue/image-collector";
+import { memoryWorker } from "@/queue/memory";
 import { scrapperWorker } from "@/queue/scrapper";
 
 registerTelemetry();
@@ -26,6 +28,7 @@ const boundary = bot.errorBoundary((error) => {
 boundary.use(videoHandler);
 boundary.use(tweetImageHandler);
 boundary.use(imageHandler);
+boundary.use(memoryHandler);
 boundary.use(messageHandler);
 boundary.use(chatMemberHandler);
 
@@ -52,6 +55,7 @@ process.on("SIGINT", async () => {
 	await classificationWorker.close();
 	await scrapperWorker.close();
 	await embeddingsWorker.close();
+	await memoryWorker.close();
 });
 
 process.on("SIGTERM", async () => {
@@ -59,9 +63,11 @@ process.on("SIGTERM", async () => {
 	await classificationWorker.close();
 	await scrapperWorker.close();
 	await embeddingsWorker.close();
+	await memoryWorker.close();
 });
 
 imagesWorker.run();
 classificationWorker.run();
 embeddingsWorker.run();
 scrapperWorker.run();
+memoryWorker.run();

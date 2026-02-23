@@ -41,12 +41,18 @@ export interface Classification {
 }
 
 export interface ChatSettings {
-	botAliases: string[];
-	botName: string | null;
-	ignoreUserChance: number;
-	inferenceUnavailableAliases: string[];
-	personalityTraits: string[];
-	randomResponseChance: number;
+	botAliases?: string[];
+	botName?: string | null;
+	ignoreUserChance?: number;
+	inferenceUnavailableAliases?: string[];
+	memory?: {
+		enabled?: boolean;
+		globalEveryMessages?: number;
+		maxMemoryCharsInPrompt?: number;
+		topicEveryMessages?: number;
+	};
+	personalityTraits?: string[];
+	randomResponseChance?: number;
 }
 
 export type Context = FileFlavor<

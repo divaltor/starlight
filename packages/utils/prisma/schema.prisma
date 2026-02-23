@@ -14,6 +14,11 @@ generator json {
   provider = "prisma-json-types-generator"
 }
 
+enum ChatMemoryScope {
+  topic
+  global
+}
+
 model User {
   id         String  @id @default(uuid(7)) @db.Uuid
   telegramId BigInt  @unique @map("telegram_id")
@@ -52,10 +57,58 @@ model Chat {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  messages    Message[]
-  chatMembers ChatMember[]
+  messages      Message[]
+  chatMembers   ChatMember[]
+  memoryCursors ChatMemoryCursor[]
+  memoryNotes   ChatMemoryNote[]
 
   @@map("chats")
+}
+
+model ChatMemoryCursor {
+  chatId BigInt          @map("chat_id")
+  scope  ChatMemoryScope
+
+  threadKey Int @default(0) @map("thread_key")
+
+  lastMessageId Int @default(0) @map("last_message_id")
+
+  failureCount Int       @default(0) @map("failure_count")
+  lastError    String?   @db.Text @map("last_error")
+  lastErrorAt  DateTime? @map("last_error_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, scope, threadKey])
+  @@index([chatId, scope, updatedAt(sort: Desc)])
+  @@map("chat_memory_cursors")
+}
+
+model ChatMemoryNote {
+  id     String @id @default(uuid(7)) @db.Uuid
+  chatId BigInt @map("chat_id")
+  scope  ChatMemoryScope
+
+  threadKey Int @default(0) @map("thread_key")
+
+  startMessageId Int @map("start_message_id")
+  endMessageId   Int @map("end_message_id")
+  messageCount   Int @map("message_count")
+
+  summary String @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, scope, threadKey, endMessageId])
+  @@index([chatId, scope, threadKey, createdAt(sort: Desc)])
+  @@index([chatId, scope, createdAt(sort: Desc)])
+  @@map("chat_memory_notes")
 }
 
 model ChatMember {
@@ -225,6 +278,8 @@ model Message {
   @@index([mediaType])
   @@index([text])
   @@index([deletedAt])
+  @@index([chatId, messageThreadId, messageId])
+  @@index([chatId, messageId])
   @@map("messages")
 }
 

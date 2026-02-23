@@ -1,6 +1,7 @@
 import { prisma } from "@starlight/utils";
 import type { NextFunction } from "grammy";
 import type { Message } from "grammy/types";
+import { scheduleChatMemorySummaries } from "@/queue/memory";
 import type { Context } from "@/types";
 import {
 	prepareMessageAttachments,
@@ -77,7 +78,10 @@ async function syncUserFromMessage(
 
 export async function upsertStoredMessage(
 	ctx: Context,
-	msg: Message
+	msg: Message,
+	options?: {
+		scheduleMemory?: boolean;
+	}
 ): Promise<StoredMessageAttachment[]> {
 	const parsedChatId = BigInt(msg.chat.id);
 	const data = buildMessageData(parsedChatId, msg);
@@ -120,6 +124,25 @@ export async function upsertStoredMessage(
 		}
 	});
 
+	if (options?.scheduleMemory !== false) {
+		try {
+			await scheduleChatMemorySummaries({
+				chatId: parsedChatId,
+				messageId: msg.message_id,
+				messageThreadId: msg.message_thread_id ?? null,
+			});
+		} catch (error) {
+			ctx.logger.warn(
+				{
+					chatId: msg.chat.id,
+					error,
+					messageId: msg.message_id,
+				},
+				"Failed to schedule chat memory jobs"
+			);
+		}
+	}
+
 	return attachments;
 }
 
@@ -145,7 +168,9 @@ export async function storeMessage(ctx: Context, next: NextFunction) {
 	if (repliedMessage) {
 		const sender = await syncUserFromMessage(repliedMessage);
 		if (sender?.isBot) {
-			await upsertStoredMessage(ctx, repliedMessage);
+			await upsertStoredMessage(ctx, repliedMessage, {
+				scheduleMemory: false,
+			});
 		}
 	}
 

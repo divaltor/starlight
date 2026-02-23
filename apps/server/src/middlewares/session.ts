@@ -94,6 +94,14 @@ export async function attachChat(ctx: Context, next: NextFunction) {
 		},
 		create: {
 			id: ctx.chat.id,
+			settings: {
+				memory: {
+					enabled: true,
+					globalEveryMessages: 200,
+					maxMemoryCharsInPrompt: 1800,
+					topicEveryMessages: 50,
+				},
+			},
 			title: ctx.chat.title,
 			username: ctx.chat.username,
 			...chatPhotoData,

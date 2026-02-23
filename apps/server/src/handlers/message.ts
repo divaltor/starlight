@@ -4,14 +4,15 @@ import { Composer } from "grammy";
 import type { Context } from "@/bot";
 import { upsertStoredMessage } from "@/middlewares/message";
 import { getLangfuseTelemetry } from "@/otel";
+import { buildChatMemoryPromptContext } from "@/services/chat-memory";
 import { s3 } from "@/storage";
 import {
 	type ConversationMessage,
 	type ConversationReplyReference,
 	openrouter,
-	SYSTEM_PROMPT,
 	shouldReplyToMessage,
 	toConversationMessage,
+	withMemorySystemPrompt,
 } from "@/utils/message";
 
 const composer = new Composer<Context>();
@@ -357,11 +358,24 @@ groupChat.on("message").filter(
 
 		messages.push(currentConversationMessage);
 
+		const memoryContext = await buildChatMemoryPromptContext({
+			chatId,
+			chatSettings: ctx.userChat?.settings ?? null,
+			messageThreadId,
+		});
+		const systemPrompt = withMemorySystemPrompt(memoryContext);
+
 		const { text } = await generateText({
 			model: openrouter(env.OPENROUTER_MODEL),
-			system: SYSTEM_PROMPT,
+			system: systemPrompt,
 			messages,
-			experimental_telemetry: getLangfuseTelemetry(ctx),
+			experimental_telemetry: getLangfuseTelemetry("message-reply", {
+				chatId: String(ctx.chat.id),
+				messageId: String(ctx.message.message_id),
+				messageThreadId: String(ctx.message.message_thread_id ?? "main"),
+				userId: ctx.message.from?.id ? String(ctx.message.from.id) : "unknown",
+				sessionId: `${ctx.chat.id}:${ctx.message.message_thread_id ?? "main"}`,
+			}),
 			experimental_download: async (downloads) => downloads.map(() => null),
 			temperature: 0.75,
 			topK: 80,

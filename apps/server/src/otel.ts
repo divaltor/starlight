@@ -1,10 +1,8 @@
-import type { Message } from "@grammyjs/types";
 import { env } from "@starlight/utils";
 import { registerOTel } from "@vercel/otel";
 import type { TelemetrySettings } from "ai";
 import { LangfuseExporter } from "langfuse-vercel";
 import { logger } from "@/logger";
-import type { Context } from "@/types";
 
 export function registerTelemetry() {
 	if (!(env.LANGFUSE_PUBLIC_KEY && env.LANGFUSE_SECRET_KEY)) {
@@ -25,24 +23,16 @@ export function registerTelemetry() {
 }
 
 export function getLangfuseTelemetry(
-	ctx: Context & { message: Message }
+	functionId: string,
+	metadata: Record<string, string>
 ): TelemetrySettings | undefined {
 	if (!(env.LANGFUSE_PUBLIC_KEY && env.LANGFUSE_SECRET_KEY)) {
 		return;
 	}
 
-	const chatId = String(ctx.chat?.id ?? "unknown");
-	const messageThreadId = String(ctx.message.message_thread_id ?? "main");
-
 	return {
 		isEnabled: true,
-		functionId: "message-reply",
-		metadata: {
-			chatId,
-			messageId: String(ctx.message.message_id),
-			messageThreadId,
-			userId: ctx.message.from?.id ? String(ctx.message.from.id) : "unknown",
-			sessionId: `${chatId}:${messageThreadId}`,
-		},
+		functionId,
+		metadata,
 	};
 }
