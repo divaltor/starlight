@@ -4,7 +4,6 @@ export interface CreateContextOptions {
 
 // biome-ignore lint/suspicious/useAwait: We don't need to await this function
 export async function createContext({ request }: CreateContextOptions) {
-	// biome-ignore lint/correctness/noUndeclaredVariables: Global
 	const requestId = request.headers.get("X-Request-Id") || Bun.randomUUIDv7();
 
 	return {

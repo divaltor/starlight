@@ -3,7 +3,6 @@ import { env } from "@starlight/utils";
 import { create } from "youtube-dl-exec";
 import { logger } from "@/logger";
 
-// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 const filesGlob = new Bun.Glob("*.mp4");
 
 interface VideoMetadata {
@@ -31,7 +30,6 @@ async function createVideoInformation(
 	let metadata: VideoMetadata = {};
 
 	try {
-		// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 		metadata = (await Bun.file(infoJsonPath).json()) as VideoMetadata;
 	} catch (error) {
 		logger.error(error, "Error creating video information for %s", filePath);
@@ -50,7 +48,6 @@ export async function downloadVideoFromUrl(
 	folder: string,
 	metadata: VideoMetadata = {}
 ): Promise<VideoInformation> {
-	// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 	const uuid = Bun.randomUUIDv7();
 	const filePath = path.join(folder, `${uuid}.mp4`);
 
@@ -62,7 +59,6 @@ export async function downloadVideoFromUrl(
 		throw new Error(`Failed to download video from ${url}: ${response.status}`);
 	}
 
-	// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 	await Bun.write(filePath, response);
 
 	return { filePath, metadata };
@@ -74,7 +70,6 @@ export async function downloadVideo(
 ): Promise<VideoInformation[]> {
 	logger.debug("Downloading video from %s to %s", url, folder);
 
-	// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 	const uuid = Bun.randomUUIDv7();
 
 	const subprocess = await youtubedl.exec(url, {

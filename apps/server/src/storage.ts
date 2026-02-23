@@ -115,7 +115,6 @@ interface SessionData {
 	cookies: RFC6265Cookie[] | null;
 }
 
-// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 export const s3 = new Bun.S3Client({
 	accessKeyId: env.AWS_ACCESS_KEY_ID,
 	secretAccessKey: env.AWS_SECRET_ACCESS_KEY,

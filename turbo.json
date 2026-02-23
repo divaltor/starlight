@@ -20,9 +20,6 @@
       "dependsOn": ["^db:generate"],
       "persistent": true
     },
-    "check-types": {
-      "dependsOn": ["^check-types"]
-    },
     "db:push": {
       "cache": false,
       "env": ["DATABASE_URL"]

@@ -53,7 +53,6 @@ async function downloadFilePayload(
 	const file = await api.getFile(fileId);
 	const path = await file.download();
 
-	// biome-ignore lint/correctness/noUndeclaredVariables: Bun is global
 	return await Bun.file(path).bytes();
 }
 

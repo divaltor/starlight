@@ -33,7 +33,6 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		}
 
 		const { photoId, userId, requestId: incomingRequestId } = job.data;
-		// biome-ignore lint/correctness/noUndeclaredVariables: Bun is the runtime global in this worker
 		const requestId = incomingRequestId || Bun.randomUUIDv7();
 
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {

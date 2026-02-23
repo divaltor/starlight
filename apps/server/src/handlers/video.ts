@@ -1,4 +1,3 @@
-/** biome-ignore-all lint/correctness/noUndeclaredVariables: Global Bun */
 import { cleanupTweetText, extractTweetId, prisma } from "@starlight/utils";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";

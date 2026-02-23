@@ -71,9 +71,7 @@ export async function attachChat(ctx: Context, next: NextFunction) {
 				const thumbnailPath = `chats/${chatUniqueId}/thumbnail.jpg`;
 
 				await Promise.all([
-					// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 					s3.write(bigPath, Bun.file(bigFile)),
-					// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
 					s3.write(thumbnailPath, Bun.file(thumbnailFile)),
 				]);
 
