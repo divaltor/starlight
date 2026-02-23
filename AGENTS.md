@@ -27,16 +27,13 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 ## Critical Rules
 
 1. Use `@/` alias for all internal imports; relative imports are forbidden in apps.
-2. Use strict typing and oRPC inference capabilities.
-3. All client-server communication MUST use oRPC routers in `packages/api`.
-4. Uber-style design via DaisyUI + React Aria. Use semantic HTML and alt text.
-5. Prefer Bun APIs (`Bun.file`, `Bun.write`, etc.) over Node.js `fs` equivalents.
-
-- DON'T run typechecks and build scripts.
+2. All client-server communication MUST use oRPC routers in `packages/api`.
+3. Uber-style design via DaisyUI + React Aria. Use semantic HTML and alt text.
+4. Prefer Bun APIs (`Bun.file`, `Bun.write`, etc.) over Node.js `fs` equivalents.
 
 ## Maintenance & Tasks
 
-- Use `bun add <pkg> --filter <workspace>`. Never edit `package.json` manually.
-- Run `bun run format` to apply Biome formatting for `apps/web` and `apps/server`.
-- Database migrations: use `bun run db:migrate` to create and apply migrations via Prisma. Never write migration files manually.
-- Keep this file updated; it is the primary source of truth for agents.
+- MUST use `bun` for package management.
+- MUST use `bun run format` to apply Biome formatting for `apps/web` and `apps/server`. DON'T use `tsc` or `bunx <formatter|linter>`
+- ALWAYS use scripts from package.json to create and apply migrations via Prisma. Never write migration files manually.
+- ALWAYS look for skills you could apply before editing files.
