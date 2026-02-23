@@ -1,5 +1,6 @@
-import { prisma } from "@starlight/utils";
+import { prisma, toUniqueId } from "@starlight/utils";
 import type { NextFunction } from "grammy";
+import { s3 } from "@/storage";
 import type { Context } from "@/types";
 
 export async function attachUser(ctx: Context, next: NextFunction) {
@@ -36,6 +37,59 @@ export async function attachChat(ctx: Context, next: NextFunction) {
 		return await next();
 	}
 
+	const existingChat = await prisma.chat.findUnique({
+		where: {
+			id: ctx.chat.id,
+		},
+		select: {
+			id: true,
+		},
+	});
+
+	let chatPhotoData: {
+		photoThumbnail?: string;
+		photoBig?: string;
+	} = {};
+
+	if (!existingChat) {
+		try {
+			const fullChatInfo = await ctx.api.getChat(ctx.chat.id);
+
+			if (fullChatInfo.photo) {
+				const [thumbnail, big] = await Promise.all([
+					ctx.api.getFile(fullChatInfo.photo.small_file_id),
+					ctx.api.getFile(fullChatInfo.photo.big_file_id),
+				]);
+
+				const [bigFile, thumbnailFile] = await Promise.all([
+					big.download(),
+					thumbnail.download(),
+				]);
+
+				const chatUniqueId = toUniqueId(ctx.chat.id);
+				const bigPath = `chats/${chatUniqueId}/big.jpg`;
+				const thumbnailPath = `chats/${chatUniqueId}/thumbnail.jpg`;
+
+				await Promise.all([
+					// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
+					s3.write(bigPath, Bun.file(bigFile)),
+					// biome-ignore lint/correctness/noUndeclaredVariables: Global in runtime
+					s3.write(thumbnailPath, Bun.file(thumbnailFile)),
+				]);
+
+				chatPhotoData = {
+					photoThumbnail: thumbnailPath,
+					photoBig: bigPath,
+				};
+			}
+		} catch (error) {
+			ctx.logger.warn(
+				{ error, chatId: ctx.chat.id },
+				"Failed to save chat photo."
+			);
+		}
+	}
+
 	const chat = await prisma.chat.upsert({
 		where: {
 			id: ctx.chat.id,
@@ -44,6 +98,7 @@ export async function attachChat(ctx: Context, next: NextFunction) {
 			id: ctx.chat.id,
 			title: ctx.chat.title,
 			username: ctx.chat.username,
+			...chatPhotoData,
 		},
 		update: {
 			title: ctx.chat.title,
