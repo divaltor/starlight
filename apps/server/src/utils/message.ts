@@ -238,11 +238,23 @@ export function toConversationMessage(
 		};
 	}
 
+	let textPrefix: string;
+
+	if (content) {
+		textPrefix = `${sender}: ${content}`;
+	} else {
+		const attachmentLabels = attachments.map((a) => {
+			if (a.mimeType.startsWith("image/")) return "photo";
+			if (a.mimeType.startsWith("video/")) return "video";
+			if (a.mimeType.startsWith("audio/")) return "voice message";
+			return "file";
+		});
+
+		textPrefix = `${sender}: [sent ${attachmentLabels.join(", ")}]`;
+	}
+
 	const parts: Array<TextPart | ImagePart | FilePart> = [
-		{
-			type: "text",
-			text: content ? `${sender}: ${content}` : `${sender}:`,
-		},
+		{ type: "text", text: textPrefix },
 	];
 
 	for (const attachment of attachments) {
