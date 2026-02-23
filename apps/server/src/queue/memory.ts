@@ -8,7 +8,7 @@ import { redis } from "@/storage";
 import { formatSenderName, openrouter } from "@/utils/message";
 
 const MAX_WINDOWS_PER_JOB = 4;
-const MAX_SUMMARY_LENGTH = 3500;
+const MAX_SUMMARY_LENGTH = 8192;
 
 const TOPIC_MEMORY_SYSTEM_PROMPT = `
 ### IMPORTANT SYSTEM CONTEXT ###
@@ -25,7 +25,7 @@ Rules:
 - Keep only high-signal details useful for the next ~50 messages
 - Use concise chat language
 - Output plain text only, no markdown code fences
-- Keep it under 3500 characters
+- Keep it under 8192 characters
 
 Output format:
 Topic state:
@@ -54,7 +54,7 @@ Rules:
 - Do not include bot policy/persona/system rules
 - Use concise chat language
 - Output plain text only, no markdown code fences
-- Keep it under 3500 characters
+- Keep it under 8192 characters
 
 Output format:
 Chat identity:
@@ -154,7 +154,11 @@ function formatWindowMessage(
 	}
 
 	const sender = formatSenderName(entry);
-	const parts = [`#${entry.messageId}`, sender];
+	const senderLabel =
+		entry.fromUsername && entry.fromFirstName
+			? `${sender} (${entry.fromFirstName})`
+			: sender;
+	const parts = [`#${entry.messageId}`, senderLabel];
 
 	if (scope === ChatMemoryScope.global) {
 		const topicLabel =
