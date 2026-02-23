@@ -1,7 +1,6 @@
 import { run } from "@grammyjs/runner";
 import { bot } from "@/bot";
 import chatMemberHandler from "@/handlers/chat-member";
-import cobaltVideoHandler from "@/handlers/cobalt-video";
 import imageHandler from "@/handlers/image";
 import messageHandler from "@/handlers/message";
 import tweetImageHandler from "@/handlers/tweet-image";
@@ -24,7 +23,6 @@ const boundary = bot.errorBoundary((error) => {
 	});
 });
 
-boundary.use(cobaltVideoHandler);
 boundary.use(videoHandler);
 boundary.use(tweetImageHandler);
 boundary.use(imageHandler);

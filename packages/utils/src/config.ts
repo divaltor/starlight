@@ -90,9 +90,6 @@ const env = createEnv({
 			.transform((val) => z.stringbool().parse(val)),
 
 		PROXY_URLS: z.string().optional(),
-
-		COBALT_API_URL: z.url().optional(),
-		COBALT_API_KEY: z.string().optional(),
 	},
 	clientPrefix: "VITE_",
 	client: {
