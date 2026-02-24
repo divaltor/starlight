@@ -366,6 +366,8 @@ groupChat.on("message").filter(
 		});
 		const systemPrompt = withMemorySystemPrompt(memoryContext);
 
+		await ctx.replyWithChatAction("typing");
+
 		const { text } = await generateText({
 			model: openrouter(env.OPENROUTER_MODEL),
 			system: systemPrompt,
