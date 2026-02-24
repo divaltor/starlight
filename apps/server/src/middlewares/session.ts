@@ -98,7 +98,6 @@ export async function attachChat(ctx: Context, next: NextFunction) {
 				memory: {
 					enabled: true,
 					globalEveryMessages: 200,
-					maxMemoryCharsInPrompt: 1800,
 					topicEveryMessages: 50,
 				},
 			},

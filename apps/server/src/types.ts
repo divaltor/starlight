@@ -47,7 +47,6 @@ export interface ChatSettings {
 	memory?: {
 		enabled?: boolean;
 		globalEveryMessages?: number;
-		maxMemoryCharsInPrompt?: number;
 		topicEveryMessages?: number;
 	};
 	personalityTraits?: string[];

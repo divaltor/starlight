@@ -3,12 +3,10 @@ import type { ChatSettings } from "@/types";
 
 const DEFAULT_TOPIC_EVERY_MESSAGES = 50;
 const DEFAULT_GLOBAL_EVERY_MESSAGES = 200;
-const DEFAULT_MAX_MEMORY_CHARS_IN_PROMPT = 1800;
 
 export class ChatMemorySettings {
 	readonly enabled: boolean;
 	readonly globalEveryMessages: number;
-	readonly maxMemoryCharsInPrompt: number;
 	readonly topicEveryMessages: number;
 
 	constructor(chatSettings: ChatSettings | null) {
@@ -19,8 +17,6 @@ export class ChatMemorySettings {
 			memory?.topicEveryMessages ?? DEFAULT_TOPIC_EVERY_MESSAGES;
 		this.globalEveryMessages =
 			memory?.globalEveryMessages ?? DEFAULT_GLOBAL_EVERY_MESSAGES;
-		this.maxMemoryCharsInPrompt =
-			memory?.maxMemoryCharsInPrompt ?? DEFAULT_MAX_MEMORY_CHARS_IN_PROMPT;
 	}
 }
 
@@ -84,9 +80,5 @@ export async function buildChatMemoryPromptContext(params: {
 		...sections,
 	].join("\n\n");
 
-	if (promptContext.length <= settings.maxMemoryCharsInPrompt) {
-		return promptContext;
-	}
-
-	return `${promptContext.slice(0, settings.maxMemoryCharsInPrompt - 3)}...`;
+	return promptContext;
 }
