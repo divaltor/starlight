@@ -2,7 +2,7 @@ import { autoRetry } from "@grammyjs/auto-retry";
 import { hydrateFiles } from "@grammyjs/files";
 import { autoQuote } from "@roziscoding/grammy-autoquote";
 import { env } from "@starlight/utils";
-import { Bot, InlineKeyboard, session } from "grammy";
+import { Bot, InlineKeyboard } from "grammy";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
 import { storeMessage } from "@/middlewares/message";
@@ -11,23 +11,10 @@ import {
 	attachChatMember,
 	attachUser,
 } from "@/middlewares/session";
-import { RedisAdapter, redis } from "@/storage";
 // biome-ignore lint/style/noExportedImports: Don't care
 import type { Context } from "@/types";
 
 const bot = new Bot<Context>(env.BOT_TOKEN);
-
-bot.use(
-	session({
-		type: "multi",
-		cookies: {
-			getSessionKey: (ctx) => ctx.from?.id.toString(),
-			initial: () => null,
-			prefix: "user:cookies:",
-			storage: new RedisAdapter({ instance: redis, parseJSON: false }),
-		},
-	})
-);
 
 export const webAppKeyboard = (page: "app" | "settings", text: string) =>
 	new InlineKeyboard().webApp(text, {

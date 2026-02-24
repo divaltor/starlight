@@ -63,9 +63,9 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			throw error;
 		}
 
-		const user_cookies = await redis.get(`user:cookies:${user.telegramId}`);
+		const userCookies = user.cookies;
 
-		if (!user_cookies) {
+		if (!userCookies) {
 			logger.error({ userId }, "User cookies not found");
 
 			try {
@@ -90,7 +90,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		let cookiesJson: string;
 		try {
 			cookiesJson = cookieEncryption.safeDecrypt(
-				user_cookies,
+				userCookies,
 				user.telegramId.toString()
 			);
 		} catch (error) {

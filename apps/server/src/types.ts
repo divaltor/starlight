@@ -3,9 +3,8 @@ import type { HydrateFlavor } from "@grammyjs/hydrate";
 import type { Message, MessageEntity, MessageOrigin } from "@grammyjs/types";
 import type { Chat, ChatMember, User } from "@starlight/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
-import type { Context as BaseContext, SessionFlavor } from "grammy";
+import type { Context as BaseContext } from "grammy";
 import type { Logger } from "@/logger";
-import type { SessionData } from "@/storage";
 
 interface ExtendedContext {
 	currentMessageAttachments: Array<{
@@ -55,9 +54,7 @@ export interface ChatSettings {
 	randomResponseChance?: number;
 }
 
-export type Context = FileFlavor<
-	HydrateFlavor<BaseContext & ExtendedContext & SessionFlavor<SessionData>>
->;
+export type Context = FileFlavor<HydrateFlavor<BaseContext & ExtendedContext>>;
 
 declare global {
 	// biome-ignore lint/style/noNamespace: Prisma

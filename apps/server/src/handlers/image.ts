@@ -184,7 +184,7 @@ composer.on("inline_query").filter(
 		// Get the slice of photos for this page
 		const photosForThisPage = allPhotos.slice(photoOffset, photoOffset + 50);
 
-		if (photosForThisPage.length === 0 && ctx.session.cookies === null) {
+		if (photosForThisPage.length === 0 && !ctx.user?.cookies) {
 			// User didn't setup the bot yet
 			await ctx.answerInlineQuery(
 				[
@@ -243,7 +243,7 @@ composer.on("inline_query").filter(
 );
 
 privateChat.command("cookies").filter(
-	async (ctx) => ctx.session.cookies === null,
+	async (ctx) => !ctx.user?.cookies,
 	async (ctx) => {
 		const keyboard = new InlineKeyboard().webApp("Set cookies", {
 			url: `${env.BASE_FRONTEND_URL}/settings`,
@@ -256,21 +256,19 @@ privateChat.command("cookies").filter(
 );
 
 privateChat.command("cookies").filter(
-	async (ctx) => ctx.session.cookies !== null,
+	async (ctx) => Boolean(ctx.user?.cookies),
 	async (ctx) => {
 		try {
-			const user_cookies = await redis.get(
-				`user:cookies:${ctx.user?.telegramId}`
-			);
+			const userCookies = ctx.user?.cookies;
 
-			if (!user_cookies) {
-				await ctx.reply("No cookies found in storage.");
+			if (!(userCookies && ctx.user)) {
+				await ctx.reply("No cookies found.");
 				return;
 			}
 
 			const cookiesJson = cookieEncryption.safeDecrypt(
-				user_cookies,
-				ctx.user?.telegramId.toString() || ""
+				userCookies,
+				ctx.user.telegramId.toString()
 			);
 
 			const cookies = Cookies.fromJSON(cookiesJson);
@@ -287,7 +285,7 @@ privateChat.command("cookies").filter(
 );
 
 privateChat.command("scrapper").filter(
-	async (ctx) => ctx.session.cookies === null,
+	async (ctx) => !ctx.user?.cookies,
 	async (ctx) => {
 		const keyboard = new InlineKeyboard().webApp("Set cookies", {
 			url: `${env.BASE_FRONTEND_URL}/cookies`,
@@ -301,7 +299,7 @@ privateChat.command("scrapper").filter(
 );
 
 privateChat.command("scrapper").filter(
-	async (ctx) => ctx.session.cookies !== null,
+	async (ctx) => Boolean(ctx.user?.cookies),
 	async (ctx) => {
 		const scheduledJob = await scrapperQueue.getJobScheduler(
 			`scrapper-${ctx.user?.id}`

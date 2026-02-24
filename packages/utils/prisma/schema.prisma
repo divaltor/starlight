@@ -28,6 +28,7 @@ model User {
   isActive   Boolean @default(true) @map("is_active")
   isBot      Boolean @default(false) @map("is_bot")
   isPublic   Boolean @default(false) @map("is_public")
+  cookies    String? @db.Text
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
