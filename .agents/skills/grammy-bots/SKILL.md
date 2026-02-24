@@ -72,13 +72,17 @@ Use grammY's filter query language with `.on()` to narrow update types, then cha
 // Filter text messages that are URLs
 feature.on(":text").filter(
   (ctx) => ctx.msg.text.startsWith("https://"),
-  async (ctx) => { /* handle link */ },
+  async (ctx) => {
+    /* handle link */
+  },
 );
 
 // Filter messages by sender context
 groupChat.on("message").filter(
   (ctx) => shouldReplyToMessage(ctx, ctx.message),
-  async (ctx) => { /* generate AI reply */ },
+  async (ctx) => {
+    /* generate AI reply */
+  },
 );
 ```
 
@@ -94,7 +98,9 @@ groupChat.command("memory").filter(
     const member = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
     return member.status === "administrator" || member.status === "creator";
   },
-  async (ctx) => { /* authorized handler */ },
+  async (ctx) => {
+    /* authorized handler */
+  },
 );
 
 groupChat.command("memory").filter(
@@ -105,7 +111,9 @@ groupChat.command("memory").filter(
     return member.status !== "administrator" && member.status !== "creator";
   },
   async (ctx) => {
-    await ctx.reply("Only admins, creators, and supervisors can use this command.");
+    await ctx.reply(
+      "Only admins, creators, and supervisors can use this command.",
+    );
   },
 );
 ```
@@ -122,27 +130,30 @@ groupChat.command("memory").filter(
 Use the built-in filter query language to narrow update types before custom `.filter()`:
 
 ```ts
-bot.on("message:text");          // only text messages
-bot.on("message:photo");         // only photo messages
-bot.on(":text");                 // text in messages or channel posts
-bot.on("::url");                 // URL entities in text or caption
-bot.on(":media");                // shortcut for photo + video
+bot.on("message:text"); // only text messages
+bot.on("message:photo"); // only photo messages
+bot.on(":text"); // text in messages or channel posts
+bot.on("::url"); // URL entities in text or caption
+bot.on(":media"); // shortcut for photo + video
 bot.on("message:is_automatic_forward"); // forwarded from linked channel
 ```
 
 **Combine with AND** (chain `.on()`):
+
 ```ts
 bot.on("::url").on(":forward_origin"); // forwarded messages with URLs
 ```
 
 **Combine with OR** (array):
+
 ```ts
 bot.on(["message", "edited_message"]); // messages or edits
 ```
 
 **Filter by sender type** (chain `.filter()`):
+
 ```ts
-bot.on("message").filter((ctx) => ctx.senderChat === undefined);  // regular users
+bot.on("message").filter((ctx) => ctx.senderChat === undefined); // regular users
 bot.on("message").filter((ctx) => ctx.senderChat?.id === ctx.chat.id); // anonymous admins
 ```
 
@@ -153,12 +164,16 @@ Not scoped to chat type. Use `.filter()` to partition by query content:
 ```ts
 composer.on("inline_query").filter(
   (ctx) => !isTwitterUrl(ctx.inlineQuery.query.trim()),
-  async (ctx) => { /* handle search */ },
+  async (ctx) => {
+    /* handle search */
+  },
 );
 
 composer.on("inline_query").filter(
   (ctx) => isTwitterUrl(ctx.inlineQuery.query.trim()),
-  async (ctx) => { /* handle tweet link */ },
+  async (ctx) => {
+    /* handle tweet link */
+  },
 );
 ```
 
