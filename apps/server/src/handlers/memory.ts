@@ -36,14 +36,10 @@ groupChat.command("memory").filter(isAdminOrCreator, async (ctx) => {
 		orderBy: { messageId: "desc" },
 	});
 
-	if (!lastMessage) {
-		await ctx.reply("No messages found to build memory from.");
-		return;
-	}
-
 	await scheduleChatMemorySummaries({
 		chatId,
-		messageId: lastMessage.messageId,
+		// biome-ignore lint/style/noNonNullAssertion: Can't be null, middleware will add at least 1 message even if it this command
+		messageId: lastMessage!.messageId,
 		messageThreadId,
 	});
 
