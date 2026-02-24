@@ -1,18 +1,8 @@
-# Starlight
-
-AI-powered media management system for collecting, classifying, and managing Twitter content via Telegram.
-
 ## Architecture & Data Flow
 
-Modular Turborepo monorepo with automated quality (Biome, oRPC) and semantic search (CLIP, pgvector).
-
-```text
+```
 Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL (pgvector) <── API (oRPC)
 ```
-
-1. Telegram Bot receives links or Mini App triggers timeline scraping.
-2. BullMQ workers fetch media, generate CLIP embeddings, and pHash for duplicate detection.
-3. React 19 Mini App queries oRPC API for semantic search and media management.
 
 ## Project Structure
 
@@ -27,10 +17,8 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 ## Critical Rules
 
 1. Use `@/` alias for all internal imports; relative imports are forbidden in apps.
-2. All client-server communication MUST use oRPC routers in `packages/api`.
-3. Uber-style design via DaisyUI + React Aria. Use semantic HTML and alt text.
-4. Prefer Bun APIs (`Bun.file`, `Bun.write`, etc.) over Node.js `fs` equivalents.
-5. Treat Telegram IDs as JS safe integers (`number`) in app code; convert to `BigInt` only where required by Prisma/db types.
+2. Prefer Bun APIs (`Bun.file`, `Bun.write`, etc.) over Node.js `fs` equivalents.
+3. Treat Telegram IDs as JS safe integers (`number`) in app code; convert to `BigInt` only where required by Prisma/db types.
 
 ## Maintenance & Tasks
 
