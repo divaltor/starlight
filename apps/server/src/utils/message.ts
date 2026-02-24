@@ -204,6 +204,12 @@ export function formatSenderName(data: {
 	return "unknown";
 }
 
+const BOT_ANNOTATION_RE = /\n?\[(?:reply to [^\]]*|attachment)\]/g;
+
+export function stripBotAnnotations(text: string): string {
+	return text.replace(BOT_ANNOTATION_RE, "").trim();
+}
+
 function attachmentLabelFromMimeType(mimeType: string): string {
 	if (mimeType.startsWith("image/")) return "photo";
 	if (mimeType.startsWith("video/")) return "video";
@@ -213,7 +219,8 @@ function attachmentLabelFromMimeType(mimeType: string): string {
 
 function formatReplyReference(replyTo: ConversationReplyReference): string {
 	const sender = formatSenderName(replyTo);
-	const normalizedContent = (replyTo.text ?? replyTo.caption)?.trim() ?? "";
+	const rawContent = (replyTo.text ?? replyTo.caption)?.trim() ?? "";
+	const normalizedContent = stripBotAnnotations(rawContent);
 
 	if (normalizedContent.length > 0) {
 		const singleLineContent = normalizedContent.replace(/\s+/g, " ");
@@ -282,9 +289,11 @@ export function toConversationMessage(
 		: null;
 
 	if (entry.fromId !== null && entry.fromId === botId) {
+		const cleanedContent = content ? stripBotAnnotations(content) : null;
+
 		return {
 			role: "assistant",
-			content: content ?? "[attachment]",
+			content: cleanedContent || "[attachment]",
 		};
 	}
 

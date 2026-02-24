@@ -11,6 +11,7 @@ import {
 	type ConversationReplyReference,
 	openrouter,
 	shouldReplyToMessage,
+	stripBotAnnotations,
 	toConversationMessage,
 	withMemorySystemPrompt,
 } from "@/utils/message";
@@ -381,7 +382,7 @@ groupChat.on("message").filter(
 			topK: 80,
 		});
 
-		const reply = text.trim();
+		const reply = stripBotAnnotations(text);
 		if (!reply) {
 			return;
 		}
