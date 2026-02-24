@@ -46,6 +46,33 @@ const env = createEnv({
 		LANGFUSE_TRACING_ENVIRONMENT: z.string().default("development"),
 
 		HISTORY_LIMIT: z.number().default(20),
+		SUPERVISOR_IDS: z
+			.string()
+			.default("")
+			.transform((value) => {
+				if (!value) {
+					return [] as number[];
+				}
+
+				return [...new Set(value.split(",").map((id) => id.trim()))]
+					.filter(Boolean)
+					.map((id) => {
+						if (!/^\d+$/.test(id)) {
+							throw new Error(
+								`SUPERVISOR_IDS contains invalid Telegram ID: ${id}`
+							);
+						}
+
+						const numericId = Number(id);
+						if (!Number.isSafeInteger(numericId)) {
+							throw new Error(
+								`SUPERVISOR_IDS contains unsafe integer ID: ${id}`
+							);
+						}
+
+						return numericId;
+					});
+			}),
 
 		BASE_FRONTEND_URL: z.string().default(""),
 		BASE_CDN_URL: z

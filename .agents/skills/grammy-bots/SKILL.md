@@ -3,13 +3,11 @@ name: grammy-bots
 description: "Guides writing grammY Telegram bot handlers, middleware, and plugins. Use when creating or modifying bot commands, inline queries, callback queries, message handlers, or middleware."
 ---
 
-# Writing grammY Bots
-
-Best practices for structuring grammY Telegram bots with atomic handlers, filter-based routing, and proper plugin usage.
+# Writing grammY Handlers
 
 ## Handler File Structure
 
-Each handler file uses a `Composer` scoped to a business domain and exports it as default:
+Each file is a `Composer` scoped to a business domain (one file per domain):
 
 ```ts
 import { Composer } from "grammy";
@@ -17,7 +15,6 @@ import type { Context } from "@/types";
 
 const composer = new Composer<Context>();
 
-// Scope to chat type
 const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 
@@ -26,28 +23,20 @@ const groupChat = composer.chatType(["group", "supergroup"]);
 export default composer;
 ```
 
-Register handlers on an error boundary:
+Register on the error boundary in `src/index.ts`:
 
 ```ts
-const boundary = bot.errorBoundary((error) => {
-  error.ctx.logger.error({ err: error.error, message: error.message });
-});
-
 boundary.use(featureHandler);
 ```
 
-## Core Principles
+## Filter Chains -- The Core Pattern
 
-### 1. One File Per Business Domain
+**NEVER use `if` + early-return inside handlers.** Instead, split every case into separate `.filter()` chains with mutually exclusive predicates. This applies to `.command()`, `.on()`, and all handler methods.
 
-Separate handlers by business domain, not by update type. Each file owns one cohesive feature area. Create a **new file** for a distinct domain; add to an existing file only if the feature clearly belongs there.
-
-### 2. Atomic Handlers via Filter Chains
-
-**Never mix validation and processing in a single handler.** Split into separate `.filter()` chains — one validates, one processes. This replaces early-returns inside handlers:
+### Commands with validation
 
 ```ts
-// ✅ CORRECT: Validation handler responds to invalid state
+// CORRECT: Validation handler responds when precondition fails
 privateChat.command("find").filter(
   (ctx) => ctx.message.reply_to_message?.photo === undefined,
   async (ctx) => {
@@ -55,7 +44,7 @@ privateChat.command("find").filter(
   },
 );
 
-// ✅ CORRECT: Processing handler only runs when valid
+// CORRECT: Processing handler runs when precondition is met
 privateChat.command("find").filter(
   (ctx) => ctx.message.reply_to_message?.photo !== undefined,
   async (ctx) => {
@@ -65,7 +54,7 @@ privateChat.command("find").filter(
 ```
 
 ```ts
-// ❌ WRONG: Mixed validation and processing
+// WRONG: Mixed validation and processing
 privateChat.command("find", async (ctx) => {
   if (!ctx.message.reply_to_message?.photo) {
     await ctx.reply("Please reply to a photo.");
@@ -75,145 +64,142 @@ privateChat.command("find", async (ctx) => {
 });
 ```
 
-**Rules:**
+### `.on()` with `.filter()` for message routing
 
-- Each handler atomically processes ONE case
-- Filter predicates must be **mutually exclusive** and **exhaustive**
-- Validation handlers reply with user-friendly error messages
+Use grammY's filter query language with `.on()` to narrow update types, then chain `.filter()` for custom predicates:
+
+```ts
+// Filter text messages that are URLs
+feature.on(":text").filter(
+  (ctx) => ctx.msg.text.startsWith("https://"),
+  async (ctx) => { /* handle link */ },
+);
+
+// Filter messages by sender context
+groupChat.on("message").filter(
+  (ctx) => shouldReplyToMessage(ctx, ctx.message),
+  async (ctx) => { /* generate AI reply */ },
+);
+```
+
+### Async filter predicates (permission checks)
+
+Filter predicates can be `async`. Use this for permission checks instead of `if` blocks:
+
+```ts
+groupChat.command("memory").filter(
+  async (ctx) => {
+    if (!ctx.from) return false;
+    if (env.SUPERVISOR_IDS.includes(ctx.from.id)) return true;
+    const member = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+    return member.status === "administrator" || member.status === "creator";
+  },
+  async (ctx) => { /* authorized handler */ },
+);
+
+groupChat.command("memory").filter(
+  async (ctx) => {
+    if (!ctx.from) return true;
+    if (env.SUPERVISOR_IDS.includes(ctx.from.id)) return false;
+    const member = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+    return member.status !== "administrator" && member.status !== "creator";
+  },
+  async (ctx) => {
+    await ctx.reply("Only admins, creators, and supervisors can use this command.");
+  },
+);
+```
+
+### Filter chain rules
+
+- Each handler processes **ONE case** atomically
+- Predicates must be **mutually exclusive** and **exhaustive**
+- Validation handlers reply with user-friendly messages
 - Processing handlers assume their preconditions are met
-- Filter predicates can be `async` (e.g., checking session state)
 
-### 3. Chat Type Scoping
+## grammY Filter Query Language
 
-Always scope handlers to their target chat type:
-
-```ts
-const privateChat = composer.chatType("private");
-const groupChat = composer.chatType(["group", "supergroup"]);
-const allChats = composer.chatType(["private", "group", "supergroup"]);
-```
-
-### 4. Use grammY Plugins
-
-Prefer official grammY plugins over manual implementations:
-
-| Plugin           | Package                      | Purpose                                                    |
-| ---------------- | ---------------------------- | ---------------------------------------------------------- |
-| Auto-retry       | `@grammyjs/auto-retry`       | Transformer — automatic rate limit retry                   |
-| Files            | `@grammyjs/files`            | Transformer — download files from `getFile()`              |
-| Hydrate          | `@grammyjs/hydrate`          | Context flavor — methods on API return objects             |
-| Parse Mode       | `@grammyjs/parse-mode`       | Transformer — default parse mode + `ctx.replyWithHTML()`   |
-| Router           | `@grammyjs/router`           | Route updates based on session state                       |
-| Runner           | `@grammyjs/runner`           | Concurrent long polling at scale                           |
-| Rate Limiter     | `@grammyjs/ratelimiter`      | Middleware — dismiss excess user requests (supports Redis) |
-| Auto Chat Action | `@grammyjs/auto-chat-action` | Middleware — auto "typing...", "uploading..." indicators   |
-| Conversations    | `@grammyjs/conversations`    | Complex multi-step dialog flows                            |
-| Menu             | `@grammyjs/menu`             | Dynamic interactive button menus                           |
-
-**When to reach for a plugin:**
-
-- **Rate limiting users** → `@grammyjs/ratelimiter` with Redis instead of manual rate-limiter libraries
-- **HTML/Markdown formatting** → `@grammyjs/parse-mode` transformer so you don't pass `parse_mode` on every call
-- **Multi-step flows** → `@grammyjs/router` for session-based routing, or `@grammyjs/conversations` for dialogs
-- **Upload indicators** → `@grammyjs/auto-chat-action` instead of manual `replyWithChatAction()`
-
-### 5. Context Type Safety
-
-Compose context types using grammY flavors:
+Use the built-in filter query language to narrow update types before custom `.filter()`:
 
 ```ts
-import type { Context as BaseContext, SessionFlavor } from "grammy";
-import type { FileFlavor } from "@grammyjs/files";
-import type { HydrateFlavor } from "@grammyjs/hydrate";
-import type { ParseModeFlavor } from "@grammyjs/parse-mode";
-
-type MyContext = FileFlavor<
-  HydrateFlavor<
-    ParseModeFlavor<BaseContext & CustomProps & SessionFlavor<SessionData>>
-  >
->;
+bot.on("message:text");          // only text messages
+bot.on("message:photo");         // only photo messages
+bot.on(":text");                 // text in messages or channel posts
+bot.on("::url");                 // URL entities in text or caption
+bot.on(":media");                // shortcut for photo + video
+bot.on("message:is_automatic_forward"); // forwarded from linked channel
 ```
 
-When adding new context properties, define them in a dedicated type and attach via middleware.
+**Combine with AND** (chain `.on()`):
+```ts
+bot.on("::url").on(":forward_origin"); // forwarded messages with URLs
+```
 
-### 6. Inline Queries
+**Combine with OR** (array):
+```ts
+bot.on(["message", "edited_message"]); // messages or edits
+```
 
-Inline queries are not scoped to chat type. Use `.filter()` to partition by query content:
+**Filter by sender type** (chain `.filter()`):
+```ts
+bot.on("message").filter((ctx) => ctx.senderChat === undefined);  // regular users
+bot.on("message").filter((ctx) => ctx.senderChat?.id === ctx.chat.id); // anonymous admins
+```
+
+## Inline Queries
+
+Not scoped to chat type. Use `.filter()` to partition by query content:
 
 ```ts
 composer.on("inline_query").filter(
-  (ctx) => isSpecialQuery(ctx.inlineQuery.query.trim()),
-  async (ctx) => {
-    /* handle special case */
-  },
+  (ctx) => !isTwitterUrl(ctx.inlineQuery.query.trim()),
+  async (ctx) => { /* handle search */ },
 );
 
 composer.on("inline_query").filter(
-  (ctx) => !isSpecialQuery(ctx.inlineQuery.query.trim()),
-  async (ctx) => {
-    /* handle default case */
-  },
+  (ctx) => isTwitterUrl(ctx.inlineQuery.query.trim()),
+  async (ctx) => { /* handle tweet link */ },
 );
 ```
 
-### 7. Callback Queries
+## Callback Queries
 
-Use regex patterns for callback data with structured metadata:
+Use regex patterns for structured callback data:
 
 ```ts
-// Pattern: feature:action:id:param:ownerId
-composer.callbackQuery(/^feature:action:(\w+):(\w+):(\d+)$/, async (ctx) => {
-  const id = ctx.match.at(1)!;
-  const param = ctx.match.at(2)!;
-  const ownerId = ctx.match.at(3)!;
-
-  // Ownership check
-  if (ctx.from.id !== Number(ownerId)) {
-    await ctx.answerCallbackQuery({
-      text: "Only the requester can use this button",
-      show_alert: true,
-    });
-    return;
-  }
-
+// Pattern: feature:action:params
+feature.callbackQuery(/^video:(add_desc|remove_desc):(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const action = ctx.match[1];
+  const videoId = ctx.match[2];
   // Process...
 });
 ```
 
-### 8. Error Handling
+## Context Type
 
-- Let the error boundary catch unhandled errors
-- Handle **expected** errors (like `GrammyError` for missing permissions) locally
-- Re-throw unexpected errors
+The project composes context flavors in `src/types.ts`:
 
 ```ts
-try {
-  await ctx.deleteMessage();
-} catch (error) {
-  if (error instanceof GrammyError) {
-    ctx.logger.debug({ error: error.message }, "Could not delete message");
-  } else {
-    throw error;
-  }
-}
+type Context = FileFlavor<HydrateFlavor<BaseContext & ExtendedContext>>;
 ```
 
-### 9. Separation of Concerns
+`ExtendedContext` adds `logger`, `user`, `userChat`, `userChatMember`, and `currentMessageAttachments`. These are attached via middleware. Do not re-declare them.
 
-- **Handlers** orchestrate: receive update → call services → reply
-- **Services** compute: pure business logic, no grammY dependency
-- **Middleware** cross-cuts: session, auth, logging, rate limiting
+## Separation of Concerns
 
-## Checklist for New Handlers
+- **Handlers** orchestrate: receive update, call services, reply
+- **Services** compute: business logic, no grammY dependency
+- **Middleware** cross-cuts: session, auth, logging
 
-1. Create a file named after the business domain
-2. Use `Composer<Context>` with chat type scoping
-3. Split every command into atomic filter chains (validation → processing)
-4. Register on the error boundary
-5. Keep business logic in services — handlers orchestrate, not compute
-6. Use grammY plugins instead of reimplementing common patterns
-7. Use structured logging with context fields
+## Checklist
+
+1. File named after business domain, exports `Composer<Context>` as default
+2. Chat type scoped (`privateChat`, `groupChat`)
+3. Every handler split into atomic `.filter()` chains, no `if` + early-return
+4. Business logic in services, not handlers
+5. Registered on error boundary
 
 ## Reference
 
-If something falls outside the scope of this skill or you encounter an unfamiliar grammY API, consult the official documentation at <https://grammy.dev> for examples, plugin guides, and API reference from Telegram (<https://core.telegram.org/bots/api>).
+Consult <https://grammy.dev> for unfamiliar APIs and <https://core.telegram.org/bots/api> for the Telegram Bot API.

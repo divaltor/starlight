@@ -30,6 +30,7 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 2. All client-server communication MUST use oRPC routers in `packages/api`.
 3. Uber-style design via DaisyUI + React Aria. Use semantic HTML and alt text.
 4. Prefer Bun APIs (`Bun.file`, `Bun.write`, etc.) over Node.js `fs` equivalents.
+5. Treat Telegram IDs as JS safe integers (`number`) in app code; convert to `BigInt` only where required by Prisma/db types.
 
 ## Maintenance & Tasks
 

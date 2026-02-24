@@ -197,6 +197,10 @@ const isAdminOrCreator = async (ctx: Context) => {
 		return false;
 	}
 
+	if (env.SUPERVISOR_IDS.includes(ctx.from.id)) {
+		return true;
+	}
+
 	const member = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
 
 	return member.status === "administrator" || member.status === "creator";
@@ -204,7 +208,9 @@ const isAdminOrCreator = async (ctx: Context) => {
 
 groupChat.command("clear", async (ctx) => {
 	if (!(await isAdminOrCreator(ctx))) {
-		await ctx.reply("Only admins and creators can use this command.");
+		await ctx.reply(
+			"Only admins, creators, and supervisors can use this command."
+		);
 		return;
 	}
 
