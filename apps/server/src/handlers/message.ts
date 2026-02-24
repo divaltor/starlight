@@ -15,6 +15,7 @@ import {
 	toConversationMessage,
 	withMemorySystemPrompt,
 } from "@/utils/message";
+import { sleep } from "@/utils/tools";
 
 const composer = new Composer<Context>();
 
@@ -56,6 +57,40 @@ type StoredConversationMessageWithInlineVideo = Omit<
 type ReplyToMessage = NonNullable<
 	NonNullable<Context["message"]>["reply_to_message"]
 >;
+
+const RESPONSE_DELAY_MS = 1500;
+
+async function hasNewerHumanMessage(params: {
+	chatId: bigint;
+	messageId: number;
+	messageThreadId: number | null;
+}): Promise<boolean> {
+	const newerMessage = await prisma.message.findFirst({
+		where: {
+			chatId: params.chatId,
+			messageThreadId: params.messageThreadId,
+			deletedAt: null,
+			messageId: {
+				gt: params.messageId,
+			},
+			fromId: {
+				not: null,
+			},
+			rawData: {
+				path: ["from", "is_bot"],
+				equals: false,
+			},
+		},
+		select: {
+			messageId: true,
+		},
+		orderBy: {
+			messageId: "desc",
+		},
+	});
+
+	return newerMessage !== null;
+}
 
 async function inlineVideoAttachments(
 	ctx: Context,
@@ -243,8 +278,25 @@ groupChat.on("message").filter(
 			return;
 		}
 
+		const triggerMessageId = ctx.message.message_id;
 		const messageThreadId = ctx.message.message_thread_id ?? null;
 		const chatId = BigInt(ctx.chat.id);
+
+		await sleep(RESPONSE_DELAY_MS);
+
+		if (
+			await hasNewerHumanMessage({
+				chatId,
+				messageId: triggerMessageId,
+				messageThreadId,
+			})
+		) {
+			ctx.logger.debug(
+				{ chatId: ctx.chat.id, messageId: triggerMessageId, messageThreadId },
+				"Skipping stale AI reply after response delay"
+			);
+			return;
+		}
 
 		const history = await prisma.message.findMany({
 			where: {
@@ -392,6 +444,20 @@ groupChat.on("message").filter(
 
 		const reply = stripBotAnnotations(text);
 		if (!reply) {
+			return;
+		}
+
+		if (
+			await hasNewerHumanMessage({
+				chatId,
+				messageId: triggerMessageId,
+				messageThreadId,
+			})
+		) {
+			ctx.logger.debug(
+				{ chatId: ctx.chat.id, messageId: triggerMessageId, messageThreadId },
+				"Skipping stale AI reply after inference"
+			);
 			return;
 		}
 
