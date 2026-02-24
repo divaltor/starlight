@@ -5,8 +5,10 @@ import type { Chat, ChatMember, User } from "@starlight/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import type { Context as BaseContext } from "grammy";
 import type { Logger } from "@/logger";
+import type { ChatMemorySettings } from "@/services/chat-memory";
 
 interface ExtendedContext {
+	chatMemorySettings: ChatMemorySettings;
 	currentMessageAttachments: Array<{
 		base64Data: string;
 		mimeType: string;

@@ -1,4 +1,4 @@
-import { ChatMemoryScope, prisma } from "@starlight/utils";
+import { ChatMemoryScope, env, prisma } from "@starlight/utils";
 import type { ChatSettings } from "@/types";
 
 const DEFAULT_TOPIC_EVERY_MESSAGES = 50;
@@ -7,6 +7,7 @@ const DEFAULT_GLOBAL_EVERY_MESSAGES = 200;
 export class ChatMemorySettings {
 	readonly enabled: boolean;
 	readonly globalEveryMessages: number;
+	readonly ignoreUserChance: number;
 	readonly topicEveryMessages: number;
 
 	constructor(chatSettings: ChatSettings | null) {
@@ -17,6 +18,8 @@ export class ChatMemorySettings {
 			memory?.topicEveryMessages ?? DEFAULT_TOPIC_EVERY_MESSAGES;
 		this.globalEveryMessages =
 			memory?.globalEveryMessages ?? DEFAULT_GLOBAL_EVERY_MESSAGES;
+		this.ignoreUserChance =
+			chatSettings?.ignoreUserChance ?? env.IGNORE_USER_CHANCE;
 	}
 }
 

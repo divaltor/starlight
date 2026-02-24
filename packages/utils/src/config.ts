@@ -46,6 +46,7 @@ const env = createEnv({
 		LANGFUSE_TRACING_ENVIRONMENT: z.string().default("development"),
 
 		HISTORY_LIMIT: z.number().default(20),
+		IGNORE_USER_CHANCE: z.number().gte(0).lte(1).default(0.75),
 		SUPERVISOR_IDS: z
 			.string()
 			.default("")

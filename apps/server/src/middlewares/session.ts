@@ -1,5 +1,6 @@
 import { prisma, toUniqueId } from "@starlight/utils";
 import type { NextFunction } from "grammy";
+import { ChatMemorySettings } from "@/services/chat-memory";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
 
@@ -111,6 +112,7 @@ export async function attachChat(ctx: Context, next: NextFunction) {
 		},
 	});
 
+	ctx.chatMemorySettings = new ChatMemorySettings(chat.settings);
 	ctx.userChat = chat;
 
 	await next();

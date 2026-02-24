@@ -6,6 +6,32 @@ import type { Context } from "@/bot";
 
 const REPLY_CHANCE = 0.01;
 
+const LOW_SIGNAL_TOKEN_ALLOWLIST = new Set([
+	"ок",
+	"окей",
+	"к",
+	"кк",
+	"ага",
+	"угу",
+	"ясно",
+	"пон",
+	"понял",
+	"поняла",
+	"да",
+	"нет",
+	"хз",
+	"лол",
+	"ору",
+	"ахах",
+	"хаха",
+	"хд",
+	"мм",
+	"м",
+	"эм",
+	"спс",
+	"спасибо",
+]);
+
 export const SYSTEM_PROMPT = `
 ### Character: Starlight (Звездочка) ###
 - Core Identity: 25-year-old girl, calm and composed with dry wit and quiet confidence
@@ -177,6 +203,68 @@ function isReplyToBotMessage(ctx: Context, msg: Message): boolean {
 	return msg.reply_to_message?.from?.id === ctx.me.id;
 }
 
+function isCommandMessage(msg: Message): boolean {
+	const textData = getTextWithEntities(msg);
+
+	if (!textData) {
+		return false;
+	}
+
+	if (textData.entities.some((entity) => entity.type === "bot_command")) {
+		return true;
+	}
+
+	return textData.text.trimStart().startsWith("/");
+}
+
+function isLowSignalMessageText(text: string): boolean {
+	const normalized = text.trim().toLowerCase();
+
+	if (!normalized || normalized.length > 24) {
+		return false;
+	}
+
+	if (normalized.includes("http://") || normalized.includes("https://")) {
+		return false;
+	}
+
+	if (/^[\p{P}\p{S}\s]+$/u.test(normalized)) {
+		return true;
+	}
+
+	const tokens = normalized
+		.split(/\s+/)
+		.map((token) => token.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ""))
+		.filter(Boolean);
+
+	if (tokens.length === 0 || tokens.length > 4) {
+		return false;
+	}
+
+	return tokens.every((token) => LOW_SIGNAL_TOKEN_ALLOWLIST.has(token));
+}
+
+function shouldIgnoreMessage(ctx: Context, msg: Message): boolean {
+	if (ctx.chat?.type === "private") {
+		return false;
+	}
+
+	if (isCommandMessage(msg)) {
+		return false;
+	}
+
+	const content = getMessageContent(msg);
+	if (!content) {
+		return false;
+	}
+
+	if (!isLowSignalMessageText(content)) {
+		return false;
+	}
+
+	return Math.random() < ctx.chatMemorySettings.ignoreUserChance;
+}
+
 export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
 	if (msg.from?.is_bot) {
 		return false;
@@ -186,11 +274,19 @@ export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
 		return false;
 	}
 
-	return (
-		hasDirectBotMention(ctx, msg) ||
-		isReplyToBotMessage(ctx, msg) ||
-		Math.random() < REPLY_CHANCE
-	);
+	if (hasDirectBotMention(ctx, msg)) {
+		return true;
+	}
+
+	if (isReplyToBotMessage(ctx, msg)) {
+		return true;
+	}
+
+	if (Math.random() >= REPLY_CHANCE) {
+		return false;
+	}
+
+	return !shouldIgnoreMessage(ctx, msg);
 }
 
 export function formatSenderName(data: {
