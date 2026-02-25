@@ -6,7 +6,7 @@
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "build": "bun run -b tsdown",
-    "format": "biome check --write .",
+    "format": "oxlint --fix && oxfmt",
     "test": "bun test",
     "queue:classify": "bun run src/scripts/classification.ts",
     "queue:embeddings": "bun run src/scripts/embeddings.ts"

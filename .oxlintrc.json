@@ -134,5 +134,23 @@
     "builtin": true
   },
   "globals": {},
-  "ignorePatterns": []
+  "ignorePatterns": [
+    "**/.next/**",
+    "**/dist/**",
+    "**/.turbo/**",
+    "**/dev-dist/**",
+    "**/.zed/**",
+    "**/.vscode/**",
+    "**/routeTree.gen.ts",
+    "**/src-tauri/**",
+    "**/.nuxt/**",
+    "**/generated/**",
+    "**/node_modules/**",
+    "**/.git/**",
+    "**/*.css",
+    "**/.output/**",
+    "**/.tanstack/**",
+    "**/.nitro/**",
+    "**/out/**"
+  ]
 }
