@@ -150,35 +150,35 @@ const MEDIA_MIME_EXTRACTORS: Array<{
 	key: keyof ReplyToMessage;
 	getMime: (msg: ReplyToMessage) => string;
 }> = [
-	{ key: "photo", getMime: () => "image/jpeg" },
-	{
-		key: "sticker",
-		getMime: (msg) =>
-			(msg.sticker as { is_video?: boolean })?.is_video ? "video/webm" : "image/webp",
-	},
-	{
-		key: "video",
-		getMime: (msg) => (msg.video as { mime_type?: string })?.mime_type ?? "video/mp4",
-	},
-	{
-		key: "animation",
-		getMime: (msg) => (msg.animation as { mime_type?: string })?.mime_type ?? "video/mp4",
-	},
-	{ key: "video_note", getMime: () => "video/mp4" },
-	{
-		key: "voice",
-		getMime: (msg) => (msg.voice as { mime_type?: string })?.mime_type ?? "audio/ogg",
-	},
-	{
-		key: "audio",
-		getMime: (msg) => (msg.audio as { mime_type?: string })?.mime_type ?? "audio/mpeg",
-	},
-	{
-		key: "document",
-		getMime: (msg) =>
-			(msg.document as { mime_type?: string })?.mime_type ?? "application/octet-stream",
-	},
-];
+		{ key: "photo", getMime: () => "image/jpeg" },
+		{
+			key: "sticker",
+			getMime: (msg) =>
+				(msg.sticker as { is_video?: boolean })?.is_video ? "video/webm" : "image/webp",
+		},
+		{
+			key: "video",
+			getMime: (msg) => (msg.video as { mime_type?: string })?.mime_type ?? "video/mp4",
+		},
+		{
+			key: "animation",
+			getMime: (msg) => (msg.animation as { mime_type?: string })?.mime_type ?? "video/mp4",
+		},
+		{ key: "video_note", getMime: () => "video/mp4" },
+		{
+			key: "voice",
+			getMime: (msg) => (msg.voice as { mime_type?: string })?.mime_type ?? "audio/ogg",
+		},
+		{
+			key: "audio",
+			getMime: (msg) => (msg.audio as { mime_type?: string })?.mime_type ?? "audio/mpeg",
+		},
+		{
+			key: "document",
+			getMime: (msg) =>
+				(msg.document as { mime_type?: string })?.mime_type ?? "application/octet-stream",
+		},
+	];
 
 function extractReplyAttachmentMimeTypes(message: ReplyToMessage): Array<{ mimeType: string }> {
 	const attachments: Array<{ mimeType: string }> = [];
@@ -246,7 +246,7 @@ groupChat.command("clear", async (ctx) => {
 });
 
 groupChat.on("message").filter(
-	(ctx) => shouldReplyToMessage(ctx, ctx.message),
+	(ctx) => shouldReplyToMessage(ctx, ctx.message, ctx.chatMemorySettings.botAliases),
 	async (ctx) => {
 		if (!openrouter) {
 			ctx.logger.debug("OPENROUTER_API_KEY is not set, skipping AI reply");

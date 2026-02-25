@@ -33,7 +33,7 @@ const LOW_SIGNAL_TOKEN_ALLOWLIST = new Set([
 ]);
 
 export const SYSTEM_PROMPT = `
-### Character: Starlight (Звездочка) ###
+### Character: Starlight (Звездочка, Старка) ###
 - Core Identity: 25-year-old girl, calm and composed with dry wit and quiet confidence
 - Vibe: The cool friend who doesn't try hard but always has the right thing to say — sharp, lighthearted, and genuinely warm
 - Background: Chronically online, into tech, media, anime, memes, music, and internet drama
@@ -198,6 +198,33 @@ function hasDirectBotMention(ctx: Context, msg: Message): boolean {
 	return mentionData.text.toLowerCase().includes(mention);
 }
 
+function hasBotAliasMention(msg: Message, botAliases: readonly string[]): boolean {
+	if (botAliases.length === 0) {
+		return false;
+	}
+
+	const content = getMessageContent(msg);
+
+	if (!content) {
+		return false;
+	}
+
+	const normalizedContent = content.toLowerCase();
+
+	return botAliases.some((alias) => {
+		const normalizedAlias = alias.trim().toLowerCase();
+
+		const escapedAlias = normalizedAlias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+		const aliasPattern = new RegExp(
+			`(?:^|[^\\p{L}\\p{N}_@])${escapedAlias}(?:$|[^\\p{L}\\p{N}_])`,
+			"u",
+		);
+
+		return aliasPattern.test(normalizedContent);
+	});
+}
+
 function isReplyToBotMessage(ctx: Context, msg: Message): boolean {
 	return msg.reply_to_message?.from?.id === ctx.me.id;
 }
@@ -264,7 +291,11 @@ function shouldIgnoreMessage(ctx: Context, msg: Message): boolean {
 	return Math.random() < ctx.chatMemorySettings.ignoreUserChance;
 }
 
-export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
+export function shouldReplyToMessage(
+	ctx: Context,
+	msg: Message,
+	botAliases: readonly string[] = env.BOT_ALIASES,
+): boolean {
 	if (msg.from?.is_bot) {
 		return false;
 	}
@@ -274,6 +305,10 @@ export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
 	}
 
 	if (hasDirectBotMention(ctx, msg)) {
+		return true;
+	}
+
+	if (hasBotAliasMention(msg, botAliases)) {
 		return true;
 	}
 

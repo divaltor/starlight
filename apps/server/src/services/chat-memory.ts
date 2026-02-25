@@ -5,6 +5,7 @@ const DEFAULT_TOPIC_EVERY_MESSAGES = 50;
 const DEFAULT_GLOBAL_EVERY_MESSAGES = 200;
 
 export class ChatMemorySettings {
+	readonly botAliases: readonly string[];
 	readonly enabled: boolean;
 	readonly globalEveryMessages: number;
 	readonly ignoreUserChance: number;
@@ -12,11 +13,17 @@ export class ChatMemorySettings {
 
 	constructor(chatSettings: ChatSettings | null) {
 		const memory = chatSettings?.memory;
+		const chatAliases = chatSettings?.botAliases;
+		const normalizedChatAliases = Array.isArray(chatAliases)
+			? chatAliases.map((alias) => alias.trim().toLowerCase()).filter(Boolean)
+			: [];
 
 		this.enabled = memory?.enabled !== false;
 		this.topicEveryMessages = memory?.topicEveryMessages ?? DEFAULT_TOPIC_EVERY_MESSAGES;
 		this.globalEveryMessages = memory?.globalEveryMessages ?? DEFAULT_GLOBAL_EVERY_MESSAGES;
 		this.ignoreUserChance = chatSettings?.ignoreUserChance ?? env.IGNORE_USER_CHANCE;
+		this.botAliases =
+			normalizedChatAliases.length === 0 ? env.BOT_ALIASES : [...new Set(normalizedChatAliases)];
 	}
 }
 

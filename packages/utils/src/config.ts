@@ -4,6 +4,12 @@ import { z } from "zod/v4";
 const env = createEnv({
 	server: {
 		BOT_TOKEN: z.string(),
+		BOT_ALIASES: z
+			.string()
+			.default("starlight,звездочка,старка")
+			.transform((value) =>
+				[...new Set(value.split(",").map((alias) => alias.trim().toLowerCase()))].filter(Boolean),
+			),
 
 		REDIS_URL: z.url({ protocol: /^rediss?$/ }),
 		DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
