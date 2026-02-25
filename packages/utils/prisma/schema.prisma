@@ -25,8 +25,7 @@ model User {
   username   String? @unique
   firstName  String  @map("first_name")
   lastName   String? @map("last_name")
-  isActive   Boolean @default(true) @map("is_active")
-  isBot      Boolean @default(false) @map("is_bot")
+  isBot   Boolean @default(false) @map("is_bot")
   isPublic   Boolean @default(false) @map("is_public")
   cookies    String? @db.Text
 
