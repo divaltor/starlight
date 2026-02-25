@@ -1,3 +1,4 @@
+import { http } from "@starlight/utils/http";
 import { logger } from "@/logger";
 import type { FxEmbedResponse, FxEmbedTweet } from "./types";
 
@@ -9,8 +10,8 @@ export async function fetchTweet(tweetId: string): Promise<FxEmbedTweet | null> 
 	const url = `${FXEMBED_BASE_URL}/status/${tweetId}`;
 
 	try {
-		const response = await fetch(url, {
-			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+		const response = await http(url, {
+			timeout: FETCH_TIMEOUT_MS,
 			headers: {
 				"User-Agent": USER_AGENT,
 				Accept: "application/json",

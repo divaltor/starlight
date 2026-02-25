@@ -1,4 +1,5 @@
 import type { TweetData } from "@starlight/api/src/types/tweets";
+import { http } from "@starlight/utils/http";
 import { X } from "lucide-react";
 import type { UIElementData } from "photoswipe";
 import type { PhotoSwipe } from "photoswipe/lightbox";
@@ -65,7 +66,7 @@ export function TweetImageGrid({
 				const filename = currItem?.alt ?? "image.jpg";
 
 				try {
-					const response = await fetch(url);
+					const response = await http(url);
 
 					if (!response.ok) {
 						throw new Error(`HTTP error! status: ${response.status}`);

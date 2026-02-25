@@ -1,6 +1,7 @@
 import { Decoder, Encoder } from "@msgpack/msgpack";
 import { ORPCError } from "@orpc/client";
 import { env, prisma } from "@starlight/utils";
+import { http } from "@starlight/utils/http";
 import z from "zod";
 import { publicProcedure } from "..";
 import { maybeAuthProcedure } from "../middlewares/auth";
@@ -68,17 +69,17 @@ export const searchImages = maybeAuthProcedure
 		if (memberExists) {
 			text = decoder.decode(memberExists) as number[];
 		} else {
-			const response = await fetch(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
-				method: "POST",
+			const response = await http(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
+				method: "post",
 				headers: {
 					"Content-Type": "application/json",
 					"X-API-Token": env.ML_API_TOKEN,
 					"X-Request-Id": context.requestId,
 				},
-				body: JSON.stringify({
+				json: {
 					tags: query,
 					encoding_mode: "retrieval.query",
-				}),
+				},
 			});
 
 			if (!response.ok) {

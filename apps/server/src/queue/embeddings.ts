@@ -1,4 +1,5 @@
 import { DbNull, env, Prisma, prisma } from "@starlight/utils";
+import { http } from "@starlight/utils/http";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import { logger } from "@/logger";
 import { redis } from "@/storage";
@@ -82,13 +83,13 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		};
 
 		try {
-			response = await fetch(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
-				method: "POST",
+			response = await http(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
+				method: "post",
 				headers,
-				body: JSON.stringify({
+				json: {
 					image: photo.s3Url,
 					tags: photo.classification?.tags,
-				}),
+				},
 			});
 		} catch (error) {
 			logger.error({ photoId, userId, requestId, error }, "Failed request to embeddings service");

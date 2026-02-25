@@ -1,4 +1,5 @@
 import { prisma } from "@starlight/utils";
+import { http } from "@starlight/utils/http";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import sharp from "sharp";
@@ -88,7 +89,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 				continue;
 			}
 
-			const response = await fetch(photo.originalUrl, {
+			const response = await http(photo.originalUrl, {
 				headers: {
 					"User-Agent": userAgent.toString(),
 				},

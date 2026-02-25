@@ -1,5 +1,6 @@
 import path from "node:path";
 import { env } from "@starlight/utils";
+import { http } from "@starlight/utils/http";
 import { create } from "youtube-dl-exec";
 import { logger } from "@/logger";
 
@@ -48,7 +49,7 @@ export async function downloadVideoFromUrl(
 
 	logger.debug("Downloading video directly from URL %s", url);
 
-	const response = await fetch(url);
+	const response = await http(url);
 
 	if (!(response.ok && response.body)) {
 		throw new Error(`Failed to download video from ${url}: ${response.status}`);

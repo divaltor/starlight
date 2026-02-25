@@ -1,4 +1,5 @@
 import { env, prisma } from "@starlight/utils";
+import { http } from "@starlight/utils/http";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import { logger } from "@/logger";
 import { redis } from "@/storage";
@@ -79,10 +80,10 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		};
 
 		try {
-			response = await fetch(new URL("/v1/classify", env.ML_BASE_URL).toString(), {
-				method: "POST",
+			response = await http(new URL("/v1/classify", env.ML_BASE_URL).toString(), {
+				method: "post",
 				headers,
-				body: JSON.stringify({ image: photo.s3Url }),
+				json: { image: photo.s3Url },
 			});
 		} catch (error) {
 			logger.error(
