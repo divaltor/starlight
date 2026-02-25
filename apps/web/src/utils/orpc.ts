@@ -6,10 +6,7 @@ import { createRouterClient } from "@orpc/server";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import { createContext } from "@starlight/api/context";
 import { appRouter } from "@starlight/api/routers/index";
-import {
-	defaultShouldDehydrateQuery,
-	QueryClient,
-} from "@tanstack/react-query";
+import { defaultShouldDehydrateQuery, QueryClient } from "@tanstack/react-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { retrieveRawInitData } from "@telegram-apps/sdk-react";
@@ -30,8 +27,7 @@ export function createQueryClient() {
 			},
 			dehydrate: {
 				shouldDehydrateQuery: (query) =>
-					defaultShouldDehydrateQuery(query) ||
-					query.state.status === "pending",
+					defaultShouldDehydrateQuery(query) || query.state.status === "pending",
 				serializeData: (data) => {
 					const [json, meta] = serializer.serialize(data);
 					return { json, meta };
@@ -53,7 +49,7 @@ const getORPCClient = createIsomorphicFn()
 				const request = getRequest();
 				return createContext({ request });
 			},
-		})
+		}),
 	)
 	.client((): RouterClient<typeof appRouter> => {
 		let rawInitData: string;
@@ -70,7 +66,7 @@ const getORPCClient = createIsomorphicFn()
 				headers: {
 					Authorization: rawInitData,
 				},
-			})
+			}),
 		);
 	});
 

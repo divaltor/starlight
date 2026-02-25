@@ -15,15 +15,10 @@ export interface VideoInformation {
 	metadata: VideoMetadata;
 }
 
-async function createVideoInformation(
-	filePath: string
-): Promise<VideoInformation> {
+async function createVideoInformation(filePath: string): Promise<VideoInformation> {
 	const parsedPath = path.parse(filePath);
 
-	const infoJsonPath = path.join(
-		parsedPath.dir,
-		`${parsedPath.name}.info.json`
-	);
+	const infoJsonPath = path.join(parsedPath.dir, `${parsedPath.name}.info.json`);
 
 	logger.debug("Creating video information for %s", infoJsonPath);
 
@@ -46,7 +41,7 @@ const youtubedl = create(env.YOUTUBE_DL_PATH);
 export async function downloadVideoFromUrl(
 	url: string,
 	folder: string,
-	metadata: VideoMetadata = {}
+	metadata: VideoMetadata = {},
 ): Promise<VideoInformation> {
 	const uuid = Bun.randomUUIDv7();
 	const filePath = path.join(folder, `${uuid}.mp4`);
@@ -64,10 +59,7 @@ export async function downloadVideoFromUrl(
 	return { filePath, metadata };
 }
 
-export async function downloadVideo(
-	url: string,
-	folder: string
-): Promise<VideoInformation[]> {
+export async function downloadVideo(url: string, folder: string): Promise<VideoInformation[]> {
 	logger.debug("Downloading video from %s to %s", url, folder);
 
 	const uuid = Bun.randomUUIDv7();
@@ -94,9 +86,7 @@ export async function downloadVideo(
 	const videoInformations: VideoInformation[] = [];
 
 	for await (const filePath of mp4Files) {
-		videoInformations.push(
-			await createVideoInformation(path.join(folder, filePath))
-		);
+		videoInformations.push(await createVideoInformation(path.join(folder, filePath)));
 	}
 
 	return videoInformations;

@@ -10,27 +10,21 @@ interface ClassificationJobData {
 	userId: string;
 }
 
-export const classificationQueue = new Queue<ClassificationJobData>(
-	"classification",
-	{
-		connection: redis,
-		defaultJobOptions: {
-			attempts: 5,
-			backoff: { type: "exponential", delay: 30_000 }, // 30s, 90s, 270s
-			removeOnComplete: true,
-			removeOnFail: true,
-		},
-	}
-);
+export const classificationQueue = new Queue<ClassificationJobData>("classification", {
+	connection: redis,
+	defaultJobOptions: {
+		attempts: 5,
+		backoff: { type: "exponential", delay: 30_000 }, // 30s, 90s, 270s
+		removeOnComplete: true,
+		removeOnFail: true,
+	},
+});
 
 export const classificationWorker = new Worker<ClassificationJobData>(
 	"classification",
 	async (job) => {
 		if (!env.ENABLE_CLASSIFICATION) {
-			logger.warn(
-				{ jobId: job.id },
-				"Classification skipped: feature disabled"
-			);
+			logger.warn({ jobId: job.id }, "Classification skipped: feature disabled");
 			return;
 		}
 
@@ -38,10 +32,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		const requestId = incomingRequestId || Bun.randomUUIDv7();
 
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
-			logger.warn(
-				{ photoId, userId, requestId },
-				"Classification skipped: service not configured"
-			);
+			logger.warn({ photoId, userId, requestId }, "Classification skipped: service not configured");
 			return;
 		}
 
@@ -49,7 +40,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			{ photoId, userId, requestId },
 			"Classifying photo %s for user %s",
 			photoId,
-			userId
+			userId,
 		);
 
 		// Fetch photo record to get URL
@@ -69,17 +60,13 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 				{ photoId, userId, requestId },
 				"Photo %s not found for user %s",
 				photoId,
-				userId
+				userId,
 			);
 			return;
 		}
 
 		if (!photo.s3Url) {
-			logger.warn(
-				{ photoId, userId, requestId },
-				"Photo %s has no s3Url yet",
-				photoId
-			);
+			logger.warn({ photoId, userId, requestId }, "Photo %s has no s3Url yet", photoId);
 			throw new Error("Photo has no URL for classification");
 		}
 
@@ -92,18 +79,15 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		};
 
 		try {
-			response = await fetch(
-				new URL("/v1/classify", env.ML_BASE_URL).toString(),
-				{
-					method: "POST",
-					headers,
-					body: JSON.stringify({ image: photo.s3Url }),
-				}
-			);
+			response = await fetch(new URL("/v1/classify", env.ML_BASE_URL).toString(), {
+				method: "POST",
+				headers,
+				body: JSON.stringify({ image: photo.s3Url }),
+			});
 		} catch (error) {
 			logger.error(
 				{ photoId, userId, requestId, error },
-				"Failed request to classification service"
+				"Failed request to classification service",
 			);
 			throw error;
 		}
@@ -112,7 +96,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			const text = await response.text();
 			logger.error(
 				{ photoId, userId, requestId, status: response.status, body: text },
-				"Classification service error"
+				"Classification service error",
 			);
 			throw new Error(`Classification service error: ${response.status}`);
 		}
@@ -124,7 +108,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		} catch (error) {
 			logger.error(
 				{ photoId, userId, requestId, error },
-				"Failed to parse classification response"
+				"Failed to parse classification response",
 			);
 			throw error;
 		}
@@ -141,7 +125,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		concurrency: 2,
 		autorun: false,
 		lockDuration: 1000 * 60 * 5,
-	}
+	},
 );
 
 classificationWorker.on("failed", (job) => {
@@ -153,7 +137,7 @@ classificationWorker.on("failed", (job) => {
 			error: job?.failedReason,
 			stack: job?.stacktrace,
 		},
-		"Classification job failed"
+		"Classification job failed",
 	);
 });
 

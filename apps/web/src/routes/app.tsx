@@ -20,10 +20,7 @@ function TwitterArtViewer() {
 	const { updateButtons, rawInitData } = useTelegramContext();
 
 	// Search state with URL params and history support
-	const [urlQuery, setUrlQuery] = useQueryState(
-		"q",
-		parseAsString.withDefault("")
-	);
+	const [urlQuery, setUrlQuery] = useQueryState("q", parseAsString.withDefault(""));
 	const [inputValue, setInputValue] = useState(urlQuery);
 
 	const { data: profile } = useQuery<ProfileResult>(
@@ -33,7 +30,7 @@ function TwitterArtViewer() {
 			staleTime: 5 * 60 * 1000,
 			gcTime: 30 * 60 * 1000,
 			retry: 1,
-		})
+		}),
 	);
 
 	useEffect(() => {
@@ -71,14 +68,7 @@ function TwitterArtViewer() {
 
 	const isSearchActive = urlQuery.trim().length > 0;
 
-	const {
-		tweets,
-		isLoading,
-		isFetchingNextPage,
-		hasNextPage,
-		error,
-		fetchNextPage,
-	} = useTweets();
+	const { tweets, isLoading, isFetchingNextPage, hasNextPage, error, fetchNextPage } = useTweets();
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -97,7 +87,7 @@ function TwitterArtViewer() {
 			isItemLoaded: (index, items) => !!items[index],
 			minimumBatchSize: 30,
 			threshold: 5,
-		}
+		},
 	);
 
 	// Infinite loader for search results
@@ -111,7 +101,7 @@ function TwitterArtViewer() {
 			isItemLoaded: (index, items) => !!items[index],
 			minimumBatchSize: 30,
 			threshold: 5,
-		}
+		},
 	);
 
 	const renderMasonryItem = useCallback(
@@ -120,7 +110,7 @@ function TwitterArtViewer() {
 				<TweetImageGrid tweet={data} />
 			</div>
 		),
-		[]
+		[],
 	);
 
 	// Show error state
@@ -139,9 +129,7 @@ function TwitterArtViewer() {
 	// Determine which data to display
 	const displayItems = isSearchActive ? searchResults : tweets;
 	const displayLoading = isSearchActive ? isSearchLoading : isLoading;
-	const currentInfiniteLoader = isSearchActive
-		? searchInfiniteLoader
-		: infiniteLoader;
+	const currentInfiniteLoader = isSearchActive ? searchInfiniteLoader : infiniteLoader;
 
 	return (
 		<div className="flex min-h-screen flex-col p-4">
@@ -197,10 +185,7 @@ function TwitterArtViewer() {
 								value={inputValue}
 							/>
 							<Button
-								className={cn(
-									"btn btn-primary join-item",
-									displayLoading && "btn-disabled"
-								)}
+								className={cn("btn btn-primary join-item", displayLoading && "btn-disabled")}
 								disabled={displayLoading}
 								type="submit"
 							>
@@ -244,11 +229,10 @@ export const Route = createFileRoute("/app")({
 				}),
 				queryKey: ["tweets", { username: undefined }],
 				initialPageParam: undefined,
-				getNextPageParam: (lastPage: TweetsPageResult) =>
-					lastPage.nextCursor ?? undefined,
+				getNextPageParam: (lastPage: TweetsPageResult) => lastPage.nextCursor ?? undefined,
 				retry: false,
 				gcTime: 10 * 60 * 1000,
-			})
+			}),
 		);
 	},
 	component: TwitterArtViewer,

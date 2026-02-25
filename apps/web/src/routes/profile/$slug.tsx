@@ -1,7 +1,4 @@
-import type {
-	TweetData,
-	TweetsPageResult,
-} from "@starlight/api/src/types/tweets";
+import type { TweetData, TweetsPageResult } from "@starlight/api/src/types/tweets";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback } from "react";
@@ -13,14 +10,9 @@ import { orpc } from "@/utils/orpc";
 function SharedProfileViewer() {
 	const { slug } = useParams({ from: "/profile/$slug" });
 
-	const {
-		tweets,
-		isLoading,
-		isFetchingNextPage,
-		hasNextPage,
-		error,
-		fetchNextPage,
-	} = useTweets({ username: slug });
+	const { tweets, isLoading, isFetchingNextPage, hasNextPage, error, fetchNextPage } = useTweets({
+		username: slug,
+	});
 
 	const infiniteLoader = useInfiniteLoader(
 		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
@@ -32,7 +24,7 @@ function SharedProfileViewer() {
 			isItemLoaded: (index, items) => !!items[index],
 			minimumBatchSize: 30,
 			threshold: 5,
-		}
+		},
 	);
 
 	const renderMasonryItem = useCallback(
@@ -41,7 +33,7 @@ function SharedProfileViewer() {
 				<TweetImageGrid tweet={data} />
 			</div>
 		),
-		[]
+		[],
 	);
 
 	if (error) {
@@ -103,11 +95,10 @@ export const Route = createFileRoute("/profile/$slug")({
 				}),
 				queryKey: ["tweets", { username: slug }],
 				initialPageParam: undefined,
-				getNextPageParam: (lastPage: TweetsPageResult) =>
-					lastPage.nextCursor ?? undefined,
+				getNextPageParam: (lastPage: TweetsPageResult) => lastPage.nextCursor ?? undefined,
 				retry: false,
 				gcTime: 10 * 60 * 1000,
-			})
+			}),
 		);
 	},
 	component: SharedProfileViewer,

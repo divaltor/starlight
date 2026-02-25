@@ -20,8 +20,7 @@ export class CookieEncryption {
 	private readonly salt: Uint8Array;
 
 	constructor(masterKey: string | Uint8Array, salt?: string | Uint8Array) {
-		this.masterKey =
-			typeof masterKey === "string" ? hexToBytes(masterKey) : masterKey;
+		this.masterKey = typeof masterKey === "string" ? hexToBytes(masterKey) : masterKey;
 
 		this.salt =
 			typeof salt === "string"
@@ -86,7 +85,7 @@ export class CookieEncryption {
 			return this.decrypt(data, userId);
 		} catch (error) {
 			throw new Error(
-				`Failed to decrypt cookie data: ${error instanceof Error ? error.message : "Unknown error"}`
+				`Failed to decrypt cookie data: ${error instanceof Error ? error.message : "Unknown error"}`,
 			);
 		}
 	}

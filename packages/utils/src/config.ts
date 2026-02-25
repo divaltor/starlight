@@ -12,10 +12,7 @@ const env = createEnv({
 
 		COOKIE_ENCRYPTION_KEY: z
 			.string()
-			.min(
-				64,
-				"Cookie encryption key must be at least 64 characters (32 bytes hex)"
-			),
+			.min(64, "Cookie encryption key must be at least 64 characters (32 bytes hex)"),
 		COOKIE_ENCRYPTION_SALT: z.string().min(16),
 
 		YOUTUBE_DL_PATH: z.string().optional().default("yt-dlp"),
@@ -28,14 +25,9 @@ const env = createEnv({
 		AXIOM_DATASET: z.string().default("starlight"),
 		AXIOM_TOKEN: z.string().optional(),
 
-		NODE_ENV: z
-			.enum(["development", "production"])
-			.optional()
-			.default("development"),
+		NODE_ENV: z.enum(["development", "production"]).optional().default("development"),
 
-		LOG_LEVEL: z
-			.enum(["trace", "debug", "info", "warn", "error", "fatal"])
-			.optional(),
+		LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),
 
 		OPENROUTER_API_KEY: z.string().optional(),
 		OPENROUTER_MODEL: z.string().default("google/gemini-3-flash-preview"),
@@ -55,24 +47,18 @@ const env = createEnv({
 					return [] as number[];
 				}
 
-				return [...new Set(value.split(",").map((id) => id.trim()))]
-					.filter(Boolean)
-					.map((id) => {
-						if (!/^\d+$/.test(id)) {
-							throw new Error(
-								`SUPERVISOR_IDS contains invalid Telegram ID: ${id}`
-							);
-						}
+				return [...new Set(value.split(",").map((id) => id.trim()))].filter(Boolean).map((id) => {
+					if (!/^\d+$/.test(id)) {
+						throw new Error(`SUPERVISOR_IDS contains invalid Telegram ID: ${id}`);
+					}
 
-						const numericId = Number(id);
-						if (!Number.isSafeInteger(numericId)) {
-							throw new Error(
-								`SUPERVISOR_IDS contains unsafe integer ID: ${id}`
-							);
-						}
+					const numericId = Number(id);
+					if (!Number.isSafeInteger(numericId)) {
+						throw new Error(`SUPERVISOR_IDS contains unsafe integer ID: ${id}`);
+					}
 
-						return numericId;
-					});
+					return numericId;
+				});
 			}),
 
 		BASE_FRONTEND_URL: z.string().default(""),
@@ -91,9 +77,7 @@ const env = createEnv({
 
 				try {
 					const url = new URL(
-						frontendUrl.startsWith("http")
-							? frontendUrl
-							: `https://${frontendUrl}`
+						frontendUrl.startsWith("http") ? frontendUrl : `https://${frontendUrl}`,
 					);
 					url.hostname = `cdn.${url.hostname}`;
 					return url.toString();

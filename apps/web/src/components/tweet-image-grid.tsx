@@ -34,9 +34,7 @@ export function TweetImageGrid({
 		window.open(tweet.sourceUrl, "_blank", "noopener,noreferrer");
 	};
 
-	const handleGalleryOpenKeyDown = (
-		event: React.KeyboardEvent<HTMLElement>
-	) => {
+	const handleGalleryOpenKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
 		if (event.key === "Enter" || event.key === " ") {
 			event.preventDefault();
 			event.currentTarget.click();
@@ -55,11 +53,7 @@ export function TweetImageGrid({
 				outlineID: "pswp__icn-download",
 			},
 			appendTo: "bar",
-			onClick: async (
-				e: MouseEvent,
-				_el: HTMLElement,
-				pswpInstance: PhotoSwipe
-			) => {
+			onClick: async (e: MouseEvent, _el: HTMLElement, pswpInstance: PhotoSwipe) => {
 				e.preventDefault();
 				const currItem = pswpInstance.currSlide?.data;
 				const url = currItem?.src;

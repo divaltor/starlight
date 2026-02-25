@@ -2,10 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import Sqids from "sqids";
 import { parse as uuidParse } from "uuid";
 import env from "./config";
-import {
-	PrismaClient,
-	type Prisma as PrismaGenerated,
-} from "./generated/prisma/client";
+import { PrismaClient, type Prisma as PrismaGenerated } from "./generated/prisma/client";
 
 const sqids = new Sqids({
 	minLength: 12,
@@ -22,7 +19,7 @@ const onlyNotDeletedMessages = <
 		where?: PrismaGenerated.MessageWhereInput;
 	},
 >(
-	args: T
+	args: T,
 ): T => {
 	const where = args.where as Record<string, unknown> | undefined;
 	if (where?.deletedAt !== undefined) {
@@ -30,7 +27,7 @@ const onlyNotDeletedMessages = <
 	}
 
 	args.where = {
-		...(args.where ?? {}),
+		...args.where,
 		deletedAt: null,
 	} as PrismaGenerated.MessageWhereInput;
 
@@ -51,10 +48,7 @@ const isMessageReadOperation = (operation: string) => {
 };
 
 export const prisma = new PrismaClient({
-	log:
-		env.NODE_ENV === "production"
-			? ["warn", "error"]
-			: ["info", "warn", "error"],
+	log: env.NODE_ENV === "production" ? ["warn", "error"] : ["info", "warn", "error"],
 	adapter,
 }).$extends({
 	query: {
@@ -65,8 +59,8 @@ export const prisma = new PrismaClient({
 						onlyNotDeletedMessages(
 							args as {
 								where?: PrismaGenerated.MessageWhereInput;
-							}
-						)
+							},
+						),
 					);
 				}
 
@@ -148,10 +142,7 @@ export const prisma = new PrismaClient({
 				s3Path: { not: null },
 				publishedPhotos: { none: { chatId: Number(chatId) } },
 			}),
-		} satisfies Record<
-			string,
-			(...args: any) => PrismaGenerated.PhotoWhereInput
-		>,
+		} satisfies Record<string, (...args: any) => PrismaGenerated.PhotoWhereInput>,
 		tweet: {
 			available: () => ({
 				photos: {
@@ -161,9 +152,6 @@ export const prisma = new PrismaClient({
 					},
 				},
 			}),
-		} satisfies Record<
-			string,
-			(...args: any) => PrismaGenerated.TweetWhereInput
-		>,
+		} satisfies Record<string, (...args: any) => PrismaGenerated.TweetWhereInput>,
 	},
 });

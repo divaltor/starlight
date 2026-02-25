@@ -27,7 +27,7 @@ export class LayoutManager {
 
 	overlaps(
 		r1: { x: number; y: number; width: number; height: number },
-		r2: { x: number; y: number; width: number; height: number }
+		r2: { x: number; y: number; width: number; height: number },
 	) {
 		return (
 			r1.x < r2.x + r2.width &&
@@ -37,12 +37,7 @@ export class LayoutManager {
 		);
 	}
 
-	isValidPosition(rect: {
-		x: number;
-		y: number;
-		width: number;
-		height: number;
-	}) {
+	isValidPosition(rect: { x: number; y: number; width: number; height: number }) {
 		if (this.overlaps(rect, this.centerZone)) {
 			return false;
 		}
@@ -135,10 +130,7 @@ export class LayoutManager {
 			}
 			const computedHeight = CONTAINER_WIDTH_PERCENT * aspect;
 
-			const placement = this.placeRectangle(
-				CONTAINER_WIDTH_PERCENT,
-				computedHeight
-			);
+			const placement = this.placeRectangle(CONTAINER_WIDTH_PERCENT, computedHeight);
 			if (placement) {
 				results.push({ position: placement, index: i });
 			}

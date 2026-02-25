@@ -1,7 +1,4 @@
-import type {
-	TweetData,
-	TweetsPageResult,
-} from "@starlight/api/src/types/tweets";
+import type { TweetData, TweetsPageResult } from "@starlight/api/src/types/tweets";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { orpc } from "@/utils/orpc";
 
@@ -13,29 +10,21 @@ interface UseTweetsOptions {
 export function useTweets(options: UseTweetsOptions = {}) {
 	const { username, limit = 30 } = options;
 
-	const {
-		data,
-		error,
-		fetchNextPage,
-		hasNextPage,
-		isFetching,
-		isFetchingNextPage,
-		status,
-	} = useInfiniteQuery(
-		orpc.tweets.list.infiniteOptions({
-			input: (pageParam: string | undefined) => ({
-				username,
-				cursor: pageParam,
-				limit,
+	const { data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage, status } =
+		useInfiniteQuery(
+			orpc.tweets.list.infiniteOptions({
+				input: (pageParam: string | undefined) => ({
+					username,
+					cursor: pageParam,
+					limit,
+				}),
+				queryKey: ["tweets", { username }],
+				initialPageParam: undefined,
+				getNextPageParam: (lastPage: TweetsPageResult) => lastPage.nextCursor ?? undefined,
+				retry: false,
+				gcTime: 10 * 60 * 1000,
 			}),
-			queryKey: ["tweets", { username }],
-			initialPageParam: undefined,
-			getNextPageParam: (lastPage: TweetsPageResult) =>
-				lastPage.nextCursor ?? undefined,
-			retry: false,
-			gcTime: 10 * 60 * 1000,
-		})
-	);
+		);
 
 	return {
 		tweets: data?.pages.flatMap((page) => page.tweets) ?? ([] as TweetData[]),

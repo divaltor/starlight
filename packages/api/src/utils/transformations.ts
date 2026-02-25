@@ -2,9 +2,7 @@ import { env, type Photo, type Tweet } from "@starlight/utils";
 import { format } from "date-fns";
 import type { SearchResult, TweetData } from "../types/tweets";
 
-function transformTweetsBase<
-	T extends Pick<Tweet, "id" | "createdAt" | "username">,
->(
+function transformTweetsBase<T extends Pick<Tweet, "id" | "createdAt" | "username">>(
 	tweets: T[],
 	getPhotos: (tweet: T) => Array<
 		Pick<Photo, "id" | "originalUrl"> & {
@@ -13,7 +11,7 @@ function transformTweetsBase<
 			height?: number;
 			width?: number;
 		}
-	>
+	>,
 ): TweetData[] {
 	return tweets.map((tweet) => {
 		const photos = getPhotos(tweet).map((photo) => {
@@ -47,12 +45,10 @@ export const transformTweets = (
 			height?: number;
 			width?: number;
 		})[];
-	})[]
+	})[],
 ) => transformTweetsBase(tweets, (t) => t.photos);
 
-export const transformSearchResults = (
-	results: SearchResult[]
-): TweetData[] => {
+export const transformSearchResults = (results: SearchResult[]): TweetData[] => {
 	const grouped = results.reduce(
 		(acc, result) => {
 			const tweetId = result.tweet_id;
@@ -67,9 +63,7 @@ export const transformSearchResults = (
 			acc[tweetId].photos.push({
 				id: result.photo_id,
 				originalUrl: result.original_url,
-				s3Url: result.s3_path
-					? `${env.BASE_CDN_URL}/${result.s3_path}`
-					: undefined,
+				s3Url: result.s3_path ? `${env.BASE_CDN_URL}/${result.s3_path}` : undefined,
 				is_nsfw: result.is_nsfw,
 				height: result.height,
 				width: result.width,
@@ -91,7 +85,7 @@ export const transformSearchResults = (
 					width?: number;
 				}>;
 			}
-		>
+		>,
 	);
 
 	return transformTweetsBase(Object.values(grouped), (tweet) => tweet.photos);

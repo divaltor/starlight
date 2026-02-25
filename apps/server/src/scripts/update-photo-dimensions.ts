@@ -18,7 +18,7 @@ async function main() {
 			dryRun: DRY_RUN,
 			batchSize: BATCH_SIZE,
 		},
-		"Starting photo dimensions update"
+		"Starting photo dimensions update",
 	);
 
 	// Find photos with null height or width that have s3Path
@@ -57,17 +57,14 @@ async function main() {
 				batch: Math.floor(i / BATCH_SIZE) + 1,
 				totalBatches: Math.ceil(photos.length / BATCH_SIZE),
 			},
-			"Processing batch"
+			"Processing batch",
 		);
 
 		await Promise.allSettled(
 			batch.map(async (photo) => {
 				try {
 					if (!photo.s3Path) {
-						logger.warn(
-							{ photoId: photo.id, userId: photo.userId },
-							"Photo has no s3Path"
-						);
+						logger.warn({ photoId: photo.id, userId: photo.userId }, "Photo has no s3Path");
 						return;
 					}
 
@@ -82,7 +79,7 @@ async function main() {
 					if (!(metadata.height && metadata.width)) {
 						logger.warn(
 							{ photoId: photo.id, userId: photo.userId, metadata },
-							"Failed to extract dimensions"
+							"Failed to extract dimensions",
 						);
 						failed++;
 						return;
@@ -107,18 +104,18 @@ async function main() {
 							width: metadata.width,
 							dryRun: DRY_RUN,
 						},
-						"Updated photo dimensions"
+						"Updated photo dimensions",
 					);
 
 					updated++;
 				} catch (error) {
 					logger.error(
 						{ error, photoId: photo.id, userId: photo.userId },
-						"Failed to update photo dimensions"
+						"Failed to update photo dimensions",
 					);
 					failed++;
 				}
-			})
+			}),
 		);
 	}
 
@@ -130,7 +127,7 @@ async function main() {
 			dryRun: DRY_RUN,
 			batchSize: BATCH_SIZE,
 		},
-		"Finished photo dimensions update"
+		"Finished photo dimensions update",
 	);
 }
 

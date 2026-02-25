@@ -72,7 +72,7 @@ composer.on("chat_member", async (ctx) => {
 				chatId: ctx.update.chat_member.chat.id,
 				userId: ctx.update.chat_member.new_chat_member.user.id,
 			},
-			"Failed to process chat member update."
+			"Failed to process chat member update.",
 		);
 	}
 });
@@ -87,7 +87,7 @@ composer.on("my_chat_member", async (ctx) => {
 				chatId: ctx.update.my_chat_member.chat.id,
 				userId: ctx.update.my_chat_member.new_chat_member.user.id,
 			},
-			"Failed to process bot chat member update."
+			"Failed to process bot chat member update.",
 		);
 	}
 });

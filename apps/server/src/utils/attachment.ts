@@ -46,10 +46,7 @@ function extensionFromMimeType(mimeType: string, fallback: string): string {
 	return subtype.split(";")[0]?.split("+")[0] || fallback;
 }
 
-async function downloadFilePayload(
-	api: Context["api"],
-	fileId: string
-): Promise<Uint8Array> {
+async function downloadFilePayload(api: Context["api"], fileId: string): Promise<Uint8Array> {
 	const file = await api.getFile(fileId);
 	const path = await file.download();
 
@@ -59,7 +56,7 @@ async function downloadFilePayload(
 async function convertImage(
 	payload: Uint8Array,
 	format: "jpeg" | "webp",
-	quality: number
+	quality: number,
 ): Promise<Uint8Array> {
 	const pipeline = sharp(payload).rotate();
 	return format === "jpeg"
@@ -69,7 +66,7 @@ async function convertImage(
 
 async function preparePhotoAttachment(
 	msg: Message,
-	api: Context["api"]
+	api: Context["api"],
 ): Promise<PreparedAttachment | null> {
 	if (!(msg.photo && msg.photo.length > 0)) {
 		return null;
@@ -93,16 +90,14 @@ async function preparePhotoAttachment(
 
 async function prepareStickerAttachment(
 	msg: Message,
-	api: Context["api"]
+	api: Context["api"],
 ): Promise<PreparedAttachment | null> {
 	if (!msg.sticker) {
 		return null;
 	}
 
 	const useThumbnail = msg.sticker.is_animated || msg.sticker.is_video;
-	const sourceFileId = useThumbnail
-		? msg.sticker.thumbnail?.file_id
-		: msg.sticker.file_id;
+	const sourceFileId = useThumbnail ? msg.sticker.thumbnail?.file_id : msg.sticker.file_id;
 
 	if (!sourceFileId) {
 		return null;
@@ -121,15 +116,14 @@ async function prepareStickerAttachment(
 
 async function prepareVideoAttachment(
 	msg: Message,
-	api: Context["api"]
+	api: Context["api"],
 ): Promise<PreparedAttachment | null> {
 	if (!msg.video) {
 		return null;
 	}
 
 	const isLargeVideo =
-		typeof msg.video.file_size === "number" &&
-		msg.video.file_size > MAX_VIDEO_DOWNLOAD_SIZE;
+		typeof msg.video.file_size === "number" && msg.video.file_size > MAX_VIDEO_DOWNLOAD_SIZE;
 
 	if (isLargeVideo) {
 		if (!msg.video.thumbnail) {
@@ -160,7 +154,7 @@ async function prepareVideoAttachment(
 
 async function prepareAnimationAttachment(
 	msg: Message,
-	api: Context["api"]
+	api: Context["api"],
 ): Promise<PreparedAttachment | null> {
 	if (!msg.animation) {
 		return null;
@@ -179,7 +173,7 @@ async function prepareAnimationAttachment(
 
 async function prepareVideoNoteAttachment(
 	msg: Message,
-	api: Context["api"]
+	api: Context["api"],
 ): Promise<PreparedAttachment | null> {
 	if (!msg.video_note) {
 		return null;
@@ -197,7 +191,7 @@ async function prepareVideoNoteAttachment(
 
 async function prepareVoiceAttachment(
 	msg: Message,
-	api: Context["api"]
+	api: Context["api"],
 ): Promise<PreparedAttachment | null> {
 	if (!msg.voice) {
 		return null;
@@ -227,7 +221,7 @@ export async function prepareMessageAttachments(
 	chatId: bigint,
 	msg: Message,
 	api: Context["api"],
-	logger?: Context["logger"]
+	logger?: Context["logger"],
 ): Promise<StoredMessageAttachment[]> {
 	const preparedAttachments: PreparedAttachment[] = [];
 
@@ -240,7 +234,7 @@ export async function prepareMessageAttachments(
 		} catch (error) {
 			logger?.warn(
 				{ error, messageId: msg.message_id, chatId: chatId.toString() },
-				"Failed to prepare message attachment"
+				"Failed to prepare message attachment",
 			);
 		}
 	}
@@ -264,6 +258,6 @@ export async function prepareMessageAttachments(
 				mimeType: attachment.mimeType,
 				s3Path,
 			};
-		})
+		}),
 	);
 }

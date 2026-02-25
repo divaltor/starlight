@@ -20,10 +20,7 @@ export const listUserTweets = maybeAuthProcedure
 		const { cursor, limit } = input;
 
 		// Determine target user
-		let targetUser: Pick<
-			User,
-			"id" | "telegramId" | "username" | "isPublic"
-		> | null = null;
+		let targetUser: Pick<User, "id" | "telegramId" | "username" | "isPublic"> | null = null;
 
 		if (input.username) {
 			targetUser = await prisma.user.findUnique({
@@ -73,7 +70,7 @@ export const retrieveUserTweets = no
 	.input(
 		TweetsQuery.omit({ username: true }).extend({
 			userId: z.string(),
-		})
+		}),
 	)
 	.handler(async ({ input }) => {
 		const { userId, cursor, limit } = input;

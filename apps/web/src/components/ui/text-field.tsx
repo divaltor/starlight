@@ -28,7 +28,8 @@ const textFieldVariants = cva("form-control", {
 });
 
 interface TextFieldProps
-	extends Omit<React.ComponentProps<typeof AriaTextField>, "className">,
+	extends
+		Omit<React.ComponentProps<typeof AriaTextField>, "className">,
 		VariantProps<typeof textFieldVariants> {
 	className?: string;
 	description?: string;
@@ -52,7 +53,7 @@ function TextField({
 		textFieldVariants({
 			size,
 			className,
-		})
+		}),
 	);
 
 	return (
@@ -67,7 +68,7 @@ function TextField({
 					className={cn(
 						"textarea w-full transition-shadow duration-200 ease-in-out focus:ring-2 focus:ring-blue-500/20",
 						size === "default" || !size ? "textarea-md" : `textarea-${size}`,
-						className
+						className,
 					)}
 					placeholder={placeholder}
 					ref={inputRef as React.Ref<HTMLTextAreaElement>}
@@ -87,9 +88,7 @@ function TextField({
 			<FieldError>
 				{({ validationErrors }) => (
 					<div className="label">
-						<span className="label-text-alt text-error">
-							{validationErrors.join(" ")}
-						</span>
+						<span className="label-text-alt text-error">{validationErrors.join(" ")}</span>
 					</div>
 				)}
 			</FieldError>

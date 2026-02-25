@@ -24,7 +24,11 @@ export class RedisAdapter<T> implements StorageAdapter<T> {
 		instance,
 		ttl,
 		parseJSON,
-	}: { instance?: Redis; ttl?: number; parseJSON?: boolean }) {
+	}: {
+		instance?: Redis;
+		ttl?: number;
+		parseJSON?: boolean;
+	}) {
 		if (instance) {
 			this.redis = instance;
 		} else {
@@ -83,23 +87,17 @@ export class Cookies {
 	}
 
 	toString() {
-		return this.cookies
-			.map((cookie) => `${cookie.key}=${cookie.value}`)
-			.join("; ");
+		return this.cookies.map((cookie) => `${cookie.key}=${cookie.value}`).join("; ");
 	}
 
 	static fromJSON(data: string): Cookies {
 		const parsed = JSON.parse(data);
 
-		return new Cookies(
-			parsed.map((cookie: any) => new Cookie(mapToRFC6265Cookie(cookie)))
-		);
+		return new Cookies(parsed.map((cookie: any) => new Cookie(mapToRFC6265Cookie(cookie))));
 	}
 
 	userId() {
-		const twidValue = this.cookies.find(
-			(cookie) => cookie.key === "twid"
-		)?.value;
+		const twidValue = this.cookies.find((cookie) => cookie.key === "twid")?.value;
 
 		if (!twidValue) {
 			return;

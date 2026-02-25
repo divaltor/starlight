@@ -12,7 +12,9 @@
     }
   },
   "scripts": {
-    "build": "bun run -b tsdown"
+    "build": "bun run -b tsdown",
+    "lint": "oxlint --fix",
+    "format": "oxfmt"
   },
   "devDependencies": {
     "tsdown": "catalog:"

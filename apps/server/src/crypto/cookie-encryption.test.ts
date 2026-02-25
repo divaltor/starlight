@@ -27,9 +27,7 @@ describe("CookieEncryption", () => {
 		});
 
 		test("should create instance with custom string salt", () => {
-			expect(
-				() => new CookieEncryption(masterKey, "custom-salt")
-			).not.toThrow();
+			expect(() => new CookieEncryption(masterKey, "custom-salt")).not.toThrow();
 		});
 
 		test("should create instance with custom Uint8Array salt", () => {
@@ -189,8 +187,7 @@ describe("CookieEncryption", () => {
 		});
 
 		test("should handle special characters", () => {
-			const specialData =
-				'{"emoji":"🔒","unicode":"\\u0000\\u001f","quotes":"\'""}';
+			const specialData = '{"emoji":"🔒","unicode":"\\u0000\\u001f","quotes":"\'""}';
 			const encrypted = encryption.encrypt(specialData, testUserId);
 			const decrypted = encryption.decrypt(encrypted, testUserId);
 			expect(decrypted).toBe(specialData);
@@ -273,7 +270,7 @@ describe("CookieEncryption", () => {
 					const encrypted = encryption.encrypt(data, userId);
 					const decrypted = encryption.decrypt(encrypted, userId);
 					return { original: data, decrypted, userId };
-				})
+				}),
 			);
 
 			const results = await Promise.all(operations);

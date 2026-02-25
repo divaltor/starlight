@@ -5,9 +5,7 @@ const FXEMBED_BASE_URL = "https://api.fxtwitter.com";
 const FETCH_TIMEOUT_MS = 5000;
 const USER_AGENT = "StarlightBot/1.0 (Telegram Bot)";
 
-export async function fetchTweet(
-	tweetId: string
-): Promise<FxEmbedTweet | null> {
+export async function fetchTweet(tweetId: string): Promise<FxEmbedTweet | null> {
 	const url = `${FXEMBED_BASE_URL}/status/${tweetId}`;
 
 	try {
@@ -27,10 +25,7 @@ export async function fetchTweet(
 		const data = (await response.json()) as FxEmbedResponse;
 
 		if (data.code !== 200 || !data.tweet) {
-			logger.warn(
-				{ code: data.code, message: data.message, tweetId },
-				"FxEmbed returned non-200"
-			);
+			logger.warn({ code: data.code, message: data.message, tweetId }, "FxEmbed returned non-200");
 			return null;
 		}
 

@@ -26,5 +26,6 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 ## Maintenance & Tasks
 
 - MUST use `bun` for package management.
-- DON'T use `tsc` or `typecheck` or `check-types`. Formatters applied automatically when you edit files via integrated Opencode\Amp plugins.
+- DON'T use `tsc` or `typecheck` or `check-types`.
+- Run `lint` command to check for linting errors. DON'T run `format` — it's triggered automatically by other pipelines.
 - ALWAYS use scripts from package.json to create and apply migrations via Prisma. Never write migration files manually.

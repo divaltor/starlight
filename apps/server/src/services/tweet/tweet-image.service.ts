@@ -12,9 +12,7 @@ import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";
 
-function mapArticleData(
-	article: FxEmbedArticle | undefined
-): ArticleData | null {
+function mapArticleData(article: FxEmbedArticle | undefined): ArticleData | null {
 	if (!article) {
 		return null;
 	}
@@ -47,7 +45,7 @@ interface ReplyChainResult {
 async function fetchReplyChain(
 	tweetId: string,
 	depth = 0,
-	childReplyingTo?: string
+	childReplyingTo?: string,
 ): Promise<ReplyChainResult> {
 	if (depth >= MAX_REPLY_CHAIN_DEPTH) {
 		return { chain: [], hasMore: true };
@@ -58,9 +56,7 @@ async function fetchReplyChain(
 		return { chain: [], hasMore: false };
 	}
 
-	const tweetText = childReplyingTo
-		? stripLeadingMention(tweet.text, childReplyingTo)
-		: tweet.text;
+	const tweetText = childReplyingTo ? stripLeadingMention(tweet.text, childReplyingTo) : tweet.text;
 
 	const tweetData: TweetData = {
 		authorName: tweet.author.name,
@@ -113,7 +109,7 @@ async function fetchReplyChain(
 		const parentResult = await fetchReplyChain(
 			tweet.replying_to_status,
 			depth + 1,
-			tweet.replying_to ?? undefined
+			tweet.replying_to ?? undefined,
 		);
 		return {
 			chain: [...parentResult.chain, tweetData],
@@ -200,17 +196,14 @@ export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 
 export async function generateTweetImage(
 	tweetId: string,
-	theme: Theme = "light"
+	theme: Theme = "light",
 ): Promise<TweetImageResult> {
 	const s3Path = `tweets/${tweetId}/${theme}.jpg`;
 	const s3File = s3.file(s3Path);
 
 	try {
 		if (await s3File.exists()) {
-			logger.debug(
-				{ tweetId, theme, s3Path },
-				"Found cached tweet image in S3"
-			);
+			logger.debug({ tweetId, theme, s3Path }, "Found cached tweet image in S3");
 
 			const cachedBuffer = Buffer.from(await s3File.arrayBuffer());
 			const metadata = await sharp(cachedBuffer).metadata();
@@ -224,7 +217,7 @@ export async function generateTweetImage(
 	} catch (error) {
 		logger.warn(
 			{ error, tweetId, theme, s3Path },
-			"Failed to read cached image from S3, falling back to API"
+			"Failed to read cached image from S3, falling back to API",
 		);
 	}
 
@@ -236,15 +229,9 @@ export async function generateTweetImage(
 
 	try {
 		await s3.write(s3Path, result.buffer, { type: "image/jpeg" });
-		logger.debug(
-			{ tweetId, theme, s3Path },
-			"Uploaded rendered tweet image to S3"
-		);
+		logger.debug({ tweetId, theme, s3Path }, "Uploaded rendered tweet image to S3");
 	} catch (error) {
-		logger.warn(
-			{ error, tweetId, theme, s3Path },
-			"Failed to upload rendered image to S3"
-		);
+		logger.warn({ error, tweetId, theme, s3Path }, "Failed to upload rendered image to S3");
 	}
 
 	return result;

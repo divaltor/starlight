@@ -17,40 +17,23 @@ export function registerFonts(): void {
 	try {
 		const fontPath = path.join(process.cwd(), "assets", "fonts");
 
-		GlobalFonts.registerFromPath(
-			path.join(fontPath, "Inter-Regular.ttf"),
-			"Inter"
-		);
+		GlobalFonts.registerFromPath(path.join(fontPath, "Inter-Regular.ttf"), "Inter");
 
-		GlobalFonts.registerFromPath(
-			path.join(fontPath, "Inter-Bold.ttf"),
-			"Inter"
-		);
+		GlobalFonts.registerFromPath(path.join(fontPath, "Inter-Bold.ttf"), "Inter");
 
 		GlobalFonts.registerFromPath(
 			path.join(fontPath, "NotoSans-Regular.ttf"),
-			UNICODE_FALLBACK_FAMILY
+			UNICODE_FALLBACK_FAMILY,
 		);
 
-		GlobalFonts.registerFromPath(
-			path.join(fontPath, "NotoSansCJKsc-Regular.otf"),
-			CJK_FONT_FAMILY
-		);
+		GlobalFonts.registerFromPath(path.join(fontPath, "NotoSansCJKsc-Regular.otf"), CJK_FONT_FAMILY);
 
-		GlobalFonts.registerFromPath(
-			path.join(fontPath, "NotoSansMath-Regular.ttf"),
-			MATH_FONT_FAMILY
-		);
+		GlobalFonts.registerFromPath(path.join(fontPath, "NotoSansMath-Regular.ttf"), MATH_FONT_FAMILY);
 
-		GlobalFonts.registerFromPath(
-			path.join(fontPath, "NotoColorEmoji.ttf"),
-			EMOJI_FONT_FAMILY
-		);
+		GlobalFonts.registerFromPath(path.join(fontPath, "NotoColorEmoji.ttf"), EMOJI_FONT_FAMILY);
 
 		fontsRegistered = true;
-		logger.info(
-			"Registered Inter, Noto Sans, Noto Sans CJK, Noto Sans Math, and emoji fonts"
-		);
+		logger.info("Registered Inter, Noto Sans, Noto Sans CJK, Noto Sans Math, and emoji fonts");
 	} catch {
 		logger.warn("Could not register fonts, using system fallback");
 		fontsRegistered = true;

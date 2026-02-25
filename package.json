@@ -22,6 +22,7 @@
     }
   },
   "scripts": {
+    "lint": "turbo lint",
     "format": "turbo format",
     "build": "turbo build",
     "dev": "turbo dev",

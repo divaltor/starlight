@@ -15,8 +15,7 @@ import { redis } from "@/storage";
 //   photos that already have a classification saved.
 
 const DRY_RUN = process.env.DRY_RUN === "1";
-const CLEAR_QUEUE =
-	process.env.CLEAR_QUEUE === "1" || process.env.CLEAR === "1";
+const CLEAR_QUEUE = process.env.CLEAR_QUEUE === "1" || process.env.CLEAR === "1";
 const FORCE = process.env.FORCE === "1";
 // When set, only enqueue photos missing classification.nsfw.is_nsfw
 const ALL_PICTURES = process.env.ALL_PICTURES === "1";
@@ -29,15 +28,13 @@ async function main() {
 			force: FORCE,
 			onlyMissingNsfw: ALL_PICTURES,
 		},
-		"Starting enqueue of all photos for classification"
+		"Starting enqueue of all photos for classification",
 	);
 
 	if (CLEAR_QUEUE) {
 		try {
 			await classificationQueue.drain(true);
-			logger.info(
-				"Classification queue drained (waiting & delayed jobs removed)"
-			);
+			logger.info("Classification queue drained (waiting & delayed jobs removed)");
 		} catch (error) {
 			logger.error({ error }, "Failed to drain classification queue");
 		}
@@ -76,7 +73,7 @@ async function main() {
 					// Only enable deduplication when not forcing
 					opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
 				};
-			})
+			}),
 		);
 		enqueued = photos.length;
 	}
@@ -89,7 +86,7 @@ async function main() {
 			clearQueue: CLEAR_QUEUE,
 			onlyMissingNsfw: ALL_PICTURES,
 		},
-		"Finished enqueue script"
+		"Finished enqueue script",
 	);
 }
 

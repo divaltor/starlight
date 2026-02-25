@@ -18,7 +18,7 @@ const scrapperRateLimiter = new RateLimiterRedis({
 
 const cookieEncryption = new CookieEncryption(
 	env.COOKIE_ENCRYPTION_KEY,
-	env.COOKIE_ENCRYPTION_SALT
+	env.COOKIE_ENCRYPTION_SALT,
 );
 
 const composer = new Composer<Context>();
@@ -63,14 +63,14 @@ privateChat.command("find").filter(
 		}
 
 		await ctx.reply(message);
-	}
+	},
 );
 
 privateChat.command("find").filter(
 	(ctx) => ctx.message.reply_to_message?.photo === undefined,
 	async (ctx) => {
 		await ctx.reply("Please reply to a photo with /find command.");
-	}
+	},
 );
 
 composer.on("inline_query").filter(
@@ -188,20 +188,16 @@ composer.on("inline_query").filter(
 			// User didn't setup the bot yet
 			await ctx.answerInlineQuery(
 				[
-					InlineQueryResultBuilder.article(
-						`id:no-photos:${ctx.from?.id}`,
-						"Oops, no photos...",
-						{
-							reply_markup: new InlineKeyboard().url(
-								"Set cookies",
-								`${env.BASE_FRONTEND_URL}/settings`
-							),
-						}
-					).text("No photos found, did you setup the bot?"),
+					InlineQueryResultBuilder.article(`id:no-photos:${ctx.from?.id}`, "Oops, no photos...", {
+						reply_markup: new InlineKeyboard().url(
+							"Set cookies",
+							`${env.BASE_FRONTEND_URL}/settings`,
+						),
+					}).text("No photos found, did you setup the bot?"),
 				],
 				{
 					is_personal: true,
-				}
+				},
 			);
 
 			return;
@@ -209,23 +205,16 @@ composer.on("inline_query").filter(
 
 		const results = photosForThisPage.map((photo) => {
 			const caption = photo.username
-				? FormattedString.link(
-						`@${photo.username}`,
-						`https://x.com/i/status/${photo.tweetId}`
-					)
+				? FormattedString.link(`@${photo.username}`, `https://x.com/i/status/${photo.tweetId}`)
 				: new FormattedString(`https://x.com/i/status/${photo.tweetId}`);
 
-			return InlineQueryResultBuilder.photo(
-				photo.externalId ?? photo.id,
-				photo.s3Url as string,
-				{
-					caption: caption.caption,
-					caption_entities: caption.caption_entities,
-					thumbnail_url: photo.s3Url as string,
-					photo_height: photo.height ?? undefined,
-					photo_width: photo.width ?? undefined,
-				}
-			);
+			return InlineQueryResultBuilder.photo(photo.externalId ?? photo.id, photo.s3Url as string, {
+				caption: caption.caption,
+				caption_entities: caption.caption_entities,
+				thumbnail_url: photo.s3Url as string,
+				photo_height: photo.height ?? undefined,
+				photo_width: photo.width ?? undefined,
+			});
 		});
 
 		// Calculate next offset for pagination
@@ -239,7 +228,7 @@ composer.on("inline_query").filter(
 			is_personal: true,
 			cache_time: 30,
 		});
-	}
+	},
 );
 
 privateChat.command("cookies").filter(
@@ -252,7 +241,7 @@ privateChat.command("cookies").filter(
 		await ctx.reply("No cookies found. Please set your cookies first.", {
 			reply_markup: keyboard,
 		});
-	}
+	},
 );
 
 privateChat.command("cookies").filter(
@@ -266,10 +255,7 @@ privateChat.command("cookies").filter(
 				return;
 			}
 
-			const cookiesJson = cookieEncryption.safeDecrypt(
-				userCookies,
-				ctx.user.telegramId.toString()
-			);
+			const cookiesJson = cookieEncryption.safeDecrypt(userCookies, ctx.user.telegramId.toString());
 
 			const cookies = Cookies.fromJSON(cookiesJson);
 			const cookiesString = cookies.toString();
@@ -277,11 +263,9 @@ privateChat.command("cookies").filter(
 			await ctx.reply(`Your cookies:\n\n${cookiesString}`);
 		} catch (error) {
 			ctx.logger.error({ error }, "Failed to decrypt cookies");
-			await ctx.reply(
-				"Failed to decrypt cookies. Please try setting them again."
-			);
+			await ctx.reply("Failed to decrypt cookies. Please try setting them again.");
 		}
-	}
+	},
 );
 
 privateChat.command("scrapper").filter(
@@ -293,17 +277,15 @@ privateChat.command("scrapper").filter(
 
 		await ctx.reply(
 			"Beep boop, you need to give me your cookies before I can send you daily images.",
-			{ reply_markup: keyboard }
+			{ reply_markup: keyboard },
 		);
-	}
+	},
 );
 
 privateChat.command("scrapper").filter(
 	async (ctx) => Boolean(ctx.user?.cookies),
 	async (ctx) => {
-		const scheduledJob = await scrapperQueue.getJobScheduler(
-			`scrapper-${ctx.user?.id}`
-		);
+		const scheduledJob = await scrapperQueue.getJobScheduler(`scrapper-${ctx.user?.id}`);
 		const args = ctx.match;
 
 		if (!scheduledJob) {
@@ -321,14 +303,14 @@ privateChat.command("scrapper").filter(
 						limit: 300, // 1000 is too much for free users
 					},
 					name: `scrapper-${ctx.user?.id}`,
-				}
+				},
 			);
 
 			await ctx.reply(
 				"You placed in the queue (runs every 6 hours). You can check your images in a few minutes in your gallery.\n\nYou can start the job anytime by sending /scrapper command again.",
 				{
 					reply_markup: webAppKeyboard("app", "View gallery"),
-				}
+				},
 			);
 			return;
 		}
@@ -338,7 +320,7 @@ privateChat.command("scrapper").filter(
 				await scrapperRateLimiter.consume(ctx.from.id);
 			} catch {
 				await ctx.reply(
-					"Sorry, but we already collected images for you. You can start a job each 15 minutes only for your convenience to not accidentally block your account."
+					"Sorry, but we already collected images for you. You can start a job each 15 minutes only for your convenience to not accidentally block your account.",
 				);
 				return;
 			}
@@ -355,20 +337,19 @@ privateChat.command("scrapper").filter(
 				deduplication: {
 					id: `scrapper-${ctx.user?.id}`,
 				},
-			}
+			},
 		);
 
 		await ctx.reply("Starting to collect images, check back in a few minutes.");
-	}
+	},
 );
 
 groupChat.command("source").filter(
 	async (ctx) =>
-		ctx.message.reply_to_message === undefined ||
-		ctx.message.reply_to_message?.photo?.length === 0,
+		ctx.message.reply_to_message === undefined || ctx.message.reply_to_message?.photo?.length === 0,
 	async (ctx) => {
 		await ctx.reply("Please, reply to a message with a photo.");
-	}
+	},
 );
 
 groupChat.command("source").filter(
@@ -394,7 +375,7 @@ groupChat.command("source").filter(
 		}
 
 		await ctx.reply(`https://x.com/i/status/${tweet.photo.tweetId}`);
-	}
+	},
 );
 
 export default composer;

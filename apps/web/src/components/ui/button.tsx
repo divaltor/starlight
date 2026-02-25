@@ -65,7 +65,7 @@ function Button({
 			isSoft,
 			className,
 		}),
-		isPressed ? "scale-98" : "scale-100"
+		isPressed ? "scale-98" : "scale-100",
 	);
 
 	return (

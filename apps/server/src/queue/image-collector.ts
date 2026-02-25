@@ -9,19 +9,16 @@ import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
 import { calculatePerceptualHash } from "@/services/image";
 import { redis, s3 } from "@/storage";
 
-export const imagesQueue = new Queue<ImageCollectorJobData>(
-	"images-collector",
-	{
-		connection: redis,
-		defaultJobOptions: {
-			attempts: 3,
-			backoff: {
-				type: "exponential",
-				delay: 10_000, // 10 seconds
-			},
+export const imagesQueue = new Queue<ImageCollectorJobData>("images-collector", {
+	connection: redis,
+	defaultJobOptions: {
+		attempts: 3,
+		backoff: {
+			type: "exponential",
+			delay: 10_000, // 10 seconds
 		},
-	}
-);
+	},
+});
 
 interface ImageCollectorJobData {
 	tweet: Tweet;
@@ -34,26 +31,15 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 	async (job) => {
 		const { tweet, userId } = job.data;
 
-		logger.info(
-			{ tweetId: tweet.id, userId },
-			"Processing tweet %s for user %s",
-			tweet.id,
-			userId
-		);
+		logger.info({ tweetId: tweet.id, userId }, "Processing tweet %s for user %s", tweet.id, userId);
 
 		if (!tweet.id) {
-			logger.error(
-				{ tweetId: tweet.id, userId },
-				"Tweet ID is required, skipping job"
-			);
+			logger.error({ tweetId: tweet.id, userId }, "Tweet ID is required, skipping job");
 			return;
 		}
 
 		if (tweet.photos.length === 0) {
-			logger.debug(
-				{ tweetId: tweet.id, userId },
-				"Tweet has no photos, skipping job"
-			);
+			logger.debug({ tweetId: tweet.id, userId }, "Tweet has no photos, skipping job");
 			return;
 		}
 
@@ -85,7 +71,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 			"Tweet %s for user %s upserted with %s photos",
 			tweet.id,
 			userId,
-			tweetRecord.photos.length
+			tweetRecord.photos.length,
 		);
 
 		for (const photo of tweetRecord.photos) {
@@ -97,7 +83,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 						userId,
 					},
 					"Photo %s already downloaded, skipping",
-					photo.id
+					photo.id,
 				);
 				continue;
 			}
@@ -116,7 +102,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 						status: response.status,
 						userId,
 					},
-					"Failed to fetch photo %s for tweet %s"
+					"Failed to fetch photo %s for tweet %s",
 				);
 				throw new Error(`Failed to fetch photo ${photo.originalUrl}`);
 			}
@@ -133,7 +119,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 						userId,
 						similarPhotos,
 					},
-					"Found similar photos, skipping saving photo"
+					"Found similar photos, skipping saving photo",
 				);
 				continue;
 			}
@@ -168,13 +154,10 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 					{
 						jobId: `classify-${photo.id}-${userId}`,
 						deduplication: { id: `classify-${photo.id}-${userId}` },
-					}
+					},
 				);
 			} catch (error) {
-				logger.error(
-					{ error, photoId: photo.id, userId },
-					"Failed to enqueue classification job"
-				);
+				logger.error({ error, photoId: photo.id, userId }, "Failed to enqueue classification job");
 			}
 
 			logger.info(
@@ -185,7 +168,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 				},
 				"Tweet %s photos are saved to S3 for user %s",
 				tweet.id,
-				userId
+				userId,
 			);
 		}
 	},
@@ -195,13 +178,13 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 		removeOnComplete: { age: 60 * 60, count: 1000 },
 		removeOnFail: { age: 60 * 60 * 24, count: 5000 },
 		autorun: false,
-	}
+	},
 );
 
 imagesWorker.on("failed", (job) => {
 	logger.error(
 		{ jobId: job?.id, error: job?.failedReason, stack: job?.stacktrace },
-		"Image collector job failed"
+		"Image collector job failed",
 	);
 });
 

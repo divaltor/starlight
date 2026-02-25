@@ -14,8 +14,7 @@ import { redis } from "@/storage";
 //   photos that already have embeddings saved.
 
 const DRY_RUN = process.env.DRY_RUN === "1";
-const CLEAR_QUEUE =
-	process.env.CLEAR_QUEUE === "1" || process.env.CLEAR === "1";
+const CLEAR_QUEUE = process.env.CLEAR_QUEUE === "1" || process.env.CLEAR === "1";
 const FORCE = process.env.FORCE === "1";
 
 async function main() {
@@ -25,7 +24,7 @@ async function main() {
 			clear: CLEAR_QUEUE,
 			force: FORCE,
 		},
-		"Starting enqueue of all photos for embeddings"
+		"Starting enqueue of all photos for embeddings",
 	);
 
 	if (CLEAR_QUEUE) {
@@ -62,7 +61,7 @@ async function main() {
 					// Only enable deduplication when not forcing
 					opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
 				};
-			})
+			}),
 		);
 		enqueued = photos.length;
 	}
@@ -74,7 +73,7 @@ async function main() {
 			force: FORCE,
 			clearQueue: CLEAR_QUEUE,
 		},
-		"Finished enqueue script"
+		"Finished enqueue script",
 	);
 }
 

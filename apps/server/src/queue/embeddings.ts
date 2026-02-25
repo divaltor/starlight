@@ -36,10 +36,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		const requestId = incomingRequestId || Bun.randomUUIDv7();
 
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
-			logger.warn(
-				{ photoId, userId, requestId },
-				"Embeddings skipped: service not configured"
-			);
+			logger.warn({ photoId, userId, requestId }, "Embeddings skipped: service not configured");
 			return;
 		}
 
@@ -47,7 +44,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 			{ photoId, userId, requestId },
 			"Generating embeddings for photo %s for user %s",
 			photoId,
-			userId
+			userId,
 		);
 
 		const photo = await prisma.photo.findUnique({
@@ -66,17 +63,13 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 				{ photoId, userId, requestId },
 				"Photo %s not found for user %s",
 				photoId,
-				userId
+				userId,
 			);
 			return;
 		}
 
 		if (!photo.s3Url) {
-			logger.warn(
-				{ photoId, userId, requestId },
-				"Photo %s has no s3Url yet",
-				photoId
-			);
+			logger.warn({ photoId, userId, requestId }, "Photo %s has no s3Url yet", photoId);
 			throw new Error("Photo has no URL for embeddings");
 		}
 
@@ -89,22 +82,16 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		};
 
 		try {
-			response = await fetch(
-				new URL("/v1/embeddings", env.ML_BASE_URL).toString(),
-				{
-					method: "POST",
-					headers,
-					body: JSON.stringify({
-						image: photo.s3Url,
-						tags: photo.classification?.tags,
-					}),
-				}
-			);
+			response = await fetch(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
+				method: "POST",
+				headers,
+				body: JSON.stringify({
+					image: photo.s3Url,
+					tags: photo.classification?.tags,
+				}),
+			});
 		} catch (error) {
-			logger.error(
-				{ photoId, userId, requestId, error },
-				"Failed request to embeddings service"
-			);
+			logger.error({ photoId, userId, requestId, error }, "Failed request to embeddings service");
 			throw error;
 		}
 
@@ -112,7 +99,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 			const text = await response.text();
 			logger.error(
 				{ photoId, userId, requestId, status: response.status, body: text },
-				"Embeddings service error"
+				"Embeddings service error",
 			);
 			throw new Error(`Classification service error: ${response.status}`);
 		}
@@ -122,10 +109,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		try {
 			data = await response.json();
 		} catch (error) {
-			logger.error(
-				{ photoId, userId, requestId, error },
-				"Failed to parse embeddings response"
-			);
+			logger.error({ photoId, userId, requestId, error }, "Failed to parse embeddings response");
 			throw error;
 		}
 
@@ -133,21 +117,17 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		const imageVecStr = `[${(data.image ?? []).join(",")}]`;
 
 		await prisma.$executeRaw(
-			Prisma.sql`UPDATE photos SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE id = ${photoId} AND user_id = ${userId}`
+			Prisma.sql`UPDATE photos SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE id = ${photoId} AND user_id = ${userId}`,
 		);
 
-		logger.info(
-			{ photoId, userId, requestId },
-			"Photo %s embeddings generated",
-			photoId
-		);
+		logger.info({ photoId, userId, requestId }, "Photo %s embeddings generated", photoId);
 	},
 	{
 		connection: redis,
 		concurrency: 2,
 		autorun: false,
 		lockDuration: 1000 * 60 * 5,
-	}
+	},
 );
 
 embeddingsWorker.on("failed", (job) => {
@@ -159,7 +139,7 @@ embeddingsWorker.on("failed", (job) => {
 			error: job?.failedReason,
 			stack: job?.stacktrace,
 		},
-		"Embeddings job failed"
+		"Embeddings job failed",
 	);
 });
 

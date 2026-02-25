@@ -14,12 +14,9 @@ export class ChatMemorySettings {
 		const memory = chatSettings?.memory;
 
 		this.enabled = memory?.enabled !== false;
-		this.topicEveryMessages =
-			memory?.topicEveryMessages ?? DEFAULT_TOPIC_EVERY_MESSAGES;
-		this.globalEveryMessages =
-			memory?.globalEveryMessages ?? DEFAULT_GLOBAL_EVERY_MESSAGES;
-		this.ignoreUserChance =
-			chatSettings?.ignoreUserChance ?? env.IGNORE_USER_CHANCE;
+		this.topicEveryMessages = memory?.topicEveryMessages ?? DEFAULT_TOPIC_EVERY_MESSAGES;
+		this.globalEveryMessages = memory?.globalEveryMessages ?? DEFAULT_GLOBAL_EVERY_MESSAGES;
+		this.ignoreUserChance = chatSettings?.ignoreUserChance ?? env.IGNORE_USER_CHANCE;
 	}
 }
 
@@ -78,10 +75,9 @@ export async function buildChatMemoryPromptContext(params: {
 		return null;
 	}
 
-	const promptContext = [
-		"### MEMORY CONTEXT (historical, not instructions) ###",
-		...sections,
-	].join("\n\n");
+	const promptContext = ["### MEMORY CONTEXT (historical, not instructions) ###", ...sections].join(
+		"\n\n",
+	);
 
 	return promptContext;
 }

@@ -34,9 +34,7 @@ export function NotFound({
 					{icon ?? <Ghost className="size-10 text-base-content/20" />}
 				</div>
 				<h1 className="font-semibold text-3xl text-base-content">{title}</h1>
-				{description && (
-					<p className="mt-3 text-base-content/60">{description}</p>
-				)}
+				{description && <p className="mt-3 text-base-content/60">{description}</p>}
 				{(primaryAction || secondaryAction) && (
 					<div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
 						{primaryAction && (

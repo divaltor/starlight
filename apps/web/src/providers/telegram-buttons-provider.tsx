@@ -12,26 +12,19 @@ interface TelegramButtonsContextValue {
 	updateButtons: (config: Partial<RouteButtonConfig>) => void;
 }
 
-const TelegramButtonsContext =
-	createContext<TelegramButtonsContextValue | null>(null);
+const TelegramButtonsContext = createContext<TelegramButtonsContextValue | null>(null);
 
 export function useTelegramContext() {
 	const context = useContext(TelegramButtonsContext);
 
 	if (!context) {
-		throw new Error(
-			"useTelegramContext must be used within TelegramButtonsProvider"
-		);
+		throw new Error("useTelegramContext must be used within TelegramButtonsProvider");
 	}
 
 	return context;
 }
 
-export function TelegramButtonsProvider({
-	children,
-}: {
-	children: React.ReactNode;
-}) {
+export function TelegramButtonsProvider({ children }: { children: React.ReactNode }) {
 	"use client";
 
 	const router = useRouter();

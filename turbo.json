@@ -9,9 +9,8 @@
       "outputs": ["dist/**"],
       "env": ["DATABASE_URL"]
     },
-    "format": {
-      "dependsOn": ["^format"]
-    },
+    "lint": {},
+    "format": {},
     "start": {
       "cache": false,
       "persistent": true

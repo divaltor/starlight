@@ -25,10 +25,7 @@ const examples = [
 ];
 
 export default function DiscoverPage() {
-	const [urlQuery, setUrlQuery] = useQueryState(
-		"q",
-		parseAsString.withDefault("")
-	);
+	const [urlQuery, setUrlQuery] = useQueryState("q", parseAsString.withDefault(""));
 	const [inputValue, setInputValue] = useState(urlQuery);
 	const [isLargeScreen, setIsLargeScreen] = useState(false);
 	const [visibleIndices, setVisibleIndices] = useState<number[]>([]);
@@ -45,8 +42,9 @@ export default function DiscoverPage() {
 		return () => window.removeEventListener("resize", updateScreen);
 	}, []);
 
-	const { results, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } =
-		useSearch({ query: urlQuery });
+	const { results, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useSearch({
+		query: urlQuery,
+	});
 
 	const randomQuery = useQuery({
 		...orpc.tweets.random.queryOptions({ retry: false }),
@@ -81,7 +79,7 @@ export default function DiscoverPage() {
 			isItemLoaded: (index, items) => !!items[index],
 			minimumBatchSize: 30,
 			threshold: 5,
-		}
+		},
 	);
 
 	const renderMasonryItem = useCallback(
@@ -90,7 +88,7 @@ export default function DiscoverPage() {
 				<TweetImageGrid tweet={data} />
 			</div>
 		),
-		[]
+		[],
 	);
 
 	// Generate non-overlapping positions for random images
@@ -104,12 +102,7 @@ export default function DiscoverPage() {
 	}, [randomImages]);
 
 	useEffect(() => {
-		if (
-			placedData.length > 0 &&
-			randomQuery.isSuccess &&
-			!isLoading &&
-			results.length === 0
-		) {
+		if (placedData.length > 0 && randomQuery.isSuccess && !isLoading && results.length === 0) {
 			const timeouts: NodeJS.Timeout[] = [];
 			for (let i = 0; i < placedData.length; i++) {
 				const item = placedData[i];
@@ -165,14 +158,10 @@ export default function DiscoverPage() {
 											"z-20 transition-all duration-500 ease-in-out",
 											inputPosition === "initial"
 												? "relative mx-auto w-full max-w-lg"
-												: "fixed inset-x-0 bottom-0 p-4"
+												: "fixed inset-x-0 bottom-0 p-4",
 										)}
 									>
-										<div
-											className={cn(
-												inputPosition === "bottom" ? "mx-auto max-w-lg" : "p-0"
-											)}
-										>
+										<div className={cn(inputPosition === "bottom" ? "mx-auto max-w-lg" : "p-0")}>
 											<div className="join flex w-full">
 												<Input
 													className="input input-bordered join-item flex-1"
@@ -182,10 +171,7 @@ export default function DiscoverPage() {
 													value={inputValue}
 												/>
 												<Button
-													className={cn(
-														"btn btn-primary join-item",
-														isLoading && "btn-disabled"
-													)}
+													className={cn("btn btn-primary join-item", isLoading && "btn-disabled")}
 													disabled={isLoading}
 													type="submit"
 												>
@@ -204,7 +190,7 @@ export default function DiscoverPage() {
 								<div
 									className={cn(
 										"py-6 text-center transition-opacity duration-300 ease-in-out",
-										showExamples ? "opacity-100" : "opacity-0"
+										showExamples ? "opacity-100" : "opacity-0",
 									)}
 								>
 									<div className="flex flex-wrap justify-center gap-2">
@@ -238,7 +224,7 @@ export default function DiscoverPage() {
 								<div
 									className={cn(
 										"pointer-events-auto absolute transition-opacity duration-700 ease-in-out",
-										isVisible ? "opacity-85" : "opacity-0"
+										isVisible ? "opacity-85" : "opacity-0",
 									)}
 									key={tweet.id}
 									style={{
@@ -271,10 +257,7 @@ export default function DiscoverPage() {
 									value={inputValue}
 								/>
 								<Button
-									className={cn(
-										"btn btn-primary join-item",
-										isLoading && "btn-disabled"
-									)}
+									className={cn("btn btn-primary join-item", isLoading && "btn-disabled")}
 									disabled={isLoading}
 									type="submit"
 								>

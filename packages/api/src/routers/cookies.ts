@@ -10,7 +10,7 @@ const cookiesSchema = z.object({
 
 const cookieEncryption = new CookieEncryption(
 	env.COOKIE_ENCRYPTION_KEY,
-	env.COOKIE_ENCRYPTION_SALT
+	env.COOKIE_ENCRYPTION_SALT,
 );
 
 export const saveCookies = protectedProcedure
@@ -32,10 +32,7 @@ export const saveCookies = protectedProcedure
 		}
 
 		// Encrypt and store under telegramId scoped key
-		const encryptedCookies = cookieEncryption.encrypt(
-			input.cookies,
-			context.user.id.toString()
-		);
+		const encryptedCookies = cookieEncryption.encrypt(input.cookies, context.user.id.toString());
 
 		await prisma.user.update({
 			where: {

@@ -16,7 +16,7 @@ export async function findSimilarPhotos(
 	targetHash: string,
 	maxDistance = 10,
 	excludePhotoId?: string,
-	excludeUserId?: string
+	excludeUserId?: string,
 ): Promise<SimilarPhoto[]> {
 	const buckets = [
 		{ len: 12, field: "hashBucket12" as const, maxCandidates: 50 },
@@ -27,10 +27,7 @@ export async function findSimilarPhotos(
 	for (const { len, field, maxCandidates } of buckets) {
 		const prefix = targetHash.substring(0, len);
 
-		logger.debug(
-			{ prefix, field, maxCandidates },
-			"Searching for similar photos"
-		);
+		logger.debug({ prefix, field, maxCandidates }, "Searching for similar photos");
 
 		const candidates = await prisma.photo.findMany({
 			where: {
@@ -68,10 +65,7 @@ export async function findSimilarPhotos(
 					continue;
 				}
 
-				const distance = calculateHashDistance(
-					targetHash,
-					candidate.perceptualHash
-				);
+				const distance = calculateHashDistance(targetHash, candidate.perceptualHash);
 
 				if (distance <= maxDistance) {
 					similarPhotos.push({
@@ -96,7 +90,7 @@ export async function findSimilarPhotos(
 
 export async function findDuplicatesByImageContent(
 	imageContent: Parameters<typeof calculatePerceptualHash>[0],
-	maxDistance = 10
+	maxDistance = 10,
 ): Promise<SimilarPhoto[]> {
 	const targetHash = await calculatePerceptualHash(imageContent);
 

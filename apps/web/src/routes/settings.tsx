@@ -49,7 +49,7 @@ function RouteComponent() {
 			staleTime: 5 * 60 * 1000,
 			gcTime: 30 * 60 * 1000,
 			retry: 1,
-		})
+		}),
 	);
 
 	const saveCookiesMutation = useMutation(
@@ -65,7 +65,7 @@ function RouteComponent() {
 			onError: (error: Error) => {
 				setDisplayError(error.message || "Failed to save cookies");
 			},
-		})
+		}),
 	);
 
 	const deleteCookiesMutation = useMutation(
@@ -76,15 +76,12 @@ function RouteComponent() {
 					hasValidCookies: false,
 				}));
 			},
-		})
+		}),
 	);
 
 	const visibilityMutation = useMutation(
 		orpc.profiles.visibility.mutationOptions({
-			onSuccess: (
-				_data: { success: boolean },
-				variables: { status: "public" | "private" }
-			) => {
+			onSuccess: (_data: { success: boolean }, variables: { status: "public" | "private" }) => {
 				queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
 					...old,
 					user: {
@@ -93,7 +90,7 @@ function RouteComponent() {
 					},
 				}));
 			},
-		})
+		}),
 	);
 
 	if (isLoading && !profile) {
@@ -137,11 +134,7 @@ function RouteComponent() {
 							<AlertCircle className="h-4 w-4" />
 							<AlertTitle>Failed to load settings</AlertTitle>
 							<div className="mt-2">
-								<Button
-									onClick={() => refetchProfile()}
-									size="sm"
-									variant="outline"
-								>
+								<Button onClick={() => refetchProfile()} size="sm" variant="outline">
 									Retry
 								</Button>
 							</div>
@@ -196,8 +189,7 @@ function RouteComponent() {
 									<Alert variant="default">
 										<AlertCircle className="h-4 w-4" />
 										<AlertDescription>
-											Connect your Twitter account by adding authentication
-											cookies
+											Connect your Twitter account by adding authentication cookies
 										</AlertDescription>
 									</Alert>
 								)}
@@ -221,9 +213,7 @@ function RouteComponent() {
 											placeholder="Paste your authentication cookies here"
 											value={newCookies}
 										/>
-										{displayError && (
-											<p className="text-error text-sm">{displayError}</p>
-										)}
+										{displayError && <p className="text-error text-sm">{displayError}</p>}
 									</div>
 
 									<div className="flex gap-2">
@@ -234,13 +224,10 @@ function RouteComponent() {
 											<Button
 												disabled={isSubmitting}
 												onClick={() =>
-													queryClient.setQueryData(
-														["profile"],
-														(old: ProfileResult) => ({
-															...old,
-															hasValidCookies: false,
-														})
-													)
+													queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+														...old,
+														hasValidCookies: false,
+													}))
 												}
 												size="sm"
 												type="button"

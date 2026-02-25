@@ -6,7 +6,8 @@
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "build": "bun run -b tsdown",
-    "format": "oxlint --fix && oxfmt",
+    "lint": "oxlint --fix",
+    "format": "oxfmt",
     "test": "bun test",
     "queue:classify": "bun run src/scripts/classification.ts",
     "queue:embeddings": "bun run src/scripts/embeddings.ts"

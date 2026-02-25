@@ -1,8 +1,4 @@
-import type {
-	InferRouterInputs,
-	InferRouterOutputs,
-	RouterClient,
-} from "@orpc/server";
+import type { InferRouterInputs, InferRouterOutputs, RouterClient } from "@orpc/server";
 import { deleteCookies, saveCookies } from "./cookies";
 import { changeProfileVisibility, getUserProfile } from "./profiles";
 import { randomImages, searchImages } from "./search";

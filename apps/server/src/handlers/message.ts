@@ -45,18 +45,11 @@ type StoredConversationMessage = Prisma.MessageGetPayload<{
 	select: typeof messageHistorySelect;
 }>;
 
-type StoredConversationMessageWithInlineVideo = Omit<
-	StoredConversationMessage,
-	"attachments"
-> & {
-	attachments: Array<
-		StoredConversationMessage["attachments"][number] & { base64Data?: string }
-	>;
+type StoredConversationMessageWithInlineVideo = Omit<StoredConversationMessage, "attachments"> & {
+	attachments: Array<StoredConversationMessage["attachments"][number] & { base64Data?: string }>;
 };
 
-type ReplyToMessage = NonNullable<
-	NonNullable<Context["message"]>["reply_to_message"]
->;
+type ReplyToMessage = NonNullable<NonNullable<Context["message"]>["reply_to_message"]>;
 
 const RESPONSE_DELAY_MS = 1500;
 
@@ -94,7 +87,7 @@ async function hasNewerHumanMessage(params: {
 
 async function inlineVideoAttachments(
 	ctx: Context,
-	entry: StoredConversationMessage
+	entry: StoredConversationMessage,
 ): Promise<StoredConversationMessageWithInlineVideo> {
 	if (entry.attachments.length === 0) {
 		return entry;
@@ -121,12 +114,12 @@ async function inlineVideoAttachments(
 						s3Path: attachment.s3Path,
 						mimeType: attachment.mimeType,
 					},
-					"Failed to inline video attachment for provider payload"
+					"Failed to inline video attachment for provider payload",
 				);
 
 				return attachment;
 			}
-		})
+		}),
 	);
 
 	return {
@@ -138,13 +131,8 @@ async function inlineVideoAttachments(
 function toReplyReferenceFromStoredMessage(
 	entry: Pick<
 		StoredConversationMessageWithInlineVideo,
-		| "fromId"
-		| "fromUsername"
-		| "fromFirstName"
-		| "text"
-		| "caption"
-		| "attachments"
-	>
+		"fromId" | "fromUsername" | "fromFirstName" | "text" | "caption" | "attachments"
+	>,
 ): ConversationReplyReference {
 	return {
 		fromId: entry.fromId,
@@ -166,42 +154,33 @@ const MEDIA_MIME_EXTRACTORS: Array<{
 	{
 		key: "sticker",
 		getMime: (msg) =>
-			(msg.sticker as { is_video?: boolean })?.is_video
-				? "video/webm"
-				: "image/webp",
+			(msg.sticker as { is_video?: boolean })?.is_video ? "video/webm" : "image/webp",
 	},
 	{
 		key: "video",
-		getMime: (msg) =>
-			(msg.video as { mime_type?: string })?.mime_type ?? "video/mp4",
+		getMime: (msg) => (msg.video as { mime_type?: string })?.mime_type ?? "video/mp4",
 	},
 	{
 		key: "animation",
-		getMime: (msg) =>
-			(msg.animation as { mime_type?: string })?.mime_type ?? "video/mp4",
+		getMime: (msg) => (msg.animation as { mime_type?: string })?.mime_type ?? "video/mp4",
 	},
 	{ key: "video_note", getMime: () => "video/mp4" },
 	{
 		key: "voice",
-		getMime: (msg) =>
-			(msg.voice as { mime_type?: string })?.mime_type ?? "audio/ogg",
+		getMime: (msg) => (msg.voice as { mime_type?: string })?.mime_type ?? "audio/ogg",
 	},
 	{
 		key: "audio",
-		getMime: (msg) =>
-			(msg.audio as { mime_type?: string })?.mime_type ?? "audio/mpeg",
+		getMime: (msg) => (msg.audio as { mime_type?: string })?.mime_type ?? "audio/mpeg",
 	},
 	{
 		key: "document",
 		getMime: (msg) =>
-			(msg.document as { mime_type?: string })?.mime_type ??
-			"application/octet-stream",
+			(msg.document as { mime_type?: string })?.mime_type ?? "application/octet-stream",
 	},
 ];
 
-function extractReplyAttachmentMimeTypes(
-	message: ReplyToMessage
-): Array<{ mimeType: string }> {
+function extractReplyAttachmentMimeTypes(message: ReplyToMessage): Array<{ mimeType: string }> {
 	const attachments: Array<{ mimeType: string }> = [];
 
 	for (const { key, getMime } of MEDIA_MIME_EXTRACTORS) {
@@ -214,9 +193,7 @@ function extractReplyAttachmentMimeTypes(
 	return attachments;
 }
 
-function toReplyReferenceFromTelegramMessage(
-	message: ReplyToMessage
-): ConversationReplyReference {
+function toReplyReferenceFromTelegramMessage(message: ReplyToMessage): ConversationReplyReference {
 	return {
 		fromId: message.from ? BigInt(message.from.id) : null,
 		fromUsername: message.from?.username ?? null,
@@ -243,9 +220,7 @@ const isAdminOrCreator = async (ctx: Context) => {
 
 groupChat.command("clear", async (ctx) => {
 	if (!(await isAdminOrCreator(ctx))) {
-		await ctx.reply(
-			"Only admins, creators, and supervisors can use this command."
-		);
+		await ctx.reply("Only admins, creators, and supervisors can use this command.");
 		return;
 	}
 
@@ -293,7 +268,7 @@ groupChat.on("message").filter(
 		) {
 			ctx.logger.debug(
 				{ chatId: ctx.chat.id, messageId: triggerMessageId, messageThreadId },
-				"Skipping stale AI reply after response delay"
+				"Skipping stale AI reply after response delay",
 			);
 			return;
 		}
@@ -305,11 +280,7 @@ groupChat.on("message").filter(
 				messageId: {
 					not: ctx.message.message_id,
 				},
-				OR: [
-					{ text: { not: null } },
-					{ caption: { not: null } },
-					{ attachments: { some: {} } },
-				],
+				OR: [{ text: { not: null } }, { caption: { not: null } }, { attachments: { some: {} } }],
 			},
 			select: messageHistorySelect,
 			orderBy: {
@@ -319,23 +290,19 @@ groupChat.on("message").filter(
 		});
 
 		const historyWithInlineVideo = await Promise.all(
-			history.map((entry) => inlineVideoAttachments(ctx, entry))
+			history.map((entry) => inlineVideoAttachments(ctx, entry)),
 		);
 
 		const botId = BigInt(ctx.me.id);
-		const storedMessageById = new Map<
-			number,
-			StoredConversationMessageWithInlineVideo
-		>(historyWithInlineVideo.map((entry) => [entry.messageId, entry]));
+		const storedMessageById = new Map<number, StoredConversationMessageWithInlineVideo>(
+			historyWithInlineVideo.map((entry) => [entry.messageId, entry]),
+		);
 
 		const repliedMessage = ctx.message.reply_to_message;
 
 		const missingReplyIds: number[] = [];
 		for (const entry of historyWithInlineVideo) {
-			if (
-				entry.replyToMessageId !== null &&
-				!storedMessageById.has(entry.replyToMessageId)
-			) {
+			if (entry.replyToMessageId !== null && !storedMessageById.has(entry.replyToMessageId)) {
 				missingReplyIds.push(entry.replyToMessageId);
 			}
 		}
@@ -353,7 +320,7 @@ groupChat.on("message").filter(
 			});
 
 			const referencedWithInlineVideo = await Promise.all(
-				referencedMessages.map((entry) => inlineVideoAttachments(ctx, entry))
+				referencedMessages.map((entry) => inlineVideoAttachments(ctx, entry)),
 			);
 
 			for (const entry of referencedWithInlineVideo) {
@@ -372,11 +339,9 @@ groupChat.on("message").filter(
 				return toConversationMessage(
 					{
 						...entry,
-						replyTo: replyToEntry
-							? toReplyReferenceFromStoredMessage(replyToEntry)
-							: null,
+						replyTo: replyToEntry ? toReplyReferenceFromStoredMessage(replyToEntry) : null,
 					},
-					botId
+					botId,
 				);
 			})
 			.filter((entry): entry is ConversationMessage => entry !== null);
@@ -387,11 +352,9 @@ groupChat.on("message").filter(
 
 		let currentReplyReference: ConversationReplyReference | null = null;
 		if (storedRepliedMessage) {
-			currentReplyReference =
-				toReplyReferenceFromStoredMessage(storedRepliedMessage);
+			currentReplyReference = toReplyReferenceFromStoredMessage(storedRepliedMessage);
 		} else if (repliedMessage) {
-			currentReplyReference =
-				toReplyReferenceFromTelegramMessage(repliedMessage);
+			currentReplyReference = toReplyReferenceFromTelegramMessage(repliedMessage);
 		}
 
 		const currentMessageAttachments = ctx.currentMessageAttachments;
@@ -406,10 +369,7 @@ groupChat.on("message").filter(
 			replyTo: currentReplyReference,
 		};
 
-		const currentConversationMessage = toConversationMessage(
-			currentMessageEntry,
-			botId
-		);
+		const currentConversationMessage = toConversationMessage(currentMessageEntry, botId);
 
 		if (!currentConversationMessage) {
 			return;
@@ -456,7 +416,7 @@ groupChat.on("message").filter(
 		) {
 			ctx.logger.debug(
 				{ chatId: ctx.chat.id, messageId: triggerMessageId, messageThreadId },
-				"Skipping stale AI reply after inference"
+				"Skipping stale AI reply after inference",
 			);
 			return;
 		}
@@ -467,7 +427,7 @@ groupChat.on("message").filter(
 		});
 
 		await upsertStoredMessage(ctx, sentMessage);
-	}
+	},
 );
 
 export default composer;

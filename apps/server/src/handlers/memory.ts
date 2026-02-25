@@ -17,10 +17,7 @@ const isAdminOrCreator = (ctx: Context) => {
 		return true;
 	}
 
-	return (
-		ctx.userChatMember?.status === "administrator" ||
-		ctx.userChatMember?.status === "creator"
-	);
+	return ctx.userChatMember?.status === "administrator" || ctx.userChatMember?.status === "creator";
 };
 
 groupChat.command("memory").filter(isAdminOrCreator, async (ctx) => {
@@ -49,10 +46,8 @@ groupChat.command("memory").filter(isAdminOrCreator, async (ctx) => {
 groupChat.command("memory").filter(
 	(ctx) => !isAdminOrCreator(ctx),
 	async (ctx) => {
-		await ctx.reply(
-			"Only admins, creators, and supervisors can use this command."
-		);
-	}
+		await ctx.reply("Only admins, creators, and supervisors can use this command.");
+	},
 );
 
 export default composer;

@@ -55,14 +55,7 @@ interface DrawImageCoverParams {
 }
 
 export function drawImageCover(params: DrawImageCoverParams): void {
-	const {
-		ctx,
-		image,
-		x: destX,
-		y: destY,
-		width: destWidth,
-		height: destHeight,
-	} = params;
+	const { ctx, image, x: destX, y: destY, width: destWidth, height: destHeight } = params;
 	const srcWidth = image.width;
 	const srcHeight = image.height;
 
@@ -82,17 +75,7 @@ export function drawImageCover(params: DrawImageCoverParams): void {
 		cropY = (srcHeight - cropHeight) / 2;
 	}
 
-	ctx.drawImage(
-		image,
-		cropX,
-		cropY,
-		cropWidth,
-		cropHeight,
-		destX,
-		destY,
-		destWidth,
-		destHeight
-	);
+	ctx.drawImage(image, cropX, cropY, cropWidth, cropHeight, destX, destY, destWidth, destHeight);
 }
 
 export interface TextLine {
@@ -105,11 +88,7 @@ function isHashtagLine(text: string): boolean {
 	return words.length > 0 && words.every((word) => word.startsWith("#"));
 }
 
-function breakLongWord(
-	ctx: SKRSContext2D,
-	word: string,
-	maxWidth: number
-): string[] {
+function breakLongWord(ctx: SKRSContext2D, word: string, maxWidth: number): string[] {
 	const chunks: string[] = [];
 	let current = "";
 
@@ -134,16 +113,9 @@ function stripLeadingMentions(text: string): string {
 	return text.replace(/^(@\w+\s*)+/, "").trimStart();
 }
 
-export function wrapText(
-	ctx: SKRSContext2D,
-	text: string,
-	maxWidth: number
-): TextLine[] {
+export function wrapText(ctx: SKRSContext2D, text: string, maxWidth: number): TextLine[] {
 	const cleanedText = stripLeadingMentions(text);
-	const normalizedText = cleanedText.replace(
-		/\n(#\S+(\s+#\S+)*\s*)$/,
-		"\n\n$1"
-	);
+	const normalizedText = cleanedText.replace(/\n(#\S+(\s+#\S+)*\s*)$/, "\n\n$1");
 	const paragraphs = normalizedText.split(/\n\n+/);
 	const lines: TextLine[] = [];
 
@@ -298,9 +270,7 @@ interface DrawAvatarParams {
 	y: number;
 }
 
-export async function drawAvatarWithFallback(
-	params: DrawAvatarParams
-): Promise<void> {
+export async function drawAvatarWithFallback(params: DrawAvatarParams): Promise<void> {
 	const { ctx, url, x, y, size, fallbackColor } = params;
 
 	try {
@@ -327,20 +297,8 @@ interface DrawMediaBlockParams {
 	y: number;
 }
 
-export async function drawMediaBlock(
-	params: DrawMediaBlockParams
-): Promise<void> {
-	const {
-		ctx,
-		imageUrl,
-		x,
-		y,
-		width,
-		height,
-		isVideo,
-		backgroundColor,
-		borderRadius,
-	} = params;
+export async function drawMediaBlock(params: DrawMediaBlockParams): Promise<void> {
+	const { ctx, imageUrl, x, y, width, height, isVideo, backgroundColor, borderRadius } = params;
 
 	try {
 		const image = await loadImage(imageUrl);
@@ -426,17 +384,7 @@ interface DrawTextLinesParams {
 }
 
 export function drawTextLines(params: DrawTextLinesParams): number {
-	const {
-		ctx,
-		lines,
-		x,
-		startY,
-		fontSize,
-		lineHeight,
-		paragraphGap,
-		color,
-		fontFamily,
-	} = params;
+	const { ctx, lines, x, startY, fontSize, lineHeight, paragraphGap, color, fontFamily } = params;
 
 	let y = startY;
 

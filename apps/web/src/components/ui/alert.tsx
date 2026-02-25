@@ -21,25 +21,14 @@ function Alert({
 	variant,
 	...props
 }: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>) {
-	return (
-		<div
-			className={cn(alertVariants({ variant }), className)}
-			role="alert"
-			{...props}
-		/>
-	);
+	return <div className={cn(alertVariants({ variant }), className)} role="alert" {...props} />;
 }
 
 function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
-	return (
-		<div className={cn("font-medium tracking-tight", className)} {...props} />
-	);
+	return <div className={cn("font-medium tracking-tight", className)} {...props} />;
 }
 
-function AlertDescription({
-	className,
-	...props
-}: React.ComponentProps<"div">) {
+function AlertDescription({ className, ...props }: React.ComponentProps<"div">) {
 	return <div className={cn("text-sm", className)} {...props} />;
 }
 

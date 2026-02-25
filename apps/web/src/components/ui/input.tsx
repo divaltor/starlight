@@ -37,14 +37,12 @@ const inputVariants = cva(
 			color: "default",
 			size: "default",
 		},
-	}
+	},
 );
 
 interface InputProps
-	extends Omit<
-			React.ComponentProps<typeof AriaInput>,
-			"className" | "color" | "size"
-		>,
+	extends
+		Omit<React.ComponentProps<typeof AriaInput>, "className" | "color" | "size">,
 		VariantProps<typeof inputVariants> {
 	className?: string;
 }
@@ -56,7 +54,7 @@ function Input({ className, variant, color, size, ...props }: InputProps) {
 			color,
 			size,
 			className,
-		})
+		}),
 	);
 
 	return <AriaInput {...props} className={classes} />;

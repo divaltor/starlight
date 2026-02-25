@@ -122,9 +122,7 @@ export const openrouter = env.OPENROUTER_API_KEY
 	? createOpenRouter({ apiKey: env.OPENROUTER_API_KEY })
 	: null;
 
-export function getMessageContent(
-	msg: Pick<Message, "text" | "caption">
-): string | null {
+export function getMessageContent(msg: Pick<Message, "text" | "caption">): string | null {
 	const content = msg.text ?? msg.caption;
 
 	if (!content) {
@@ -136,18 +134,15 @@ export function getMessageContent(
 }
 
 export function hasMessageAttachments(
-	msg: Pick<
-		Message,
-		"photo" | "sticker" | "video" | "animation" | "video_note" | "voice"
-	>
+	msg: Pick<Message, "photo" | "sticker" | "video" | "animation" | "video_note" | "voice">,
 ): boolean {
 	return Boolean(
 		(msg.photo && msg.photo.length > 0) ||
-			msg.sticker ||
-			msg.video ||
-			msg.animation ||
-			msg.video_note ||
-			msg.voice
+		msg.sticker ||
+		msg.video ||
+		msg.animation ||
+		msg.video_note ||
+		msg.voice,
 	);
 }
 
@@ -345,7 +340,7 @@ function formatReplyReference(replyTo: ConversationReplyReference): string {
 	const attachments = replyTo.attachments ?? [];
 	if (attachments.length > 0) {
 		const attachmentLabels = attachments.map((attachment) =>
-			attachmentLabelFromMimeType(attachment.mimeType)
+			attachmentLabelFromMimeType(attachment.mimeType),
 		);
 
 		return `${sender}: [sent ${attachmentLabels.join(", ")}]`;
@@ -380,22 +375,17 @@ export function toConversationMessage(
 		attachments?: ConversationAttachment[];
 		replyTo?: ConversationReplyReference | null;
 	},
-	botId: bigint
+	botId: bigint,
 ): ConversationMessage | null {
 	const normalizedContent = (entry.text ?? entry.caption)?.trim();
-	const content =
-		normalizedContent && normalizedContent.length > 0
-			? normalizedContent
-			: null;
+	const content = normalizedContent && normalizedContent.length > 0 ? normalizedContent : null;
 	const attachments = entry.attachments ?? [];
 
 	if (!content && attachments.length === 0) {
 		return null;
 	}
 
-	const replyRefStr = entry.replyTo
-		? formatReplyReference(entry.replyTo)
-		: null;
+	const replyRefStr = entry.replyTo ? formatReplyReference(entry.replyTo) : null;
 
 	if (entry.fromId !== null && entry.fromId === botId) {
 		const cleanedContent = content ? stripBotAnnotations(content) : null;
@@ -422,21 +412,16 @@ export function toConversationMessage(
 		textPrefix = `${sender}${replyContext}: ${content}`;
 	} else {
 		const attachmentLabels = attachments.map((attachment) =>
-			attachmentLabelFromMimeType(attachment.mimeType)
+			attachmentLabelFromMimeType(attachment.mimeType),
 		);
 
-		textPrefix = `${sender}${replyContext}: [sent ${attachmentLabels.join(
-			", "
-		)}]`;
+		textPrefix = `${sender}${replyContext}: [sent ${attachmentLabels.join(", ")}]`;
 	}
 
-	const parts: Array<TextPart | ImagePart | FilePart> = [
-		{ type: "text", text: textPrefix },
-	];
+	const parts: Array<TextPart | ImagePart | FilePart> = [{ type: "text", text: textPrefix }];
 
 	for (const attachment of attachments) {
-		const attachmentData =
-			attachment.base64Data ?? toAttachmentUrl(attachment.s3Path);
+		const attachmentData = attachment.base64Data ?? toAttachmentUrl(attachment.s3Path);
 
 		if (!attachmentData) {
 			continue;

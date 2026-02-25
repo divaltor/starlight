@@ -36,7 +36,7 @@ const Carousel = ({
 			width?: number;
 			is_nsfw?: boolean;
 		},
-		index: number
+		index: number,
 	) => ReactNode;
 }) => {
 	return (

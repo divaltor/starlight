@@ -24,7 +24,7 @@ export function registerTelemetry() {
 
 export function getLangfuseTelemetry(
 	functionId: string,
-	metadata: Record<string, string>
+	metadata: Record<string, string>,
 ): TelemetrySettings | undefined {
 	if (!(env.LANGFUSE_PUBLIC_KEY && env.LANGFUSE_SECRET_KEY)) {
 		return;

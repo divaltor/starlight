@@ -4,21 +4,14 @@ import tmp from "tmp";
 import { fetchTweet } from "@/services/fxembed/fxembed.service";
 import type { FxEmbedTweet } from "@/services/fxembed/types";
 import { generateTweetImage } from "@/services/tweet/tweet-image.service";
-import {
-	downloadVideo,
-	downloadVideoFromUrl,
-	type VideoInformation,
-} from "@/services/video";
+import { downloadVideo, downloadVideoFromUrl, type VideoInformation } from "@/services/video";
 import type { Context } from "@/types";
 
 const composer = new Composer<Context>();
 
 const feature = composer.chatType("private");
 
-function createVideoKeyboard(
-	videoId: string,
-	hasDescription: boolean
-): InlineKeyboard {
+function createVideoKeyboard(videoId: string, hasDescription: boolean): InlineKeyboard {
 	const keyboard = new InlineKeyboard();
 	if (hasDescription) {
 		keyboard.text("Remove description", `video:remove_desc:${videoId}`);
@@ -50,10 +43,7 @@ feature.on(":text").filter(
 			});
 
 			if (existingVideo) {
-				ctx.logger.info(
-					"Found existing video for tweet %s, sending via file_id",
-					tweetId
-				);
+				ctx.logger.info("Found existing video for tweet %s, sending via file_id", tweetId);
 
 				try {
 					await ctx.replyWithVideo(existingVideo.telegramFileId, {
@@ -70,7 +60,7 @@ feature.on(":text").filter(
 				} catch (error) {
 					ctx.logger.error(
 						{ error, videoId: existingVideo.id },
-						"Error sending existing video, will download fresh copy"
+						"Error sending existing video, will download fresh copy",
 					);
 					// Continue to download fresh copy if sending existing file fails
 				}
@@ -97,25 +87,21 @@ feature.on(":text").filter(
 				} else {
 					ctx.logger.warn(
 						{ error: downloadResult.reason },
-						"yt-dlp download failed, trying fxtwitter API fallback"
+						"yt-dlp download failed, trying fxtwitter API fallback",
 					);
 
 					const apiVideos = tweet?.media?.videos;
 					if (apiVideos && apiVideos.length > 0) {
 						try {
 							for (const apiVideo of apiVideos) {
-								const info = await downloadVideoFromUrl(
-									apiVideo.url,
-									tempDir.name,
-									{ width: apiVideo.width, height: apiVideo.height }
-								);
+								const info = await downloadVideoFromUrl(apiVideo.url, tempDir.name, {
+									width: apiVideo.width,
+									height: apiVideo.height,
+								});
 								videos.push(info);
 							}
 						} catch (fallbackError) {
-							ctx.logger.error(
-								{ error: fallbackError },
-								"Fallback video download also failed"
-							);
+							ctx.logger.error({ error: fallbackError }, "Fallback video download also failed");
 							videoDownloadFailed = true;
 						}
 					} else {
@@ -136,16 +122,11 @@ feature.on(":text").filter(
 			const hasVideo = tweet?.media?.videos && tweet.media.videos.length > 0;
 
 			if (!hasVideo && tweet) {
-				ctx.logger.info(
-					{ tweetId },
-					"No video in tweet, generating image instead"
-				);
+				ctx.logger.info({ tweetId }, "No video in tweet, generating image instead");
 
 				try {
 					const result = await generateTweetImage(tweetId, "light");
-					await ctx.replyWithPhoto(
-						new InputFile(result.buffer, `tweet-${tweetId}.jpg`)
-					);
+					await ctx.replyWithPhoto(new InputFile(result.buffer, `tweet-${tweetId}.jpg`));
 					tempDir.removeCallback();
 					return;
 				} catch (imgError) {
@@ -161,9 +142,7 @@ feature.on(":text").filter(
 			return;
 		}
 
-		const cleanedText = isTwitterLink
-			? cleanupTweetText(tweet?.text)
-			: undefined;
+		const cleanedText = isTwitterLink ? cleanupTweetText(tweet?.text) : undefined;
 
 		for (const video of videos) {
 			try {
@@ -171,17 +150,12 @@ feature.on(":text").filter(
 
 				const videoId = Bun.randomUUIDv7();
 
-				const sentMessage = await ctx.replyWithVideo(
-					new InputFile(video.filePath),
-					{
-						width: video.metadata?.width,
-						height: video.metadata?.height,
-						supports_streaming: true,
-						reply_markup: cleanedText
-							? createVideoKeyboard(videoId, false)
-							: undefined,
-					}
-				);
+				const sentMessage = await ctx.replyWithVideo(new InputFile(video.filePath), {
+					width: video.metadata?.width,
+					height: video.metadata?.height,
+					supports_streaming: true,
+					reply_markup: cleanedText ? createVideoKeyboard(videoId, false) : undefined,
+				});
 
 				if (isTwitterLink) {
 					await prisma.video.create({
@@ -198,11 +172,7 @@ feature.on(":text").filter(
 					});
 				}
 
-				ctx.logger.info(
-					"Video %s sent successfully to %s",
-					video.filePath,
-					ctx.chatId
-				);
+				ctx.logger.info("Video %s sent successfully to %s", video.filePath, ctx.chatId);
 			} catch (error) {
 				if (error instanceof GrammyError) {
 					ctx.logger.error(error, "Error sending video");
@@ -217,7 +187,7 @@ feature.on(":text").filter(
 		}
 
 		tempDir.removeCallback();
-	}
+	},
 );
 
 feature.callbackQuery(/^video:(add_desc|remove_desc):(.+)$/, async (ctx) => {
@@ -248,10 +218,7 @@ feature.callbackQuery(/^video:(add_desc|remove_desc):(.+)$/, async (ctx) => {
 		});
 	} catch (error) {
 		if (error instanceof GrammyError) {
-			ctx.logger.warn(
-				{ error, videoId },
-				"Failed to edit message, resending video"
-			);
+			ctx.logger.warn({ error, videoId }, "Failed to edit message, resending video");
 
 			await ctx.replyWithVideo(video.telegramFileId, {
 				width: video.width ?? undefined,
@@ -283,12 +250,10 @@ feature.on(":video", async (ctx) => {
 });
 
 composer.command("source").filter(
-	(ctx) =>
-		ctx.msg.reply_to_message === undefined ||
-		ctx.msg.reply_to_message?.video === undefined,
+	(ctx) => ctx.msg.reply_to_message === undefined || ctx.msg.reply_to_message?.video === undefined,
 	(ctx) => {
 		ctx.reply("Please, reply to a message with a video.");
-	}
+	},
 );
 
 composer.command("source").filter(
@@ -296,8 +261,7 @@ composer.command("source").filter(
 	async (ctx) => {
 		const video = await prisma.video.findFirst({
 			where: {
-				telegramFileUniqueId: ctx.msg.reply_to_message?.video
-					?.file_unique_id as string,
+				telegramFileUniqueId: ctx.msg.reply_to_message?.video?.file_unique_id as string,
 			},
 			orderBy: {
 				createdAt: "desc",
@@ -310,7 +274,7 @@ composer.command("source").filter(
 		}
 
 		await ctx.reply(`https://x.com/i/status/${video.tweetId}`);
-	}
+	},
 );
 
 export default composer;

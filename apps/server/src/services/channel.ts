@@ -10,11 +10,7 @@ export const updateChannelPhoto = async (ctx: Context) => {
 	try {
 		const fullChatInfo = await ctx.getChat();
 
-		ctx.logger.debug(
-			{ fullChatInfo },
-			"Full chat info for %s channel",
-			ctx.chat.title
-		);
+		ctx.logger.debug({ fullChatInfo }, "Full chat info for %s channel", ctx.chat.title);
 
 		if (fullChatInfo.photo) {
 			const [thumbnail, big] = await Promise.all([
@@ -22,10 +18,7 @@ export const updateChannelPhoto = async (ctx: Context) => {
 				ctx.api.getFile(fullChatInfo.photo.big_file_id),
 			]);
 
-			const [bigFile, thumbnailFile] = await Promise.all([
-				big.download(),
-				thumbnail.download(),
-			]);
+			const [bigFile, thumbnailFile] = await Promise.all([big.download(), thumbnail.download()]);
 
 			const bigPath = `channels/${toUniqueId(ctx.chat.id)}/big.jpg`;
 			const thumbnailPath = `channels/${toUniqueId(ctx.chat.id)}/thumbnail.jpg`;
@@ -48,7 +41,7 @@ export const updateChannelPhoto = async (ctx: Context) => {
 	} catch (error) {
 		ctx.logger.warn(
 			{ error: error instanceof Error ? error.message : "Unknown error" },
-			"Error getting chat info"
+			"Error getting chat info",
 		);
 	}
 };

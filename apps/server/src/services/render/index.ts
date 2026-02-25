@@ -155,17 +155,15 @@ function calculateTextHeight(
 	lines: { isParagraphEnd: boolean }[],
 	fontSize: number,
 	lineHeight: number,
-	paragraphGap: number
+	paragraphGap: number,
 ): number {
 	const paragraphCount = lines.filter((line) => line.isParagraphEnd).length;
-	return Math.floor(
-		lines.length * fontSize * lineHeight + paragraphCount * paragraphGap
-	);
+	return Math.floor(lines.length * fontSize * lineHeight + paragraphCount * paragraphGap);
 }
 
 function calculateMediaHeight(
 	media: MediaItem | null,
-	containerWidth: number
+	containerWidth: number,
 ): { height: number; isVideo: boolean } {
 	if (!media) {
 		return { height: 0, isVideo: false };
@@ -180,7 +178,7 @@ function calculateArticleLayout(
 	ctx: SKRSContext2D,
 	article: ArticleData | null | undefined,
 	containerWidth: number,
-	fontFamily: string
+	fontFamily: string,
 ): ArticleLayout | null {
 	if (!article) {
 		return null;
@@ -201,7 +199,7 @@ function calculateArticleLayout(
 		titleLines,
 		ARTICLE_TITLE_FONT_SIZE,
 		LAYOUT.LINE_HEIGHT,
-		0
+		0,
 	);
 
 	ctx.font = `${ARTICLE_PREVIEW_FONT_SIZE}px ${fontFamily}`;
@@ -210,7 +208,7 @@ function calculateArticleLayout(
 		previewLines,
 		ARTICLE_PREVIEW_FONT_SIZE,
 		LAYOUT.LINE_HEIGHT,
-		0
+		0,
 	);
 
 	const height = Math.floor(
@@ -218,7 +216,7 @@ function calculateArticleLayout(
 			ARTICLE_PADDING * 2 +
 			titleHeight +
 			LAYOUT.TEXT_GAP +
-			previewHeight
+			previewHeight,
 	);
 
 	return {
@@ -246,18 +244,20 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 		mainTextLines,
 		LAYOUT.FONT_SIZE_TEXT,
 		LAYOUT.LINE_HEIGHT,
-		LAYOUT.PARAGRAPH_GAP
+		LAYOUT.PARAGRAPH_GAP,
 	);
 
 	const mainMedia = getFirstMedia(tweet.media);
-	const { height: mainMediaHeight, isVideo: mainMediaIsVideo } =
-		calculateMediaHeight(mainMedia, contentWidth);
+	const { height: mainMediaHeight, isVideo: mainMediaIsVideo } = calculateMediaHeight(
+		mainMedia,
+		contentWidth,
+	);
 
 	const mainArticleLayout = calculateArticleLayout(
 		measureCtx,
 		tweet.article,
 		contentWidth,
-		fontFamily
+		fontFamily,
 	);
 
 	let quoteLayout: TweetLayout["quote"] = null;
@@ -268,34 +268,33 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 		const quoteTextLines = wrapText(
 			measureCtx,
 			tweet.quote.text,
-			quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP
+			quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP,
 		);
 		const quoteTextHeight = calculateTextHeight(
 			quoteTextLines,
 			QUOTE_FONT_SIZE_TEXT,
 			LAYOUT.LINE_HEIGHT,
-			LAYOUT.PARAGRAPH_GAP
+			LAYOUT.PARAGRAPH_GAP,
 		);
 
 		const quoteMedia = getFirstMedia(tweet.quote.media);
-		const { height: quoteMediaHeight, isVideo: quoteMediaIsVideo } =
-			calculateMediaHeight(quoteMedia, quoteContentWidth);
+		const { height: quoteMediaHeight, isVideo: quoteMediaIsVideo } = calculateMediaHeight(
+			quoteMedia,
+			quoteContentWidth,
+		);
 
 		const quoteArticleLayout = calculateArticleLayout(
 			measureCtx,
 			tweet.quote.article,
 			quoteContentWidth,
-			fontFamily
+			fontFamily,
 		);
 
 		const quoteHeight = Math.floor(
 			QUOTE_PADDING * 2 +
-				Math.max(
-					QUOTE_AVATAR_SIZE,
-					QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + quoteTextHeight
-				) +
+				Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + quoteTextHeight) +
 				(quoteMediaHeight > 0 ? LAYOUT.AVATAR_GAP + quoteMediaHeight : 0) +
-				(quoteArticleLayout ? LAYOUT.AVATAR_GAP + quoteArticleLayout.height : 0)
+				(quoteArticleLayout ? LAYOUT.AVATAR_GAP + quoteArticleLayout.height : 0),
 		);
 
 		quoteLayout = {
@@ -321,21 +320,19 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 
 		for (const chainTweet of tweet.replyChain) {
 			measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
-			const chainTextLines = wrapText(
-				measureCtx,
-				chainTweet.text,
-				replyToTextWidth
-			);
+			const chainTextLines = wrapText(measureCtx, chainTweet.text, replyToTextWidth);
 			const chainTextHeight = calculateTextHeight(
 				chainTextLines,
 				REPLY_FONT_SIZE_TEXT,
 				LAYOUT.LINE_HEIGHT,
-				LAYOUT.PARAGRAPH_GAP
+				LAYOUT.PARAGRAPH_GAP,
 			);
 
 			const chainMedia = getFirstMedia(chainTweet.media);
-			const { height: chainMediaHeight, isVideo: chainMediaIsVideo } =
-				calculateMediaHeight(chainMedia, replyToTextWidth);
+			const { height: chainMediaHeight, isVideo: chainMediaIsVideo } = calculateMediaHeight(
+				chainMedia,
+				replyToTextWidth,
+			);
 
 			let chainQuoteLayout: TweetLayout["quote"] = null;
 			if (chainTweet.quote) {
@@ -343,40 +340,34 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 				const chainQuoteTextLines = wrapText(
 					measureCtx,
 					chainTweet.quote.text,
-					chainQuoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP
+					chainQuoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP,
 				);
 				const chainQuoteTextHeight = calculateTextHeight(
 					chainQuoteTextLines,
 					QUOTE_FONT_SIZE_TEXT,
 					LAYOUT.LINE_HEIGHT,
-					LAYOUT.PARAGRAPH_GAP
+					LAYOUT.PARAGRAPH_GAP,
 				);
 
 				const chainQuoteMedia = getFirstMedia(chainTweet.quote.media);
-				const {
-					height: chainQuoteMediaHeight,
-					isVideo: chainQuoteMediaIsVideo,
-				} = calculateMediaHeight(chainQuoteMedia, chainQuoteContentWidth);
+				const { height: chainQuoteMediaHeight, isVideo: chainQuoteMediaIsVideo } =
+					calculateMediaHeight(chainQuoteMedia, chainQuoteContentWidth);
 
 				const chainQuoteArticleLayout = calculateArticleLayout(
 					measureCtx,
 					chainTweet.quote.article,
 					chainQuoteContentWidth,
-					fontFamily
+					fontFamily,
 				);
 
 				const chainQuoteHeight = Math.floor(
 					QUOTE_PADDING * 2 +
 						Math.max(
 							QUOTE_AVATAR_SIZE,
-							QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + chainQuoteTextHeight
+							QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + chainQuoteTextHeight,
 						) +
-						(chainQuoteMediaHeight > 0
-							? LAYOUT.AVATAR_GAP + chainQuoteMediaHeight
-							: 0) +
-						(chainQuoteArticleLayout
-							? LAYOUT.AVATAR_GAP + chainQuoteArticleLayout.height
-							: 0)
+						(chainQuoteMediaHeight > 0 ? LAYOUT.AVATAR_GAP + chainQuoteMediaHeight : 0) +
+						(chainQuoteArticleLayout ? LAYOUT.AVATAR_GAP + chainQuoteArticleLayout.height : 0),
 				);
 
 				chainQuoteLayout = {
@@ -395,19 +386,13 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 					LAYOUT.AVATAR_GAP +
 					Math.max(
 						0,
-						chainTextHeight -
-							REPLY_AVATAR_SIZE +
-							REPLY_FONT_SIZE_NAME +
-							LAYOUT.TEXT_GAP
+						chainTextHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + LAYOUT.TEXT_GAP,
 					) +
-					(chainMediaHeight > 0
-						? LAYOUT.AVATAR_GAP + chainMediaHeight + LAYOUT.MEDIA_GAP
-						: 0) +
+					(chainMediaHeight > 0 ? LAYOUT.AVATAR_GAP + chainMediaHeight + LAYOUT.MEDIA_GAP : 0) +
 					(chainQuoteLayout
-						? (chainMediaHeight > 0 ? 0 : LAYOUT.AVATAR_GAP) +
-							chainQuoteLayout.height
+						? (chainMediaHeight > 0 ? 0 : LAYOUT.AVATAR_GAP) + chainQuoteLayout.height
 						: 0) +
-					LAYOUT.AVATAR_GAP
+					LAYOUT.AVATAR_GAP,
 			);
 
 			replyChainItems.push({
@@ -434,15 +419,9 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 		headerHeight +
 		LAYOUT.AVATAR_GAP +
 		mainTextHeight +
-		(mainMediaHeight > 0
-			? LAYOUT.AVATAR_GAP + mainMediaHeight + mediaGapAfter
-			: 0) +
-		(mainArticleLayout
-			? LAYOUT.AVATAR_GAP + mainArticleLayout.height + mediaGapAfter
-			: 0) +
-		(quoteLayout
-			? (hasMainMediaOrArticle ? 0 : LAYOUT.AVATAR_GAP) + quoteLayout.height
-			: 0) +
+		(mainMediaHeight > 0 ? LAYOUT.AVATAR_GAP + mainMediaHeight + mediaGapAfter : 0) +
+		(mainArticleLayout ? LAYOUT.AVATAR_GAP + mainArticleLayout.height + mediaGapAfter : 0) +
+		(quoteLayout ? (hasMainMediaOrArticle ? 0 : LAYOUT.AVATAR_GAP) + quoteLayout.height : 0) +
 		LAYOUT.AVATAR_GAP +
 		statsHeight +
 		LAYOUT.PADDING;
@@ -478,16 +457,8 @@ interface DrawReplyChainParams {
 }
 
 async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
-	const {
-		ctx,
-		items,
-		hasMoreInChain,
-		startY,
-		colors,
-		fontFamily,
-		replyToTextX,
-		replyToTextWidth,
-	} = params;
+	const { ctx, items, hasMoreInChain, startY, colors, fontFamily, replyToTextX, replyToTextWidth } =
+		params;
 
 	let yOffset = startY;
 	const replyAvatarCenterX = LAYOUT.PADDING + REPLY_AVATAR_SIZE / 2;
@@ -501,7 +472,7 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 				yOffset + 12 + (i - 1) * (DOT_SIZE + DOT_GAP),
 				DOT_SIZE / 2,
 				0,
-				Math.PI * 2
+				Math.PI * 2,
 			);
 			ctx.fill();
 		}
@@ -546,8 +517,7 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 		let mediaEndY = replyTextY;
 		const chainMedia = getFirstMedia(item.tweet.media);
 		if (chainMedia && item.mediaHeight > 0) {
-			const chainImageUrl =
-				chainMedia.type === "photo" ? chainMedia.url : chainMedia.thumbnailUrl;
+			const chainImageUrl = chainMedia.type === "photo" ? chainMedia.url : chainMedia.thumbnailUrl;
 			await drawMediaBlock({
 				ctx,
 				imageUrl: chainImageUrl,
@@ -583,9 +553,7 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 		const lineMargin = 4;
 		const lineStartY = yOffset + REPLY_AVATAR_SIZE + lineMargin;
 		const bottomGap =
-			item.quoteLayout || item.mediaHeight > 0
-				? LAYOUT.MEDIA_GAP
-				: LAYOUT.AVATAR_GAP;
+			item.quoteLayout || item.mediaHeight > 0 ? LAYOUT.MEDIA_GAP : LAYOUT.AVATAR_GAP;
 		const lineEndY = yOffset + item.height - bottomGap / 2;
 
 		ctx.strokeStyle = colors.border;
@@ -612,8 +580,7 @@ interface DrawArticleBlockParams {
 }
 
 async function drawArticleBlock(params: DrawArticleBlockParams): Promise<void> {
-	const { ctx, articleLayout, x, y, containerWidth, colors, fontFamily } =
-		params;
+	const { ctx, articleLayout, x, y, containerWidth, colors, fontFamily } = params;
 
 	ctx.strokeStyle = colors.border;
 	ctx.lineWidth = ARTICLE_BORDER_WIDTH;
@@ -688,8 +655,7 @@ interface DrawQuoteTweetParams {
 }
 
 async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
-	const { ctx, quote, quoteLayout, x, y, contentWidth, colors, fontFamily } =
-		params;
+	const { ctx, quote, quoteLayout, x, y, contentWidth, colors, fontFamily } = params;
 
 	ctx.strokeStyle = colors.border;
 	ctx.lineWidth = QUOTE_BORDER_WIDTH;
@@ -743,8 +709,7 @@ async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
 
 	const quoteMedia = getFirstMedia(quote.media);
 	if (quoteMedia && quoteLayout.mediaHeight > 0) {
-		const quoteImageUrl =
-			quoteMedia.type === "photo" ? quoteMedia.url : quoteMedia.thumbnailUrl;
+		const quoteImageUrl = quoteMedia.type === "photo" ? quoteMedia.url : quoteMedia.thumbnailUrl;
 		await drawMediaBlock({
 			ctx,
 			imageUrl: quoteImageUrl,
@@ -830,10 +795,7 @@ function drawStats(params: DrawStatsParams): void {
 	ctx.fillText(stats.join("  ·  "), LAYOUT.PADDING, y + LAYOUT.FONT_SIZE_STATS);
 }
 
-export async function renderTweetImage(
-	tweet: TweetData,
-	theme: Theme
-): Promise<RenderResult> {
+export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<RenderResult> {
 	registerFonts();
 
 	const colors = themes[theme];
@@ -843,8 +805,7 @@ export async function renderTweetImage(
 
 	const mainMedia = getFirstMedia(tweet.media);
 	const replyToTextX = LAYOUT.PADDING + REPLY_AVATAR_SIZE + LAYOUT.AVATAR_GAP;
-	const replyToTextWidth =
-		layout.contentWidth - REPLY_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
+	const replyToTextWidth = layout.contentWidth - REPLY_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
 
 	const headerHeight = LAYOUT.AVATAR_SIZE;
 	const mediaGapAfter = LAYOUT.MEDIA_GAP_BOTTOM;
@@ -888,11 +849,7 @@ export async function renderTweetImage(
 
 	ctx.fillStyle = colors.secondaryText;
 	ctx.font = `${LAYOUT.FONT_SIZE_USERNAME}px ${fontFamily}`;
-	ctx.fillText(
-		`@${tweet.authorUsername}`,
-		layout.textX,
-		yOffset + LAYOUT.USERNAME_OFFSET_Y
-	);
+	ctx.fillText(`@${tweet.authorUsername}`, layout.textX, yOffset + LAYOUT.USERNAME_OFFSET_Y);
 
 	yOffset += headerHeight + LAYOUT.AVATAR_GAP;
 
@@ -911,8 +868,7 @@ export async function renderTweetImage(
 	if (mainMedia && layout.mainTweet.mediaHeight > 0) {
 		yOffset += LAYOUT.AVATAR_GAP;
 
-		const imageUrl =
-			mainMedia.type === "photo" ? mainMedia.url : mainMedia.thumbnailUrl;
+		const imageUrl = mainMedia.type === "photo" ? mainMedia.url : mainMedia.thumbnailUrl;
 		await drawMediaBlock({
 			ctx,
 			imageUrl,
@@ -973,7 +929,7 @@ export async function renderTweetImage(
 
 	logger.debug(
 		{ width: LAYOUT.WIDTH, height: layout.totalHeight, size: buffer.length },
-		"Rendered tweet image"
+		"Rendered tweet image",
 	);
 
 	return {

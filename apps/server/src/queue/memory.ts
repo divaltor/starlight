@@ -40,8 +40,7 @@ interface ChatMemoryJobData {
 	triggerMessageId: number;
 }
 
-type ChatMemoryScopeValue =
-	(typeof ChatMemoryScope)[keyof typeof ChatMemoryScope];
+type ChatMemoryScopeValue = (typeof ChatMemoryScope)[keyof typeof ChatMemoryScope];
 
 const memoryMessageSelect = {
 	attachments: {
@@ -98,7 +97,7 @@ function normalizeMessageContent(content: string): string {
 
 function formatWindowMessage(
 	entry: MemoryWindowMessage,
-	scope: ChatMemoryScopeValue
+	scope: ChatMemoryScopeValue,
 ): string | null {
 	const rawContent = (entry.text ?? entry.caption)?.trim();
 	const hasText = Boolean(rawContent && rawContent.length > 0);
@@ -109,7 +108,7 @@ function formatWindowMessage(
 		body = normalizeMessageContent(rawContent ?? "");
 	} else if (entry.attachments.length > 0) {
 		const labels = entry.attachments.map((attachment) =>
-			attachmentLabelFromMimeType(attachment.mimeType)
+			attachmentLabelFromMimeType(attachment.mimeType),
 		);
 		body = `[sent ${labels.join(", ")}]`;
 	}
@@ -120,16 +119,12 @@ function formatWindowMessage(
 
 	const sender = formatSenderName(entry);
 	const senderLabel =
-		entry.fromUsername && entry.fromFirstName
-			? `${sender} (${entry.fromFirstName})`
-			: sender;
+		entry.fromUsername && entry.fromFirstName ? `${sender} (${entry.fromFirstName})` : sender;
 	const parts = [`#${entry.messageId}`, senderLabel];
 
 	if (scope === ChatMemoryScope.global) {
 		const topicLabel =
-			entry.messageThreadId === null
-				? "main-topic"
-				: `topic-${entry.messageThreadId}`;
+			entry.messageThreadId === null ? "main-topic" : `topic-${entry.messageThreadId}`;
 		parts.push(`(${topicLabel})`);
 	}
 
@@ -140,10 +135,7 @@ function formatWindowMessage(
 	return `${parts.join(" ")}: ${body}`;
 }
 
-function buildTranscript(
-	entries: MemoryWindowMessage[],
-	scope: ChatMemoryScopeValue
-): string {
+function buildTranscript(entries: MemoryWindowMessage[], scope: ChatMemoryScopeValue): string {
 	const lines = entries
 		.map((entry) => formatWindowMessage(entry, scope))
 		.filter((line): line is string => line !== null);
@@ -159,19 +151,14 @@ function normalizeModelOutput(text: string): string {
 	return text.replace(/```(?:json|text|markdown|md)?/gi, "").trim();
 }
 
-function memoryScopeWindowSize(
-	scope: ChatMemoryScopeValue,
-	settings: ChatMemorySettings
-): number {
+function memoryScopeWindowSize(scope: ChatMemoryScopeValue, settings: ChatMemorySettings): number {
 	return scope === ChatMemoryScope.topic
 		? settings.topicEveryMessages
 		: settings.globalEveryMessages;
 }
 
 function memorySystemPrompt(scope: ChatMemoryScopeValue): string {
-	return scope === ChatMemoryScope.topic
-		? TOPIC_MEMORY_SYSTEM_PROMPT
-		: GLOBAL_MEMORY_SYSTEM_PROMPT;
+	return scope === ChatMemoryScope.topic ? TOPIC_MEMORY_SYSTEM_PROMPT : GLOBAL_MEMORY_SYSTEM_PROMPT;
 }
 
 function isKnownDuplicateJobError(error: unknown): boolean {
@@ -183,11 +170,7 @@ function isKnownDuplicateJobError(error: unknown): boolean {
 	return message.includes("job") && message.includes("exists");
 }
 
-async function addMemoryJob(
-	jobName: string,
-	jobData: ChatMemoryJobData,
-	jobId: string
-) {
+async function addMemoryJob(jobName: string, jobData: ChatMemoryJobData, jobId: string) {
 	try {
 		await memoryQueue.add(jobName, jobData, {
 			jobId,
@@ -222,7 +205,7 @@ export async function scheduleChatMemorySummaries(params: {
 				threadKey,
 				triggerMessageId: params.messageId,
 			},
-			`memory-topic-${chatId}-${threadKey}`
+			`memory-topic-${chatId}-${threadKey}`,
 		),
 		addMemoryJob(
 			"global",
@@ -232,7 +215,7 @@ export async function scheduleChatMemorySummaries(params: {
 				threadKey: 0,
 				triggerMessageId: params.messageId,
 			},
-			`memory-global-${chatId}`
+			`memory-global-${chatId}`,
 		),
 	]);
 }
@@ -255,8 +238,7 @@ async function summarizeWindow(params: {
 	let scopeLabel = "all-topics";
 
 	if (params.scope === ChatMemoryScope.topic) {
-		scopeLabel =
-			params.threadKey === 0 ? "main-topic" : `topic-${params.threadKey}`;
+		scopeLabel = params.threadKey === 0 ? "main-topic" : `topic-${params.threadKey}`;
 	}
 
 	const userPrompt = [
@@ -331,11 +313,7 @@ async function processWindow(params: {
 						messageThreadId: params.threadKey === 0 ? null : params.threadKey,
 					}
 				: {}),
-			OR: [
-				{ text: { not: null } },
-				{ caption: { not: null } },
-				{ attachments: { some: {} } },
-			],
+			OR: [{ text: { not: null } }, { caption: { not: null } }, { attachments: { some: {} } }],
 		},
 		select: memoryMessageSelect,
 		orderBy: {
@@ -430,7 +408,7 @@ async function processWindow(params: {
 			threadKey: params.threadKey,
 			windowSize,
 		},
-		"Generated chat memory note"
+		"Generated chat memory note",
 	);
 
 	return true;
@@ -445,8 +423,7 @@ export const memoryWorker = new Worker<ChatMemoryJobData>(
 		}
 
 		const chatId = BigInt(job.data.chatId);
-		const threadKey =
-			job.data.scope === ChatMemoryScope.topic ? job.data.threadKey : 0;
+		const threadKey = job.data.scope === ChatMemoryScope.topic ? job.data.threadKey : 0;
 
 		const chat = await prisma.chat.findUnique({
 			where: {
@@ -518,7 +495,7 @@ export const memoryWorker = new Worker<ChatMemoryJobData>(
 				threadKey,
 				triggerMessageId: job.data.triggerMessageId,
 			},
-			"Processed chat memory job"
+			"Processed chat memory job",
 		);
 	},
 	{
@@ -526,7 +503,7 @@ export const memoryWorker = new Worker<ChatMemoryJobData>(
 		concurrency: 2,
 		autorun: false,
 		lockDuration: 1000 * 60 * 5,
-	}
+	},
 );
 
 memoryWorker.on("failed", (job) => {
@@ -539,7 +516,7 @@ memoryWorker.on("failed", (job) => {
 			stack: job?.stacktrace,
 			threadKey: job?.data?.threadKey,
 		},
-		"Chat memory job failed"
+		"Chat memory job failed",
 	);
 });
 

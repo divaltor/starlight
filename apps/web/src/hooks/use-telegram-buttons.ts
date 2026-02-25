@@ -1,16 +1,7 @@
 import { useRouter } from "@tanstack/react-router";
-import {
-	backButton,
-	mainButton,
-	secondaryButton,
-	settingsButton,
-} from "@telegram-apps/sdk-react";
+import { backButton, mainButton, secondaryButton, settingsButton } from "@telegram-apps/sdk-react";
 import { useCallback, useEffect, useRef } from "react";
-import type {
-	ButtonAction,
-	ButtonState,
-	RouteButtonConfig,
-} from "@/types/telegram-buttons";
+import type { ButtonAction, ButtonState, RouteButtonConfig } from "@/types/telegram-buttons";
 
 interface ButtonManager {
 	getButtonState: (buttonType: keyof RouteButtonConfig) => ButtonState;
@@ -25,7 +16,7 @@ interface UseTelegramButtonsOptions {
 
 export function useTelegramButtons(
 	initialConfig?: RouteButtonConfig,
-	options?: UseTelegramButtonsOptions
+	options?: UseTelegramButtonsOptions,
 ): ButtonManager {
 	const router = useRouter();
 	const configRef = useRef<RouteButtonConfig>(initialConfig || {});
@@ -55,7 +46,7 @@ export function useTelegramButtons(
 				console.error(`Error executing ${buttonType} action:`, error);
 			}
 		},
-		[router]
+		[router],
 	);
 
 	// Core button update logic
@@ -70,8 +61,7 @@ export function useTelegramButtons(
 
 			// Main Button Logic
 			if (config.mainButton) {
-				const { state, text, action, condition, isLoading, hasShineEffect } =
-					config.mainButton;
+				const { state, text, action, condition, isLoading, hasShineEffect } = config.mainButton;
 
 				const shouldShow = condition ? condition() : state === "visible";
 
@@ -168,7 +158,7 @@ export function useTelegramButtons(
 				backButton.hide.ifAvailable();
 			}
 		},
-		[executeButtonAction]
+		[executeButtonAction],
 	);
 
 	// Debounced config updates
@@ -182,7 +172,7 @@ export function useTelegramButtons(
 				updateButtonsInternal(config);
 			}, options?.debounceMs || 100);
 		},
-		[options?.debounceMs, updateButtonsInternal]
+		[options?.debounceMs, updateButtonsInternal],
 	);
 
 	// Public API
@@ -191,7 +181,7 @@ export function useTelegramButtons(
 			configRef.current = { ...configRef.current, ...newConfig };
 			debouncedUpdateButtons(configRef.current);
 		},
-		[debouncedUpdateButtons]
+		[debouncedUpdateButtons],
 	);
 
 	const resetToDefaults = useCallback(() => {
@@ -199,13 +189,10 @@ export function useTelegramButtons(
 		debouncedUpdateButtons({});
 	}, [debouncedUpdateButtons]);
 
-	const getButtonState = useCallback(
-		(buttonType: keyof RouteButtonConfig): ButtonState => {
-			const buttonConfig = configRef.current[buttonType];
-			return buttonConfig?.state || "hidden";
-		},
-		[]
-	);
+	const getButtonState = useCallback((buttonType: keyof RouteButtonConfig): ButtonState => {
+		const buttonConfig = configRef.current[buttonType];
+		return buttonConfig?.state || "hidden";
+	}, []);
 
 	// Initialize on mount
 	useEffect(() => {

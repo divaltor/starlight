@@ -3,10 +3,7 @@ import type { NextFunction } from "grammy";
 import type { Message } from "grammy/types";
 import { scheduleChatMemorySummaries } from "@/queue/memory";
 import type { Context } from "@/types";
-import {
-	prepareMessageAttachments,
-	type StoredMessageAttachment,
-} from "@/utils/attachment";
+import { prepareMessageAttachments, type StoredMessageAttachment } from "@/utils/attachment";
 
 function detectMediaType(msg: Message): string | null {
 	if (msg.photo) return "photo";
@@ -46,9 +43,7 @@ function buildMessageData(chatId: bigint, msg: Message) {
 	};
 }
 
-async function syncUserFromMessage(
-	msg: Message
-): Promise<{ isBot: boolean } | null> {
+async function syncUserFromMessage(msg: Message): Promise<{ isBot: boolean } | null> {
 	if (!msg.from) {
 		return null;
 	}
@@ -81,16 +76,11 @@ export async function upsertStoredMessage(
 	msg: Message,
 	options?: {
 		scheduleMemory?: boolean;
-	}
+	},
 ): Promise<StoredMessageAttachment[]> {
 	const parsedChatId = BigInt(msg.chat.id);
 	const data = buildMessageData(parsedChatId, msg);
-	const attachments = await prepareMessageAttachments(
-		parsedChatId,
-		msg,
-		ctx.api,
-		ctx.logger
-	);
+	const attachments = await prepareMessageAttachments(parsedChatId, msg, ctx.api, ctx.logger);
 
 	await prisma.$transaction(async (tx) => {
 		await tx.message.upsert({
@@ -138,7 +128,7 @@ export async function upsertStoredMessage(
 					error,
 					messageId: msg.message_id,
 				},
-				"Failed to schedule chat memory jobs"
+				"Failed to schedule chat memory jobs",
 			);
 		}
 	}
@@ -156,13 +146,11 @@ export async function storeMessage(ctx: Context, next: NextFunction) {
 	const msg = ctx.message;
 
 	const currentMessageAttachments = await upsertStoredMessage(ctx, msg);
-	ctx.currentMessageAttachments = currentMessageAttachments.map(
-		(attachment) => ({
-			base64Data: attachment.base64Data,
-			mimeType: attachment.mimeType,
-			s3Path: attachment.s3Path,
-		})
-	);
+	ctx.currentMessageAttachments = currentMessageAttachments.map((attachment) => ({
+		base64Data: attachment.base64Data,
+		mimeType: attachment.mimeType,
+		s3Path: attachment.s3Path,
+	}));
 
 	const repliedMessage = msg.reply_to_message;
 	if (repliedMessage) {
@@ -174,10 +162,7 @@ export async function storeMessage(ctx: Context, next: NextFunction) {
 		}
 	}
 
-	ctx.logger.debug(
-		{ messageId: msg.message_id, chatId: ctx.chat.id },
-		"Stored chat message"
-	);
+	ctx.logger.debug({ messageId: msg.message_id, chatId: ctx.chat.id }, "Stored chat message");
 
 	await next();
 }

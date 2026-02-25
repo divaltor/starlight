@@ -19,7 +19,7 @@ export const searchImages = maybeAuthProcedure
 			cursor: z.string().optional(),
 			limit: z.number().min(1).max(100).default(30),
 			ownOnly: z.boolean().optional().default(false),
-		})
+		}),
 	)
 	.handler(async ({ input, context }) => {
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
@@ -68,21 +68,18 @@ export const searchImages = maybeAuthProcedure
 		if (memberExists) {
 			text = decoder.decode(memberExists) as number[];
 		} else {
-			const response = await fetch(
-				new URL("/v1/embeddings", env.ML_BASE_URL).toString(),
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						"X-API-Token": env.ML_API_TOKEN,
-						"X-Request-Id": context.requestId,
-					},
-					body: JSON.stringify({
-						tags: query,
-						encoding_mode: "retrieval.query",
-					}),
-				}
-			);
+			const response = await fetch(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"X-API-Token": env.ML_API_TOKEN,
+					"X-Request-Id": context.requestId,
+				},
+				body: JSON.stringify({
+					tags: query,
+					encoding_mode: "retrieval.query",
+				}),
+			});
 
 			if (!response.ok) {
 				throw new ORPCError("Failed to search images", {
@@ -97,11 +94,7 @@ export const searchImages = maybeAuthProcedure
 			text = data.text;
 
 			try {
-				await redis.setex(
-					ttlKey,
-					60 * 60 * 24 * 7,
-					Buffer.from(encoder.encode(text))
-				);
+				await redis.setex(ttlKey, 60 * 60 * 24 * 7, Buffer.from(encoder.encode(text)));
 			} catch {
 				// Redis unavailable, skip caching
 			}
@@ -119,9 +112,7 @@ export const searchImages = maybeAuthProcedure
 			}
 		}
 
-		const queryTime = cursorData?.queryTime
-			? `'${cursorData.queryTime}'::timestamptz`
-			: "NOW()";
+		const queryTime = cursorData?.queryTime ? `'${cursorData.queryTime}'::timestamptz` : "NOW()";
 
 		const whereClause = cursorData
 			? `WHERE final_score < ${cursorData.lastScore} OR (final_score = ${cursorData.lastScore} AND photo_id < '${cursorData.lastPhotoId}')`

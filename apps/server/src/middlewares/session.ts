@@ -62,10 +62,7 @@ export async function attachChat(ctx: Context, next: NextFunction) {
 					ctx.api.getFile(fullChatInfo.photo.big_file_id),
 				]);
 
-				const [bigFile, thumbnailFile] = await Promise.all([
-					big.download(),
-					thumbnail.download(),
-				]);
+				const [bigFile, thumbnailFile] = await Promise.all([big.download(), thumbnail.download()]);
 
 				const chatUniqueId = toUniqueId(ctx.chat.id);
 				const bigPath = `chats/${chatUniqueId}/big.jpg`;
@@ -82,10 +79,7 @@ export async function attachChat(ctx: Context, next: NextFunction) {
 				};
 			}
 		} catch (error) {
-			ctx.logger.warn(
-				{ error, chatId: ctx.chat.id },
-				"Failed to save chat photo."
-			);
+			ctx.logger.warn({ error, chatId: ctx.chat.id }, "Failed to save chat photo.");
 		}
 	}
 
@@ -143,10 +137,7 @@ export async function attachChatMember(ctx: Context, next: NextFunction) {
 			return await next();
 		}
 
-		const telegramMember = await ctx.api.getChatMember(
-			ctx.chat.id,
-			ctx.from.id
-		);
+		const telegramMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
 
 		ctx.userChatMember = await prisma.chatMember.upsert({
 			where: {
@@ -171,7 +162,7 @@ export async function attachChatMember(ctx: Context, next: NextFunction) {
 				chatId: ctx.chat.id,
 				userId: ctx.from.id,
 			},
-			"Failed to attach chat member."
+			"Failed to attach chat member.",
 		);
 	}
 

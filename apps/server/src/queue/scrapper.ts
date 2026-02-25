@@ -1,11 +1,7 @@
 import { CookieEncryption } from "@starlight/crypto";
 import type { User } from "@starlight/utils";
 import { env, getRandomProxy, prisma } from "@starlight/utils";
-import {
-	type QueryTweetsResponse,
-	Scraper,
-	type Tweet,
-} from "@the-convocation/twitter-scraper";
+import { type QueryTweetsResponse, Scraper, type Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import UserAgent from "user-agents";
 import { bot } from "@/bot";
@@ -15,7 +11,7 @@ import { Cookies, redis } from "@/storage";
 
 const cookieEncryption = new CookieEncryption(
 	env.COOKIE_ENCRYPTION_KEY,
-	env.COOKIE_ENCRYPTION_SALT
+	env.COOKIE_ENCRYPTION_SALT,
 );
 
 export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
@@ -47,7 +43,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			{ userId, jobData: job.data },
 			"Scraping timeline for user %s, page %s",
 			userId,
-			job.data.cursor
+			job.data.cursor,
 		);
 
 		let user: User;
@@ -74,14 +70,10 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 				logger.error({ userId, error }, "Failed to remove job scheduler");
 			}
 
-			await bot.api.sendPhoto(
-				user.telegramId.toString(),
-				`${env.BASE_CDN_URL}/moom.jpg`,
-				{
-					caption:
-						"Can't scrape your timeline, no cookies?. Please setup your them in settings again and send /scrapper command again.",
-				}
-			);
+			await bot.api.sendPhoto(user.telegramId.toString(), `${env.BASE_CDN_URL}/moom.jpg`, {
+				caption:
+					"Can't scrape your timeline, no cookies?. Please setup your them in settings again and send /scrapper command again.",
+			});
 
 			return;
 		}
@@ -89,10 +81,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		// Decrypt cookies with migration support
 		let cookiesJson: string;
 		try {
-			cookiesJson = cookieEncryption.safeDecrypt(
-				userCookies,
-				user.telegramId.toString()
-			);
+			cookiesJson = cookieEncryption.safeDecrypt(userCookies, user.telegramId.toString());
 		} catch (error) {
 			logger.error({ userId, error }, "Failed to decrypt user cookies");
 			throw new Error("Failed to decrypt user cookies");
@@ -130,7 +119,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 					error: String(error),
 				},
 				"Unable to fetch timeline for user %s",
-				userId
+				userId,
 			);
 
 			throw error;
@@ -144,15 +133,13 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			},
 			"Scraped timeline for user %s, page %s",
 			userId,
-			job.data.cursor
+			job.data.cursor,
 		);
 
 		const CONSECUTIVE_THRESHOLD = 15;
 
 		// Step 1: Batch check existing tweets
-		const tweetIds = timeline.tweets
-			.map((tweet) => tweet.id)
-			.filter((id) => id !== undefined);
+		const tweetIds = timeline.tweets.map((tweet) => tweet.id).filter((id) => id !== undefined);
 
 		const existingTweetMap = new Map(
 			(
@@ -164,7 +151,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 					},
 					select: { id: true, createdAt: true },
 				})
-			).map((tweet) => [tweet.id, tweet.createdAt])
+			).map((tweet) => [tweet.id, tweet.createdAt]),
 		);
 
 		// Step 2: Process tweets and build batch operations
@@ -226,7 +213,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 						totalProcessed: timeline.tweets.indexOf(tweet) + 1,
 					},
 					"Stopping scrape: found %d consecutive known tweets",
-					consecutiveKnownTweets
+					consecutiveKnownTweets,
 				);
 				break;
 			}
@@ -249,8 +236,8 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 						tx.tweet.update({
 							where: { tweetId: { userId, id: tweet.id } },
 							data: { tweetData: tweet.tweetData },
-						})
-					)
+						}),
+					),
 				);
 			}
 		});
@@ -287,7 +274,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 					force: job.data.force,
 					reason,
 				},
-				"Stopping scrape job"
+				"Stopping scrape job",
 			);
 			return;
 		}
@@ -306,19 +293,16 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 				deduplication: {
 					id: `scrapper-${userId}-${timeline.next}`,
 				},
-			}
+			},
 		);
 
-		logger.info(
-			{ userId, count: job.data.count, limit: job.data.limit },
-			"Scraping next page"
-		);
+		logger.info({ userId, count: job.data.count, limit: job.data.limit }, "Scraping next page");
 	},
 	{
 		connection: redis,
 		concurrency: 1,
 		autorun: false,
-	}
+	},
 );
 
 const scrapperEvents = new QueueEvents("feed-scrapper", {

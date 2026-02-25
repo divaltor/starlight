@@ -6,11 +6,7 @@ import { Bot, InlineKeyboard } from "grammy";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
 import { storeMessage } from "@/middlewares/message";
-import {
-	attachChat,
-	attachChatMember,
-	attachUser,
-} from "@/middlewares/session";
+import { attachChat, attachChatMember, attachUser } from "@/middlewares/session";
 // biome-ignore lint/style/noExportedImports: Don't care
 import type { Context } from "@/types";
 
@@ -35,7 +31,7 @@ bot.api.config.use(
 	autoRetry({
 		maxRetryAttempts: 3,
 		maxDelaySeconds: 5,
-	})
+	}),
 );
 bot.api.config.use(hydrateFiles(bot.token));
 bot.use(attachUser);

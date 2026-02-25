@@ -1,28 +1,15 @@
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import {
-	Button,
-	Menu,
-	MenuItem,
-	MenuSection,
-	MenuTrigger,
-	Popover,
-} from "react-aria-components";
+import { Button, Menu, MenuItem, MenuSection, MenuTrigger, Popover } from "react-aria-components";
 
 import { cn } from "@/lib/utils";
 
-function DropdownMenu({
-	children,
-	...props
-}: React.ComponentProps<typeof MenuTrigger>) {
+function DropdownMenu({ children, ...props }: React.ComponentProps<typeof MenuTrigger>) {
 	return <MenuTrigger {...props}>{children}</MenuTrigger>;
 }
 
-function DropdownMenuPortal({
-	children,
-	...props
-}: React.ComponentProps<"div">) {
+function DropdownMenuPortal({ children, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div data-slot="dropdown-menu-portal" {...props}>
 			{children}
@@ -30,10 +17,7 @@ function DropdownMenuPortal({
 	);
 }
 
-function DropdownMenuTrigger({
-	children,
-	...props
-}: React.ComponentProps<typeof Button>) {
+function DropdownMenuTrigger({ children, ...props }: React.ComponentProps<typeof Button>) {
 	return (
 		<Button data-slot="dropdown-menu-trigger" {...props}>
 			{children}
@@ -50,7 +34,7 @@ function DropdownMenuContent({
 		<Popover
 			className={cn(
 				"dropdown-content z-[1] w-52 rounded-box bg-base-100 p-2 shadow transition-all duration-200 ease-in-out data-[state=open]:visible data-[state=closed]:invisible data-[state=closed]:scale-95 data-[state=open]:scale-100 data-[state=closed]:opacity-0 data-[state=open]:opacity-100",
-				className
+				className,
 			)}
 			{...props}
 		>
@@ -59,9 +43,7 @@ function DropdownMenuContent({
 	);
 }
 
-function DropdownMenuGroup({
-	...props
-}: React.ComponentProps<typeof MenuSection>) {
+function DropdownMenuGroup({ ...props }: React.ComponentProps<typeof MenuSection>) {
 	return <MenuSection data-slot="dropdown-menu-group" {...props} />;
 }
 
@@ -78,7 +60,7 @@ function DropdownMenuItem({
 		<MenuItem
 			className={cn(
 				"relative flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none focus:bg-base-200 focus:text-base-content data-[disabled]:pointer-events-none data-[inset]:pl-8 data-[variant=destructive]:text-error data-[disabled]:opacity-50 data-[variant=destructive]:focus:bg-error/10 data-[variant=destructive]:focus:text-error [&_svg:not([class*='text-'])]:text-base-content/60 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-				className
+				className,
 			)}
 			data-inset={inset}
 			data-slot="dropdown-menu-item"
@@ -93,14 +75,12 @@ function DropdownMenuCheckboxItem({
 	children,
 	checked,
 	...props
-}: { children: ReactNode; checked?: boolean } & React.ComponentProps<
-	typeof MenuItem
->) {
+}: { children: ReactNode; checked?: boolean } & React.ComponentProps<typeof MenuItem>) {
 	return (
 		<MenuItem
 			className={cn(
 				"relative flex cursor-default select-none items-center gap-2 rounded-md py-1.5 pr-2 pl-8 text-sm outline-none focus:bg-base-200 focus:text-base-content data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-				className
+				className,
 			)}
 			data-slot="dropdown-menu-checkbox-item"
 			{...props}
@@ -134,7 +114,7 @@ function DropdownMenuRadioItem({
 		<MenuItem
 			className={cn(
 				"relative flex cursor-default select-none items-center gap-2 rounded-md py-1.5 pr-2 pl-8 text-sm outline-none focus:bg-base-200 focus:text-base-content data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-				className
+				className,
 			)}
 			data-slot="dropdown-menu-radio-item"
 			onAction={() => setSelected(true)}
@@ -156,10 +136,7 @@ function DropdownMenuLabel({
 }: { children: ReactNode; inset?: boolean } & React.ComponentProps<"div">) {
 	return (
 		<div
-			className={cn(
-				"px-2 py-1.5 font-medium text-sm data-[inset]:pl-8",
-				className
-			)}
+			className={cn("px-2 py-1.5 font-medium text-sm data-[inset]:pl-8", className)}
 			data-inset={inset}
 			data-slot="dropdown-menu-label"
 			role="presentation"
@@ -170,10 +147,7 @@ function DropdownMenuLabel({
 	);
 }
 
-function DropdownMenuSeparator({
-	className,
-	...props
-}: React.ComponentProps<"hr">) {
+function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<"hr">) {
 	return (
 		<hr
 			className={cn("-mx-1 my-1 h-px bg-base-200/50", className)}
@@ -183,16 +157,10 @@ function DropdownMenuSeparator({
 	);
 }
 
-function DropdownMenuShortcut({
-	className,
-	...props
-}: React.ComponentProps<"span">) {
+function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<"span">) {
 	return (
 		<span
-			className={cn(
-				"ml-auto text-base-content/60 text-xs tracking-widest",
-				className
-			)}
+			className={cn("ml-auto text-base-content/60 text-xs tracking-widest", className)}
 			data-slot="dropdown-menu-shortcut"
 			{...props}
 		/>
@@ -208,14 +176,12 @@ function DropdownMenuSubTrigger({
 	inset,
 	children,
 	...props
-}: { children: ReactNode; inset?: boolean } & React.ComponentProps<
-	typeof MenuItem
->) {
+}: { children: ReactNode; inset?: boolean } & React.ComponentProps<typeof MenuItem>) {
 	return (
 		<MenuItem
 			className={cn(
 				"flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-sm outline-none focus:bg-base-200 focus:text-base-content data-[state=open]:bg-base-200 data-[inset]:pl-8 data-[state=open]:text-base-content",
-				className
+				className,
 			)}
 			data-inset={inset}
 			data-slot="dropdown-menu-sub-trigger"
@@ -227,15 +193,12 @@ function DropdownMenuSubTrigger({
 	);
 }
 
-function DropdownMenuSubContent({
-	className,
-	...props
-}: React.ComponentProps<typeof Popover>) {
+function DropdownMenuSubContent({ className, ...props }: React.ComponentProps<typeof Popover>) {
 	return (
 		<Popover
 			className={cn(
 				"z-50 min-w-[8rem] origin-[var(--radix-dropdown-menu-content-transform-origin)] overflow-hidden rounded-box border bg-base-100 p-1 text-base-content shadow-lg transition-all duration-200 ease-in-out data-[state=open]:visible data-[state=closed]:invisible data-[state=closed]:scale-95 data-[state=open]:scale-100 data-[state=closed]:opacity-0 data-[state=open]:opacity-100",
-				className
+				className,
 			)}
 			data-slot="dropdown-menu-sub-content"
 			{...props}

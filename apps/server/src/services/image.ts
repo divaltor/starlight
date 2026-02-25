@@ -56,7 +56,7 @@ function applyDCT(f: number[][], size: number): number[][] {
 
 export async function calculatePerceptualHash(
 	image: Parameters<typeof sharp>[0],
-	options?: SharpOptions
+	options?: SharpOptions,
 ): Promise<string> {
 	const data = await sharp(image, options)
 		.greyscale()

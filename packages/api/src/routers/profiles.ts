@@ -8,7 +8,7 @@ export const changeProfileVisibility = protectedProcedure
 	.input(
 		z.object({
 			status: z.enum(["public", "private"]),
-		})
+		}),
 	)
 	.handler(async ({ input, context }) => {
 		const userId = context.databaseUserId;
