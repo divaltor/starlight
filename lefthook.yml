@@ -1,0 +1,9 @@
+pre-commit:
+  commands:
+    oxlint:
+      glob: "*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"
+      run: bunx oxlint --fix "{staged_files}"
+      stage_fixed: true
+    oxfmt:
+      run: bunx oxfmt --no-error-on-unmatched-pattern "{staged_files}"
+      stage_fixed: true
