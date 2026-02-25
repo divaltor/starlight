@@ -6,7 +6,7 @@ const env = createEnv({
 		BOT_TOKEN: z.string(),
 		BOT_ALIASES: z
 			.string()
-			.default("starlight,звездочка,старка")
+			.default("starlight,звездочка,старка,стар")
 			.transform((value) =>
 				[...new Set(value.split(",").map((alias) => alias.trim().toLowerCase()))].filter(Boolean),
 			),
