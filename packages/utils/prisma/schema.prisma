@@ -73,9 +73,7 @@ model ChatMemoryCursor {
 
   lastMessageId Int @default(0) @map("last_message_id")
 
-  failureCount Int       @default(0) @map("failure_count")
-  lastError    String?   @db.Text @map("last_error")
-  lastErrorAt  DateTime? @map("last_error_at")
+  failureCount Int @default(0) @map("failure_count")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

@@ -239,15 +239,9 @@ export async function scheduleChatMemorySummaries(params: {
 
 async function updateCursorFailure(params: {
 	chatId: bigint;
-	error: unknown;
 	scope: ChatMemoryScopeValue;
 	threadKey: number;
 }) {
-	const errorMessage =
-		params.error instanceof Error
-			? params.error.message.slice(0, 2000)
-			: String(params.error).slice(0, 2000);
-
 	await prisma.chatMemoryCursor.upsert({
 		where: {
 			chatId_scope_threadKey: {
@@ -261,15 +255,11 @@ async function updateCursorFailure(params: {
 			scope: params.scope,
 			threadKey: params.threadKey,
 			failureCount: 1,
-			lastError: errorMessage,
-			lastErrorAt: new Date(),
 		},
 		update: {
 			failureCount: {
 				increment: 1,
 			},
-			lastError: errorMessage,
-			lastErrorAt: new Date(),
 		},
 	});
 }
@@ -454,8 +444,6 @@ async function processWindow(params: {
 			data: {
 				lastMessageId: endMessageId,
 				failureCount: 0,
-				lastError: null,
-				lastErrorAt: null,
 			},
 		});
 	});
@@ -527,7 +515,6 @@ export const memoryWorker = new Worker<ChatMemoryJobData>(
 		} catch (error) {
 			await updateCursorFailure({
 				chatId,
-				error,
 				scope: job.data.scope,
 				threadKey,
 			});
