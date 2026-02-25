@@ -237,33 +237,6 @@ export async function scheduleChatMemorySummaries(params: {
 	]);
 }
 
-async function updateCursorFailure(params: {
-	chatId: bigint;
-	scope: ChatMemoryScopeValue;
-	threadKey: number;
-}) {
-	await prisma.chatMemoryCursor.upsert({
-		where: {
-			chatId_scope_threadKey: {
-				chatId: params.chatId,
-				scope: params.scope,
-				threadKey: params.threadKey,
-			},
-		},
-		create: {
-			chatId: params.chatId,
-			scope: params.scope,
-			threadKey: params.threadKey,
-			failureCount: 1,
-		},
-		update: {
-			failureCount: {
-				increment: 1,
-			},
-		},
-	});
-}
-
 async function summarizeWindow(params: {
 	chatId: bigint;
 	endMessageId: number;
@@ -513,10 +486,25 @@ export const memoryWorker = new Worker<ChatMemoryJobData>(
 				processedWindows++;
 			}
 		} catch (error) {
-			await updateCursorFailure({
-				chatId,
-				scope: job.data.scope,
-				threadKey,
+			await prisma.chatMemoryCursor.upsert({
+				where: {
+					chatId_scope_threadKey: {
+						chatId,
+						scope: job.data.scope,
+						threadKey,
+					},
+				},
+				create: {
+					chatId,
+					scope: job.data.scope,
+					threadKey,
+					failureCount: 1,
+				},
+				update: {
+					failureCount: {
+						increment: 1,
+					},
+				},
 			});
 
 			throw error;

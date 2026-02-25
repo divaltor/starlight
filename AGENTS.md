@@ -26,5 +26,5 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 ## Maintenance & Tasks
 
 - MUST use `bun` for package management.
-- MUST use `bun run format` to apply Biome formatting for `apps/web` and `apps/server`. DON'T use `tsc` or `typecheck` or `check-types`.
+- DON'T use `tsc` or `typecheck` or `check-types`. Formatters applied automatically when you edit files via integrated Opencode\Amp plugins.
 - ALWAYS use scripts from package.json to create and apply migrations via Prisma. Never write migration files manually.
