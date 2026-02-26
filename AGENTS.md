@@ -23,6 +23,7 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 5. Run `build` script only for changes in `apps/web` package.
 6. Don't run `test` command unless you change code related to these tests.
 7. Use pre-defined types from libraries\Prisma generated files where is possible. Use Pick, Omit and other Typescript type-helpers to extract required values instead of creating own types with same information.
+8. Instead of `fetch` -> `http` from `@/starlight/utils/http` module
 
 ## Maintenance & Tasks
 
