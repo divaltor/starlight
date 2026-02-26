@@ -38,12 +38,7 @@ function extensionFromMimeType(mimeType: string, fallback: string): string {
 	}
 
 	const [, subtype] = mimeType.split("/");
-
-	if (!subtype) {
-		return fallback;
-	}
-
-	return subtype.split(";")[0]?.split("+")[0] || fallback;
+	return subtype!.split(";")[0]?.split("+")[0] || fallback;
 }
 
 async function downloadFilePayload(api: Context["api"], fileId: string): Promise<Uint8Array> {
@@ -72,11 +67,8 @@ async function preparePhotoAttachment(
 		return null;
 	}
 
-	const largestPhoto = msg.photo.at(-1);
-	if (!largestPhoto) {
-		return null;
-	}
-
+	// biome-ignore lint/style/noNonNullAssertion: photo.length > 0 guarantees .at(-1) is defined
+	const largestPhoto = msg.photo.at(-1)!;
 	const payload = await downloadFilePayload(api, largestPhoto.file_id);
 	const converted = await convertImage(payload, "jpeg", 90);
 
@@ -237,10 +229,6 @@ export async function prepareMessageAttachments(
 				"Failed to prepare message attachment",
 			);
 		}
-	}
-
-	if (preparedAttachments.length === 0) {
-		return [];
 	}
 
 	return await Promise.all(

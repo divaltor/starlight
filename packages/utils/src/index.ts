@@ -5,3 +5,19 @@ export * from "./generated/prisma/client";
 
 export { DbNull, JsonNull } from "./generated/prisma/internal/prismaNamespace";
 export * from "./twitter";
+
+export function attachmentLabelFromMimeType(mimeType: string): string {
+	if (mimeType.startsWith("image/")) {
+		return "photo";
+	}
+
+	if (mimeType.startsWith("video/")) {
+		return "video";
+	}
+
+	if (mimeType.startsWith("audio/")) {
+		return "voice message";
+	}
+
+	return "file";
+}

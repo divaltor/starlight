@@ -196,10 +196,6 @@ feature.callbackQuery(/^video:(add_desc|remove_desc):(.+)$/, async (ctx) => {
 	const action = ctx.match[1];
 	const videoId = ctx.match[2];
 
-	if (!videoId) {
-		return;
-	}
-
 	const video = await prisma.video.findUnique({
 		where: { id: videoId },
 	});

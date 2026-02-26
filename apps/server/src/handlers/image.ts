@@ -5,7 +5,6 @@ import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { RateLimiterRedis } from "rate-limiter-flexible";
 import { webAppKeyboard } from "@/bot";
 import { scrapperQueue } from "@/queue/scrapper";
-import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
 import { Cookies, redis } from "@/storage";
 import type { Context } from "@/types";
 
@@ -24,54 +23,6 @@ const cookieEncryption = new CookieEncryption(
 const composer = new Composer<Context>();
 
 const privateChat = composer.chatType("private");
-const groupChat = composer.chatType(["group", "supergroup"]);
-
-privateChat.command("find").filter(
-	(ctx) => ctx.message.reply_to_message?.photo !== undefined,
-	async (ctx) => {
-		const photoArray = ctx.message.reply_to_message?.photo;
-
-		if (!photoArray || photoArray.length === 0) {
-			await ctx.reply("Please reply to a photo with /find command.");
-			return;
-		}
-
-		// biome-ignore lint/style/noNonNullAssertion: We know photo array is not empty if it's sent
-		const largestPhoto = photoArray.at(-1)!;
-		const telegramPhoto = await ctx.api.getFile(largestPhoto.file_id);
-		const file = await telegramPhoto.download();
-
-		const similarPhotos = await findDuplicatesByImageContent(file);
-
-		ctx.logger.debug({ similarPhotos }, "Found similar photos");
-
-		if (similarPhotos.length === 0) {
-			await ctx.reply("No similar photos found, sorry 😔");
-			return;
-		}
-		if (similarPhotos.length === 1) {
-			await ctx.reply(`https://x.com/i/status/${similarPhotos[0]?.tweetId}`);
-			return;
-		}
-
-		const topMatches = similarPhotos.slice(0, 3);
-
-		let message = "Found similar photos:\n\n";
-		for (const [index, photo] of topMatches.entries()) {
-			message += `${index + 1}. Similarity: ${photo.distance}\n`;
-			message += `https://x.com/i/status/${photo.tweetId}\n\n`;
-		}
-
-		await ctx.reply(message);
-	},
-);
-
-privateChat.command("find").filter(
-	(ctx) => ctx.message.reply_to_message?.photo === undefined,
-	async (ctx) => {
-		await ctx.reply("Please reply to a photo with /find command.");
-	},
-);
 
 composer.on("inline_query").filter(
 	(ctx) => !isTwitterUrl(ctx.inlineQuery.query.trim()),
@@ -341,40 +292,6 @@ privateChat.command("scrapper").filter(
 		);
 
 		await ctx.reply("Starting to collect images, check back in a few minutes.");
-	},
-);
-
-groupChat.command("source").filter(
-	async (ctx) =>
-		ctx.message.reply_to_message === undefined || ctx.message.reply_to_message?.photo?.length === 0,
-	async (ctx) => {
-		await ctx.reply("Please, reply to a message with a photo.");
-	},
-);
-
-groupChat.command("source").filter(
-	async (ctx) => ctx.message.reply_to_message !== undefined,
-	async (ctx) => {
-		const tweet = await prisma.publishedPhoto.findFirst({
-			where: {
-				messageId: ctx.message.reply_to_message?.message_id as number,
-			},
-			include: {
-				photo: {
-					select: {
-						tweetId: true,
-					},
-				},
-			},
-		});
-
-		if (!tweet) {
-			// Impossible to happen, but just in case
-			await ctx.reply("No source found, sorry.");
-			return;
-		}
-
-		await ctx.reply(`https://x.com/i/status/${tweet.photo.tweetId}`);
 	},
 );
 

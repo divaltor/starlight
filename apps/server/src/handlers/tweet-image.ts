@@ -164,18 +164,10 @@ composer.on("inline_query").filter(
 );
 
 chats.callbackQuery(/^tweet_img:toggle:(\d+):(light|dark):(\d+)$/, async (ctx) => {
-	const match = ctx.match;
-
-	if (!match) {
-		ctx.logger.debug("Callback query without match");
-		await ctx.answerCallbackQuery();
-		return;
-	}
-
-	// biome-ignore lint/style/noNonNullAssertion: We validate it on filter level
-	const tweetId = match.at(1)!;
-	const newTheme = match.at(2) as Theme;
-	const ownerId = match.at(3);
+	// biome-ignore lint/style/noNonNullAssertion: regex callback query guarantees match groups
+	const tweetId = ctx.match.at(1)!;
+	const newTheme = ctx.match.at(2) as Theme;
+	const ownerId = ctx.match.at(3);
 
 	if (ctx.from.id !== Number(ownerId)) {
 		await ctx.answerCallbackQuery({

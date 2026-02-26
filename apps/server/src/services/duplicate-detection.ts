@@ -61,17 +61,13 @@ export async function findSimilarPhotos(
 			const similarPhotos: SimilarPhoto[] = [];
 
 			for (const candidate of candidates) {
-				if (!candidate.perceptualHash) {
-					continue;
-				}
-
-				const distance = calculateHashDistance(targetHash, candidate.perceptualHash);
+				const distance = calculateHashDistance(targetHash, candidate.perceptualHash!);
 
 				if (distance <= maxDistance) {
 					similarPhotos.push({
 						id: candidate.id,
 						userId: candidate.userId,
-						perceptualHash: candidate.perceptualHash,
+						perceptualHash: candidate.perceptualHash!,
 						distance,
 						s3Path: candidate.s3Path || undefined,
 						originalUrl: candidate.originalUrl,
