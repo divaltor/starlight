@@ -344,7 +344,7 @@ export function formatSenderName(data: {
 
 const BOT_ANNOTATION_RE = /\n?\[(?:reply to [^\]]*|attachment)\]/g;
 
-const BOT_USERNAME_PREFIX_RE = /^@\w+:\s*/;
+const BOT_USERNAME_PREFIX_RE = /^@\w+:?\s*/;
 
 export function stripBotAnnotations(text: string): string {
 	return text.replace(BOT_ANNOTATION_RE, "").trim().replace(BOT_USERNAME_PREFIX_RE, "");
