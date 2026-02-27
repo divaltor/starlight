@@ -53,7 +53,9 @@ const env = createEnv({
 		LANGFUSE_BASEURL: z.url().default("https://cloud.langfuse.com"),
 		LANGFUSE_TRACING_ENVIRONMENT: z.string().default("development"),
 
-		HISTORY_LIMIT: z.number().default(20),
+		HISTORY_LIMIT: z.number().default(13),
+		ATTACHMENT_INLINE_OFFSET: z.number().default(3),
+		MAX_DIRECT_REPLY_URLS: z.number().default(2),
 		IGNORE_USER_CHANCE: z.number().gte(0).lte(1).default(0.75),
 		SUPERVISOR_IDS: z
 			.string()

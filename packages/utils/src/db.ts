@@ -69,6 +69,14 @@ export const prisma = new PrismaClient({
 		},
 	},
 	result: {
+		attachment: {
+			base64Data: {
+				needs: { id: true },
+				compute() {
+					return undefined as string | undefined;
+				},
+			},
+		},
 		photo: {
 			externalId: {
 				needs: {
@@ -153,5 +161,29 @@ export const prisma = new PrismaClient({
 				},
 			}),
 		} satisfies Record<string, (...args: any) => PrismaGenerated.TweetWhereInput>,
+		message: {
+			async hasNewerMessages(params: {
+				chatId: bigint | number;
+				messageId: number;
+				messageThreadId: number | null | undefined;
+			}): Promise<boolean> {
+				const newerMessage = await prisma.message.findFirst({
+					where: {
+						chatId: BigInt(params.chatId),
+						messageThreadId: params.messageThreadId,
+						messageId: { gt: params.messageId },
+						fromId: { not: null },
+						rawData: {
+							path: ["from", "is_bot"],
+							equals: false,
+						},
+					},
+					select: { messageId: true },
+					orderBy: { messageId: "desc" },
+				});
+
+				return newerMessage !== null;
+			},
+		},
 	},
 });

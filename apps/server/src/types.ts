@@ -6,18 +6,16 @@ import type { Tweet } from "@the-convocation/twitter-scraper";
 import type { Context as BaseContext } from "grammy";
 import type { Logger } from "@/logger";
 import type { ChatMemorySettings } from "@/services/chat-memory";
+import type { SavedAttachment } from "./utils/attachment";
 
 interface ExtendedContext {
-	chatMemorySettings: ChatMemorySettings;
-	currentMessageAttachments: Array<{
-		base64Data: string;
-		mimeType: string;
-		s3Path: string;
-	}>;
+	chatSettings: ChatMemorySettings;
+	attachments: SavedAttachment[];
 	logger: Logger;
 	user?: User;
 	userChat?: Chat;
 	userChatMember?: ChatMember;
+	isSupervisor: boolean;
 }
 
 export interface Classification {

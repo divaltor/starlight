@@ -106,7 +106,7 @@ export async function attachChat(ctx: Context, next: NextFunction) {
 		},
 	});
 
-	ctx.chatMemorySettings = new ChatMemorySettings(chat.settings);
+	ctx.chatSettings = new ChatMemorySettings(chat.settings);
 	ctx.userChat = chat;
 
 	await next();

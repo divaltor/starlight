@@ -3,7 +3,7 @@ import type { NextFunction } from "grammy";
 import type { Message } from "grammy/types";
 import { scheduleChatMemorySummaries } from "@/queue/memory";
 import type { Context } from "@/types";
-import { prepareMessageAttachments, type StoredMessageAttachment } from "@/utils/attachment";
+import { Attachment, type SavedAttachment } from "@/utils/attachment";
 
 function detectMediaType(msg: Message): string | null {
 	if (msg.photo) return "photo";
@@ -20,27 +20,6 @@ function detectMediaType(msg: Message): string | null {
 	if (msg.venue) return "venue";
 	if (msg.dice) return "dice";
 	return null;
-}
-
-function buildMessageData(chatId: bigint, msg: Message) {
-	return {
-		messageId: msg.message_id,
-		chatId,
-		fromId: msg.from ? BigInt(msg.from.id) : null,
-		fromUsername: msg.from?.username,
-		fromFirstName: msg.from?.first_name,
-		text: msg.text,
-		caption: msg.caption,
-		entities: msg.entities,
-		captionEntities: msg.caption_entities,
-		mediaType: detectMediaType(msg),
-		replyToMessageId: msg.reply_to_message?.message_id ?? null,
-		messageThreadId: msg.message_thread_id ?? null,
-		forwardOrigin: msg.forward_origin,
-		rawData: msg,
-		date: new Date(msg.date * 1000),
-		editDate: msg.edit_date ? new Date(msg.edit_date * 1000) : null,
-	};
 }
 
 async function syncUserFromMessage(msg: Message): Promise<{ isBot: boolean } | null> {
@@ -71,16 +50,35 @@ async function syncUserFromMessage(msg: Message): Promise<{ isBot: boolean } | n
 	});
 }
 
-export async function upsertStoredMessage(
-	ctx: Context,
-	msg: Message,
-	options?: {
-		scheduleMemory?: boolean;
-	},
-): Promise<StoredMessageAttachment[]> {
+export async function saveMessage({
+	ctx,
+	msg,
+	scheduleMemory,
+}: {
+	ctx: Context;
+	msg: Message;
+	scheduleMemory?: boolean;
+}): Promise<SavedAttachment[]> {
 	const parsedChatId = BigInt(msg.chat.id);
-	const data = buildMessageData(parsedChatId, msg);
-	const attachments = await prepareMessageAttachments(parsedChatId, msg, ctx.api, ctx.logger);
+	const data = {
+		messageId: msg.message_id,
+		chatId: parsedChatId,
+		fromId: msg.from ? BigInt(msg.from.id) : null,
+		fromUsername: msg.from?.username,
+		fromFirstName: msg.from?.first_name,
+		text: msg.text,
+		caption: msg.caption,
+		entities: msg.entities,
+		captionEntities: msg.caption_entities,
+		mediaType: detectMediaType(msg),
+		replyToMessageId: msg.reply_to_message?.message_id ?? null,
+		messageThreadId: msg.message_thread_id ?? null,
+		forwardOrigin: msg.forward_origin,
+		rawData: msg,
+		date: new Date(msg.date * 1000),
+		editDate: msg.edit_date ? new Date(msg.edit_date * 1000) : null,
+	};
+	const attachments = await Attachment.save(ctx, msg);
 
 	await prisma.$transaction(async (tx) => {
 		await tx.message.upsert({
@@ -94,6 +92,7 @@ export async function upsertStoredMessage(
 			update: data,
 		});
 
+		// User can delete attacment
 		await tx.attachment.deleteMany({
 			where: {
 				messageId: msg.message_id,
@@ -114,7 +113,7 @@ export async function upsertStoredMessage(
 		}
 	});
 
-	if (options?.scheduleMemory !== false) {
+	if (scheduleMemory !== false) {
 		try {
 			await scheduleChatMemorySummaries({
 				chatId: parsedChatId,
@@ -136,8 +135,8 @@ export async function upsertStoredMessage(
 	return attachments;
 }
 
-export async function storeMessage(ctx: Context, next: NextFunction) {
-	ctx.currentMessageAttachments = [];
+export async function attachMessage(ctx: Context, next: NextFunction) {
+	ctx.attachments = [];
 
 	if (!(ctx.chat && ctx.message) || ctx.chat.type === "private") {
 		return await next();
@@ -145,20 +144,13 @@ export async function storeMessage(ctx: Context, next: NextFunction) {
 
 	const msg = ctx.message;
 
-	const currentMessageAttachments = await upsertStoredMessage(ctx, msg);
-	ctx.currentMessageAttachments = currentMessageAttachments.map((attachment) => ({
-		base64Data: attachment.base64Data,
-		mimeType: attachment.mimeType,
-		s3Path: attachment.s3Path,
-	}));
+	ctx.attachments = await saveMessage({ ctx, msg });
 
 	const repliedMessage = msg.reply_to_message;
 	if (repliedMessage) {
 		const sender = await syncUserFromMessage(repliedMessage);
 		if (sender?.isBot) {
-			await upsertStoredMessage(ctx, repliedMessage, {
-				scheduleMemory: false,
-			});
+			await saveMessage({ ctx, msg: repliedMessage });
 		}
 	}
 

@@ -7,6 +7,7 @@ export class FetchExtractor implements Extractor {
 	}
 
 	async extract(url: string): Promise<ExtractionResult | null> {
+		// TODO: Add custom user agent and other human-spoof headers
 		const response = await http(url, {
 			headers: {
 				Accept: "text/markdown",

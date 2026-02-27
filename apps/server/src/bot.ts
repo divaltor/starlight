@@ -5,7 +5,7 @@ import { env } from "@starlight/utils";
 import { Bot, InlineKeyboard } from "grammy";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
-import { storeMessage } from "@/middlewares/message";
+import { attachMessage } from "@/middlewares/message";
 import { attachChat, attachChatMember, attachUser } from "@/middlewares/session";
 // biome-ignore lint/style/noExportedImports: Don't care
 import type { Context } from "@/types";
@@ -34,10 +34,16 @@ bot.api.config.use(
 	}),
 );
 bot.api.config.use(hydrateFiles(bot.token));
+bot.use(async (ctx, next) => {
+	if (ctx.from && env.SUPERVISOR_IDS.includes(ctx.from.id)) {
+		ctx.isSupervisor = true;
+	}
+	await next();
+});
 bot.use(attachUser);
 bot.use(attachChat);
 bot.use(attachChatMember);
-bot.use(storeMessage);
+bot.use(attachMessage);
 bot.use(logUpdates);
 
 export { bot, type Context };

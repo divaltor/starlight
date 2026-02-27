@@ -1,3 +1,4 @@
+import type { Attachment as PrismaAttachment } from "@starlight/utils";
 import type { Message } from "grammy/types";
 import sharp from "sharp";
 import { s3 } from "@/storage";
@@ -18,6 +19,7 @@ const MIME_TYPE_EXTENSION: Record<string, string> = {
 	"video/webm": "webm",
 };
 
+// Attachment downloaded from Telegram, but not saved to database and S3 yet
 interface PreparedAttachment {
 	attachmentType: string;
 	extension: string;
@@ -25,11 +27,13 @@ interface PreparedAttachment {
 	payload: Uint8Array;
 }
 
-export interface StoredMessageAttachment {
-	attachmentType: string;
+// Attachment from database
+export interface SavedAttachment extends Pick<
+	PrismaAttachment,
+	"attachmentType" | "mimeType" | "s3Path"
+> {
 	base64Data: string;
-	mimeType: string;
-	s3Path: string;
+	summary: null; // Summary is null because we generate it on demand via queue and it's not ready yet usually on immediate acces
 }
 
 function extensionFromMimeType(mimeType: string, fallback: string): string {
@@ -209,43 +213,39 @@ const handlers = [
 	prepareVoiceAttachment,
 ];
 
-export async function prepareMessageAttachments(
-	chatId: bigint,
-	msg: Message,
-	api: Context["api"],
-	logger?: Context["logger"],
-): Promise<StoredMessageAttachment[]> {
-	const preparedAttachments: PreparedAttachment[] = [];
+export class Attachment {
+	static async save(ctx: Context, msg: Message): Promise<SavedAttachment[]> {
+		const preparedAttachments: PreparedAttachment[] = [];
 
-	for (const handler of handlers) {
-		try {
-			const prepared = await handler(msg, api);
-			if (prepared) {
-				preparedAttachments.push(prepared);
+		for (const handler of handlers) {
+			try {
+				const prepared = await handler(msg, ctx.api);
+				if (prepared) {
+					preparedAttachments.push(prepared);
+				}
+			} catch (error) {
+				ctx.logger.warn(
+					{ error, messageId: msg.message_id, chatId: ctx.chat!.id },
+					"Failed to prepare message attachment",
+				);
 			}
-		} catch (error) {
-			logger?.warn(
-				{ error, messageId: msg.message_id, chatId: chatId.toString() },
-				"Failed to prepare message attachment",
-			);
 		}
+
+		return await Promise.all(
+			preparedAttachments.map(async (attachment, index) => {
+				const s3Path = `attachments/${ctx.chat!.id}/${msg.message_id}-${index}.${attachment.extension}`;
+				const base64Data = Buffer.from(attachment.payload).toString("base64");
+
+				await s3.write(s3Path, attachment.payload, { type: attachment.mimeType });
+
+				return {
+					attachmentType: attachment.attachmentType,
+					base64Data,
+					mimeType: attachment.mimeType,
+					s3Path,
+					summary: null,
+				} satisfies SavedAttachment;
+			}),
+		);
 	}
-
-	return await Promise.all(
-		preparedAttachments.map(async (attachment, index) => {
-			const normalizedExtension =
-				attachment.extension.replace(/[^a-z0-9]/gi, "").toLowerCase() || "bin";
-			const s3Path = `attachments/${chatId.toString()}/${msg.message_id}-${index}.${normalizedExtension}`;
-			const base64Data = Buffer.from(attachment.payload).toString("base64");
-
-			await s3.write(s3Path, attachment.payload, { type: attachment.mimeType });
-
-			return {
-				attachmentType: attachment.attachmentType,
-				base64Data,
-				mimeType: attachment.mimeType,
-				s3Path,
-			};
-		}),
-	);
 }

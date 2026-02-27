@@ -1,24 +1,12 @@
-import { env, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
 import { Composer } from "grammy";
 import type { Context } from "@/bot";
 import { scheduleChatMemorySummaries } from "@/queue/memory";
+import { isAdminOrCreator } from "@/utils/auth";
 
 const composer = new Composer<Context>();
 
 const groupChat = composer.chatType(["group", "supergroup"]);
-
-const isAdminOrCreator = (ctx: Context) => {
-	// TOOD: Search how to remove that check
-	if (!ctx.from) {
-		return false;
-	}
-
-	if (env.SUPERVISOR_IDS.includes(ctx.from.id)) {
-		return true;
-	}
-
-	return ctx.userChatMember?.status === "administrator" || ctx.userChatMember?.status === "creator";
-};
 
 groupChat.command("memory").filter(isAdminOrCreator, async (ctx) => {
 	const chatId = BigInt(ctx.chat.id);

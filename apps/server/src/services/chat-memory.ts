@@ -29,12 +29,10 @@ export class ChatMemorySettings {
 
 export async function buildChatMemoryPromptContext(params: {
 	chatId: bigint;
-	chatSettings: ChatSettings | null;
+	chatSettings: ChatMemorySettings;
 	messageThreadId: number | null;
 }): Promise<string | null> {
-	const settings = new ChatMemorySettings(params.chatSettings);
-
-	if (!settings.enabled) {
+	if (!params.chatSettings.enabled) {
 		return null;
 	}
 

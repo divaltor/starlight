@@ -25,7 +25,7 @@ model User {
   username   String? @unique
   firstName  String  @map("first_name")
   lastName   String? @map("last_name")
-  isBot   Boolean @default(false) @map("is_bot")
+  isBot      Boolean @default(false) @map("is_bot")
   isPublic   Boolean @default(false) @map("is_public")
   cookies    String? @db.Text
 
@@ -86,8 +86,8 @@ model ChatMemoryCursor {
 }
 
 model ChatMemoryNote {
-  id     String @id @default(uuid(7)) @db.Uuid
-  chatId BigInt @map("chat_id")
+  id     String          @id @default(uuid(7)) @db.Uuid
+  chatId BigInt          @map("chat_id")
   scope  ChatMemoryScope
 
   threadKey Int @default(0) @map("thread_key")
@@ -262,8 +262,8 @@ model Message {
   date     DateTime  @map("date")
   editDate DateTime? @map("edit_date")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
@@ -287,9 +287,10 @@ model Attachment {
   messageId Int    @map("message_id")
   chatId    BigInt @map("chat_id")
 
-  attachmentType String @map("attachment_type")
-  mimeType       String @map("mime_type")
-  s3Path         String @map("s3_path")
+  attachmentType String  @map("attachment_type")
+  mimeType       String  @map("mime_type")
+  s3Path         String  @map("s3_path")
+  summary        String? @db.Text
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

@@ -1,4 +1,10 @@
-import { ChatMemoryScope, env, type Prisma, prisma } from "@starlight/utils";
+import {
+	ChatMemoryScope,
+	attachmentLabelFromMimeType,
+	env,
+	type Prisma,
+	prisma,
+} from "@starlight/utils";
 import { generateText } from "ai";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import { logger } from "@/logger";
@@ -83,22 +89,6 @@ export const memoryQueue = new Queue<ChatMemoryJobData>("chat-memory", {
 	},
 });
 
-function attachmentLabelFromMimeType(mimeType: string): string {
-	if (mimeType.startsWith("image/")) {
-		return "photo";
-	}
-
-	if (mimeType.startsWith("video/")) {
-		return "video";
-	}
-
-	if (mimeType.startsWith("audio/")) {
-		return "voice message";
-	}
-
-	return "file";
-}
-
 function normalizeMessageContent(content: string): string {
 	return content.replace(/\s+/g, " ").trim().slice(0, 280);
 }
@@ -113,7 +103,8 @@ function formatWindowMessage(
 	let body = "";
 
 	if (hasText) {
-		body = normalizeMessageContent(rawContent ?? "");
+		// biome-ignore lint/style/noNonNullAssertion: hasText guarantees rawContent is non-null
+		body = normalizeMessageContent(rawContent!);
 	} else if (entry.attachments.length > 0) {
 		const labels = entry.attachments.map((attachment) =>
 			attachmentLabelFromMimeType(attachment.mimeType),
@@ -125,7 +116,7 @@ function formatWindowMessage(
 		return null;
 	}
 
-	const sender = formatSenderName(entry);
+	const sender = formatSenderName({ ...entry, fromId: entry.fromId });
 	const senderLabel =
 		entry.fromUsername && entry.fromFirstName ? `${sender} (${entry.fromFirstName})` : sender;
 	const parts = [`#${entry.messageId}`, senderLabel];
@@ -197,10 +188,6 @@ export async function scheduleChatMemorySummaries(params: {
 	messageId: number;
 	messageThreadId: number | null;
 }) {
-	if (!openrouter) {
-		return;
-	}
-
 	const chatId = params.chatId.toString();
 	const threadKey = params.messageThreadId ?? 0;
 
@@ -334,12 +321,10 @@ async function processWindow(params: {
 		return false;
 	}
 
-	const startMessageId = messages[0]?.messageId;
-	const endMessageId = messages.at(-1)?.messageId;
-
-	if (!(startMessageId && endMessageId)) {
-		return false;
-	}
+	// biome-ignore lint/style/noNonNullAssertion: messages.length >= windowSize (>= 1) guarantees elements exist
+	const startMessageId = messages[0]!.messageId;
+	// biome-ignore lint/style/noNonNullAssertion: messages.length >= windowSize (>= 1) guarantees elements exist
+	const endMessageId = messages.at(-1)!.messageId;
 
 	const previousMemory = await prisma.chatMemoryNote.findFirst({
 		where: {

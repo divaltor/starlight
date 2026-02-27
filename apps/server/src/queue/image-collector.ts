@@ -32,12 +32,10 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 	async (job) => {
 		const { tweet, userId } = job.data;
 
-		logger.info({ tweetId: tweet.id, userId }, "Processing tweet %s for user %s", tweet.id, userId);
+		// Tweet guaranteed to have IDs, fucking types
+		const id = tweet.id!;
 
-		if (!tweet.id) {
-			logger.error({ tweetId: tweet.id, userId }, "Tweet ID is required, skipping job");
-			return;
-		}
+		logger.info({ tweetId: tweet.id, userId }, "Processing tweet %s for user %s", tweet.id, userId);
 
 		if (tweet.photos.length === 0) {
 			logger.debug({ tweetId: tweet.id, userId }, "Tweet has no photos, skipping job");
@@ -48,7 +46,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 
 		// We can safely update Tweet record here, because we created Tweet object in scrapper queue
 		const tweetRecord = await prisma.tweet.update({
-			where: { tweetId: { userId, id: tweet.id } },
+			where: { tweetId: { userId, id } },
 			data: {
 				tweetData: tweet,
 				photos: {
