@@ -15,37 +15,12 @@ import {
 	toConversationMessage,
 } from "@/utils/message";
 import { sleep } from "@/utils/tools";
-import { isAdminOrCreator } from "@/utils/auth";
 
 const composer = new Composer<Context>();
 
 const groupChat = composer.chatType(["group", "supergroup"]);
 
 const RESPONSE_DELAY_MS = 500;
-
-groupChat.command("clear").filter(
-	(ctx) => !isAdminOrCreator(ctx),
-	async (ctx) => {
-		await ctx.reply("Only admins, creators, and supervisors can use this command.");
-	},
-);
-
-groupChat.command("clear").filter(isAdminOrCreator, async (ctx) => {
-	const messageThreadId = ctx.message.message_thread_id ?? null;
-
-	await prisma.message.updateMany({
-		where: {
-			chatId: BigInt(ctx.chat.id),
-			messageThreadId,
-			deletedAt: null,
-		},
-		data: {
-			deletedAt: new Date(),
-		},
-	});
-
-	await ctx.reply(`Ты чево наделал...`);
-});
 
 groupChat
 	.on("message")
