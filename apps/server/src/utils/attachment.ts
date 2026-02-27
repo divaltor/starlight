@@ -1,6 +1,7 @@
 import type { Attachment as PrismaAttachment } from "@starlight/utils";
 import type { Message } from "grammy/types";
 import sharp from "sharp";
+import { logger } from "@/logger";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
 
@@ -215,12 +216,17 @@ const handlers = [
 
 export class Attachment {
 	static async save(ctx: Context, msg: Message): Promise<SavedAttachment[]> {
+		logger.debug({ messageId: msg.message_id, chatId: ctx.chat!.id }, "Processing attachments");
+
 		const preparedAttachments: PreparedAttachment[] = [];
 
 		for (const handler of handlers) {
 			try {
 				const prepared = await handler(msg, ctx.api);
 				if (prepared) {
+					logger.debug(
+						`Prepared ${prepared.attachmentType} (${prepared.mimeType}, ${prepared.payload.length} bytes)`,
+					);
 					preparedAttachments.push(prepared);
 				}
 			} catch (error) {
@@ -231,12 +237,14 @@ export class Attachment {
 			}
 		}
 
-		return await Promise.all(
+		const savedAttachments = await Promise.all(
 			preparedAttachments.map(async (attachment, index) => {
 				const s3Path = `attachments/${ctx.chat!.id}/${msg.message_id}-${index}.${attachment.extension}`;
 				const base64Data = Buffer.from(attachment.payload).toString("base64");
 
 				await s3.write(s3Path, attachment.payload, { type: attachment.mimeType });
+
+				logger.debug(`Saved ${attachment.attachmentType} to S3: ${s3Path}`);
 
 				return {
 					attachmentType: attachment.attachmentType,
@@ -247,5 +255,9 @@ export class Attachment {
 				} satisfies SavedAttachment;
 			}),
 		);
+
+		logger.debug(`Saved ${savedAttachments.length} attachments`);
+
+		return savedAttachments;
 	}
 }

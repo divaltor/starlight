@@ -56,6 +56,11 @@ export class History {
 		const currentMessageId = message.message_id;
 		const repliedMessage = message.reply_to_message;
 
+		logger.debug(
+			{ chatId: ctx.chat!.id, messageId: currentMessageId },
+			`Building message history (thread: ${messageThreadId}, hasReply: ${!!repliedMessage})`,
+		);
+
 		// Fetch recent chat history, excluding the current message (it's appended separately by the caller)
 		const history = await prisma.message.findMany({
 			where: {
@@ -72,6 +77,8 @@ export class History {
 			},
 			take: env.HISTORY_LIMIT,
 		});
+
+		logger.debug(`Fetched ${history.length} messages from history`);
 
 		const historyEntries = history.map((entry) => this.toPromptMessage(entry));
 		const directReplyMessageId = repliedMessage?.message_id ?? null;
@@ -92,6 +99,11 @@ export class History {
 
 			if (referencedMessage) {
 				storedMessageById.set(referencedMessage.messageId, this.toPromptMessage(referencedMessage));
+				logger.debug({ messageId: referencedMessage.messageId }, "Backfilled direct reply message");
+			} else {
+				logger.debug(
+					`Direct reply message not found in database (replyTo: ${repliedMessage.message_id})`,
+				);
 			}
 		}
 
@@ -121,6 +133,10 @@ export class History {
 		const directReplySupplementalContent = extractedReplyPages
 			.filter((page): page is NonNullable<typeof page> => page !== null)
 			.map((page) => `URL: ${page.url}\nSource: ${page.source}\n${page.markdown}`);
+
+		logger.debug(
+			`Extracted ${directReplySupplementalContent.length}/${directReplyUrls.length} URLs from direct reply`,
+		);
 
 		// Deduplicate and merge the enriched direct reply entry (with inlined video attachments)
 		// into history — it may already exist in the window or come from outside it
@@ -176,6 +192,10 @@ export class History {
 			.filter((entry): entry is ConversationMessage => entry !== null);
 
 		const knownMessageIds = new Set(orderedHistoryEntries.map((entry) => entry.messageId));
+
+		logger.debug(
+			`Built history: ${messages.length} messages, ${inlineMessageIds.size} inlined, directReply: ${!!directReplyEntry}`,
+		);
 
 		return {
 			directReplyEntry,

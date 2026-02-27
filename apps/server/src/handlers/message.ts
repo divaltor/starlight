@@ -87,10 +87,19 @@ groupChat.on("message").filter(
 		const chatId = BigInt(ctx.chat.id);
 		const botId = ctx.me.id;
 
+		ctx.logger.debug(
+			{ chatId: ctx.chat.id, messageId: triggerMessageId },
+			`Processing for AI (thread: ${messageThreadId}, text: ${!!ctx.message.text}, caption: ${!!ctx.message.caption}, attachments: ${ctx.attachments.length})`,
+		);
+
 		await ctx.replyWithChatAction("typing");
 
 		const { messages, directReplyEntry, directReplySupplementalContent, knownMessageIds } =
 			await History.build(ctx);
+
+		ctx.logger.debug(
+			`Built conversation: ${messages.length} messages, directReply: ${!!directReplyEntry}, supplemental: ${directReplySupplementalContent.length}`,
+		);
 
 		const currentConversationMessage = toConversationMessage(
 			{
@@ -137,6 +146,8 @@ groupChat.on("message").filter(
 
 		knownMessageIds.add(triggerMessageId);
 
+		ctx.logger.debug(`Sending ${allMessages.length} messages to AI (memory: ${!!memoryContext})`);
+
 		const { output } = await generateText({
 			model: openrouter!(env.OPENROUTER_MODEL),
 			output: Output.object({ schema: chatResponseSchema }),
@@ -154,8 +165,11 @@ groupChat.on("message").filter(
 		});
 
 		if (!output) {
+			ctx.logger.debug("No output from AI");
 			return;
 		}
+
+		ctx.logger.debug(`Received ${output.replies.length} replies from AI`);
 
 		for (const reply of output.replies) {
 			const replyText = stripBotAnnotations(reply.text);
@@ -173,6 +187,11 @@ groupChat.on("message").filter(
 				reply_to_message_id: replyToId,
 				message_thread_id: ctx.message.message_thread_id,
 			});
+
+			ctx.logger.debug(
+				{ messageId: sentMessage.message_id },
+				`Sent AI reply (replyTo: ${replyToId}, length: ${replyText.length})`,
+			);
 
 			await saveMessage({ ctx, msg: sentMessage });
 		}
