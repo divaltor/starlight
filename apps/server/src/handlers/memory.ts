@@ -26,15 +26,16 @@ groupChat.command("memory").filter(isAdminOrCreator, async (ctx) => {
 		// biome-ignore lint/style/noNonNullAssertion: Can't be null, middleware will add at least 1 message even if it this command
 		messageId: lastMessage!.messageId,
 		messageThreadId,
+		forceRebuild: true,
 	});
 
-	await ctx.reply("Memory build triggered.");
+	await ctx.reply("щас снова идти за блокнотом, ни дня без отдыха");
 });
 
 groupChat.command("memory").filter(
 	(ctx) => !isAdminOrCreator(ctx),
 	async (ctx) => {
-		await ctx.reply("Only admins, creators, and supervisors can use this command.");
+		await ctx.reply("а может тебе еще и борщ сварить?");
 	},
 );
 

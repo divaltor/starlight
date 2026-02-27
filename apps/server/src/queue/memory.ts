@@ -80,6 +80,7 @@ interface ChatMemoryJobData {
 	scope: ChatMemoryScopeValue;
 	threadKey: number;
 	triggerMessageId: number;
+	forceRebuild?: boolean;
 }
 
 type ChatMemoryScopeValue = (typeof ChatMemoryScope)[keyof typeof ChatMemoryScope];
@@ -204,6 +205,22 @@ async function addMemoryJob(jobName: string, jobData: ChatMemoryJobData, jobId: 
 		});
 	} catch (error) {
 		if (isKnownDuplicateJobError(error)) {
+			if (!jobData.forceRebuild) {
+				return;
+			}
+
+			const existingJob = await memoryQueue.getJob(jobId);
+
+			if (existingJob) {
+				await existingJob.updateData({
+					...existingJob.data,
+					forceRebuild: true,
+					triggerMessageId: Math.max(existingJob.data.triggerMessageId, jobData.triggerMessageId),
+				});
+				return;
+			}
+
+			await memoryQueue.add(jobName, jobData);
 			return;
 		}
 
@@ -215,6 +232,7 @@ export async function scheduleChatMemorySummaries(params: {
 	chatId: bigint;
 	messageId: number;
 	messageThreadId: number | null;
+	forceRebuild?: boolean;
 }) {
 	const chatId = params.chatId.toString();
 	const threadKey = params.messageThreadId ?? 0;
@@ -227,6 +245,7 @@ export async function scheduleChatMemorySummaries(params: {
 				scope: ChatMemoryScope.topic,
 				threadKey,
 				triggerMessageId: params.messageId,
+				forceRebuild: params.forceRebuild,
 			},
 			`memory-topic-${chatId}-${threadKey}`,
 		),
@@ -237,6 +256,7 @@ export async function scheduleChatMemorySummaries(params: {
 				scope: ChatMemoryScope.global,
 				threadKey: 0,
 				triggerMessageId: params.messageId,
+				forceRebuild: params.forceRebuild,
 			},
 			`memory-global-${chatId}`,
 		),
@@ -306,22 +326,57 @@ async function processWindow(params: {
 	scope: ChatMemoryScopeValue;
 	settings: ChatMemorySettings;
 	threadKey: number;
+	forceRebuild?: boolean;
 }): Promise<boolean> {
-	const cursor = await prisma.chatMemoryCursor.upsert({
-		where: {
-			chatId_scope_threadKey: {
+	let cursorLastMessageId = 0;
+
+	if (params.forceRebuild) {
+		await prisma.$transaction([
+			prisma.chatMemoryNote.deleteMany({
+				where: {
+					chatId: params.chatId,
+					scope: params.scope,
+					threadKey: params.threadKey,
+				},
+			}),
+			prisma.chatMemoryCursor.upsert({
+				where: {
+					chatId_scope_threadKey: {
+						chatId: params.chatId,
+						scope: params.scope,
+						threadKey: params.threadKey,
+					},
+				},
+				create: {
+					chatId: params.chatId,
+					scope: params.scope,
+					threadKey: params.threadKey,
+				},
+				update: {
+					failureCount: 0,
+					lastMessageId: 0,
+				},
+			}),
+		]);
+	} else {
+		const cursor = await prisma.chatMemoryCursor.upsert({
+			where: {
+				chatId_scope_threadKey: {
+					chatId: params.chatId,
+					scope: params.scope,
+					threadKey: params.threadKey,
+				},
+			},
+			create: {
 				chatId: params.chatId,
 				scope: params.scope,
 				threadKey: params.threadKey,
 			},
-		},
-		create: {
-			chatId: params.chatId,
-			scope: params.scope,
-			threadKey: params.threadKey,
-		},
-		update: {},
-	});
+			update: {},
+		});
+
+		cursorLastMessageId = cursor.lastMessageId;
+	}
 
 	const windowSize = memoryScopeWindowSize(params.scope, params.settings);
 
@@ -329,7 +384,7 @@ async function processWindow(params: {
 		where: {
 			chatId: params.chatId,
 			messageId: {
-				gt: cursor.lastMessageId,
+				gt: cursorLastMessageId,
 			},
 			...(params.scope === ChatMemoryScope.topic
 				? {
@@ -357,6 +412,9 @@ async function processWindow(params: {
 	const previousMemory = await prisma.chatMemoryNote.findFirst({
 		where: {
 			chatId: params.chatId,
+			endMessageId: {
+				lt: startMessageId,
+			},
 			scope: params.scope,
 			threadKey: params.threadKey,
 		},
@@ -475,6 +533,7 @@ export const memoryWorker = new Worker<ChatMemoryJobData>(
 					scope: job.data.scope,
 					settings,
 					threadKey,
+					forceRebuild: index === 0 ? job.data.forceRebuild : false,
 				});
 
 				if (!processed) {
@@ -506,6 +565,13 @@ export const memoryWorker = new Worker<ChatMemoryJobData>(
 			});
 
 			throw error;
+		}
+
+		if (processedWindows === MAX_WINDOWS_PER_JOB) {
+			await memoryQueue.add(job.name, {
+				...job.data,
+				forceRebuild: false,
+			});
 		}
 
 		logger.debug(

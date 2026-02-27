@@ -47,16 +47,17 @@ groupChat.command("clear").filter(isAdminOrCreator, async (ctx) => {
 	await ctx.reply(`Ты чево наделал...`);
 });
 
-groupChat.on("message").filter(
-	(ctx) => {
+groupChat
+	.on("message")
+	.filter((ctx) => {
 		if (!openrouter) {
 			ctx.logger.debug("OPENROUTER_API_KEY is not set, skipping AI reply");
 			return false;
 		}
 
 		return true;
-	},
-	async (ctx) => {
+	})
+	.filter(async (ctx) => {
 		await sleep(RESPONSE_DELAY_MS, { minMs: 100, maxMs: 800 });
 
 		// TODO: Revisit logic with waiting for new messages and should reply or not because now it tend to ignore even if it's direct mention because new messages appear
@@ -79,9 +80,9 @@ groupChat.on("message").filter(
 		}
 
 		return true;
-	},
-	(ctx) => shouldReplyToMessage(ctx, ctx.message),
-	async (ctx) => {
+	})
+	.filter((ctx) => shouldReplyToMessage(ctx, ctx.message))
+	.use(async (ctx) => {
 		const triggerMessageId = ctx.message.message_id;
 		const messageThreadId = ctx.message.message_thread_id ?? null;
 		const chatId = BigInt(ctx.chat.id);
@@ -195,7 +196,6 @@ groupChat.on("message").filter(
 
 			await saveMessage({ ctx, msg: sentMessage });
 		}
-	},
-);
+	});
 
 export default composer;
