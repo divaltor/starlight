@@ -353,6 +353,7 @@ function formatSupplementalContent(supplementalContent: string[]): string {
 export function toConversationMessage(
 	entry: {
 		messageId?: number;
+		replyToMessageId?: number | null;
 		fromId: number | bigint | null;
 		fromUsername: string | null;
 		fromFirstName: string | null;
@@ -388,8 +389,15 @@ export function toConversationMessage(
 		attachments.length > 0
 			? attachments.map((attachment) => attachmentLabelFromMimeType(attachment.mimeType))
 			: [];
+	const replyLabel =
+		entry.replyToMessageId !== null && entry.replyToMessageId !== undefined
+			? `[Reply to #${entry.replyToMessageId}]`
+			: null;
 
 	const textSegments: string[] = [];
+	if (replyLabel) {
+		textSegments.push(replyLabel);
+	}
 	if (content) {
 		textSegments.push(content);
 	}

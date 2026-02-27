@@ -105,6 +105,7 @@ groupChat
 		const currentConversationMessage = toConversationMessage(
 			{
 				messageId: triggerMessageId,
+				replyToMessageId: ctx.message.reply_to_message?.message_id ?? null,
 				fromId: ctx.message.from?.id ?? null,
 				fromUsername: ctx.message.from?.username ?? null,
 				fromFirstName: ctx.message.from?.first_name ?? null,
