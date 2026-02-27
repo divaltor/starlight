@@ -6,9 +6,17 @@ export const chatResponseSchema = z.object({
 			z.object({
 				text: z.string().min(1).describe("Response text in character"),
 				reply_to: z
-					.number()
-					.int()
-					.nullable()
+					.union([
+						z.number().int(),
+						z.null(),
+						z.string().transform((val) => {
+							if (val === "null" || val === "") return null;
+							const parsed = Number(val);
+							if (Number.isNaN(parsed)) return null;
+							return parsed;
+						}),
+					])
+					.pipe(z.number().int().nullable())
 					.describe("Message #id to reply to, null to reply to the triggering message"),
 			}),
 		)
