@@ -149,7 +149,8 @@ export async function attachMessage(ctx: Context, next: NextFunction) {
 	const repliedMessage = msg.reply_to_message;
 	if (repliedMessage) {
 		const sender = await syncUserFromMessage(repliedMessage);
-		if (sender?.isBot) {
+
+		if (sender) {
 			await saveMessage({ ctx, msg: repliedMessage });
 		}
 	}
