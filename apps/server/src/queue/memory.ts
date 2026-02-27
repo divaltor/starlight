@@ -35,6 +35,14 @@ Rules:
 - Keep unresolved context and immediate intent.
 - Remove outdated or contradictory details.
 - No numbering, no headers, only bullet points.
+
+Reference note style:
+- Максим рассказал о проблемах с багами в новой версии.
+- Лена предложила откатить релиз и сделать хотфикс.
+- В треде обсуждали, какие тесты добавить перед следующим деплоем.
+- Антон нашёл причину бага в миграции базы.
+- Решили созвониться завтра в 15:00 для обсуждения архитектуры.
+- Лена отправила ссылку на документацию API.
 `;
 
 const GLOBAL_MEMORY_SYSTEM_PROMPT = `
@@ -118,10 +126,6 @@ export const memoryQueue = new Queue<ChatMemoryJobData>("chat-memory", {
 	},
 });
 
-function normalizeMessageContent(content: string): string {
-	return content.replace(/\s+/g, " ").trim().slice(0, 280);
-}
-
 function formatWindowMessage(
 	entry: MemoryWindowMessage,
 	scope: ChatMemoryScopeValue,
@@ -133,7 +137,7 @@ function formatWindowMessage(
 
 	if (hasText) {
 		// biome-ignore lint/style/noNonNullAssertion: hasText guarantees rawContent is non-null
-		body = normalizeMessageContent(rawContent!);
+		body = rawContent!.replace(/\s+/g, " ").trim().slice(0, 280);
 	} else if (entry.attachments.length > 0) {
 		const labels = entry.attachments.map((attachment) =>
 			attachmentLabelFromMimeType(attachment.mimeType),
@@ -175,52 +179,22 @@ function buildTranscript(entries: MemoryWindowMessage[], scope: ChatMemoryScopeV
 	return lines.join("\n");
 }
 
-function normalizeModelOutput(text: string): string {
-	return text.replace(/```(?:json|text|markdown|md)?/gi, "").trim();
-}
-
-function memoryScopeWindowSize(scope: ChatMemoryScopeValue, settings: ChatMemorySettings): number {
-	return scope === ChatMemoryScope.topic
-		? settings.topicEveryMessages
-		: settings.globalEveryMessages;
-}
-
-function memorySystemPrompt(scope: ChatMemoryScopeValue): string {
-	return scope === ChatMemoryScope.topic ? TOPIC_MEMORY_SYSTEM_PROMPT : GLOBAL_MEMORY_SYSTEM_PROMPT;
-}
-
-function isKnownDuplicateJobError(error: unknown): boolean {
-	if (!(error instanceof Error)) {
-		return false;
+async function addMemoryJob(jobName: string, jobData: ChatMemoryJobData, jobId: string) {
+	if (jobData.forceRebuild) {
+		await memoryQueue.add(jobName, jobData);
+		return;
 	}
 
-	const message = error.message.toLowerCase();
-	return message.includes("job") && message.includes("exists");
-}
-
-async function addMemoryJob(jobName: string, jobData: ChatMemoryJobData, jobId: string) {
 	try {
 		await memoryQueue.add(jobName, jobData, {
 			jobId,
 		});
 	} catch (error) {
-		if (isKnownDuplicateJobError(error)) {
-			if (!jobData.forceRebuild) {
-				return;
-			}
-
-			const existingJob = await memoryQueue.getJob(jobId);
-
-			if (existingJob) {
-				await existingJob.updateData({
-					...existingJob.data,
-					forceRebuild: true,
-					triggerMessageId: Math.max(existingJob.data.triggerMessageId, jobData.triggerMessageId),
-				});
-				return;
-			}
-
-			await memoryQueue.add(jobName, jobData);
+		const isDuplicate =
+			error instanceof Error &&
+			error.message.toLowerCase().includes("job") &&
+			error.message.toLowerCase().includes("exists");
+		if (isDuplicate) {
 			return;
 		}
 
@@ -298,7 +272,10 @@ async function summarizeWindow(params: {
 	const { text } = await generateText({
 		model: openrouter(env.OPENROUTER_MODEL),
 		maxOutputTokens: MAX_SUMMARY_TOKENS,
-		system: memorySystemPrompt(params.scope),
+		system:
+			params.scope === ChatMemoryScope.topic
+				? TOPIC_MEMORY_SYSTEM_PROMPT
+				: GLOBAL_MEMORY_SYSTEM_PROMPT,
 		messages: [{ role: "user", content: userPrompt }],
 		experimental_telemetry: getLangfuseTelemetry("chat-memory", {
 			chatId: String(params.chatId),
@@ -312,13 +289,11 @@ async function summarizeWindow(params: {
 		topK: 60,
 	});
 
-	const normalized = normalizeModelOutput(text);
-
-	if (!normalized) {
+	if (!text) {
 		throw new Error("Memory summarization returned empty output");
 	}
 
-	return normalized;
+	return text;
 }
 
 async function processWindow(params: {
@@ -378,7 +353,10 @@ async function processWindow(params: {
 		cursorLastMessageId = cursor.lastMessageId;
 	}
 
-	const windowSize = memoryScopeWindowSize(params.scope, params.settings);
+	const windowSize =
+		params.scope === ChatMemoryScope.topic
+			? params.settings.topicEveryMessages
+			: params.settings.globalEveryMessages;
 
 	const messages = await prisma.message.findMany({
 		where: {

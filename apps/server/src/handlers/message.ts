@@ -65,7 +65,7 @@ groupChat
 			await prisma.message.hasNewerMessages({
 				chatId: ctx.chat.id,
 				messageId: ctx.message.message_id,
-				messageThreadId: ctx.message.message_thread_id,
+				messageThreadId: ctx.message.message_thread_id ?? null,
 			})
 		) {
 			ctx.logger.debug(

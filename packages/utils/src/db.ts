@@ -170,7 +170,7 @@ export const prisma = new PrismaClient({
 				const newerMessage = await prisma.message.findFirst({
 					where: {
 						chatId: BigInt(params.chatId),
-						messageThreadId: params.messageThreadId,
+						messageThreadId: params.messageThreadId ?? null,
 						messageId: { gt: params.messageId },
 						fromId: { not: null },
 						rawData: {
