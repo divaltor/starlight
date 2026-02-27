@@ -4,8 +4,8 @@ WORKDIR /code
 
 ENV NODE_ENV=production
 
-# For Prisma
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+# For Prisma and build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends openssl git && rm -rf /var/lib/apt/lists/*
 
 COPY package.json bun.lock ./
 COPY apps/web/package.json ./apps/web/package.json
