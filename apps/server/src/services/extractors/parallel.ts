@@ -1,6 +1,7 @@
 import env from "@starlight/utils/config";
 import { http } from "@starlight/utils/http";
 import type { Extractor, ExtractionResult } from "@/services/extractors/base";
+import { logger } from "@/logger";
 
 interface ParallelExtractResponse {
 	results: Array<{
@@ -22,6 +23,8 @@ export class ParallelExtractor implements Extractor {
 	}
 
 	async extract(url: string): Promise<ExtractionResult | null> {
+		logger.info("ParallelExtractor: Starting extraction for %s", url);
+
 		const response = await http.post(`${env.PARALLEL_API_BASE_URL}/v1beta/extract`, {
 			headers: {
 				"Content-Type": "application/json",
@@ -37,6 +40,7 @@ export class ParallelExtractor implements Extractor {
 		});
 
 		if (!response.ok) {
+			logger.info("ParallelExtractor: API request failed for %s, status %s", url, response.status);
 			return null;
 		}
 
@@ -44,9 +48,17 @@ export class ParallelExtractor implements Extractor {
 
 		const result = data.results[0];
 		if (!result?.excerpts?.length) {
+			logger.info("ParallelExtractor: No excerpts found for %s", url);
 			return null;
 		}
 
-		return { kind: "markdown", content: result.excerpts.join("\n\n") };
+		const content = result.excerpts.join("\n\n");
+		logger.info(
+			"ParallelExtractor: Extracted %s excerpts from %s (%s bytes)",
+			result.excerpts.length,
+			url,
+			content.length,
+		);
+		return { kind: "markdown", content };
 	}
 }

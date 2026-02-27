@@ -1,6 +1,7 @@
 import env from "@starlight/utils/config";
 import { http } from "@starlight/utils/http";
 import type { ExtractionFile, ExtractionResult } from "@/services/extractors/base";
+import { logger } from "@/logger";
 
 export class WorkersExtractor {
 	isEnabled(): boolean {
@@ -8,6 +9,12 @@ export class WorkersExtractor {
 	}
 
 	async extract(file: ExtractionFile): Promise<ExtractionResult | null> {
+		logger.info(
+			"WorkersExtractor: Starting extraction for file %s (type: %s)",
+			file.name,
+			file.type,
+		);
+
 		const blob = new Blob([file.data], { type: file.type });
 		const form = new FormData();
 		form.append("files", blob, file.name);
@@ -23,6 +30,11 @@ export class WorkersExtractor {
 		);
 
 		if (!response.ok) {
+			logger.info(
+				"WorkersExtractor: Cloudflare API request failed for %s, status %s",
+				file.name,
+				response.status,
+			);
 			return null;
 		}
 
@@ -32,9 +44,15 @@ export class WorkersExtractor {
 
 		const first = results.result[0];
 		if (!first || first.format !== "markdown" || !first.data) {
+			logger.info("WorkersExtractor: Invalid or error result for %s", file.name);
 			return null;
 		}
 
+		logger.info(
+			"WorkersExtractor: Successfully extracted markdown from %s (%s bytes)",
+			file.name,
+			first.data.length,
+		);
 		return { kind: "markdown", content: first.data };
 	}
 }

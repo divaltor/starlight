@@ -1,5 +1,6 @@
 import { http } from "@starlight/utils/http";
 import type { Extractor, ExtractionResult } from "@/services/extractors/base";
+import { logger } from "@/logger";
 
 export class FetchExtractor implements Extractor {
 	isEnabled(): boolean {
@@ -7,7 +8,8 @@ export class FetchExtractor implements Extractor {
 	}
 
 	async extract(url: string): Promise<ExtractionResult | null> {
-		// TODO: Add custom user agent and other human-spoof headers
+		logger.info("FetchExtractor: Starting extraction for %s", url);
+
 		const response = await http(url, {
 			headers: {
 				Accept: "text/markdown",
@@ -15,6 +17,7 @@ export class FetchExtractor implements Extractor {
 		});
 
 		if (!response.ok) {
+			logger.info("FetchExtractor: Failed to fetch %s, status %s", url, response.status);
 			return null;
 		}
 
@@ -22,9 +25,15 @@ export class FetchExtractor implements Extractor {
 		const body = await response.text();
 
 		if (contentType?.includes("text/markdown")) {
+			logger.info(
+				"FetchExtractor: Extracted markdown content from %s (%s bytes)",
+				url,
+				body.length,
+			);
 			return { kind: "markdown", content: body };
 		}
 
+		logger.info("FetchExtractor: Extracted HTML content from %s (%s bytes)", url, body.length);
 		return { kind: "html", content: body };
 	}
 }
