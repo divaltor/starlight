@@ -248,23 +248,23 @@ function isLowSignalMessageText(text: string): boolean {
 
 function shouldIgnoreMessage(ctx: Context, msg: Message): boolean {
 	if (ctx.chat?.type === "private") {
-		return false;
+		return true;
 	}
 
 	if (isCommandMessage(msg)) {
-		return false;
+		return true;
 	}
 
 	const content = getMessageContent(msg);
 	if (!content) {
-		return false;
+		return true;
 	}
 
 	if (!isLowSignalMessageText(content)) {
-		return false;
+		return true;
 	}
 
-	return Math.random() < ctx.chatSettings.ignoreUserChance;
+	return Math.random() > ctx.chatSettings.ignoreUserChance;
 }
 
 export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
@@ -293,7 +293,7 @@ export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
 		return false;
 	}
 
-	return !shouldIgnoreMessage(ctx, msg);
+	return shouldIgnoreMessage(ctx, msg);
 }
 
 export function formatSenderName(data: {

@@ -545,14 +545,6 @@ const memoryEvents = new QueueEvents("chat-memory", {
 	connection: redis,
 });
 
-memoryEvents.on("completed", ({ jobId }) => {
-	logger.debug({ jobId }, "Chat memory job completed");
-});
-
 memoryEvents.on("failed", ({ failedReason, jobId }) => {
 	logger.error({ failedReason, jobId }, "Chat memory job failed");
-});
-
-memoryEvents.on("added", ({ jobId }) => {
-	logger.debug({ jobId }, "Chat memory job added");
 });
