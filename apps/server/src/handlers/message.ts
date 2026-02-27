@@ -180,10 +180,15 @@ groupChat
 				continue;
 			}
 
-			const replyToId =
-				reply.reply_to !== null && knownMessageIds.has(reply.reply_to)
-					? reply.reply_to
-					: triggerMessageId;
+			if (reply.reply_to !== null && !knownMessageIds.has(reply.reply_to)) {
+				ctx.logger.debug(
+					{ replyTo: reply.reply_to },
+					"Skipping AI reply: reply_to message ID not in known messages",
+				);
+				continue;
+			}
+
+			const replyToId = reply.reply_to ?? triggerMessageId;
 
 			const sentMessage = await ctx.api.sendMessage(ctx.chat.id, replyText, {
 				reply_to_message_id: replyToId,
