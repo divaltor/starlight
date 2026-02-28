@@ -395,10 +395,13 @@ export function toConversationMessage(
 		attachments.length > 0
 			? attachments.map((attachment) => attachmentLabelFromMimeType(attachment.mimeType))
 			: [];
+
+	// If we send message to a topic - Telelegram set `reply_to_message` as first system message from that topic. Insane
 	const isTopicRootReply =
 		entry.replyToMessageId !== null &&
 		entry.messageThreadId !== null &&
 		entry.replyToMessageId === entry.messageThreadId;
+
 	const replyLabel =
 		entry.replyToMessageId !== null && !isTopicRootReply
 			? `[Reply to #${entry.replyToMessageId}]`
