@@ -373,7 +373,7 @@ export function toConversationMessage(
 		return null;
 	}
 
-	if (entry.fromId !== null && entry.fromId === botId) {
+	if (entry.fromId !== null && Number(entry.fromId) === botId) {
 		const cleanedContent = content ? stripBotAnnotations(content) : null;
 
 		return {
