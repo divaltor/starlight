@@ -34,21 +34,11 @@ const runner = run(bot);
 
 logger.info("Bot is running...");
 
-process.on("SIGINT", async () => {
+process.once("SIGINT", async () => {
 	logger.info("Stopping bot...");
 	if (runner.isRunning()) {
 		await runner.stop();
 	}
-});
-
-process.on("SIGTERM", async () => {
-	logger.info("Stopping bot...");
-	if (runner.isRunning()) {
-		await runner.stop();
-	}
-});
-
-process.on("SIGINT", async () => {
 	await imagesWorker.close();
 	await classificationWorker.close();
 	await scrapperWorker.close();
@@ -56,7 +46,11 @@ process.on("SIGINT", async () => {
 	await memoryWorker.close();
 });
 
-process.on("SIGTERM", async () => {
+process.once("SIGTERM", async () => {
+	logger.info("Stopping bot...");
+	if (runner.isRunning()) {
+		await runner.stop();
+	}
 	await imagesWorker.close();
 	await classificationWorker.close();
 	await scrapperWorker.close();
