@@ -15,7 +15,7 @@
     "build": "bun run db:generate && bun run -b tsdown",
     "lint": "oxlint --fix",
     "format": "oxfmt",
-    "db:push": "prisma --config prisma.config.ts migrate deploy",
+    "db:deploy": "prisma --config prisma.config.ts migrate deploy",
     "db:generate": "prisma --config prisma.config.ts generate",
     "db:migrate": "prisma --config prisma.config.ts migrate dev"
   },

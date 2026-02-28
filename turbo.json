@@ -19,7 +19,7 @@
       "dependsOn": ["^db:generate"],
       "persistent": true
     },
-    "db:push": {
+    "db:deploy": {
       "cache": false,
       "env": ["DATABASE_URL"]
     },
