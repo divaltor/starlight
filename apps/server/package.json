@@ -26,7 +26,7 @@
     "@starlight/utils": "workspace:*",
     "@the-convocation/twitter-scraper": "git+https://github.com/divaltor/twitter-scraper.git",
     "@vercel/otel": "^2.1.1",
-    "ai": "^6.0.100",
+    "ai": "^6.0.105",
     "bullmq": "^5.70.1",
     "date-fns": "^4.1.0",
     "grammy": "catalog:",
