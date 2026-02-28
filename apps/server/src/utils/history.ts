@@ -1,9 +1,10 @@
-import { env, type Prisma, prisma } from "@starlight/utils";
+import { logger } from "@/logger";
 import { extractMarkdown } from "@/services/markdown";
 import { s3 } from "@/storage";
-import { type ConversationMessage, toConversationMessage } from "@/utils/message";
 import type { Context } from "@/types";
-import { logger } from "@/logger";
+import { type ConversationMessage, toConversationMessage } from "@/utils/message";
+import type { Message } from "@grammyjs/types";
+import { env, type Prisma, prisma } from "@starlight/utils";
 
 const messageHistorySelect = {
 	messageId: true,
@@ -33,6 +34,10 @@ export type StoredConversationMessage = Prisma.MessageGetPayload<{
 }>;
 
 type ReplyToMessage = NonNullable<NonNullable<Context["message"]>["reply_to_message"]>;
+
+type UrlExtractionMessage =
+	| Pick<StoredConversationMessage, "text" | "caption" | "entities" | "captionEntities">
+	| Pick<ReplyToMessage, "text" | "caption" | "entities" | "caption_entities">;
 
 interface ExtractedPageMarkdown {
 	markdown: string;
@@ -118,12 +123,9 @@ export class History {
 			}
 		}
 
-		// Extract URLs from the replied-to message and fetch their page content,
-		// giving the model context about linked articles/pages
-		const directReplyUrls = this.extractURLs({
-			directReplyEntry,
-			repliedMessage,
-		});
+		// Extract URLs: prioritize trigger message, then fall back to reply context
+		const directReplyUrls =
+			this.extractURLsFromMessage(repliedMessage) ?? this.extractURLsFromMessage(message) ?? [];
 
 		// TODO: Store that in DB or Redis too as processed link and re-fresh after TTL is expired
 		const extractedReplyPages = await Promise.all(
@@ -135,7 +137,7 @@ export class History {
 			.map((page) => `URL: ${page.url}\nSource: ${page.source}\n${page.markdown}`);
 
 		logger.debug(
-			`Extracted ${directReplySupplementalContent.length}/${directReplyUrls.length} URLs from direct reply`,
+			`Extracted ${directReplySupplementalContent.length}/${directReplyUrls.length} URLs for supplemental context`,
 		);
 
 		// Deduplicate and merge the enriched direct reply entry (with inlined video attachments)
@@ -251,28 +253,24 @@ export class History {
 		};
 	}
 
-	private static extractURLs(params: {
-		directReplyEntry: Pick<
-			StoredConversationMessage,
-			"text" | "caption" | "entities" | "captionEntities"
-		> | null;
-		repliedMessage: ReplyToMessage | undefined;
-	}): string[] {
-		const msg = params.directReplyEntry ?? params.repliedMessage;
+	private static extractURLsFromMessage(
+		msg: UrlExtractionMessage | null | undefined,
+	): string[] | null {
 		if (!msg) {
-			return [];
+			return null;
 		}
 
 		const text = msg.text ?? msg.caption;
+
 		if (!text) {
-			return [];
+			return null;
 		}
 
 		const captionEntities = "captionEntities" in msg ? msg.captionEntities : msg.caption_entities;
 		const entities = (msg.text ? msg.entities : captionEntities) ?? [];
 
 		if (entities.length === 0) {
-			return [];
+			return null;
 		}
 
 		const urls: string[] = [];
