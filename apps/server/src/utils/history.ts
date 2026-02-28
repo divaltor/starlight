@@ -33,12 +33,6 @@ export type StoredConversationMessage = Prisma.MessageGetPayload<{
 	select: typeof messageHistorySelect;
 }>;
 
-type ReplyToMessage = NonNullable<NonNullable<Context["message"]>["reply_to_message"]>;
-
-type UrlExtractionMessage =
-	| Pick<StoredConversationMessage, "text" | "caption" | "entities" | "captionEntities">
-	| Pick<ReplyToMessage, "text" | "caption" | "entities" | "caption_entities">;
-
 interface ExtractedPageMarkdown {
 	markdown: string;
 	source: string;
@@ -245,9 +239,7 @@ export class History {
 		};
 	}
 
-	private static extractURLsFromMessage(
-		msg: UrlExtractionMessage | null | undefined,
-	): string[] | null {
+	private static extractURLsFromMessage(msg?: Message): string[] | null {
 		if (!msg) {
 			return null;
 		}
@@ -258,8 +250,7 @@ export class History {
 			return null;
 		}
 
-		const captionEntities = "captionEntities" in msg ? msg.captionEntities : msg.caption_entities;
-		const entities = (msg.text ? msg.entities : captionEntities) ?? [];
+		const entities = (msg.text ? msg.entities : msg.caption_entities) ?? [];
 
 		if (entities.length === 0) {
 			return null;
