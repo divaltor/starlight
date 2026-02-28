@@ -85,11 +85,10 @@ export class History {
 
 		logger.debug(`Fetched ${history.length} messages from history`);
 
-		const historyEntries = history.map((entry) => this.toPromptMessage(entry));
 		const directReplyMessageId = repliedMessage?.message_id ?? null;
 
 		const storedMessageById = new Map<number, StoredConversationMessage>(
-			historyEntries.map((entry) => [entry.messageId, entry]),
+			history.map((entry) => [entry.messageId, entry]),
 		);
 
 		// Backfill only the current message's direct reply target if it fell outside the history window
@@ -103,7 +102,7 @@ export class History {
 			});
 
 			if (referencedMessage) {
-				storedMessageById.set(referencedMessage.messageId, this.toPromptMessage(referencedMessage));
+				storedMessageById.set(referencedMessage.messageId, referencedMessage);
 				logger.debug({ messageId: referencedMessage.messageId }, "Backfilled direct reply message");
 			} else {
 				logger.debug(
@@ -143,11 +142,8 @@ export class History {
 		// Deduplicate and merge the enriched direct reply entry (with inlined video attachments)
 		// into history — it may already exist in the window or come from outside it
 		const orderedHistoryEntries = directReplyEntry
-			? [
-					...historyEntries.filter((e) => e.messageId !== directReplyEntry.messageId),
-					directReplyEntry,
-				]
-			: [...historyEntries];
+			? [...history.filter((e) => e.messageId !== directReplyEntry.messageId), directReplyEntry]
+			: [...history];
 
 		// Sort chronologically so the model sees messages in natural order
 		orderedHistoryEntries.sort((left, right) => left.messageId - right.messageId);
@@ -205,10 +201,6 @@ export class History {
 			knownMessageIds,
 			messages,
 		};
-	}
-
-	private static toPromptMessage(entry: StoredConversationMessage): StoredConversationMessage {
-		return entry;
 	}
 
 	private static async inlineVideoAttachments(
