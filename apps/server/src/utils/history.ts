@@ -16,6 +16,7 @@ const messageHistorySelect = {
 	entities: true,
 	captionEntities: true,
 	replyToMessageId: true,
+	messageThreadId: true,
 	attachments: {
 		select: {
 			attachmentType: true,

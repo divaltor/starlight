@@ -81,6 +81,7 @@ groupChat
 			{
 				messageId: triggerMessageId,
 				replyToMessageId: ctx.message.reply_to_message?.message_id ?? null,
+				messageThreadId,
 				fromId: ctx.message.from?.id ?? null,
 				fromUsername: ctx.message.from?.username ?? null,
 				fromFirstName: ctx.message.from?.first_name ?? null,

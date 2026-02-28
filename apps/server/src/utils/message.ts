@@ -358,7 +358,8 @@ function formatSupplementalContent(supplementalContent: string[]): string {
 export function toConversationMessage(
 	entry: {
 		messageId?: number;
-		replyToMessageId?: number | null;
+		replyToMessageId: number | null;
+		messageThreadId: number | null;
 		fromId: number | bigint | null;
 		fromUsername: string | null;
 		fromFirstName: string | null;
@@ -394,8 +395,12 @@ export function toConversationMessage(
 		attachments.length > 0
 			? attachments.map((attachment) => attachmentLabelFromMimeType(attachment.mimeType))
 			: [];
+	const isTopicRootReply =
+		entry.replyToMessageId !== null &&
+		entry.messageThreadId !== null &&
+		entry.replyToMessageId === entry.messageThreadId;
 	const replyLabel =
-		entry.replyToMessageId !== null && entry.replyToMessageId !== undefined
+		entry.replyToMessageId !== null && !isTopicRootReply
 			? `[Reply to #${entry.replyToMessageId}]`
 			: null;
 
