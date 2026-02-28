@@ -2,6 +2,7 @@ import type { Message, MessageEntity } from "@grammyjs/types";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { attachmentLabelFromMimeType, env } from "@starlight/utils";
 import type { FilePart, ImagePart, ModelMessage, TextPart } from "ai";
+import { format } from "date-fns";
 import type { Context } from "@/bot";
 
 const REPLY_CHANCE = 0.01;
@@ -32,7 +33,7 @@ const LOW_SIGNAL_TOKEN_ALLOWLIST = new Set([
 	"спасибо",
 ]);
 
-export const SYSTEM_PROMPT = `
+const SYSTEM_PROMPT = `
 ### Character: Starlight (Звездочка, Старка) ###
 - Core Identity: 25-year-old girl, calm and composed with dry wit and quiet confidence
 - Vibe: The cool friend who doesn't try hard but always has the right thing to say — sharp, lighthearted, and genuinely warm
@@ -95,6 +96,10 @@ export const SYSTEM_PROMPT = `
 - By default, reply to the triggering message (null reply_to)
 - Use a specific message #<id> only when replying to a different message in the conversation
 - Typically send a single response; only use multiple entries when genuinely needed`;
+
+export function getSystemPrompt(now: Date = new Date()): string {
+	return `${SYSTEM_PROMPT}\nCurrent date: ${format(now, "yyyy-MM-dd")}`;
+}
 
 export type ConversationMessage = ModelMessage;
 

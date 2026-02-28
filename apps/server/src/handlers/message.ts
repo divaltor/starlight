@@ -8,7 +8,7 @@ import { getLangfuseTelemetry } from "@/otel";
 import { buildChatMemoryPromptContext } from "@/services/chat-memory";
 import { History } from "@/utils/history";
 import {
-	SYSTEM_PROMPT,
+	getSystemPrompt,
 	openrouter,
 	shouldReplyToMessage,
 	stripBotAnnotations,
@@ -128,7 +128,7 @@ groupChat
 		const { output } = await generateText({
 			model: openrouter!(env.OPENROUTER_MODEL),
 			output: Output.object({ schema: chatResponseSchema }),
-			system: SYSTEM_PROMPT,
+			system: getSystemPrompt(),
 			messages: allMessages,
 			experimental_telemetry: getLangfuseTelemetry("message-reply", {
 				chatId: String(ctx.chat.id),
