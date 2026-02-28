@@ -19,11 +19,10 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 1. Use `@/` alias for all internal imports; relative imports are forbidden in apps.
 2. Prefer Bun APIs (`Bun.file`, `Bun.write`, etc.) over Node.js `fs` equivalents.
 3. Treat Telegram IDs as JS safe integers (`number`) in app code; convert to `BigInt` only where required by Prisma/db types.
-4. NEVER use `git` to verify your own changed files. You did it right away, you know what was changed.
-5. Run `build` script only for changes in `apps/web` package.
-6. Don't run `test` command unless you change code related to these tests.
-7. Use pre-defined types from libraries\Prisma generated files where is possible. Use Pick, Omit and other Typescript type-helpers to extract required values instead of creating own types with same information.
-8. Instead of `fetch` -> `http` from `@/starlight/utils/http` module
+4. Run `build` script only for changes in `apps/web` package.
+5. Don't run `test` command unless you change code related to these tests.
+6. Use pre-defined types from libraries\Prisma generated files where is possible. Use Pick, Omit and other Typescript type-helpers to extract required values instead of creating own types with same information.
+7. Instead of `fetch` -> `http` from `@/starlight/utils/http` module
 
 ## Maintenance & Tasks
 
