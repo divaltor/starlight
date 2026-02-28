@@ -1,6 +1,6 @@
 import { env, prisma } from "@starlight/utils";
 import { Output, generateText } from "ai";
-import { Composer } from "grammy";
+import { Composer, GrammyError } from "grammy";
 import { chatResponseSchema } from "@/ai/schema";
 import type { Context } from "@/bot";
 import { saveMessage } from "@/middlewares/message";
@@ -165,17 +165,29 @@ groupChat
 
 			const replyToId = reply.reply_to ?? triggerMessageId;
 
-			const sentMessage = await ctx.api.sendMessage(ctx.chat.id, replyText, {
-				reply_to_message_id: replyToId,
-				message_thread_id: ctx.message.message_thread_id,
-			});
+			try {
+				const sentMessage = await ctx.api.sendMessage(ctx.chat.id, replyText, {
+					reply_parameters: { message_id: replyToId },
+					message_thread_id: ctx.message.message_thread_id,
+				});
 
-			ctx.logger.debug(
-				{ messageId: sentMessage.message_id },
-				`Sent AI reply (replyTo: ${replyToId}, length: ${replyText.length})`,
-			);
+				ctx.logger.debug(
+					{ messageId: sentMessage.message_id },
+					`Sent AI reply (replyTo: ${replyToId}, length: ${replyText.length})`,
+				);
 
-			await saveMessage({ ctx, msg: sentMessage });
+				await saveMessage({ ctx, msg: sentMessage });
+			} catch (error) {
+				if (error instanceof GrammyError) {
+					ctx.logger.debug(
+						{ error: error.message, replyTo: replyToId },
+						"Could not send AI reply (message may have been deleted)",
+					);
+					continue;
+				}
+
+				throw error;
+			}
 		}
 	});
 
