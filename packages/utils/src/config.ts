@@ -3,6 +3,8 @@ import { z } from "zod/v4";
 
 const env = createEnv({
 	server: {
+		APP_NAME: z.string().default("Starlight"),
+
 		BOT_TOKEN: z.string(),
 		BOT_ALIASES: z
 			.string()

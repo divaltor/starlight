@@ -115,7 +115,10 @@ export interface ToConversationMessageOptions {
 }
 
 export const openrouter = env.OPENROUTER_API_KEY
-	? createOpenRouter({ apiKey: env.OPENROUTER_API_KEY })
+	? createOpenRouter({
+			apiKey: env.OPENROUTER_API_KEY,
+			headers: { "X-OpenRouter-Title": env.APP_NAME },
+		})
 	: null;
 
 export function getMessageContent(msg: Pick<Message, "text" | "caption">): string | null {
