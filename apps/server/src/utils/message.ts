@@ -279,6 +279,10 @@ export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
 		return false;
 	}
 
+	if (msg.from?.username?.toLowerCase() === "nrj_ex") {
+		return false;
+	}
+
 	if (!(getMessageContent(msg) || hasMessageAttachments(msg))) {
 		return false;
 	}
