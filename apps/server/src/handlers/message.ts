@@ -178,6 +178,10 @@ groupChat
 				);
 
 				await saveMessage({ ctx, msg: sentMessage });
+				await sleep(1_200, {
+					minMs: 1_200,
+					maxMs: 2_500,
+				});
 			} catch (error) {
 				if (error instanceof GrammyError) {
 					ctx.logger.debug(
