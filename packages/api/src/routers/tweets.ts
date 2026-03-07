@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/client";
 import { type Prisma, prisma, type User } from "@starlight/utils";
 import { z } from "zod";
 import { no } from "..";
-import { maybeAuthProcedure } from "../middlewares/auth";
+import { maybeAuthProcedure, protectedProcedure } from "../middlewares/auth";
 import { Cursor, type CursorPayload } from "../utils/cursor";
 import { transformTweets } from "../utils/transformations";
 
@@ -148,3 +148,34 @@ export const retrieveUserTweets = no
 		}
 	})
 	.callable();
+
+export const deletePhoto = protectedProcedure
+	.input(z.object({ photoId: z.string() }))
+	.handler(async ({ input, context }) => {
+		const photo = await prisma.photo.findFirst({
+			where: {
+				id: input.photoId,
+				userId: context.databaseUserId,
+				deletedAt: null,
+			},
+		});
+
+		if (!photo) {
+			throw new ORPCError("NOT_FOUND", {
+				message: "Photo not found",
+				status: 404,
+			});
+		}
+
+		await prisma.photo.update({
+			where: {
+				photoId: {
+					id: input.photoId,
+					userId: context.databaseUserId,
+				},
+			},
+			data: { deletedAt: new Date() },
+		});
+
+		return { success: true };
+	});

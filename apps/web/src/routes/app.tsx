@@ -1,6 +1,6 @@
 import type { ProfileResult } from "@starlight/api/routers/index";
 import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle, Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
@@ -14,10 +14,11 @@ import { useSearch } from "@/hooks/use-search";
 import { useTweets } from "@/hooks/use-tweets";
 import { cn } from "@/lib/utils";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
-import { orpc } from "@/utils/orpc";
+import { client, orpc } from "@/utils/orpc";
 
 function TwitterArtViewer() {
 	const { updateButtons, rawInitData } = useTelegramContext();
+	const queryClient = useQueryClient();
 
 	// Search state with URL params and history support
 	const [urlQuery, setUrlQuery] = useQueryState("q", parseAsString.withDefault(""));
@@ -70,6 +71,13 @@ function TwitterArtViewer() {
 
 	const { tweets, isLoading, isFetchingNextPage, hasNextPage, error, fetchNextPage } = useTweets();
 
+	const deletePhotoMutation = useMutation({
+		mutationFn: (photoId: string) => client.tweets.delete({ photoId }),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["tweets"] });
+		},
+	});
+
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
 		const trimmedQuery = inputValue.trim();
@@ -107,10 +115,14 @@ function TwitterArtViewer() {
 	const renderMasonryItem = useCallback(
 		({ data, width }: { data: TweetData; width: number }) => (
 			<div className="mb-1" style={{ width }}>
-				<TweetImageGrid tweet={data} />
+				<TweetImageGrid
+					tweet={data}
+					showActions
+					onDeleteImage={(photoId) => deletePhotoMutation.mutate(photoId)}
+				/>
 			</div>
 		),
-		[],
+		[deletePhotoMutation],
 	);
 
 	// Show error state

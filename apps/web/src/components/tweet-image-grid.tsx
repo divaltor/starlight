@@ -5,6 +5,16 @@ import type { UIElementData } from "photoswipe";
 import type { PhotoSwipe } from "photoswipe/lightbox";
 import { useState } from "react";
 import { Gallery, Item } from "react-photoswipe-gallery";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Carousel } from "@/components/ui/skiper-ui/carousel";
 
@@ -24,6 +34,7 @@ export function TweetImageGrid({
 	const [isImageLoading, setIsImageLoading] = useState<{
 		[key: string]: boolean;
 	}>({});
+	const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
 	const handleImageLoad = (imageId: string, isLoading: boolean) => {
 		setIsImageLoading((prev) => ({ ...prev, [imageId]: isLoading }));
@@ -157,7 +168,7 @@ export function TweetImageGrid({
 												className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
 												onClick={(e) => {
 													e.stopPropagation();
-													onDeleteImage(photo.id);
+													setDeleteConfirm(photo.id);
 												}}
 												size="sm"
 												variant="ghost"
@@ -171,6 +182,14 @@ export function TweetImageGrid({
 						</div>
 					)}
 				</Item>
+				<DeleteConfirmDialog
+					deleteConfirm={deleteConfirm}
+					onConfirm={() => {
+						if (deleteConfirm) onDeleteImage?.(deleteConfirm);
+						setDeleteConfirm(null);
+					}}
+					onOpenChange={(open) => !open && setDeleteConfirm(null)}
+				/>
 			</Gallery>
 		);
 	}
@@ -253,7 +272,7 @@ export function TweetImageGrid({
 													className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
 													onClick={(e) => {
 														e.stopPropagation();
-														onDeleteImage(item.id || "");
+														setDeleteConfirm(item.id || "");
 													}}
 													size="sm"
 													variant="ghost"
@@ -269,6 +288,43 @@ export function TweetImageGrid({
 					</Item>
 				)}
 			/>
+			<DeleteConfirmDialog
+				deleteConfirm={deleteConfirm}
+				onConfirm={() => {
+					if (deleteConfirm) onDeleteImage?.(deleteConfirm);
+					setDeleteConfirm(null);
+				}}
+				onOpenChange={(open) => !open && setDeleteConfirm(null)}
+			/>
 		</Gallery>
+	);
+}
+
+function DeleteConfirmDialog({
+	deleteConfirm,
+	onConfirm,
+	onOpenChange,
+}: {
+	deleteConfirm: string | null;
+	onConfirm: () => void;
+	onOpenChange: (open: boolean) => void;
+}) {
+	return (
+		<AlertDialog open={deleteConfirm !== null} onOpenChange={onOpenChange}>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle>Delete image</AlertDialogTitle>
+					<AlertDialogDescription>
+						Are you sure you want to delete this image? This action cannot be undone.
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel>Cancel</AlertDialogCancel>
+					<AlertDialogAction variant="destructive" onPress={onConfirm}>
+						Delete
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
 	);
 }

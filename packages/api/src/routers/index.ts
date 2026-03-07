@@ -2,7 +2,7 @@ import type { InferRouterInputs, InferRouterOutputs, RouterClient } from "@orpc/
 import { deleteCookies, saveCookies } from "./cookies";
 import { changeProfileVisibility, getUserProfile } from "./profiles";
 import { randomImages, searchImages } from "./search";
-import { listUserTweets } from "./tweets";
+import { deletePhoto, listUserTweets } from "./tweets";
 
 export const appRouter = {
 	profiles: {
@@ -15,6 +15,7 @@ export const appRouter = {
 	},
 	tweets: {
 		list: listUserTweets,
+		delete: deletePhoto,
 		search: searchImages,
 		random: randomImages,
 	},
