@@ -1,4 +1,4 @@
-import type * as React from "react";
+import * as React from "react";
 import { Dialog as AriaDialog, Modal as AriaModal, Heading } from "react-aria-components";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
