@@ -1,3 +1,4 @@
+import { PinoInstrumentation } from "@opentelemetry/instrumentation-pino";
 import { PrismaInstrumentation } from "@prisma/instrumentation";
 import env from "@starlight/utils/config";
 import { registerOTel } from "@vercel/otel";
@@ -41,7 +42,7 @@ export function registerTelemetry() {
 				})
 			: undefined,
 		spanProcessors,
-		instrumentations: ["auto", new PrismaInstrumentation()],
+		instrumentations: ["auto", new PrismaInstrumentation(), new PinoInstrumentation()],
 	});
 }
 
