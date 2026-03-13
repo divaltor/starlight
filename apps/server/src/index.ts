@@ -3,6 +3,7 @@ import { bot } from "@/bot";
 import chatMemberHandler from "@/handlers/chat-member";
 import imageHandler from "@/handlers/image";
 import messageHandler from "@/handlers/message";
+import startHandler from "@/handlers/start";
 import tweetImageHandler from "@/handlers/tweet-image";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
@@ -28,6 +29,7 @@ boundary.use(videoHandler);
 boundary.use(tweetImageHandler);
 boundary.use(imageHandler);
 boundary.use(messageHandler);
+boundary.use(startHandler);
 boundary.use(chatMemberHandler);
 
 const runner = run(bot);
