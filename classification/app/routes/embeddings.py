@@ -1,3 +1,4 @@
+import threading
 from typing import TYPE_CHECKING, Annotated
 
 import structlog
@@ -20,6 +21,7 @@ embedding_model = SentenceTransformer(
     trust_remote_code=True,
     truncate_dim=1024,
 )
+embedding_model_lock = threading.Lock()
 
 router = APIRouter()
 
@@ -41,7 +43,10 @@ async def embeddings(
 ) -> EmbeddingResponse:
     try:
         # Always encode text
-        with pipeline_span('text_embedding', 'jinaai/jina-clip-v2', payload.encoding_mode):
+        with (
+            pipeline_span('text_embedding', 'jinaai/jina-clip-v2', payload.encoding_mode),
+            embedding_model_lock,
+        ):
             emb_text_vec: ndarray = embedding_model.encode(
                 [payload.text],
                 prompt_name=payload.encoding_mode.value,
@@ -54,7 +59,10 @@ async def embeddings(
             with torch.no_grad():
                 img = await preprocess_image(payload.image.strip())
 
-                with pipeline_span('image_embedding', 'jinaai/jina-clip-v2', payload.encoding_mode):
+                with (
+                    pipeline_span('image_embedding', 'jinaai/jina-clip-v2', payload.encoding_mode),
+                    embedding_model_lock,
+                ):
                     emb_image: ndarray = embedding_model.encode(
                         [img],
                         prompt_name=payload.encoding_mode.value,
