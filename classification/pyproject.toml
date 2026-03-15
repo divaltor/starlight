@@ -10,19 +10,21 @@ dependencies = [
   "einops>=0.8.1",
   "fake-useragent>=2.2.0",
   "fastapi>=0.119.0",
-  "granian[reload,uvloop]>=2.5.5",
-  "ml-dtypes>=0.4.1",
-  "numpy>=1.26.4",
-  "onnxruntime>=1.24.2",
-  "optimum<2.0.0",
+  "granian[reload]>=2.7.2",
+  "ml-dtypes>=0.5.1",
+  "numpy>=2.1.0",
+  "onnxruntime>=1.24.3",
+  "optimum>=1.27.0,<2.0.0",
   "pillow>=11.3.0",
   "pydantic>=2.12.0",
   "pydantic-settings>=2.11.0",
-  "sentence-transformers>=5.1.1",
+  "sentence-transformers>=5.3.0",
   "structlog>=25.4.0",
   "tiktoken>=0.12.0",
   "timm>=1.0.20",
-  "transformers[torch]>=4.44.0",
+  "tokenizers>=0.22.2",
+  "torch>=2.10.0",
+  "transformers>=5.3.0",
 ]
 
 [tool.uv]
@@ -172,11 +174,11 @@ reportImplicitAbstractClass = "warning"
 [dependency-groups]
 dev = ["ruff>=0.14.0"]
 otel = [
-  "opentelemetry-api>=1.37.0",
-  "opentelemetry-exporter-otlp>=1.37.0",
-  "opentelemetry-instrumentation-fastapi>=0.58b0",
-  "opentelemetry-instrumentation-threading>=0.58b0",
-  "opentelemetry-instrumentation-transformers>=0.47.3",
-  "opentelemetry-instrumentation-urllib>=0.58b0",
-  "opentelemetry-sdk>=1.37.0",
+  "opentelemetry-api>=1.40.0",
+  "opentelemetry-exporter-otlp-proto-http>=1.40.0",
+  "opentelemetry-instrumentation-fastapi>=0.61b0",
+  "opentelemetry-instrumentation-threading>=0.61b0",
+  "opentelemetry-instrumentation-transformers>=0.53.0",
+  "opentelemetry-instrumentation-urllib>=0.61b0",
+  "opentelemetry-sdk>=1.40.0",
 ]
