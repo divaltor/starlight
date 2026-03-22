@@ -12,6 +12,7 @@ Notes:
 from __future__ import annotations
 
 import copy
+import json
 import os
 import pathlib
 from collections import defaultdict
@@ -19,7 +20,6 @@ from collections.abc import Mapping
 from typing import Any, BinaryIO, Union
 
 import numpy as np
-import orjson
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -39,15 +39,13 @@ def _get_overlap_tags() -> Mapping[str, list[str]]:
         repo_type='dataset',
     )
     with pathlib.Path(json_file).open('rb') as file:
-        data = orjson.loads(file.read())
-    return data
+        return json.load(file)
 
 
 def _get_metadata_file() -> Mapping[str, Any]:
     json_file = hf_hub_download(_REPO_ID, 'camie-tagger-v2-metadata.json', repo_type='model')
     with pathlib.Path(json_file).open('rb') as f:
-        data = orjson.loads(f.read())
-    return data
+        return json.load(f)
 
 
 def drop_overlap_tags(
