@@ -113,7 +113,7 @@ groupChat
 			...(memoryContext
 				? [
 						{
-							role: "assistant" as const,
+							role: "system" as const,
 							content: memoryContext,
 						},
 					]
