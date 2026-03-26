@@ -52,7 +52,7 @@ const env = createEnv({
 
 		LANGFUSE_PUBLIC_KEY: z.string().optional(),
 		LANGFUSE_SECRET_KEY: z.string().optional(),
-		LANGFUSE_BASEURL: z.url().default("https://cloud.langfuse.com"),
+		LANGFUSE_BASE_URL: z.url().default("https://cloud.langfuse.com"),
 		LANGFUSE_TRACING_ENVIRONMENT: z.string().default("development"),
 
 		HISTORY_LIMIT: z.number().default(13),

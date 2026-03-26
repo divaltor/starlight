@@ -1,3 +1,4 @@
+import { initTelemetry, shutdownTelemetry } from "@/instrumentation";
 import { run } from "@grammyjs/runner";
 import { bot } from "@/bot";
 import chatMemberHandler from "@/handlers/chat-member";
@@ -7,14 +8,13 @@ import startHandler from "@/handlers/start";
 import tweetImageHandler from "@/handlers/tweet-image";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
-import { registerTelemetry } from "@/otel";
 import { classificationWorker } from "@/queue/classification";
 import { embeddingsWorker } from "@/queue/embeddings";
 import { imagesWorker } from "@/queue/image-collector";
 import { memoryWorker } from "@/queue/memory";
 import { scrapperWorker } from "@/queue/scrapper";
 
-registerTelemetry();
+initTelemetry();
 
 const boundary = bot.errorBoundary((error) => {
 	const { ctx } = error;
@@ -46,6 +46,7 @@ process.once("SIGINT", async () => {
 	await scrapperWorker.close();
 	await embeddingsWorker.close();
 	await memoryWorker.close();
+	await shutdownTelemetry();
 });
 
 process.once("SIGTERM", async () => {
@@ -58,6 +59,7 @@ process.once("SIGTERM", async () => {
 	await scrapperWorker.close();
 	await embeddingsWorker.close();
 	await memoryWorker.close();
+	await shutdownTelemetry();
 });
 
 imagesWorker.run();
