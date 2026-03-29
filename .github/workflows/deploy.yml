@@ -85,7 +85,7 @@ jobs:
             classification: {
               service: 'classification',
               context: 'classification',
-              dockerfile: 'Dockerfile',
+              dockerfile: 'classification/Dockerfile',
               image: 'starlight/classification',
             },
           }
