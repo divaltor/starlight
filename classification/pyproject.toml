@@ -3,36 +3,46 @@ name = "classification"
 version = "1.0.0"
 description = "Image classification API for Starlight"
 readme = "README.md"
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.14,<3.15"
 dependencies = [
-    "aiohttp[speedups]>=3.13.0",
-    "axiom-py>=0.9.1",
-    "einops>=0.8.1",
-    "fake-useragent>=2.2.0",
-    "fastapi>=0.119.0",
-    "granian[reload,uvloop]>=2.5.5",
-    "ml-dtypes>=0.4.1",
-    "numpy>=1.26.4",
-    "onnx>=1.19.1",
-    "optimum[onnxruntime]<2.0.0",
-    "orjson>=3.11.3",
-    "pillow>=11.3.0",
-    "pydantic>=2.12.0",
-    "pydantic-settings>=2.11.0",
-    "sentence-transformers>=5.1.1",
-    "structlog>=25.4.0",
-    "tiktoken>=0.12.0",
-    "timm>=1.0.20",
-    "transformers[torch]>=4.44.0",
+  "aiohttp>=3.13.0",
+  "axiom-py>=0.9.1",
+  "einops>=0.8.1",
+  "fake-useragent>=2.2.0",
+  "fastapi>=0.119.0",
+  "granian[reload]>=2.7.2",
+  "ml-dtypes>=0.5.1",
+  "numpy>=2.1.0",
+  "onnxruntime>=1.24.3",
+  "optimum>=1.27.0,<2.0.0",
+  "pillow>=11.3.0",
+  "pydantic>=2.12.0",
+  "pydantic-settings>=2.11.0",
+  "sentence-transformers>=5.3.0",
+  "structlog>=25.4.0",
+  "tiktoken>=0.12.0",
+  "timm>=1.0.20",
+  "tokenizers>=0.22.2",
+  "torch>=2.10.0",
+  "transformers>=5.3.0",
 ]
 
 [tool.uv]
 default-groups = "all"
 
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
 
 [tool.ruff]
 line-length = 100
-target-version = "py313"
+target-version = "py314"
 
 src = ["app"]
 output-format = "grouped"
@@ -41,38 +51,38 @@ show-fixes = true
 [tool.ruff.lint]
 extend-select = ["ALL"]
 extend-ignore = [
-    "D10",     # Missing docstrings everywhere,
-    "DOC",     # docstrings
-    "D401",    # First line should be in imperative mood
-    "ANN401",  # Dynamically typed expressions are disallowed
-    "A003",    # Class attribute shadowing built-in
-    "E501",    # Line too long
-    "D212",    # Multi-line docstring summary should start at the first line
-    "TRY003",  # Avoid specifying long messages outside the exception class
-    "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
-    "RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
-    "RUF001",  # String contains ambiguous {}. Did you mean {}?
-    "RUF002",  # Docstring contains ambiguous {}. Did you mean {}?
-    "RUF003",  # Comment contains ambiguous {}. Did you mean {}?
-    "UP040",   # Type alias {name} uses TypeAlias annotation instead of the type keyword
-    "ISC001",  # Implicit string concatenation
-    "TD002",   # TODO author
-    "TD003",   # TODO link
-    "FIX002",  # FIXME lines
-    "CPY",     # Copyright
-    "ERA",     # Commented out code
-    "FBT",     # Boolean-position argument
-    "PLC0415", # Import should be on top-level
-    "EM",      # Exception must not use string literal
-    "PLR091",  # Too many arguments
-    "D205",    # 1 blank line required between summary line and description
-    "TRY300",  # "return" block in "else" statement
-    "BLE001",  # Blind exception
-    "PLR6301", # Function can be static
-    "PLR2004", # Magic number
-    "S101",    # Use of `assert` for flow control
-    "C901",    # Complexity (don't care)
-    "TRY301",
+  "D10", # Missing docstrings everywhere,
+  "DOC", # docstrings
+  "D401", # First line should be in imperative mood
+  "ANN401", # Dynamically typed expressions are disallowed
+  "A003", # Class attribute shadowing built-in
+  "E501", # Line too long
+  "D212", # Multi-line docstring summary should start at the first line
+  "TRY003", # Avoid specifying long messages outside the exception class
+  "S311", # Standard pseudo-random generators are not suitable for cryptographic purposes
+  "RUF012", # Mutable class attributes should be annotated with `typing.ClassVar`
+  "RUF001", # String contains ambiguous {}. Did you mean {}?
+  "RUF002", # Docstring contains ambiguous {}. Did you mean {}?
+  "RUF003", # Comment contains ambiguous {}. Did you mean {}?
+  "UP040", # Type alias {name} uses TypeAlias annotation instead of the type keyword
+  "ISC001", # Implicit string concatenation
+  "TD002", # TODO author
+  "TD003", # TODO link
+  "FIX002", # FIXME lines
+  "CPY", # Copyright
+  "ERA", # Commented out code
+  "FBT", # Boolean-position argument
+  "PLC0415", # Import should be on top-level
+  "EM", # Exception must not use string literal
+  "PLR091", # Too many arguments
+  "D205", # 1 blank line required between summary line and description
+  "TRY300", # "return" block in "else" statement
+  "BLE001", # Blind exception
+  "PLR6301", # Function can be static
+  "PLR2004", # Magic number
+  "S101", # Use of `assert` for flow control
+  "C901", # Complexity (don't care)
+  "TRY301",
 ]
 unfixable = ["F841"] # Unused variable
 preview = true
@@ -82,10 +92,7 @@ quote-style = "single"
 
 [tool.ruff.lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel", "pydantic.RootModel"]
-runtime-evaluated-decorators = [
-    "dataclasses.dataclass",
-    "pydantic.validate_call",
-]
+runtime-evaluated-decorators = ["dataclasses.dataclass", "pydantic.validate_call"]
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = "single"
@@ -120,7 +127,7 @@ known-first-party = ["app"]
 
 
 [tool.pyright]
-pythonVersion = "3.13"
+pythonVersion = "3.14"
 typeCheckingMode = "strict"
 reportAny = false
 reportExplicitAny = false
@@ -132,7 +139,7 @@ reportUnusedExpression = false
 reportUnusedCallResult = false
 reportUnknownVariableType = false
 reportMissingTypeStubs = false
-reportUnusedVariable = false            # Ruff detects this (F841)
+reportUnusedVariable = false # Ruff detects this (F841)
 
 # Set warnings from `basedpyright` to reduce `alarm fatigue`.
 reportPropertyTypeMismatch = "warning"
@@ -176,11 +183,11 @@ reportImplicitAbstractClass = "warning"
 [dependency-groups]
 dev = ["ruff>=0.14.0"]
 otel = [
-    "opentelemetry-api>=1.37.0",
-    "opentelemetry-exporter-otlp>=1.37.0",
-    "opentelemetry-instrumentation-fastapi>=0.58b0",
-    "opentelemetry-instrumentation-threading>=0.58b0",
-    "opentelemetry-instrumentation-transformers>=0.47.3",
-    "opentelemetry-instrumentation-urllib>=0.58b0",
-    "opentelemetry-sdk>=1.37.0",
+  "opentelemetry-api>=1.40.0",
+  "opentelemetry-exporter-otlp-proto-http>=1.40.0",
+  "opentelemetry-instrumentation-fastapi>=0.61b0",
+  "opentelemetry-instrumentation-threading>=0.61b0",
+  "opentelemetry-instrumentation-transformers>=0.53.0",
+  "opentelemetry-instrumentation-urllib>=0.61b0",
+  "opentelemetry-sdk>=1.40.0",
 ]
