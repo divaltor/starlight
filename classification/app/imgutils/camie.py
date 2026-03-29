@@ -12,21 +12,26 @@ Notes:
 from __future__ import annotations
 
 import copy
+import json
 import os
 import pathlib
 from collections import defaultdict
-from collections.abc import Mapping
-from typing import Any, BinaryIO, Union
+from operator import itemgetter
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 import numpy as np
-import orjson
-import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from app.imgutils.utils import open_onnx_model, ts_lru_cache
 
-ImageTyping = Union[str, os.PathLike[str], bytes, bytearray, BinaryIO, Image.Image]
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    import torch
+    from onnxruntime import InferenceSession
+
+ImageTyping = str | os.PathLike[str] | bytes | bytearray | BinaryIO | Image.Image
 
 _REPO_ID = 'Camais03/camie-tagger-v2'
 
@@ -39,15 +44,13 @@ def _get_overlap_tags() -> Mapping[str, list[str]]:
         repo_type='dataset',
     )
     with pathlib.Path(json_file).open('rb') as file:
-        data = orjson.loads(file.read())
-    return data
+        return json.load(file)
 
 
 def _get_metadata_file() -> Mapping[str, Any]:
     json_file = hf_hub_download(_REPO_ID, 'camie-tagger-v2-metadata.json', repo_type='model')
     with pathlib.Path(json_file).open('rb') as f:
-        data = orjson.loads(f.read())
-    return data
+        return json.load(f)
 
 
 def drop_overlap_tags(
@@ -55,7 +58,7 @@ def drop_overlap_tags(
 ) -> list[str] | Mapping[str, float]:
     overlap_tags_dict = _get_overlap_tags()
     result_tags: list[str] = []
-    _origin_tags = copy.deepcopy(tags)
+    origin_tags = copy.deepcopy(tags)
     if isinstance(tags, dict):
         tags = list(tags.keys())
     tags_underscore = [tag.replace(' ', '_') for tag in tags]
@@ -63,7 +66,7 @@ def drop_overlap_tags(
     for tag, tag_ in zip(tags, tags_underscore, strict=False):
         to_remove = False
         if tag_ in overlap_tags_dict:
-            overlap_values = set(val for val in overlap_tags_dict[tag_])
+            overlap_values = set(overlap_tags_dict[tag_])
             if overlap_values.intersection(set(tags_underscore)):
                 to_remove = True
         for tag_another in tags:
@@ -73,12 +76,12 @@ def drop_overlap_tags(
         if not to_remove:
             result_tags.append(tag)
 
-    if isinstance(_origin_tags, list):
+    if isinstance(origin_tags, list):
         return result_tags
-    if isinstance(_origin_tags, dict):
-        _rtags_set = set(result_tags)
-        return {key: value for key, value in _origin_tags.items() if key in _rtags_set}
-    raise TypeError(f'Unknown tags type - {_origin_tags!r}.')  # pragma: no cover
+    if isinstance(origin_tags, dict):
+        result_tags_set = set(result_tags)
+        return {key: value for key, value in origin_tags.items() if key in result_tags_set}
+    raise TypeError(f'Unknown tags type - {origin_tags!r}.')  # pragma: no cover
 
 
 _KAOMOJIS = [
@@ -115,7 +118,7 @@ def underline(tag: str) -> str:
 
 
 @ts_lru_cache()
-def _get_camie_model():
+def _get_camie_model() -> InferenceSession:
     return open_onnx_model(
         hf_hub_download(
             repo_id=_REPO_ID,
@@ -152,7 +155,7 @@ def preprocess_image(pil_img: Image.Image, image_size: int = 512) -> torch.Tenso
         ],
     )
 
-    if pil_img.mode in ('RGBA', 'P'):
+    if pil_img.mode in {'RGBA', 'P'}:
         pil_img = pil_img.convert('RGB')
 
     width, height = pil_img.size
@@ -212,10 +215,7 @@ def get_camie_tags(
     input_name = session.get_inputs()[0].name
     outputs = session.run(None, {input_name: img_numpy})
 
-    if len(outputs) >= 2:
-        main_logits = outputs[1]
-    else:
-        main_logits = outputs[0]
+    main_logits = outputs[1] if len(outputs) >= 2 else outputs[0]
 
     main_probs = 1.0 / (1.0 + np.exp(-main_logits))
     probs = main_probs[0]
@@ -243,15 +243,15 @@ def get_camie_tags(
         tags_by_category[category].append((tag_name, prob))
 
     for category in list(tags_by_category.keys()):
-        tags_by_category[category].sort(key=lambda x: x[1], reverse=True)
+        tags_by_category[category].sort(key=itemgetter(1), reverse=True)
         if top_k > 0:
             tags_by_category[category] = tags_by_category[category][:top_k]
 
     if apply_drop_overlap:
         for category, pairs in list(tags_by_category.items()):
-            mapping = {name: score for name, score in pairs}
+            mapping = dict(pairs)
             filtered_mapping = drop_overlap_tags(mapping)  # type: ignore[arg-type]
-            filtered_pairs = sorted(filtered_mapping.items(), key=lambda x: x[1], reverse=True)
+            filtered_pairs = sorted(filtered_mapping.items(), key=itemgetter(1), reverse=True)
             tags_by_category[category] = filtered_pairs
 
     formatter = underline if use_underline else remove_underline

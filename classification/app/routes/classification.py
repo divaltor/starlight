@@ -1,30 +1,29 @@
-from typing import Annotated
+from typing import Annotated, Any
 
+import numpy as np
 import structlog
 from fastapi import APIRouter, Body, HTTPException
-from optimum.onnxruntime.modeling_ort import ORTModelForImageClassification
-from transformers import AutoImageProcessor
+from huggingface_hub import hf_hub_download
+from transformers import AutoConfig, AutoImageProcessor
 from transformers.pipelines import pipeline
 
 from app.imgutils.camie import get_camie_tags
+from app.imgutils.utils import open_onnx_model
 from app.models import ClassificationResult, ImageRequest
 from app.otel import pipeline_span
 from app.utils import preprocess_image
 
 logger = structlog.get_logger()
 
+NSFW_MODEL_ID = 'spiele/nsfw_image_detector-ONNX'
+
 processor = AutoImageProcessor.from_pretrained('spiele/nsfw_image_detector-ONNX')
-
-nsfw_model = ORTModelForImageClassification.from_pretrained(
-    'spiele/nsfw_image_detector-ONNX',
-    file_name='model_quantized.onnx',
+nsfw_config = AutoConfig.from_pretrained(NSFW_MODEL_ID)
+nsfw_session = open_onnx_model(
+    hf_hub_download(repo_id=NSFW_MODEL_ID, filename='model_quantized.onnx', subfolder='onnx'),
 )
-
-nsfw_pipe = pipeline(  # pyright: ignore[reportCallIssue]
-    'image-classification',
-    model=nsfw_model,  # pyright: ignore[reportArgumentType]
-    image_processor=processor,
-)
+nsfw_input_name = nsfw_session.get_inputs()[0].name
+nsfw_output_name = nsfw_session.get_outputs()[0].name
 aesthetic_pipe = pipeline(
     'image-classification',
     model='cafeai/cafe_aesthetic',
@@ -36,6 +35,27 @@ style_pipe = pipeline(
 
 
 router = APIRouter()
+
+
+def classify_nsfw(image: Any) -> list[dict[str, str | float]]:
+    pixel_values = processor(images=image, return_tensors='np')['pixel_values'].astype(np.float32)
+    logits = nsfw_session.run([nsfw_output_name], {nsfw_input_name: pixel_values})[0][0]
+    probabilities = np.exp(logits - np.max(logits))
+    probabilities /= probabilities.sum()
+
+    return sorted(
+        [
+            {
+                'label': str(
+                    nsfw_config.id2label.get(index, nsfw_config.id2label.get(str(index), index)),
+                ),
+                'score': float(score),
+            }
+            for index, score in enumerate(probabilities.tolist())
+        ],
+        key=lambda result: float(result['score']),
+        reverse=True,
+    )
 
 
 @router.post('/classify')
@@ -54,7 +74,7 @@ async def classify(
     try:
         img = await preprocess_image(image.image)
         with pipeline_span('nsfw_classification', 'Freepik/nsfw_image_detector'):
-            nsfw_outputs = nsfw_pipe(img)
+            nsfw_outputs = classify_nsfw(img)
 
         with pipeline_span('aesthetic_classification', 'cafeai/cafe_aesthetic'):
             aestetic_outputs = aesthetic_pipe(img)
