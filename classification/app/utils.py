@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 import aiohttp
 import structlog
-from fake_useragent import UserAgent
 from fastapi import HTTPException
 from PIL import Image
 
@@ -23,7 +22,7 @@ async def preprocess_image(image: str) -> PILImage:
     with pipeline_span('preprocess_image'):
         match image.startswith(('http://', 'https://')):
             case True:
-                headers = {'Accept-Encoding': 'gzip, br'}
+                headers = {'Accept-Encoding': 'gzip'}
                 try:
                     async with aiohttp.ClientSession(
                         timeout=aiohttp.ClientTimeout(total=25),
