@@ -1,6 +1,6 @@
 import { CookieEncryption } from "@starlight/crypto";
 import type { User } from "@starlight/utils";
-import { env, getRandomProxy, prisma } from "@starlight/utils";
+import { env, prisma } from "@starlight/utils";
 import { type QueryTweetsResponse, Scraper, type Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import UserAgent from "user-agents";
@@ -101,8 +101,6 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			deviceCategory: "desktop",
 		});
 
-		const proxy = getRandomProxy();
-
 		const scrapper = new Scraper();
 		await scrapper.setCookies(cookies.toString().split(";"));
 
@@ -114,7 +112,6 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			logger.error(
 				{
 					userId,
-					proxy,
 					userAgent: userAgent.toString(),
 					error: String(error),
 				},
