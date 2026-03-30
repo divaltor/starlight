@@ -35,7 +35,7 @@
         "@roziscoding/grammy-autoquote": "^2.0.9",
         "@starlight/crypto": "workspace:*",
         "@starlight/utils": "workspace:*",
-        "@the-convocation/twitter-scraper": "git+https://github.com/divaltor/twitter-scraper.git",
+        "@the-convocation/twitter-scraper": "^0.22.2",
         "ai": "^6.0.116",
         "bullmq": "^5.70.4",
         "date-fns": "^4.1.0",
@@ -1222,7 +1222,7 @@
 
     "@telegram-apps/types": ["@telegram-apps/types@2.0.3", "", {}, "sha512-pXh9BdnLZF3e2BGc4WL+RTRMAUpqKpaSP3Rs8rB4WyRwIoRSGWFKE4gtT/9m42LGixB8YVwdo/pJ+9XO765XEA=="],
 
-    "@the-convocation/twitter-scraper": ["@the-convocation/twitter-scraper@github:divaltor/twitter-scraper#b41e1ff", { "dependencies": { "@sinclair/typebox": "^0.32.20", "cross-fetch": "^4.0.0-alpha.5", "debug": "^4.4.1", "headers-polyfill": "^3.1.2", "json-stable-stringify": "^1.0.2", "linkedom": "^0.18.12", "otpauth": "^9.2.2", "set-cookie-parser": "^2.6.0", "tough-cookie": "^4.1.2", "tslib": "^2.5.2", "x-client-transaction-id": "^0.1.9" }, "peerDependencies": { "cycletls": "^2.0.5" }, "optionalPeers": ["cycletls"] }, "divaltor-twitter-scraper-b41e1ff", "sha512-I08e1vS281gnNwMh7Oz3KAWrJL0Zyww3pKUxCyJ4DYFCYB0ygf0VpGZLjteA5s0TlZ1PxOG73OW2rzKyAIEdDQ=="],
+    "@the-convocation/twitter-scraper": ["@the-convocation/twitter-scraper@0.22.2", "", { "dependencies": { "@sinclair/typebox": "^0.32.20", "cross-fetch": "^4.0.0-alpha.5", "debug": "^4.4.1", "headers-polyfill": "^3.1.2", "json-stable-stringify": "^1.0.2", "linkedom": "^0.18.12", "otpauth": "^9.2.2", "set-cookie-parser": "^2.6.0", "tough-cookie": "^4.1.2", "tslib": "^2.5.2", "x-client-transaction-id": "^0.2.0" }, "peerDependencies": { "cycletls": "^2.0.5" }, "optionalPeers": ["cycletls"] }, "sha512-bfwyqHsK8tq51xZ+8mRxLbEEUeawz6l1wF2WBoT580w22GYbEvyrOEBGUAzNTtK/7Up/bDAAExK+TOuMKAiurw=="],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg=="],
 
@@ -2400,7 +2400,7 @@
 
     "wrappy": ["wrappy@1.0.2", "", {}, "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ=="],
 
-    "x-client-transaction-id": ["x-client-transaction-id@0.1.9", "", { "dependencies": { "linkedom": "^0.18.9" } }, "sha512-CES4zgkJ0wbfFWm0qgdKphthyb+L7lVHymgOY15v6ivcWSx5p9lp5kzAed+BuqJSP7bS0GbQyJ16ONkRthgsUw=="],
+    "x-client-transaction-id": ["x-client-transaction-id@0.2.0", "", { "dependencies": { "linkedom": "^0.18.9" } }, "sha512-E2EgeyQpeOLOk4z7OS+IDpj7xwiKeUQHly6L1dTG2YYCEGtR6JLa6Ft5ra3pB7bY5esPb6Pqokt1DQeRm73i5g=="],
 
     "xmlbuilder2": ["xmlbuilder2@4.0.3", "", { "dependencies": { "@oozcitak/dom": "^2.0.2", "@oozcitak/infra": "^2.0.2", "@oozcitak/util": "^10.0.0", "js-yaml": "^4.1.1" } }, "sha512-bx8Q1STctnNaaDymWnkfQLKofs0mGNN7rLLapJlGuV3VlvegD7Ls4ggMjE3aUSWItCCzU0PEv45lI87iSigiCA=="],
 

@@ -30,7 +30,7 @@
     "@roziscoding/grammy-autoquote": "^2.0.9",
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
-    "@the-convocation/twitter-scraper": "git+https://github.com/divaltor/twitter-scraper.git",
+    "@the-convocation/twitter-scraper": "^0.22.2",
     "ai": "^6.0.116",
     "bullmq": "^5.70.4",
     "date-fns": "^4.1.0",
