@@ -101,7 +101,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			deviceCategory: "desktop",
 		});
 
-		const scrapper = new Scraper();
+		const scrapper = new Scraper({ experimental: { xClientTransactionId: true, xpff: true } });
 		await scrapper.setCookies(cookies.toString().split(";"));
 
 		let timeline: QueryTweetsResponse;
