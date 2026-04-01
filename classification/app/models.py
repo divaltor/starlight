@@ -132,12 +132,15 @@ class AestheticResult(ResponseModel):
 
 
 class CamieTags(ResponseModel):
-    model: Literal['tags'] = Field(default='tags', exclude=True)
+    characters: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
     @model_serializer(mode='plain')
-    def ser(self) -> list[str]:
-        return self.tags
+    def ser(self) -> dict[str, list[str]]:
+        return {
+            'characters': self.characters,
+            'tags': self.tags,
+        }
 
     @override
     @classmethod
@@ -151,26 +154,29 @@ class CamieTags(ResponseModel):
         general = [tag for tag, _ in general_pairs]
         character = [tag for tag, _ in character_pairs]
 
-        return cls.model_validate({'tags': [*character, *general]})
+        return cls.model_validate({'characters': character, 'tags': general})
 
 
 class ClassificationResult(ResponseModel):
     aesthetic: float
     style: StyleScore
     nsfw: NSFWResult
-    tags: CamieTags
+    characters: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
 
     @override
     @classmethod
     def from_response(cls, model_response: Any) -> Self:
         aesthetic = AestheticResult.from_response(model_response['cafe'])
+        tag_groups = CamieTags.from_response(model_response['tags'])
 
         return cls.model_validate(
             {
                 'aesthetic': aesthetic.aesthetic.aesthetic,
                 'style': aesthetic.style,
                 'nsfw': NSFWResult.from_response(model_response['nsfw']),
-                'tags': CamieTags.from_response(model_response['tags']),
+                'characters': tag_groups.characters,
+                'tags': tag_groups.tags,
             },
         )
 

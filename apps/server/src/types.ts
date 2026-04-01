@@ -20,6 +20,7 @@ interface ExtendedContext {
 
 export interface Classification {
 	aesthetic: number;
+	characters: string[];
 	nsfw: {
 		is_nsfw: boolean;
 		scores: {

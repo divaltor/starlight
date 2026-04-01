@@ -2,6 +2,7 @@ import { env, prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import { logger } from "@/logger";
+import { embeddingsQueue } from "@/queue/embeddings";
 import { redis } from "@/storage";
 import type { Classification } from "@/types";
 
@@ -118,6 +119,15 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			where: { photoId: { id: photoId, userId } },
 			data: { classification: data },
 		});
+
+		await embeddingsQueue.add(
+			`embed-${photoId}`,
+			{ photoId, userId, requestId },
+			{
+				jobId: `embed-${photoId}-${userId}`,
+				deduplication: { id: `embed-${photoId}-${userId}` },
+			},
+		);
 
 		logger.info({ photoId, userId, requestId }, "Photo %s classified", photoId);
 	},

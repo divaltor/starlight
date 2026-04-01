@@ -15,6 +15,19 @@ interface EmbeddingResponse {
 	text: number[];
 }
 
+function getEmbeddingTags(
+	classification: { characters?: string[]; tags?: string[] } | null | undefined,
+) {
+	const characters = classification?.characters ?? [];
+	const tags = classification?.tags ?? [];
+
+	if (characters.length === 0) {
+		return tags;
+	}
+
+	return [...characters, ...tags];
+}
+
 export const embeddingsQueue = new Queue<ClassificationJobData>("embeddings", {
 	connection: redis,
 	defaultJobOptions: {
@@ -83,12 +96,14 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		};
 
 		try {
+			const embeddingTags = getEmbeddingTags(photo.classification);
+
 			response = await http(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
 				method: "post",
 				headers,
 				json: {
 					image: photo.s3Url,
-					tags: photo.classification?.tags,
+					tags: embeddingTags,
 				},
 			});
 		} catch (error) {

@@ -1,6 +1,6 @@
 import { Decoder, Encoder } from "@msgpack/msgpack";
 import { ORPCError } from "@orpc/client";
-import { env, prisma } from "@starlight/utils";
+import { env, Prisma, prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import z from "zod";
 import { publicProcedure } from "..";
@@ -113,102 +113,196 @@ export const searchImages = maybeAuthProcedure
 			}
 		}
 
-		const queryTime = cursorData?.queryTime ? `'${cursorData.queryTime}'::timestamptz` : "NOW()";
-
-		const whereClause = cursorData
-			? `WHERE final_score < ${cursorData.lastScore} OR (final_score = ${cursorData.lastScore} AND photo_id < '${cursorData.lastPhotoId}')`
-			: "";
-
+		const queryTime = cursorData?.queryTime ?? new Date().toISOString();
 		const textQuery = `[${text.join(",")}]`;
+		const queryLower = query.toLowerCase();
+		const queryContains = `%${queryLower}%`;
+		const queryStartsWith = `${queryLower}%`;
+		const queryStartsWithSeries = `${queryLower} (%`;
+		const candidateLimit = Math.max(limit * 8, 200);
+		const hasLexicalQuery = queryLower.length > 0;
 
 		// Build user filter based on ownOnly flag
 		const userFilter =
 			ownOnly && databaseUserId
-				? `p.user_id = '${databaseUserId}'`
-				: "p.user_id IN (SELECT id FROM users WHERE is_public = true)";
+				? Prisma.sql`p.user_id = ${databaseUserId}`
+				: Prisma.sql`p.user_id IN (SELECT id FROM users WHERE is_public = true)`;
 
-		const images = await prisma.$queryRawUnsafe<SearchResult[]>(`
-        WITH coarse AS (
-            SELECT
-                p.id,
-                    1.0 - (p.image_vec <=> '${textQuery}'::vector) AS s_image,
-                1.0 - (p.tag_vec <=> '${textQuery}'::vector) AS s_tag,
-                GREATEST(1.0 - (p.image_vec <=> '${textQuery}'::vector), 1.0 - (p.tag_vec <=> '${textQuery}'::vector)) AS s_coarse
-            FROM photos p
-            WHERE classification IS NOT NULL AND image_vec IS NOT NULL AND tag_vec IS NOT NULL AND ${userFilter}
-            ORDER BY s_coarse DESC
-        ),
-        metadata_fusion AS (
-            SELECT DISTINCT ON (p.id)
-                p.id,
-                c.s_coarse,
-                c.s_image,
-                c.s_tag,
-                p.height,
-                p.width,
-                p.s3_path,
-                p.original_url,
-                t.username,
-                t.created_at,
-                t.id as tweet_id,
-                t.created_at as tweet_created_at,
-                (classification->>'aesthetic')::float AS aesthetic,
-                (classification->'style'->>'anime')::float AS style_anime,
-                (classification->'style'->>'manga_like')::float AS style_manga,
-                (classification->'style'->>'other')::float AS style_other,
-                (classification->'style'->>'real_life')::float AS style_real_life,
-                (classification->'style'->>'third_dimension')::float AS style_third_dimension,
-                (classification->'nsfw'->>'is_nsfw')::boolean AS is_nsfw
-            FROM coarse c
-            JOIN photos p ON p.id = c.id
-            JOIN tweets t ON t.id = p.tweet_id
-        ),
-        ranked AS (
-            SELECT
-                *,
-                ROW_NUMBER() OVER (ORDER BY s_image DESC) as rank_image,
-                ROW_NUMBER() OVER (ORDER BY s_tag DESC) as rank_tag,
-                ROW_NUMBER() OVER (ORDER BY aesthetic DESC) as rank_aesthetic,
-                ROW_NUMBER() OVER (ORDER BY tweet_created_at DESC) as rank_recency
-            FROM metadata_fusion
-        ),
-        fused AS (
-            SELECT
-                id as photo_id,
-                height,
-                width,
-                original_url as original_url,
-                s3_path as s3_path,
-                username,
-                tweet_created_at as tweet_created_at,
-                tweet_id as tweet_id,
-                is_nsfw as is_nsfw,
-                (
-                    (1.0 / (rank_image + 60) * 0.3) +
-                    (1.0 / (rank_tag + 60) * 0.5) +
-                    (1.0 / (rank_aesthetic + 60) * 0.1) +
-                    (1.0 / (rank_recency + 60) * 0.1)
-                ) * 
-                (
-                    (aesthetic * (1.0 - style_real_life)) * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime} - tweet_created_at)) / (30.0 * 24 * 3600)))
-                ) AS final_score
-            FROM ranked
-        )
-        SELECT
-            photo_id,
-            height,
-            width,
-            original_url,
-            s3_path,
-            username,
-            tweet_created_at,
-            tweet_id,
-            is_nsfw,
-            final_score
-        FROM fused
-        ${whereClause}
-        ORDER BY final_score DESC NULLS LAST, photo_id DESC
-        LIMIT ${limit};
+		const baseFilter = Prisma.sql`
+			p.deleted_at IS NULL
+			AND p.classification IS NOT NULL
+			AND p.image_vec IS NOT NULL
+			AND p.tag_vec IS NOT NULL
+			AND ${userFilter}
+		`;
+
+		const lexicalMatch = hasLexicalQuery
+			? Prisma.sql`
+				(
+					EXISTS (
+						SELECT 1
+						FROM jsonb_array_elements_text(COALESCE(p.classification->'characters', '[]'::jsonb)) AS character_tag(value)
+						WHERE lower(character_tag.value) = ${queryLower}
+							OR lower(character_tag.value) LIKE ${queryStartsWithSeries}
+							OR lower(character_tag.value) LIKE ${queryStartsWith}
+							OR lower(character_tag.value) LIKE ${queryContains}
+					)
+					OR EXISTS (
+						SELECT 1
+						FROM jsonb_array_elements_text(COALESCE(p.classification->'tags', '[]'::jsonb)) AS general_tag(value)
+						WHERE lower(general_tag.value) = ${queryLower}
+							OR lower(general_tag.value) LIKE ${queryStartsWith}
+							OR lower(general_tag.value) LIKE ${queryContains}
+					)
+					OR lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains}
+					OR EXISTS (
+						SELECT 1
+						FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
+						WHERE lower(hashtag.value) = ${queryLower}
+							OR lower(hashtag.value) LIKE ${queryStartsWith}
+							OR lower(hashtag.value) LIKE ${queryContains}
+					)
+				)
+			`
+			: Prisma.sql`FALSE`;
+
+		const whereClause = cursorData
+			? Prisma.sql`WHERE final_score < ${cursorData.lastScore} OR (final_score = ${cursorData.lastScore} AND photo_id < ${cursorData.lastPhotoId})`
+			: Prisma.empty;
+
+		const images = await prisma.$queryRaw<SearchResult[]>(Prisma.sql`
+			WITH image_candidates AS (
+				SELECT p.id, p.user_id
+				FROM photos p
+				WHERE ${baseFilter}
+				ORDER BY p.image_vec <=> ${textQuery}::vector
+				LIMIT ${candidateLimit}
+			),
+			tag_candidates AS (
+				SELECT p.id, p.user_id
+				FROM photos p
+				WHERE ${baseFilter}
+				ORDER BY p.tag_vec <=> ${textQuery}::vector
+				LIMIT ${candidateLimit}
+			),
+			lexical_candidates AS (
+				SELECT p.id, p.user_id
+				FROM photos p
+				JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+				WHERE ${baseFilter}
+					AND ${lexicalMatch}
+				LIMIT ${candidateLimit}
+			),
+			candidate_pool AS (
+				SELECT DISTINCT id, user_id
+				FROM (
+					SELECT id, user_id FROM image_candidates
+					UNION ALL
+					SELECT id, user_id FROM tag_candidates
+					UNION ALL
+					SELECT id, user_id FROM lexical_candidates
+				) candidates
+			),
+			scored AS (
+				SELECT
+					p.id AS photo_id,
+					p.height,
+					p.width,
+					p.original_url,
+					p.s3_path,
+					t.username,
+					t.created_at AS tweet_created_at,
+					t.id AS tweet_id,
+					COALESCE((p.classification->'nsfw'->>'is_nsfw')::boolean, false) AS is_nsfw,
+					COALESCE(1.0 - (p.image_vec <=> ${textQuery}::vector), 0.0) AS s_image,
+					COALESCE(1.0 - (p.tag_vec <=> ${textQuery}::vector), 0.0) AS s_tag_semantic,
+					COALESCE((p.classification->>'aesthetic')::float, 0.0) AS aesthetic,
+					COALESCE((p.classification->'style'->>'anime')::float, 0.0) AS style_anime,
+					COALESCE((p.classification->'style'->>'real_life')::float, 0.0) AS style_real_life,
+					COALESCE(
+						(
+							SELECT MAX(
+								CASE
+									WHEN lower(character_tag.value) = ${queryLower} THEN CASE WHEN character_tag.ordinality <= 2 THEN 1.0 ELSE 0.96 END
+									WHEN lower(character_tag.value) LIKE ${queryStartsWithSeries} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.97 ELSE 0.92 END
+									WHEN lower(character_tag.value) LIKE ${queryStartsWith} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.92 ELSE 0.86 END
+									WHEN lower(character_tag.value) LIKE ${queryContains} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.82 ELSE 0.76 END
+									ELSE 0.0
+								END
+							)
+							FROM jsonb_array_elements_text(COALESCE(p.classification->'characters', '[]'::jsonb)) WITH ORDINALITY AS character_tag(value, ordinality)
+						),
+						0.0
+					) AS s_character,
+					COALESCE(
+						(
+							SELECT MAX(
+								CASE
+									WHEN lower(general_tag.value) = ${queryLower} THEN 0.88
+									WHEN lower(general_tag.value) LIKE ${queryStartsWith} THEN 0.74
+									WHEN lower(general_tag.value) LIKE ${queryContains} THEN 0.58
+									ELSE 0.0
+								END
+							)
+							FROM jsonb_array_elements_text(COALESCE(p.classification->'tags', '[]'::jsonb)) AS general_tag(value)
+						),
+						0.0
+					) AS s_tag_lexical,
+					COALESCE(
+						(
+							SELECT MAX(
+								CASE
+									WHEN lower(hashtag.value) = ${queryLower} THEN 0.76
+									WHEN lower(hashtag.value) LIKE ${queryStartsWith} THEN 0.62
+									WHEN lower(hashtag.value) LIKE ${queryContains} THEN 0.5
+									ELSE 0.0
+								END
+							)
+							FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
+						),
+						0.0
+					) AS s_hashtag,
+					CASE WHEN lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END AS s_tweet_text
+				FROM candidate_pool c
+				JOIN photos p ON p.id = c.id AND p.user_id = c.user_id
+				JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+			),
+			fused AS (
+				SELECT
+					photo_id,
+					height,
+					width,
+					original_url,
+					s3_path,
+					username,
+					tweet_created_at,
+					tweet_id,
+					is_nsfw,
+					(
+						(s_character * 0.44) +
+						(GREATEST(s_tag_semantic, s_tag_lexical) * 0.28) +
+						(GREATEST(s_hashtag, s_tweet_text) * 0.12) +
+						(s_image * 0.1) +
+						LEAST(0.04, GREATEST(0.0, aesthetic * (1.0 - style_real_life) * (0.65 + (style_anime * 0.35))) * 0.04) +
+						(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime}::timestamptz - tweet_created_at)) / (180.0 * 24 * 3600.0))))
+					) AS final_score
+				FROM scored
+			)
+			SELECT
+				photo_id,
+				height,
+				width,
+				original_url,
+				s3_path,
+				username,
+				tweet_created_at,
+				tweet_id,
+				is_nsfw,
+				final_score
+			FROM fused
+			${whereClause}
+			ORDER BY final_score DESC NULLS LAST, photo_id DESC
+			LIMIT ${limit}
 		`);
 
 		const transformedResults = transformSearchResults(images);
@@ -220,7 +314,7 @@ export const searchImages = maybeAuthProcedure
 			nextCursor = Cursor.create<SearchCursorPayload>({
 				lastScore: lastImage.final_score,
 				lastPhotoId: lastImage.photo_id,
-				queryTime: cursorData?.queryTime ?? new Date().toISOString(),
+				queryTime,
 			});
 		}
 
@@ -247,11 +341,12 @@ export const randomImages = publicProcedure.handler(async () => {
                 (p.classification->'style'->>'real_life')::float AS style_real_life,
                 (p.classification->'style'->>'other')::float AS style_other,
                 (p.classification->'nsfw'->>'is_nsfw')::boolean AS is_nsfw
-            FROM photos p
-            JOIN tweets t ON t.id = p.tweet_id
-            WHERE p.classification IS NOT NULL 
-            AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
-            AND NOT (p.classification->'nsfw'->>'is_nsfw')::boolean
+			FROM photos p
+			JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+			WHERE p.classification IS NOT NULL 
+			AND p.deleted_at IS NULL
+			AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
+			AND NOT (p.classification->'nsfw'->>'is_nsfw')::boolean
         ),
         ranked AS (
             SELECT *,

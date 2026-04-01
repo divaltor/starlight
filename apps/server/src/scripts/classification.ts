@@ -17,7 +17,7 @@ import { redis } from "@/storage";
 const DRY_RUN = process.env.DRY_RUN === "1";
 const CLEAR_QUEUE = process.env.CLEAR_QUEUE === "1" || process.env.CLEAR === "1";
 const FORCE = process.env.FORCE === "1";
-// When set, only enqueue photos missing classification.nsfw.is_nsfw
+// When set, enqueue all photos regardless of stored classification state
 const ALL_PICTURES = process.env.ALL_PICTURES === "1";
 
 async function main() {
@@ -26,7 +26,7 @@ async function main() {
 			dryRun: DRY_RUN,
 			clear: CLEAR_QUEUE,
 			force: FORCE,
-			onlyMissingNsfw: ALL_PICTURES,
+			allPictures: ALL_PICTURES,
 		},
 		"Starting enqueue of all photos for classification",
 	);
@@ -55,6 +55,8 @@ async function main() {
 			    classification IS NULL
 			    OR (classification -> 'nsfw') IS NULL
 			    OR (classification -> 'nsfw' -> 'is_nsfw') IS NULL
+			    OR jsonb_typeof(classification -> 'characters') IS DISTINCT FROM 'array'
+			    OR jsonb_typeof(classification -> 'tags') IS DISTINCT FROM 'array'
 			  )
 			ORDER BY id ASC
 		`;
@@ -84,7 +86,7 @@ async function main() {
 			dryRun: DRY_RUN,
 			force: FORCE,
 			clearQueue: CLEAR_QUEUE,
-			onlyMissingNsfw: ALL_PICTURES,
+			allPictures: ALL_PICTURES,
 		},
 		"Finished enqueue script",
 	);
