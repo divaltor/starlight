@@ -133,7 +133,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 	},
 	{
 		connection: redis,
-		concurrency: 2,
+		concurrency: 1,
 		autorun: false,
 		lockDuration: 1000 * 60 * 5,
 	},
