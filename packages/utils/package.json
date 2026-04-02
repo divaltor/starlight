@@ -22,8 +22,8 @@
   "dependencies": {
     "@prisma/adapter-pg": "catalog:",
     "@prisma/client": "catalog:",
-    "@t3-oss/env-core": "^0.13.10",
-    "dotenv": "^17.3.1",
+    "@t3-oss/env-core": "^0.13.11",
+    "dotenv": "^17.4.0",
     "ky": "catalog:",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",
