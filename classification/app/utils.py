@@ -3,19 +3,52 @@ from __future__ import annotations
 import base64
 import binascii
 import io
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import aiohttp
 import structlog
+import torch
 from fastapi import HTTPException
 from PIL import Image
 
+from app.config import config
 from app.otel import pipeline_span
 
 if TYPE_CHECKING:
     from PIL.Image import Image as PILImage
 
 logger = structlog.get_logger()
+
+
+def _is_mps_available() -> bool:
+    mps_backend = getattr(torch.backends, 'mps', None)
+    return bool(mps_backend and mps_backend.is_available())
+
+
+@lru_cache
+def resolve_torch_device_name() -> str:
+    requested_device = config.TORCH_DEVICE
+
+    if requested_device != 'auto':
+        logger.info('Using torch device %s', requested_device)
+        return requested_device
+
+    if torch.cuda.is_available():
+        logger.info('Using torch device %s', 'cuda')
+        return 'cuda'
+
+    if _is_mps_available():
+        logger.info('Using torch device %s', 'mps')
+        return 'mps'
+
+    logger.info('Using torch device %s', 'cpu')
+    return 'cpu'
+
+
+@lru_cache
+def resolve_transformers_device() -> torch.device:
+    return torch.device(resolve_torch_device_name())
 
 
 async def preprocess_image(image: str) -> PILImage:

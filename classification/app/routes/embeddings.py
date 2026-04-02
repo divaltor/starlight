@@ -7,16 +7,18 @@ from sentence_transformers import SentenceTransformer
 
 from app.models import EmbeddingPayload, EmbeddingResponse
 from app.otel import pipeline_span
-from app.utils import preprocess_image
+from app.utils import preprocess_image, resolve_torch_device_name
 
 if TYPE_CHECKING:
     from numpy import ndarray
 
 logger = structlog.get_logger()
+torch_device = resolve_torch_device_name()
 
 
 embedding_model = SentenceTransformer(
     'jinaai/jina-clip-v2',
+    device=torch_device,
     trust_remote_code=True,
     truncate_dim=1024,
 )

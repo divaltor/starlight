@@ -11,9 +11,10 @@ from app.imgutils.camie import get_camie_tags
 from app.imgutils.utils import open_onnx_model
 from app.models import ClassificationResult, ImageRequest
 from app.otel import pipeline_span
-from app.utils import preprocess_image
+from app.utils import preprocess_image, resolve_transformers_device
 
 logger = structlog.get_logger()
+transformers_device = resolve_transformers_device()
 
 NSFW_MODEL_ID = 'spiele/nsfw_image_detector-ONNX'
 
@@ -26,10 +27,12 @@ nsfw_input_name = nsfw_session.get_inputs()[0].name
 nsfw_output_name = nsfw_session.get_outputs()[0].name
 aesthetic_pipe = pipeline(
     'image-classification',
+    device=transformers_device,
     model='cafeai/cafe_aesthetic',
 )
 style_pipe = pipeline(
     'image-classification',
+    device=transformers_device,
     model='cafeai/cafe_style',
 )
 

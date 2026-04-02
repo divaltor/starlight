@@ -1,4 +1,4 @@
-from typing import Final
+from typing import Final, Literal
 
 from pydantic_settings import BaseSettings
 
@@ -17,6 +17,7 @@ class Config(BaseSettings):
 
     LOG_LEVEL: str = 'DEBUG'
     DISABLE_OPENAPI: bool = False
+    TORCH_DEVICE: Literal['auto', 'cpu', 'cuda', 'mps'] = 'auto'
 
     class Config:
         env_file = '.env'
