@@ -1,19 +1,37 @@
-from collections.abc import Callable, Coroutine
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import structlog
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
+from niquests import AsyncSession
 from opentelemetry import baggage, trace
 from opentelemetry.context import attach, detach
-from starlette.responses import Response
 
 from app.config import config
 from app.logger import configure_logger
 from app.otel import setup_otel
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Callable, Coroutine
+
+    from starlette.responses import Response
+
 configure_logger()
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+    application.state.http_session = AsyncSession()
+
+    try:
+        yield
+    finally:
+        await application.state.http_session.close()
+
 
 app = FastAPI(
     title='Image Classification API',
@@ -21,6 +39,7 @@ app = FastAPI(
     openapi_url=None if config.DISABLE_OPENAPI else '/openapi.json',
     docs_url=None if config.DISABLE_OPENAPI else '/docs',
     redoc_url=None if config.DISABLE_OPENAPI else '/redoc',
+    lifespan=lifespan,
 )
 setup_otel(app)
 

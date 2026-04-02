@@ -5,7 +5,6 @@ import binascii
 import io
 from typing import TYPE_CHECKING
 
-import aiohttp
 import structlog
 from fastapi import HTTPException
 from PIL import Image
@@ -13,29 +12,32 @@ from PIL import Image
 from app.otel import pipeline_span
 
 if TYPE_CHECKING:
+    from niquests import AsyncSession
     from PIL.Image import Image as PILImage
 
 logger = structlog.get_logger()
 
 
-async def preprocess_image(image: str) -> PILImage:
+async def preprocess_image(image: str, session: AsyncSession) -> PILImage:
     with pipeline_span('preprocess_image'):
         match image.startswith(('http://', 'https://')):
             case True:
                 headers = {'Accept-Encoding': 'gzip'}
                 try:
-                    async with aiohttp.ClientSession(
-                        timeout=aiohttp.ClientTimeout(total=25),
-                    ) as session:
-                        resp = await session.get(image, headers=headers)
+                    response = await session.get(image, headers=headers, timeout=25)
 
-                        if not resp.ok:
-                            raise HTTPException(
-                                status_code=400,
-                                detail=f'Failed to download image: HTTP {resp.status}',
-                            )
+                    if not response.ok:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f'Failed to download image: HTTP {response.status_code}',
+                        )
 
-                        raw = await resp.read()
+                    if response.content is None:
+                        raise HTTPException(
+                            status_code=400, detail='Failed to download image: empty body',
+                        )
+
+                    raw = response.content
                 except HTTPException:
                     raise
                 except Exception as e:

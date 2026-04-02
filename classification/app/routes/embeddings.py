@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Annotated
 
 import structlog
 import torch
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 from sentence_transformers import SentenceTransformer
 
 from app.models import EmbeddingPayload, EmbeddingResponse
@@ -26,6 +26,7 @@ router = APIRouter()
 
 @router.post('/embeddings')
 async def embeddings(
+    request: Request,
     payload: Annotated[
         EmbeddingPayload,
         Body(
@@ -52,7 +53,7 @@ async def embeddings(
 
         if payload.image:
             with torch.no_grad():
-                img = await preprocess_image(payload.image.strip())
+                img = await preprocess_image(payload.image.strip(), request.app.state.http_session)
 
                 with pipeline_span('image_embedding', 'jinaai/jina-clip-v2', payload.encoding_mode):
                     emb_image: ndarray = embedding_model.encode(

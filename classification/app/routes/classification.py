@@ -2,7 +2,7 @@ from typing import Annotated, Any
 
 import numpy as np
 import structlog
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 from huggingface_hub import hf_hub_download
 from transformers import AutoConfig, AutoImageProcessor
 from transformers.pipelines import pipeline
@@ -60,6 +60,7 @@ def classify_nsfw(image: Any) -> list[dict[str, str | float]]:
 
 @router.post('/classify')
 async def classify(
+    request: Request,
     image: Annotated[
         ImageRequest,
         Body(
@@ -72,7 +73,7 @@ async def classify(
     ],
 ) -> ClassificationResult:
     try:
-        img = await preprocess_image(image.image)
+        img = await preprocess_image(image.image, request.app.state.http_session)
         with pipeline_span('nsfw_classification', 'Freepik/nsfw_image_detector'):
             nsfw_outputs = classify_nsfw(img)
 
