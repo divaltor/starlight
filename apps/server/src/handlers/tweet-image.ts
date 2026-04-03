@@ -141,6 +141,10 @@ composer.on("inline_query").filter(
 				}),
 			];
 
+			ctx.logger.info(
+				`Generated images for tweet ${tweetId}: light ${lightResult.width}x${lightResult.height} (${(lightResult.buffer.length / 1024).toFixed(1)}KB), dark ${darkResult.width}x${darkResult.height} (${(darkResult.buffer.length / 1024).toFixed(1)}KB)`,
+			);
+
 			await ctx.answerInlineQuery(results);
 
 			ctx.logger.info({ tweetId }, "Inline query answered successfully");
