@@ -141,9 +141,7 @@ composer.on("inline_query").filter(
 				}),
 			];
 
-			await ctx.answerInlineQuery(results, {
-				cache_time: 300,
-			});
+			await ctx.answerInlineQuery(results);
 
 			ctx.logger.info({ tweetId }, "Inline query answered successfully");
 		} catch (error) {
