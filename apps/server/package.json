@@ -31,7 +31,7 @@
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
     "@the-convocation/twitter-scraper": "^0.22.3",
-    "ai": "^6.0.145",
+    "ai": "^6.0.146",
     "bullmq": "^5.73.0",
     "date-fns": "^4.1.0",
     "grammy": "catalog:",
@@ -42,7 +42,7 @@
     "sharp": "^0.34.5",
     "tmp": "^0.2.5",
     "tough-cookie": "^6.0.1",
-    "user-agents": "^2.1.19",
+    "user-agents": "^2.1.21",
     "youtube-dl-exec": "^3.1.4"
   },
   "devDependencies": {
