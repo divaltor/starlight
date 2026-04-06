@@ -23,6 +23,7 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 5. Don't run `test` command unless you change code related to these tests.
 6. Use pre-defined types from libraries\Prisma generated files where is possible. Use Pick, Omit and other Typescript type-helpers to extract required values instead of creating own types with same information.
 7. Instead of `fetch` -> `http` from `@/starlight/utils/http` module
+8. Align on pre-existing types from libraries and generated code; avoid creating redundant helper types or defensive type-safety checks for scenarios that cannot happen in trusted internal code.
 
 ## Maintenance & Tasks
 
