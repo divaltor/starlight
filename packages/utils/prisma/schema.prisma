@@ -47,8 +47,7 @@ model Chat {
   title    String?
   username String?
 
-  /// [ChatSettingsType]
-  settings Json @default("{}")
+	settings Json @default("{}")
 
   photoThumbnail String? @map("photo_thumbnail")
   photoBig       String? @map("photo_big")

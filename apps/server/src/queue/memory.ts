@@ -9,7 +9,7 @@ import { generateText } from "ai";
 import { Queue, QueueEvents, Worker } from "bullmq";
 import { logger } from "@/logger";
 import { getLangfuseTelemetry } from "@/otel";
-import { ChatMemorySettings } from "@/services/chat-memory";
+import { GLOBAL_MEMORY_WINDOW_SIZE, TOPIC_MEMORY_WINDOW_SIZE } from "@/services/chat-memory";
 import { redis } from "@/storage";
 import { formatSenderName, openrouter } from "@/utils/message";
 
@@ -243,7 +243,6 @@ async function summarizeWindow(params: {
 	messages: MemoryWindowMessage[];
 	previousSummary: string | null;
 	scope: ChatMemoryScopeValue;
-	settings: ChatMemorySettings;
 	startMessageId: number;
 	threadKey: number;
 }): Promise<string> {
@@ -299,7 +298,6 @@ async function summarizeWindow(params: {
 async function processWindow(params: {
 	chatId: bigint;
 	scope: ChatMemoryScopeValue;
-	settings: ChatMemorySettings;
 	threadKey: number;
 	forceRebuild?: boolean;
 }): Promise<boolean> {
@@ -354,9 +352,7 @@ async function processWindow(params: {
 	}
 
 	const windowSize =
-		params.scope === ChatMemoryScope.topic
-			? params.settings.topicEveryMessages
-			: params.settings.globalEveryMessages;
+		params.scope === ChatMemoryScope.topic ? TOPIC_MEMORY_WINDOW_SIZE : GLOBAL_MEMORY_WINDOW_SIZE;
 
 	const messages = await prisma.message.findMany({
 		where: {
@@ -410,7 +406,6 @@ async function processWindow(params: {
 		messages,
 		previousSummary: previousMemory?.summary ?? null,
 		scope: params.scope,
-		settings: params.settings,
 		startMessageId,
 		threadKey: params.threadKey,
 	});
@@ -487,18 +482,12 @@ export const memoryWorker = new Worker<ChatMemoryJobData>(
 				id: chatId,
 			},
 			select: {
-				settings: true,
+				id: true,
 			},
 		});
 
 		if (!chat) {
 			logger.warn({ chatId: job.data.chatId }, "Chat not found for memory job");
-			return;
-		}
-
-		const settings = new ChatMemorySettings(chat.settings);
-
-		if (!settings.enabled) {
 			return;
 		}
 
@@ -509,7 +498,6 @@ export const memoryWorker = new Worker<ChatMemoryJobData>(
 				const processed = await processWindow({
 					chatId,
 					scope: job.data.scope,
-					settings,
 					threadKey,
 					forceRebuild: index === 0 ? job.data.forceRebuild : false,
 				});

@@ -5,11 +5,9 @@ import type { Chat, ChatMember, User } from "@starlight/utils";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import type { Context as BaseContext } from "grammy";
 import type { Logger } from "@/logger";
-import type { ChatMemorySettings } from "@/services/chat-memory";
 import type { SavedAttachment } from "./utils/attachment";
 
 interface ExtendedContext {
-	chatSettings: ChatMemorySettings;
 	attachments: SavedAttachment[];
 	logger: Logger;
 	user?: User;
@@ -40,20 +38,6 @@ export interface Classification {
 	tags: string[];
 }
 
-export interface ChatSettings {
-	botAliases?: string[];
-	botName?: string | null;
-	ignoreUserChance?: number;
-	inferenceUnavailableAliases?: string[];
-	memory?: {
-		enabled?: boolean;
-		globalEveryMessages?: number;
-		topicEveryMessages?: number;
-	};
-	personalityTraits?: string[];
-	randomResponseChance?: number;
-}
-
 export type Context = FileFlavor<HydrateFlavor<BaseContext & ExtendedContext>>;
 
 declare global {
@@ -64,6 +48,5 @@ declare global {
 		type MessageEntitiesType = MessageEntity[];
 		type ForwardOriginType = MessageOrigin;
 		type TelegramMessageType = Message;
-		type ChatSettingsType = ChatSettings;
 	}
 }

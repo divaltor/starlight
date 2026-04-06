@@ -105,7 +105,6 @@ groupChat
 
 		const memoryContext = await buildChatMemoryPromptContext({
 			chatId,
-			chatSettings: ctx.chatSettings,
 			messageThreadId,
 		});
 

@@ -250,7 +250,7 @@ function shouldIgnoreMessage(ctx: Context, msg: Message): boolean {
 		return true;
 	}
 
-	return Math.random() > ctx.chatSettings.ignoreUserChance;
+	return Math.random() > env.IGNORE_USER_CHANCE;
 }
 
 export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
@@ -266,7 +266,7 @@ export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
 		return true;
 	}
 
-	if (hasBotAliasMention(msg, ctx.chatSettings.botAliases)) {
+	if (hasBotAliasMention(msg, env.BOT_ALIASES)) {
 		return true;
 	}
 

@@ -1,41 +1,12 @@
-import { ChatMemoryScope, env, prisma } from "@starlight/utils";
-import type { ChatSettings } from "@/types";
+import { ChatMemoryScope, prisma } from "@starlight/utils";
 
-const DEFAULT_TOPIC_EVERY_MESSAGES = 50;
-const DEFAULT_GLOBAL_EVERY_MESSAGES = 200;
-
-export class ChatMemorySettings {
-	readonly botAliases: readonly string[];
-	readonly enabled: boolean;
-	readonly globalEveryMessages: number;
-	readonly ignoreUserChance: number;
-	readonly topicEveryMessages: number;
-
-	constructor(chatSettings: ChatSettings | null) {
-		const memory = chatSettings?.memory;
-		const chatAliases = chatSettings?.botAliases;
-		const normalizedChatAliases = Array.isArray(chatAliases)
-			? chatAliases.map((alias) => alias.trim().toLowerCase()).filter(Boolean)
-			: [];
-
-		this.enabled = memory?.enabled !== false;
-		this.topicEveryMessages = memory?.topicEveryMessages ?? DEFAULT_TOPIC_EVERY_MESSAGES;
-		this.globalEveryMessages = memory?.globalEveryMessages ?? DEFAULT_GLOBAL_EVERY_MESSAGES;
-		this.ignoreUserChance = chatSettings?.ignoreUserChance ?? env.IGNORE_USER_CHANCE;
-		this.botAliases =
-			normalizedChatAliases.length === 0 ? env.BOT_ALIASES : [...new Set(normalizedChatAliases)];
-	}
-}
+export const TOPIC_MEMORY_WINDOW_SIZE = 50;
+export const GLOBAL_MEMORY_WINDOW_SIZE = 200;
 
 export async function buildChatMemoryPromptContext(params: {
 	chatId: bigint;
-	chatSettings: ChatMemorySettings;
 	messageThreadId: number | null;
 }): Promise<string | null> {
-	if (!params.chatSettings.enabled) {
-		return null;
-	}
-
 	const threadKey = params.messageThreadId ?? 0;
 
 	const noteSelect = {
