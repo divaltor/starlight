@@ -33,7 +33,7 @@ groupChat
 		return true;
 	})
 	.filter(async (ctx) => {
-		await sleep(RESPONSE_DELAY_MS, { minMs: 100, maxMs: 800 });
+		await sleep(RESPONSE_DELAY_MS, { minMs: 1000, maxMs: 3500 });
 
 		// TODO: Revisit logic with waiting for new messages and should reply or not because now it tend to ignore even if it's direct mention because new messages appear
 		if (
