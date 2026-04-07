@@ -177,9 +177,9 @@ groupChat
 				);
 
 				await saveMessage({ ctx, msg: sentMessage });
-				await sleep(1_200, {
-					minMs: 1_200,
-					maxMs: 2_500,
+				await sleep(5_000, {
+					minMs: 5_000,
+					maxMs: 10_000,
 				});
 			} catch (error) {
 				if (error instanceof GrammyError) {
