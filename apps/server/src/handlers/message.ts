@@ -146,9 +146,39 @@ groupChat
 			return;
 		}
 
-		ctx.logger.debug(`Received ${output.replies.length} replies from AI`);
+		ctx.logger.debug(`Received ${output.replies.length} AI actions`);
 
 		for (const reply of output.replies) {
+			if (reply.type === "reaction") {
+				if (!knownMessageIds.has(reply.message_id)) {
+					ctx.logger.debug(
+						{ messageId: reply.message_id },
+						"Skipping AI reaction: message ID not in known messages",
+					);
+					continue;
+				}
+
+				try {
+					await ctx.api.setMessageReaction(ctx.chat.id, reply.message_id, [
+						{ type: "emoji", emoji: reply.emoji },
+					]);
+
+					ctx.logger.debug({ messageId: reply.message_id, emoji: reply.emoji }, "Sent AI reaction");
+				} catch (error) {
+					if (error instanceof GrammyError) {
+						ctx.logger.debug(
+							{ error: error.message, messageId: reply.message_id, emoji: reply.emoji },
+							"Could not send AI reaction",
+						);
+						continue;
+					}
+
+					throw error;
+				}
+
+				continue;
+			}
+
 			const replyText = stripBotAnnotations(reply.text);
 
 			if (!replyText) {
