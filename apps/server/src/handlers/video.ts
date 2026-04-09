@@ -9,66 +9,84 @@ import type { Context } from "@/types";
 
 const composer = new Composer<Context>();
 
-const feature = composer.chatType("private");
+const privateChat = composer.chatType("private");
+const groupChat = composer.chatType(["group", "supergroup"]);
+const chats = composer.chatType(["private", "group", "supergroup"]);
 
-function createVideoKeyboard(videoId: string, hasDescription: boolean): InlineKeyboard {
+function createVideoKeyboard(
+	videoId: string,
+	hasDescription: boolean,
+	ownerId: number,
+): InlineKeyboard {
 	const keyboard = new InlineKeyboard();
 	if (hasDescription) {
-		keyboard.text("Remove description", `video:remove_desc:${videoId}`);
+		keyboard.text("Remove description", `video:remove_desc:${videoId}:${ownerId}`);
 	} else {
-		keyboard.text("Add description", `video:add_desc:${videoId}`);
+		keyboard.text("Add description", `video:add_desc:${videoId}:${ownerId}`);
 	}
 	return keyboard;
 }
 
-feature.on(":text").filter(
-	(ctx) => ctx.msg.text.startsWith("https://"),
-	async (ctx) => {
-		if (!ctx.user) {
-			await ctx.reply("You need to be registered to use this feature.");
-			return;
+async function tryDeleteMessage(ctx: Context): Promise<void> {
+	try {
+		await ctx.deleteMessage();
+	} catch (error) {
+		if (error instanceof GrammyError) {
+			ctx.logger.debug(
+				{ error: error.message },
+				"Could not delete command message (missing permissions)",
+			);
+		} else {
+			throw error;
 		}
+	}
+}
 
-		await ctx.replyWithChatAction("upload_video");
+async function handleVideoRequest(
+	ctx: Context,
+	link: string,
+	ownerId: number,
+	messageThreadId?: number,
+): Promise<void> {
+	await ctx.replyWithChatAction("upload_video");
 
-		const link = ctx.msg.text;
-		const tweetId = extractTweetId(link);
-		const isTwitterLink = tweetId !== null;
+	const tweetId = extractTweetId(link);
+	const isTwitterLink = tweetId !== null;
 
-		// Check if video already exists in database (only for Twitter links)
-		if (isTwitterLink) {
-			const existingVideo = await prisma.video.findFirst({
-				where: { tweetId },
-				orderBy: { createdAt: "desc" },
-			});
+	if (isTwitterLink) {
+		const existingVideo = await prisma.video.findFirst({
+			where: { tweetId },
+			orderBy: { createdAt: "desc" },
+		});
 
-			if (existingVideo) {
-				ctx.logger.info("Found existing video for tweet %s, sending via file_id", tweetId);
+		if (existingVideo) {
+			ctx.logger.info("Found existing video for tweet %s, sending via file_id", tweetId);
 
-				try {
-					await ctx.replyWithVideo(existingVideo.telegramFileId, {
-						width: existingVideo.width ?? undefined,
-						height: existingVideo.height ?? undefined,
-						supports_streaming: true,
-						reply_markup: existingVideo.tweetText
-							? createVideoKeyboard(existingVideo.id, false)
-							: undefined,
-					});
+			try {
+				await ctx.replyWithVideo(existingVideo.telegramFileId, {
+					width: existingVideo.width ?? undefined,
+					height: existingVideo.height ?? undefined,
+					supports_streaming: true,
+					reply_markup: existingVideo.tweetText
+						? createVideoKeyboard(existingVideo.id, false, ownerId)
+						: undefined,
+					message_thread_id: messageThreadId,
+				});
 
-					ctx.logger.info("Existing video sent successfully to %s", ctx.chatId);
-					return;
-				} catch (error) {
-					ctx.logger.error(
-						{ error, videoId: existingVideo.id },
-						"Error sending existing video, will download fresh copy",
-					);
-					// Continue to download fresh copy if sending existing file fails
-				}
+				ctx.logger.info("Existing video sent successfully to %s", ctx.chatId);
+				return;
+			} catch (error) {
+				ctx.logger.error(
+					{ error, videoId: existingVideo.id },
+					"Error sending existing video, will download fresh copy",
+				);
 			}
 		}
+	}
 
-		const tempDir = tmp.dirSync({ unsafeCleanup: true });
+	const tempDir = tmp.dirSync({ unsafeCleanup: true });
 
+	try {
 		let videos: VideoInformation[] = [];
 		let tweet: FxEmbedTweet | null = null;
 		let videoDownloadFailed = false;
@@ -114,7 +132,9 @@ feature.on(":text").filter(
 		} catch (error) {
 			ctx.logger.error(error, "Error downloading video");
 
-			await ctx.reply("Can't download video, sorry.");
+			await ctx.reply("Can't download video, sorry.", {
+				message_thread_id: messageThreadId,
+			});
 			return;
 		}
 
@@ -126,19 +146,22 @@ feature.on(":text").filter(
 
 				try {
 					const result = await generateTweetImage(tweetId, "light");
-					await ctx.replyWithPhoto(new InputFile(result.buffer, `tweet-${tweetId}.jpg`));
-					tempDir.removeCallback();
+					await ctx.replyWithPhoto(new InputFile(result.buffer, `tweet-${tweetId}.jpg`), {
+						message_thread_id: messageThreadId,
+					});
 					return;
 				} catch (imgError) {
 					ctx.logger.error(imgError, "Error generating tweet image");
-					await ctx.reply("Can't process this tweet, sorry.");
-					tempDir.removeCallback();
+					await ctx.reply("Can't process this tweet, sorry.", {
+						message_thread_id: messageThreadId,
+					});
 					return;
 				}
 			}
 
-			await ctx.reply("Can't download video, sorry.");
-			tempDir.removeCallback();
+			await ctx.reply("Can't download video, sorry.", {
+				message_thread_id: messageThreadId,
+			});
 			return;
 		}
 
@@ -154,14 +177,15 @@ feature.on(":text").filter(
 					width: video.metadata?.width,
 					height: video.metadata?.height,
 					supports_streaming: true,
-					reply_markup: cleanedText ? createVideoKeyboard(videoId, false) : undefined,
+					reply_markup: cleanedText ? createVideoKeyboard(videoId, false, ownerId) : undefined,
+					message_thread_id: messageThreadId,
 				});
 
 				if (isTwitterLink) {
 					await prisma.video.create({
 						data: {
 							id: videoId,
-							userId: ctx.user.id,
+							userId: ctx.user!.id,
 							tweetId,
 							tweetText: cleanedText,
 							telegramFileId: sentMessage.video.file_id,
@@ -177,24 +201,62 @@ feature.on(":text").filter(
 				if (error instanceof GrammyError) {
 					ctx.logger.error(error, "Error sending video");
 					if (error.error_code === 413) {
-						await ctx.reply("Video is too large, can't be sent.");
+						await ctx.reply("Video is too large, can't be sent.", {
+							message_thread_id: messageThreadId,
+						});
 					} else {
-						await ctx.reply("Can't download video, sorry.");
+						await ctx.reply("Can't download video, sorry.", {
+							message_thread_id: messageThreadId,
+						});
 						throw error;
 					}
 				}
 			}
 		}
-
+	} finally {
 		tempDir.removeCallback();
+	}
+}
+
+privateChat.on(":text").filter(
+	(ctx) => ctx.msg.text.startsWith("https://"),
+	async (ctx) => {
+		await handleVideoRequest(ctx, ctx.msg.text, ctx.from.id);
 	},
 );
 
-feature.callbackQuery(/^video:(add_desc|remove_desc):(.+)$/, async (ctx) => {
-	await ctx.answerCallbackQuery();
+groupChat.command(["v", "video"]).filter(
+	(ctx) => !ctx.match.trim().startsWith("https://"),
+	async (ctx) => {
+		await tryDeleteMessage(ctx);
+		await ctx.reply("Не позорься и скинь нормальную ссылку", {
+			message_thread_id: ctx.msg.message_thread_id,
+		});
+	},
+);
 
+groupChat.command(["v", "video"]).filter(
+	(ctx) => ctx.match.trim().startsWith("https://"),
+	async (ctx) => {
+		await tryDeleteMessage(ctx);
+		await handleVideoRequest(ctx, ctx.match.trim(), ctx.from.id, ctx.msg.message_thread_id);
+	},
+);
+
+chats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, async (ctx) => {
 	const action = ctx.match[1];
 	const videoId = ctx.match[2];
+	const ownerId = Number(ctx.match[3]);
+
+	if (ctx.from.id !== ownerId) {
+		await ctx.answerCallbackQuery({
+			text: "Может по голове себе постучишь?",
+			show_alert: true,
+		});
+		return;
+	}
+
+	await ctx.answerCallbackQuery();
 
 	const video = await prisma.video.findUnique({
 		where: { id: videoId },
@@ -210,7 +272,7 @@ feature.callbackQuery(/^video:(add_desc|remove_desc):(.+)$/, async (ctx) => {
 	try {
 		await ctx.editMessageCaption({
 			caption,
-			reply_markup: createVideoKeyboard(videoId, showDescription),
+			reply_markup: createVideoKeyboard(videoId, showDescription, ownerId),
 		});
 	} catch (error) {
 		if (error instanceof GrammyError) {
@@ -221,7 +283,8 @@ feature.callbackQuery(/^video:(add_desc|remove_desc):(.+)$/, async (ctx) => {
 				height: video.height ?? undefined,
 				supports_streaming: true,
 				caption,
-				reply_markup: createVideoKeyboard(videoId, showDescription),
+				reply_markup: createVideoKeyboard(videoId, showDescription, ownerId),
+				message_thread_id: ctx.msg?.message_thread_id,
 			});
 		} else {
 			throw error;
@@ -229,7 +292,7 @@ feature.callbackQuery(/^video:(add_desc|remove_desc):(.+)$/, async (ctx) => {
 	}
 });
 
-feature.on(":video", async (ctx) => {
+privateChat.on(":video", async (ctx) => {
 	const fileUniqueId = ctx.msg.video.file_unique_id;
 
 	const video = await prisma.video.findFirst({
