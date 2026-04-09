@@ -23,7 +23,7 @@
     "@prisma/adapter-pg": "catalog:",
     "@prisma/client": "catalog:",
     "@t3-oss/env-core": "^0.13.11",
-    "dotenv": "^17.4.0",
+    "dotenv": "^17.4.1",
     "ky": "catalog:",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",
