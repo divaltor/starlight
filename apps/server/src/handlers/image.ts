@@ -108,7 +108,7 @@ async function searchInlineImagesWithLegacyQuery(
 
 function parseInlineImageQuery(query: string) {
 	const authors = [...query.matchAll(INLINE_QUERY_AUTHOR_REGEX)].map(([, , author]) =>
-		author.toLowerCase(),
+		author!.toLowerCase(),
 	);
 
 	return {
@@ -320,32 +320,55 @@ composer.on("inline_query").filter(
 		let rankedPhotos: InlineImageSearchResult[] = [];
 
 		if (userId) {
-			let textEmbedding: number[] | null = null;
-			let shouldUseLegacyQuery = false;
-
-			if (hasTextQuery) {
-				try {
-					textEmbedding = await getInlineQueryEmbedding(textQuery);
-				} catch (error) {
-					ctx.logger.warn({ error, query: textQuery }, "Inline image semantic search unavailable");
-				}
-
-				if (!textEmbedding) {
-					shouldUseLegacyQuery = true;
-				}
-			}
-
-			if (shouldUseLegacyQuery) {
-				rankedPhotos = await searchInlineImagesWithLegacyQuery(
-					userId,
-					query,
-					photoOffset,
-					pageQueryLimit,
-				);
-			} else if (textEmbedding) {
-				const textVector = `[${textEmbedding.join(",")}]`;
-
+			if (!hasTextQuery && authors.length === 0) {
 				rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+					SELECT
+						p.id AS photo_id,
+						p.s3_path,
+						t.id AS tweet_id,
+						t.username,
+						p.height,
+						p.width,
+						0.0 AS final_score
+					FROM photos p
+					JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+					WHERE p.user_id = ${userId}
+						AND p.deleted_at IS NULL
+						AND p.s3_path IS NOT NULL
+					ORDER BY p.created_at DESC, photo_id DESC
+					OFFSET ${photoOffset}
+					LIMIT ${pageQueryLimit}
+				`);
+			} else {
+				let textEmbedding: number[] | null = null;
+				let shouldUseLegacyQuery = false;
+
+				if (hasTextQuery) {
+					try {
+						textEmbedding = await getInlineQueryEmbedding(textQuery);
+					} catch (error) {
+						ctx.logger.warn(
+							{ error, query: textQuery },
+							"Inline image semantic search unavailable",
+						);
+					}
+
+					if (!textEmbedding) {
+						shouldUseLegacyQuery = true;
+					}
+				}
+
+				if (shouldUseLegacyQuery) {
+					rankedPhotos = await searchInlineImagesWithLegacyQuery(
+						userId,
+						query,
+						photoOffset,
+						pageQueryLimit,
+					);
+				} else if (textEmbedding) {
+					const textVector = `[${textEmbedding.join(",")}]`;
+
+					rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH image_candidates AS (
 						SELECT p.id, p.user_id
 						FROM photos p
@@ -443,10 +466,10 @@ composer.on("inline_query").filter(
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
 				`);
-			} else {
-				const lexicalFilter = hasTextQuery ? Prisma.sql`AND ${lexicalMatch}` : Prisma.empty;
+				} else {
+					const lexicalFilter = hasTextQuery ? Prisma.sql`AND ${lexicalMatch}` : Prisma.empty;
 
-				rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+					rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH scored AS (
 						SELECT
 							p.id AS photo_id,
@@ -496,6 +519,7 @@ composer.on("inline_query").filter(
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
 				`);
+				}
 			}
 		}
 
