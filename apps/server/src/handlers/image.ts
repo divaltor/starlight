@@ -440,9 +440,6 @@ composer.on("inline_query").filter(
 							t.created_at AS tweet_created_at,
 							COALESCE(1.0 - (p.image_vec <=> ${textVector}::vector), 0.0) AS s_image,
 							COALESCE(1.0 - (p.tag_vec <=> ${textVector}::vector), 0.0) AS s_tag_semantic,
-							COALESCE((p.classification->>'aesthetic')::float, 0.0) AS aesthetic,
-							COALESCE((p.classification->'style'->>'anime')::float, 0.0) AS style_anime,
-							COALESCE((p.classification->'style'->>'real_life')::float, 0.0) AS style_real_life,
 							${characterScore} AS s_character,
 							${tagLexicalScore} AS s_tag_lexical,
 							${hashtagScore} AS s_hashtag,
@@ -466,7 +463,6 @@ composer.on("inline_query").filter(
 								(GREATEST(s_hashtag, s_tweet_text) * 0.12) +
 								(s_image * 0.1) +
 								(s_author * 0.08) +
-								LEAST(0.04, GREATEST(0.0, aesthetic * (1.0 - style_real_life) * (0.65 + (style_anime * 0.35))) * 0.04) +
 								(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime}::timestamptz - tweet_created_at)) / (180.0 * 24 * 3600.0))))
 							) AS final_score
 						FROM scored
@@ -490,9 +486,6 @@ composer.on("inline_query").filter(
 							t.username,
 							t.id AS tweet_id,
 							t.created_at AS tweet_created_at,
-							COALESCE((p.classification->>'aesthetic')::float, 0.0) AS aesthetic,
-							COALESCE((p.classification->'style'->>'anime')::float, 0.0) AS style_anime,
-							COALESCE((p.classification->'style'->>'real_life')::float, 0.0) AS style_real_life,
 							${characterScore} AS s_character,
 							${tagLexicalScore} AS s_tag_lexical,
 							${hashtagScore} AS s_hashtag,
@@ -519,7 +512,6 @@ composer.on("inline_query").filter(
 								(s_character * 0.22) +
 								(s_tag_lexical * 0.12) +
 								(GREATEST(s_hashtag, s_tweet_text) * 0.08) +
-								LEAST(0.04, GREATEST(0.0, aesthetic * (1.0 - style_real_life) * (0.65 + (style_anime * 0.35))) * 0.04) +
 								(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (180.0 * 24 * 3600.0))))
 							) AS final_score
 						FROM scored
