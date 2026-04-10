@@ -23,6 +23,89 @@ type InlineImageSearchResult = {
 	final_score: number;
 };
 
+async function searchInlineImagesWithLegacyQuery(
+	userId: string,
+	query: string,
+	photoOffset: number,
+	pageQueryLimit: number,
+): Promise<InlineImageSearchResult[]> {
+	const allPhotos: InlineImageSearchResult[] = [];
+	let tweetSkip = 0;
+
+	while (allPhotos.length < photoOffset + pageQueryLimit) {
+		const { authors, textQuery } = parseInlineImageQuery(query);
+		const whereClause: Prisma.TweetWhereInput = {};
+
+		if (authors.length > 0 && textQuery) {
+			whereClause.AND = [
+				{
+					OR: authors.map((author) => ({
+						username: { contains: author, mode: "insensitive" },
+					})),
+				},
+				{ tweetText: { contains: textQuery, mode: "insensitive" } },
+			];
+		} else if (authors.length > 0) {
+			whereClause.OR = authors.map((author) => ({
+				username: { contains: author, mode: "insensitive" },
+			}));
+		} else if (textQuery) {
+			whereClause.tweetText = { contains: textQuery, mode: "insensitive" };
+		}
+
+		const tweets = await prisma.tweet.findMany({
+			where: {
+				userId,
+				photos: {
+					some: {
+						deletedAt: null,
+						s3Path: { not: null },
+					},
+				},
+				...whereClause,
+			},
+			include: {
+				photos: {
+					where: {
+						deletedAt: null,
+						s3Path: { not: null },
+					},
+					orderBy: {
+						createdAt: "desc",
+					},
+				},
+			},
+			orderBy: {
+				createdAt: "desc",
+			},
+			take: INLINE_QUERY_PAGE_SIZE,
+			skip: tweetSkip,
+		});
+
+		if (tweets.length === 0) {
+			break;
+		}
+
+		for (const tweet of tweets) {
+			for (const photo of tweet.photos) {
+				allPhotos.push({
+					photo_id: photo.id,
+					s3_path: photo.s3Path as string,
+					tweet_id: tweet.id,
+					username: tweet.username,
+					height: photo.height,
+					width: photo.width,
+					final_score: 0,
+				});
+			}
+		}
+
+		tweetSkip += INLINE_QUERY_PAGE_SIZE;
+	}
+
+	return allPhotos.slice(photoOffset, photoOffset + pageQueryLimit);
+}
+
 function parseInlineImageQuery(query: string) {
 	const authors = [...query.matchAll(INLINE_QUERY_AUTHOR_REGEX)].map(([, , author]) =>
 		author.toLowerCase(),
@@ -35,7 +118,7 @@ function parseInlineImageQuery(query: string) {
 }
 
 async function getInlineQueryEmbedding(query: string) {
-	if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
+	if (!(env.ENABLE_EMBEDDINGS && env.ML_BASE_URL && env.ML_API_TOKEN)) {
 		return null;
 	}
 
@@ -238,6 +321,7 @@ composer.on("inline_query").filter(
 
 		if (userId) {
 			let textEmbedding: number[] | null = null;
+			let shouldUseLegacyQuery = false;
 
 			if (hasTextQuery) {
 				try {
@@ -245,9 +329,20 @@ composer.on("inline_query").filter(
 				} catch (error) {
 					ctx.logger.warn({ error, query: textQuery }, "Inline image semantic search unavailable");
 				}
+
+				if (!textEmbedding) {
+					shouldUseLegacyQuery = true;
+				}
 			}
 
-			if (textEmbedding) {
+			if (shouldUseLegacyQuery) {
+				rankedPhotos = await searchInlineImagesWithLegacyQuery(
+					userId,
+					query,
+					photoOffset,
+					pageQueryLimit,
+				);
+			} else if (textEmbedding) {
 				const textVector = `[${textEmbedding.join(",")}]`;
 
 				rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
