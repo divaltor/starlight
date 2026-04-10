@@ -16,16 +16,26 @@ const chats = composer.chatType(["private", "group", "supergroup"]);
 
 function createVideoKeyboard(
 	videoId: string,
-	hasDescription: boolean,
+	descriptionAction: "add" | "remove" | null,
 	ownerId: number,
+	sourceUrl?: string,
 ): InlineKeyboard {
 	const keyboard = new InlineKeyboard();
-	if (hasDescription) {
-		keyboard.text("Remove description", `video:remove_desc:${videoId}:${ownerId}`);
-	} else {
+	if (descriptionAction === "add") {
 		keyboard.text("Add description", `video:add_desc:${videoId}:${ownerId}`);
+	} else if (descriptionAction === "remove") {
+		keyboard.text("Remove description", `video:remove_desc:${videoId}:${ownerId}`);
 	}
+
+	if (sourceUrl) {
+		keyboard.url("Open source", sourceUrl);
+	}
+
 	return keyboard;
+}
+
+function getTweetUrl(tweetId: string): string {
+	return `https://x.com/i/status/${tweetId}`;
 }
 
 async function tryDeleteMessage(ctx: Context): Promise<void> {
@@ -83,6 +93,8 @@ async function handleVideoRequest(
 
 	const tweetId = extractTweetId(link);
 	const isTwitterLink = tweetId !== null;
+	const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
+	const sourceUrl = isGroupChat && tweetId ? getTweetUrl(tweetId) : undefined;
 
 	if (isTwitterLink) {
 		const existingVideo = await prisma.video.findFirst({
@@ -98,9 +110,15 @@ async function handleVideoRequest(
 					width: existingVideo.width ?? undefined,
 					height: existingVideo.height ?? undefined,
 					supports_streaming: true,
-					reply_markup: existingVideo.tweetText
-						? createVideoKeyboard(existingVideo.id, false, ownerId)
-						: undefined,
+					reply_markup:
+						existingVideo.tweetText || sourceUrl
+							? createVideoKeyboard(
+									existingVideo.id,
+									existingVideo.tweetText ? "add" : null,
+									ownerId,
+									sourceUrl,
+								)
+							: undefined,
 					message_thread_id: messageThreadId,
 				});
 
@@ -208,7 +226,10 @@ async function handleVideoRequest(
 					width: video.metadata?.width,
 					height: video.metadata?.height,
 					supports_streaming: true,
-					reply_markup: cleanedText ? createVideoKeyboard(videoId, false, ownerId) : undefined,
+					reply_markup:
+						cleanedText || sourceUrl
+							? createVideoKeyboard(videoId, cleanedText ? "add" : null, ownerId, sourceUrl)
+							: undefined,
 					message_thread_id: messageThreadId,
 				});
 
@@ -276,7 +297,7 @@ groupChat.command(["v", "video"]).filter(
 
 chats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, async (ctx) => {
 	const action = ctx.match[1];
-	const videoId = ctx.match[2];
+	const videoId = ctx.match[2]!;
 	const ownerId = Number(ctx.match[3]);
 
 	if (ctx.from.id !== ownerId) {
@@ -299,11 +320,20 @@ chats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, async (ctx) 
 
 	const showDescription = action === "add_desc";
 	const caption = showDescription ? (video.tweetText ?? undefined) : undefined;
+	const sourceUrl =
+		ctx.chat?.type === "group" || ctx.chat?.type === "supergroup"
+			? getTweetUrl(video.tweetId)
+			: undefined;
 
 	try {
 		await ctx.editMessageCaption({
 			caption,
-			reply_markup: createVideoKeyboard(videoId, showDescription, ownerId),
+			reply_markup: createVideoKeyboard(
+				videoId,
+				video.tweetText ? (showDescription ? "remove" : "add") : null,
+				ownerId,
+				sourceUrl,
+			),
 		});
 	} catch (error) {
 		if (error instanceof GrammyError) {
@@ -314,7 +344,12 @@ chats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, async (ctx) 
 				height: video.height ?? undefined,
 				supports_streaming: true,
 				caption,
-				reply_markup: createVideoKeyboard(videoId, showDescription, ownerId),
+				reply_markup: createVideoKeyboard(
+					videoId,
+					video.tweetText ? (showDescription ? "remove" : "add") : null,
+					ownerId,
+					sourceUrl,
+				),
 				message_thread_id: ctx.msg?.message_thread_id,
 			});
 		} else {
@@ -336,7 +371,7 @@ privateChat.on(":video", async (ctx) => {
 		return;
 	}
 
-	await ctx.reply(`https://x.com/i/status/${video.tweetId}`);
+	await ctx.reply(getTweetUrl(video.tweetId));
 });
 
 composer.command("source").filter(
@@ -363,7 +398,7 @@ composer.command("source").filter(
 			return;
 		}
 
-		await ctx.reply(`https://x.com/i/status/${video.tweetId}`);
+		await ctx.reply(getTweetUrl(video.tweetId));
 	},
 );
 
