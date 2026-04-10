@@ -1,12 +1,85 @@
 import { FormattedString } from "@grammyjs/parse-mode";
 import { CookieEncryption } from "@starlight/crypto";
-import { env, isTwitterUrl, type Prisma, prisma } from "@starlight/utils";
+import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
+import { http } from "@starlight/utils/http";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { RateLimiterRedis } from "rate-limiter-flexible";
 import { webAppKeyboard } from "@/bot";
 import { scrapperQueue } from "@/queue/scrapper";
 import { Cookies, redis } from "@/storage";
 import type { Context } from "@/types";
+
+const INLINE_QUERY_PAGE_SIZE = 50;
+const INLINE_QUERY_CANDIDATE_MULTIPLIER = 8;
+const INLINE_QUERY_AUTHOR_REGEX = /(^|\s)@([A-Za-z0-9_]+)/g;
+
+type InlineImageSearchResult = {
+	photo_id: string;
+	s3_path: string;
+	tweet_id: string;
+	username: string | null;
+	height: number | null;
+	width: number | null;
+	final_score: number;
+};
+
+function parseInlineImageQuery(query: string) {
+	const authors = [...query.matchAll(INLINE_QUERY_AUTHOR_REGEX)].map(([, , author]) =>
+		author.toLowerCase(),
+	);
+
+	return {
+		authors: [...new Set(authors)],
+		textQuery: query.replace(INLINE_QUERY_AUTHOR_REGEX, " ").replace(/\s+/g, " ").trim(),
+	};
+}
+
+async function getInlineQueryEmbedding(query: string) {
+	if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
+		return null;
+	}
+
+	const cacheKey = `inline-query:${Bun.hash.xxHash3(query)}`;
+
+	try {
+		const cachedEmbedding = await redis.get(cacheKey);
+
+		if (cachedEmbedding) {
+			return JSON.parse(cachedEmbedding) as number[];
+		}
+	} catch {
+		// Redis unavailable, proceed without cache
+	}
+
+	const response = await http(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
+		method: "post",
+		headers: {
+			"Content-Type": "application/json",
+			"X-API-Token": env.ML_API_TOKEN,
+			"X-Request-Id": Bun.randomUUIDv7(),
+		},
+		json: {
+			tags: query,
+			encoding_mode: "retrieval.query",
+		},
+	});
+
+	if (!response.ok) {
+		throw new Error(`Inline image search embeddings failed: ${response.status}`);
+	}
+
+	const data = (await response.json()) as {
+		text: number[];
+	};
+
+	try {
+		await redis.setex(cacheKey, 60 * 60 * 24 * 7, JSON.stringify(data.text));
+	} catch {
+		// Redis unavailable, skip caching
+	}
+
+	return data.text;
+}
 
 const scrapperRateLimiter = new RateLimiterRedis({
 	storeClient: redis,
@@ -27,113 +100,311 @@ const privateChat = composer.chatType("private");
 composer.on("inline_query").filter(
 	(ctx) => !isTwitterUrl(ctx.inlineQuery.query.trim()),
 	async (ctx) => {
-		const offset = ctx.inlineQuery.offset || "0";
-		const photoOffset = Number(offset) || 0;
+		const photoOffset = Number(ctx.inlineQuery.offset || "0") || 0;
 		const query = ctx.inlineQuery.query.trim();
+		const userId = ctx.user?.id;
+		const { authors, textQuery } = parseInlineImageQuery(query);
+		const queryLower = textQuery.toLowerCase();
+		const hasTextQuery = queryLower.length > 0;
+		const queryContains = `%${queryLower}%`;
+		const queryStartsWith = `${queryLower}%`;
+		const queryStartsWithSeries = `${queryLower} (%`;
+		const pageQueryLimit = INLINE_QUERY_PAGE_SIZE + 1;
+		const candidateLimit = Math.max(
+			(photoOffset + pageQueryLimit) * INLINE_QUERY_CANDIDATE_MULTIPLIER,
+			200,
+		);
+		const queryTime = new Date().toISOString();
 
-		// Fetch more tweets than we need to ensure we can find 50 photos
-		// We'll fetch in batches and keep going until we have enough photos
-		const allPhotos: Array<{
-			id: string;
-			externalId?: string;
-			s3Url: string | null;
-			tweetId: string;
-			height: number | null;
-			width: number | null;
-			username?: string;
-		}> = [];
+		const authorFilter =
+			authors.length > 0
+				? Prisma.sql`AND (${Prisma.join(
+						authors.map(
+							(author) => Prisma.sql`strpos(lower(COALESCE(t.username, '')), ${author}) > 0`,
+						),
+						Prisma.sql` OR `,
+					)})`
+				: Prisma.empty;
 
-		let tweetSkip = 0;
-		let totalPhotosFound = 0;
+		const authorScore =
+			authors.length > 0
+				? Prisma.sql`GREATEST(${Prisma.join(
+						authors.map(
+							(author) =>
+								Prisma.sql`CASE
+									WHEN lower(COALESCE(t.username, '')) = ${author} THEN 1.0
+									WHEN strpos(lower(COALESCE(t.username, '')), ${author}) = 1 THEN 0.88
+									WHEN strpos(lower(COALESCE(t.username, '')), ${author}) > 0 THEN 0.76
+									ELSE 0.0
+								END`,
+						),
+						Prisma.sql`, `,
+					)})`
+				: Prisma.sql`0.0`;
 
-		// Keep fetching tweets until we have enough photos to satisfy the offset + 50 results
-		while (totalPhotosFound <= photoOffset + 50) {
-			const whereClause: Prisma.TweetWhereInput = {};
+		const lexicalMatch = hasTextQuery
+			? Prisma.sql`
+				(
+					EXISTS (
+						SELECT 1
+						FROM jsonb_array_elements_text(COALESCE(p.classification->'characters', '[]'::jsonb)) AS character_tag(value)
+						WHERE lower(character_tag.value) = ${queryLower}
+							OR lower(character_tag.value) LIKE ${queryStartsWithSeries}
+							OR lower(character_tag.value) LIKE ${queryStartsWith}
+							OR lower(character_tag.value) LIKE ${queryContains}
+					)
+					OR EXISTS (
+						SELECT 1
+						FROM jsonb_array_elements_text(COALESCE(p.classification->'tags', '[]'::jsonb)) AS general_tag(value)
+						WHERE lower(general_tag.value) = ${queryLower}
+							OR lower(general_tag.value) LIKE ${queryStartsWith}
+							OR lower(general_tag.value) LIKE ${queryContains}
+					)
+					OR lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains}
+					OR EXISTS (
+						SELECT 1
+						FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
+						WHERE lower(hashtag.value) = ${queryLower}
+							OR lower(hashtag.value) LIKE ${queryStartsWith}
+							OR lower(hashtag.value) LIKE ${queryContains}
+					)
+				)
+			`
+			: Prisma.sql`FALSE`;
 
-			if (query) {
-				// Extract author names from query (starting with @)
-				const authorMatches = query.match(/@(\w+)/g);
-				const authors = authorMatches?.map((match) => match.substring(1)) || [];
+		const characterScore = hasTextQuery
+			? Prisma.sql`
+				COALESCE(
+					(
+						SELECT MAX(
+							CASE
+								WHEN lower(character_tag.value) = ${queryLower} THEN CASE WHEN character_tag.ordinality <= 2 THEN 1.0 ELSE 0.96 END
+								WHEN lower(character_tag.value) LIKE ${queryStartsWithSeries} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.97 ELSE 0.92 END
+								WHEN lower(character_tag.value) LIKE ${queryStartsWith} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.92 ELSE 0.86 END
+								WHEN lower(character_tag.value) LIKE ${queryContains} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.82 ELSE 0.76 END
+								ELSE 0.0
+							END
+						)
+						FROM jsonb_array_elements_text(COALESCE(p.classification->'characters', '[]'::jsonb)) WITH ORDINALITY AS character_tag(value, ordinality)
+					),
+					0.0
+				)
+			`
+			: Prisma.sql`0.0`;
 
-				// Remove author mentions from query for text search
-				const textQuery = query.replace(/@\w+/g, "").trim();
+		const tagLexicalScore = hasTextQuery
+			? Prisma.sql`
+				COALESCE(
+					(
+						SELECT MAX(
+							CASE
+								WHEN lower(general_tag.value) = ${queryLower} THEN 0.88
+								WHEN lower(general_tag.value) LIKE ${queryStartsWith} THEN 0.74
+								WHEN lower(general_tag.value) LIKE ${queryContains} THEN 0.58
+								ELSE 0.0
+							END
+						)
+						FROM jsonb_array_elements_text(COALESCE(p.classification->'tags', '[]'::jsonb)) AS general_tag(value)
+					),
+					0.0
+				)
+			`
+			: Prisma.sql`0.0`;
 
-				// Build where clause
-				if (authors.length > 0 && textQuery) {
-					// Both author filter and text search
-					whereClause.AND = [
-						{
-							OR: authors.map((author) => ({
-								username: { contains: author, mode: "insensitive" },
-							})),
-						},
-						{ tweetText: { contains: textQuery, mode: "insensitive" } },
-					];
-				} else if (authors.length > 0) {
-					// Only author filter
-					whereClause.OR = authors.map((author) => ({
-						username: { contains: author, mode: "insensitive" },
-					}));
-				} else if (textQuery) {
-					// Only text search
-					whereClause.tweetText = { contains: textQuery, mode: "insensitive" };
+		const hashtagScore = hasTextQuery
+			? Prisma.sql`
+				COALESCE(
+					(
+						SELECT MAX(
+							CASE
+								WHEN lower(hashtag.value) = ${queryLower} THEN 0.76
+								WHEN lower(hashtag.value) LIKE ${queryStartsWith} THEN 0.62
+								WHEN lower(hashtag.value) LIKE ${queryContains} THEN 0.5
+								ELSE 0.0
+							END
+						)
+						FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
+					),
+					0.0
+				)
+			`
+			: Prisma.sql`0.0`;
+
+		const tweetTextScore = hasTextQuery
+			? Prisma.sql`CASE WHEN lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END`
+			: Prisma.sql`0.0`;
+
+		let rankedPhotos: InlineImageSearchResult[] = [];
+
+		if (userId) {
+			let textEmbedding: number[] | null = null;
+
+			if (hasTextQuery) {
+				try {
+					textEmbedding = await getInlineQueryEmbedding(textQuery);
+				} catch (error) {
+					ctx.logger.warn({ error, query: textQuery }, "Inline image semantic search unavailable");
 				}
 			}
 
-			const tweets = await prisma.tweet.findMany({
-				where: {
-					userId: ctx.user?.id as string,
-					photos: {
-						some: {
-							deletedAt: null,
-							s3Path: { not: null },
-						},
-					},
-					...whereClause,
-				},
-				include: {
-					photos: {
-						where: {
-							deletedAt: null,
-							s3Path: { not: null },
-						},
-						orderBy: {
-							createdAt: "desc",
-						},
-					},
-				},
-				orderBy: {
-					createdAt: "desc",
-				},
-				take: 50,
-				skip: tweetSkip,
-			});
+			if (textEmbedding) {
+				const textVector = `[${textEmbedding.join(",")}]`;
 
-			if (tweets.length === 0) {
-				break; // No more tweets
+				rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+					WITH image_candidates AS (
+						SELECT p.id, p.user_id
+						FROM photos p
+						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						WHERE p.user_id = ${userId}
+							AND p.deleted_at IS NULL
+							AND p.s3_path IS NOT NULL
+							AND p.classification IS NOT NULL
+							AND p.image_vec IS NOT NULL
+							AND p.tag_vec IS NOT NULL
+							${authorFilter}
+						ORDER BY p.image_vec <=> ${textVector}::vector
+						LIMIT ${candidateLimit}
+					),
+					tag_candidates AS (
+						SELECT p.id, p.user_id
+						FROM photos p
+						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						WHERE p.user_id = ${userId}
+							AND p.deleted_at IS NULL
+							AND p.s3_path IS NOT NULL
+							AND p.classification IS NOT NULL
+							AND p.image_vec IS NOT NULL
+							AND p.tag_vec IS NOT NULL
+							${authorFilter}
+						ORDER BY p.tag_vec <=> ${textVector}::vector
+						LIMIT ${candidateLimit}
+					),
+					lexical_candidates AS (
+						SELECT p.id, p.user_id
+						FROM photos p
+						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						WHERE p.user_id = ${userId}
+							AND p.deleted_at IS NULL
+							AND p.s3_path IS NOT NULL
+							AND ${lexicalMatch}
+							${authorFilter}
+						LIMIT ${candidateLimit}
+					),
+					candidate_pool AS (
+						SELECT DISTINCT id, user_id
+						FROM (
+							SELECT id, user_id FROM image_candidates
+							UNION ALL
+							SELECT id, user_id FROM tag_candidates
+							UNION ALL
+							SELECT id, user_id FROM lexical_candidates
+						) candidates
+					),
+					scored AS (
+						SELECT
+							p.id AS photo_id,
+							p.s3_path,
+							p.height,
+							p.width,
+							t.username,
+							t.id AS tweet_id,
+							t.created_at AS tweet_created_at,
+							COALESCE(1.0 - (p.image_vec <=> ${textVector}::vector), 0.0) AS s_image,
+							COALESCE(1.0 - (p.tag_vec <=> ${textVector}::vector), 0.0) AS s_tag_semantic,
+							COALESCE((p.classification->>'aesthetic')::float, 0.0) AS aesthetic,
+							COALESCE((p.classification->'style'->>'anime')::float, 0.0) AS style_anime,
+							COALESCE((p.classification->'style'->>'real_life')::float, 0.0) AS style_real_life,
+							${characterScore} AS s_character,
+							${tagLexicalScore} AS s_tag_lexical,
+							${hashtagScore} AS s_hashtag,
+							${tweetTextScore} AS s_tweet_text,
+							${authorScore} AS s_author
+						FROM candidate_pool c
+						JOIN photos p ON p.id = c.id AND p.user_id = c.user_id
+						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+					),
+					fused AS (
+						SELECT
+							photo_id,
+							s3_path,
+							tweet_id,
+							username,
+							height,
+							width,
+							(
+								(s_character * 0.4) +
+								(GREATEST(s_tag_semantic, s_tag_lexical) * 0.24) +
+								(GREATEST(s_hashtag, s_tweet_text) * 0.12) +
+								(s_image * 0.1) +
+								(s_author * 0.08) +
+								LEAST(0.04, GREATEST(0.0, aesthetic * (1.0 - style_real_life) * (0.65 + (style_anime * 0.35))) * 0.04) +
+								(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime}::timestamptz - tweet_created_at)) / (180.0 * 24 * 3600.0))))
+							) AS final_score
+						FROM scored
+					)
+					SELECT photo_id, s3_path, tweet_id, username, height, width, final_score
+					FROM fused
+					ORDER BY final_score DESC NULLS LAST, photo_id DESC
+					OFFSET ${photoOffset}
+					LIMIT ${pageQueryLimit}
+				`);
+			} else {
+				const lexicalFilter = hasTextQuery ? Prisma.sql`AND ${lexicalMatch}` : Prisma.empty;
+
+				rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+					WITH scored AS (
+						SELECT
+							p.id AS photo_id,
+							p.s3_path,
+							p.height,
+							p.width,
+							t.username,
+							t.id AS tweet_id,
+							t.created_at AS tweet_created_at,
+							COALESCE((p.classification->>'aesthetic')::float, 0.0) AS aesthetic,
+							COALESCE((p.classification->'style'->>'anime')::float, 0.0) AS style_anime,
+							COALESCE((p.classification->'style'->>'real_life')::float, 0.0) AS style_real_life,
+							${characterScore} AS s_character,
+							${tagLexicalScore} AS s_tag_lexical,
+							${hashtagScore} AS s_hashtag,
+							${tweetTextScore} AS s_tweet_text,
+							${authorScore} AS s_author
+						FROM photos p
+						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						WHERE p.user_id = ${userId}
+							AND p.deleted_at IS NULL
+							AND p.s3_path IS NOT NULL
+							${authorFilter}
+							${lexicalFilter}
+					),
+					fused AS (
+						SELECT
+							photo_id,
+							s3_path,
+							tweet_id,
+							username,
+							height,
+							width,
+							(
+								(s_author * 0.56) +
+								(s_character * 0.22) +
+								(s_tag_lexical * 0.12) +
+								(GREATEST(s_hashtag, s_tweet_text) * 0.08) +
+								LEAST(0.04, GREATEST(0.0, aesthetic * (1.0 - style_real_life) * (0.65 + (style_anime * 0.35))) * 0.04) +
+								(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (180.0 * 24 * 3600.0))))
+							) AS final_score
+						FROM scored
+					)
+					SELECT photo_id, s3_path, tweet_id, username, height, width, final_score
+					FROM fused
+					ORDER BY final_score DESC NULLS LAST, photo_id DESC
+					OFFSET ${photoOffset}
+					LIMIT ${pageQueryLimit}
+				`);
 			}
-
-			// Flatten photos from this batch
-			for (const tweet of tweets) {
-				for (const photo of tweet.photos) {
-					allPhotos.push({
-						id: photo.id,
-						externalId: photo.externalId,
-						s3Url: photo.s3Url as string,
-						tweetId: tweet.id,
-						height: photo.height,
-						width: photo.width,
-						username: tweet.tweetData.username,
-					});
-					totalPhotosFound++;
-				}
-			}
-
-			tweetSkip += 50;
 		}
 
-		// Get the slice of photos for this page
-		const photosForThisPage = allPhotos.slice(photoOffset, photoOffset + 50);
+		const photosForThisPage = rankedPhotos.slice(0, INLINE_QUERY_PAGE_SIZE);
 
 		if (photosForThisPage.length === 0 && !ctx.user?.cookies) {
 			// User didn't setup the bot yet
@@ -155,14 +426,15 @@ composer.on("inline_query").filter(
 		}
 
 		const results = photosForThisPage.map((photo) => {
+			const photoUrl = `${env.BASE_CDN_URL}/${photo.s3_path}`;
 			const caption = photo.username
-				? FormattedString.link(`@${photo.username}`, `https://x.com/i/status/${photo.tweetId}`)
-				: new FormattedString(`https://x.com/i/status/${photo.tweetId}`);
+				? FormattedString.link(`@${photo.username}`, `https://x.com/i/status/${photo.tweet_id}`)
+				: new FormattedString(`https://x.com/i/status/${photo.tweet_id}`);
 
-			return InlineQueryResultBuilder.photo(photo.externalId ?? photo.id, photo.s3Url as string, {
+			return InlineQueryResultBuilder.photo(photo.photo_id, photoUrl, {
 				caption: caption.caption,
 				caption_entities: caption.caption_entities,
-				thumbnail_url: photo.s3Url as string,
+				thumbnail_url: photoUrl,
 				photo_height: photo.height ?? undefined,
 				photo_width: photo.width ?? undefined,
 			});
@@ -170,8 +442,8 @@ composer.on("inline_query").filter(
 
 		// Calculate next offset for pagination
 		let nextOffset = "";
-		if (results.length === 50 && photoOffset + 50 < allPhotos.length) {
-			nextOffset = String(photoOffset + 50);
+		if (rankedPhotos.length > INLINE_QUERY_PAGE_SIZE) {
+			nextOffset = String(photoOffset + INLINE_QUERY_PAGE_SIZE);
 		}
 
 		await ctx.answerInlineQuery(results, {
