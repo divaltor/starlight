@@ -48,6 +48,36 @@ async function handleVideoRequest(
 	ownerId: number,
 	messageThreadId?: number,
 ): Promise<void> {
+	const sendText = async (text: string, options?: Parameters<Context["api"]["sendMessage"]>[2]) => {
+		if (ctx.chat?.type === "private") {
+			return ctx.reply(text, options);
+		}
+
+		return ctx.api.sendMessage(ctx.chatId!, text, options);
+	};
+
+	const sendPhoto = async (
+		photo: InputFile,
+		options?: Parameters<Context["api"]["sendPhoto"]>[2],
+	) => {
+		if (ctx.chat?.type === "private") {
+			return ctx.replyWithPhoto(photo, options);
+		}
+
+		return ctx.api.sendPhoto(ctx.chatId!, photo, options);
+	};
+
+	const sendVideo = async (
+		video: string | InputFile,
+		options?: Parameters<Context["api"]["sendVideo"]>[2],
+	) => {
+		if (ctx.chat?.type === "private") {
+			return ctx.replyWithVideo(video, options);
+		}
+
+		return ctx.api.sendVideo(ctx.chatId!, video, options);
+	};
+
 	await ctx.replyWithChatAction("upload_video");
 
 	const tweetId = extractTweetId(link);
@@ -63,7 +93,7 @@ async function handleVideoRequest(
 			ctx.logger.info("Found existing video for tweet %s, sending via file_id", tweetId);
 
 			try {
-				await ctx.replyWithVideo(existingVideo.telegramFileId, {
+				await sendVideo(existingVideo.telegramFileId, {
 					width: existingVideo.width ?? undefined,
 					height: existingVideo.height ?? undefined,
 					supports_streaming: true,
@@ -132,7 +162,7 @@ async function handleVideoRequest(
 		} catch (error) {
 			ctx.logger.error(error, "Error downloading video");
 
-			await ctx.reply("Can't download video, sorry.", {
+			await sendText("Can't download video, sorry.", {
 				message_thread_id: messageThreadId,
 			});
 			return;
@@ -146,20 +176,20 @@ async function handleVideoRequest(
 
 				try {
 					const result = await generateTweetImage(tweetId, "light");
-					await ctx.replyWithPhoto(new InputFile(result.buffer, `tweet-${tweetId}.jpg`), {
+					await sendPhoto(new InputFile(result.buffer, `tweet-${tweetId}.jpg`), {
 						message_thread_id: messageThreadId,
 					});
 					return;
 				} catch (imgError) {
 					ctx.logger.error(imgError, "Error generating tweet image");
-					await ctx.reply("Can't process this tweet, sorry.", {
+					await sendText("Can't process this tweet, sorry.", {
 						message_thread_id: messageThreadId,
 					});
 					return;
 				}
 			}
 
-			await ctx.reply("Can't download video, sorry.", {
+			await sendText("Can't download video, sorry.", {
 				message_thread_id: messageThreadId,
 			});
 			return;
@@ -173,7 +203,7 @@ async function handleVideoRequest(
 
 				const videoId = Bun.randomUUIDv7();
 
-				const sentMessage = await ctx.replyWithVideo(new InputFile(video.filePath), {
+				const sentMessage = await sendVideo(new InputFile(video.filePath), {
 					width: video.metadata?.width,
 					height: video.metadata?.height,
 					supports_streaming: true,
@@ -201,11 +231,11 @@ async function handleVideoRequest(
 				if (error instanceof GrammyError) {
 					ctx.logger.error(error, "Error sending video");
 					if (error.error_code === 413) {
-						await ctx.reply("Video is too large, can't be sent.", {
+						await sendText("Video is too large, can't be sent.", {
 							message_thread_id: messageThreadId,
 						});
 					} else {
-						await ctx.reply("Can't download video, sorry.", {
+						await sendText("Can't download video, sorry.", {
 							message_thread_id: messageThreadId,
 						});
 						throw error;
@@ -229,7 +259,7 @@ groupChat.command(["v", "video"]).filter(
 	(ctx) => !ctx.match.trim().startsWith("https://"),
 	async (ctx) => {
 		await tryDeleteMessage(ctx);
-		await ctx.reply("Не позорься и скинь нормальную ссылку", {
+		await ctx.api.sendMessage(ctx.chatId!, "Не позорься и скинь нормальную ссылку", {
 			message_thread_id: ctx.msg.message_thread_id,
 		});
 	},
