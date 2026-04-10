@@ -4,6 +4,7 @@ import { defineConfig } from "prisma/config";
 
 dotenv.config({
 	path: [".env", "../../apps/server/.env"],
+	quiet: true,
 });
 
 export default defineConfig({
