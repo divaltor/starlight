@@ -1,6 +1,7 @@
 import { cleanupTweetText, extractTweetId, prisma } from "@starlight/utils";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
+import { bot } from "@/bot";
 import { fetchTweet } from "@/services/fxembed/fxembed.service";
 import type { FxEmbedTweet } from "@/services/fxembed/types";
 import { generateTweetImage } from "@/services/tweet/tweet-image.service";
@@ -53,7 +54,7 @@ async function handleVideoRequest(
 			return ctx.reply(text, options);
 		}
 
-		return ctx.api.sendMessage(ctx.chatId!, text, options);
+		return bot.api.sendMessage(ctx.chatId!, text, options);
 	};
 
 	const sendPhoto = async (
@@ -64,7 +65,7 @@ async function handleVideoRequest(
 			return ctx.replyWithPhoto(photo, options);
 		}
 
-		return ctx.api.sendPhoto(ctx.chatId!, photo, options);
+		return bot.api.sendPhoto(ctx.chatId!, photo, options);
 	};
 
 	const sendVideo = async (
@@ -75,7 +76,7 @@ async function handleVideoRequest(
 			return ctx.replyWithVideo(video, options);
 		}
 
-		return ctx.api.sendVideo(ctx.chatId!, video, options);
+		return bot.api.sendVideo(ctx.chatId!, video, options);
 	};
 
 	await ctx.replyWithChatAction("upload_video");
@@ -259,7 +260,7 @@ groupChat.command(["v", "video"]).filter(
 	(ctx) => !ctx.match.trim().startsWith("https://"),
 	async (ctx) => {
 		await tryDeleteMessage(ctx);
-		await ctx.api.sendMessage(ctx.chatId!, "Не позорься и скинь нормальную ссылку", {
+		await bot.api.sendMessage(ctx.chatId!, "Не позорься и скинь нормальную ссылку", {
 			message_thread_id: ctx.msg.message_thread_id,
 		});
 	},
