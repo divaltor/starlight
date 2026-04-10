@@ -320,7 +320,17 @@ composer.on("inline_query").filter(
 		let rankedPhotos: InlineImageSearchResult[] = [];
 
 		if (userId) {
-			if (!hasTextQuery && authors.length === 0) {
+			if (!hasTextQuery) {
+				const recencyAuthorFilter =
+					authors.length > 0
+						? Prisma.sql`AND (${Prisma.join(
+								authors.map(
+									(author) => Prisma.sql`strpos(lower(COALESCE(t.username, '')), ${author}) > 0`,
+								),
+								Prisma.sql` OR `,
+							)})`
+						: Prisma.empty;
+
 				rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					SELECT
 						p.id AS photo_id,
@@ -335,6 +345,7 @@ composer.on("inline_query").filter(
 					WHERE p.user_id = ${userId}
 						AND p.deleted_at IS NULL
 						AND p.s3_path IS NOT NULL
+						${recencyAuthorFilter}
 					ORDER BY p.created_at DESC, photo_id DESC
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
