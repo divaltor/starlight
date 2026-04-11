@@ -31,8 +31,8 @@
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
     "@the-convocation/twitter-scraper": "^0.22.3",
-    "ai": "^6.0.156",
-    "bullmq": "^5.73.3",
+    "ai": "^6.0.158",
+    "bullmq": "^5.73.4",
     "date-fns": "^4.1.0",
     "grammy": "catalog:",
     "ioredis": "catalog:",
@@ -42,11 +42,11 @@
     "sharp": "^0.34.5",
     "tmp": "^0.2.5",
     "tough-cookie": "^6.0.1",
-    "user-agents": "^2.1.25",
+    "user-agents": "^2.1.27",
     "youtube-dl-exec": "^3.1.4"
   },
   "devDependencies": {
-    "@types/bun": "1.3.11",
+    "@types/bun": "1.3.12",
     "@types/tmp": "^0.2.6",
     "tsdown": "catalog:"
   },
