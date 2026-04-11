@@ -96,7 +96,28 @@ export function getSystemPrompt(now: Date = new Date()): string {
 	return `${SYSTEM_PROMPT}\nCurrent date: ${format(now, "yyyy-MM-dd")}`;
 }
 
-export type ConversationMessage = ModelMessage;
+export interface AssistantConversationTurn {
+	attachments: [];
+	context: [];
+	includeAttachmentData: false;
+	messageId: number;
+	replyToMessageId: number | null;
+	role: "assistant";
+	text: string;
+}
+
+export interface UserConversationTurn {
+	attachments: ConversationAttachment[];
+	context: string[];
+	includeAttachmentData: boolean;
+	messageId: number;
+	replyToMessageId: number | null;
+	role: "user";
+	senderName: string;
+	text: string | null;
+}
+
+export type ConversationTurn = AssistantConversationTurn | UserConversationTurn;
 
 export interface ConversationAttachment {
 	base64Data?: string;
@@ -105,9 +126,25 @@ export interface ConversationAttachment {
 	summary?: string | null;
 }
 
-export interface ToConversationMessageOptions {
+export interface ToConversationTurnOptions {
 	includeAttachmentData?: boolean;
 	supplementalContent?: string[];
+}
+
+export interface ToModelMessageOptions {
+	includeAttachmentData?: boolean;
+}
+
+interface ConversationTurnEntry {
+	attachments: ConversationAttachment[];
+	caption?: string | null;
+	fromFirstName?: string | null;
+	fromId?: number | bigint | null;
+	fromUsername?: string | null;
+	messageId: number;
+	messageThreadId?: number | null;
+	replyToMessageId?: number | null;
+	text?: string | null;
 }
 
 export const openrouter = env.OPENROUTER_API_KEY
@@ -300,9 +337,9 @@ export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
 }
 
 export function formatSenderName(data: {
-	fromUsername: string | null;
-	fromFirstName: string | null;
-	fromId: number | bigint | null;
+	fromUsername?: string | null;
+	fromFirstName?: string | null;
+	fromId?: number | bigint | null;
 }): string {
 	if (data.fromUsername) {
 		return `@${data.fromUsername}`;
@@ -339,55 +376,29 @@ function toAttachmentUrl(s3Path: string): URL | null {
 	return new URL(fullUrl);
 }
 
-// TODO: Check if can get rid of this stuff
-function formatSupplementalContent(supplementalContent: string[]): string {
-	const normalizedBlocks = supplementalContent.map((block) => block.trim()).filter(Boolean);
-
-	if (normalizedBlocks.length === 0) {
-		return "";
-	}
-
-	return normalizedBlocks
-		.map((block, index) => `Linked context #${index + 1}:\n${block}`)
-		.join("\n\n");
-}
-
-// TODO: Refactor that shit method
-export function toConversationMessage(
-	entry: {
-		messageId?: number;
-		replyToMessageId: number | null;
-		messageThreadId: number | null;
-		fromId: number | bigint | null;
-		fromUsername: string | null;
-		fromFirstName: string | null;
-		text: string | null;
-		caption: string | null;
-		attachments?: ConversationAttachment[];
-	},
+export function toConversationTurn(
+	entry: ConversationTurnEntry,
 	botId: number,
-	options: ToConversationMessageOptions = {},
-): ConversationMessage | null {
-	const includeAttachmentData = options.includeAttachmentData ?? true;
-	const normalizedContent = (entry.text ?? entry.caption)?.trim();
-	const content = normalizedContent && normalizedContent.length > 0 ? normalizedContent : null;
-	const attachments = entry.attachments ?? [];
+	{ includeAttachmentData = true, supplementalContent = [] }: ToConversationTurnOptions = {},
+): ConversationTurn {
+	const content = entry.text?.trim() ?? entry.caption?.trim() ?? null;
+	const attachments = entry.attachments;
+	const replyToMessageId = entry.replyToMessageId ?? null;
+	const messageThreadId = entry.messageThreadId ?? null;
 
-	if (!content && attachments.length === 0) {
-		return null;
-	}
-
-	if (entry.fromId !== null && Number(entry.fromId) === botId) {
-		const cleanedContent = content ? stripBotAnnotations(content) : null;
-
+	if (entry.fromId != null && Number(entry.fromId) === botId) {
 		return {
+			attachments: [],
+			context: [],
+			includeAttachmentData: false,
+			messageId: entry.messageId,
+			replyToMessageId,
 			role: "assistant",
-			content: cleanedContent || "[attachment]",
+			text: stripBotAnnotations(content!),
 		};
 	}
 
 	const sender = formatSenderName(entry);
-	const messageIdPrefix = entry.messageId != null ? `#${entry.messageId} ` : "";
 
 	const attachmentLabels =
 		attachments.length > 0
@@ -396,62 +407,79 @@ export function toConversationMessage(
 
 	// If we send message to a topic - Telelegram set `reply_to_message` as first system message from that topic. Insane
 	const isTopicRootReply =
-		entry.replyToMessageId !== null &&
-		entry.messageThreadId !== null &&
-		entry.replyToMessageId === entry.messageThreadId;
+		replyToMessageId !== null && messageThreadId !== null && replyToMessageId === messageThreadId;
 
-	const replyLabel =
-		entry.replyToMessageId !== null && !isTopicRootReply
-			? `[Reply to #${entry.replyToMessageId}]`
-			: null;
+	const normalizedReplyToMessageId = isTopicRootReply ? null : replyToMessageId;
 
-	const textSegments: string[] = [];
-	if (replyLabel) {
-		textSegments.push(replyLabel);
+	const context: string[] = [];
+
+	if (normalizedReplyToMessageId !== null) {
+		context.push(`Replying to message #${normalizedReplyToMessageId}`);
 	}
-	if (content) {
-		textSegments.push(content);
-	}
+
 	if (attachmentLabels.length > 0) {
-		textSegments.push(`[sent ${attachmentLabels.join(", ")}]`);
+		context.push(`Sent attachments: ${attachmentLabels.join(", ")}`);
 	}
-
-	const textBody = textSegments.join(" ");
-
-	if (attachments.length === 0) {
-		return {
-			role: "user",
-			content: `${messageIdPrefix}${sender}: ${textBody}`,
-		};
-	}
-
-	let textPrefix = `${messageIdPrefix}${sender}: ${textBody}`;
 
 	const attachmentSummaries = attachments
 		.map((attachment) => (attachment.summary ?? "").trim())
 		.filter((summary) => summary.length > 0);
 
 	if (attachmentSummaries.length > 0) {
-		textPrefix = `${textPrefix}\n\nAttachment context:\n${attachmentSummaries
-			.map((summary, index) => `${index + 1}. ${summary}`)
-			.join("\n")}`;
+		context.push(
+			`Attachment context:\n${attachmentSummaries.map((summary, index) => `${index + 1}. ${summary}`).join("\n")}`,
+		);
 	}
 
-	const supplementalContent = formatSupplementalContent(options.supplementalContent ?? []);
-	if (supplementalContent) {
-		textPrefix = `${textPrefix}\n\n${supplementalContent}`;
+	for (const [index, block] of supplementalContent.entries()) {
+		context.push(`Linked context #${index + 1}:\n${block}`);
+	}
+
+	return {
+		attachments,
+		context,
+		includeAttachmentData,
+		messageId: entry.messageId,
+		replyToMessageId: normalizedReplyToMessageId,
+		role: "user",
+		senderName: sender,
+		text: content,
+	};
+}
+
+export function toModelMessage(
+	turn: ConversationTurn,
+	options: ToModelMessageOptions = {},
+): ModelMessage {
+	if (turn.role === "assistant") {
+		return {
+			role: "assistant",
+			content: turn.text,
+		};
+	}
+
+	const includeAttachmentData = options.includeAttachmentData ?? turn.includeAttachmentData;
+	const parts: Array<TextPart | ImagePart | FilePart> = [];
+	const messageLabel = `Message #${turn.messageId} from ${turn.senderName}`;
+
+	parts.push({ type: "text", text: messageLabel });
+
+	if (turn.text) {
+		parts.push({ type: "text", text: turn.text });
+	}
+
+	for (const block of turn.context) {
+		parts.push({ type: "text", text: block });
 	}
 
 	if (!includeAttachmentData) {
 		return {
 			role: "user",
-			content: textPrefix,
+			content: parts,
 		};
 	}
 
-	const parts: Array<TextPart | ImagePart | FilePart> = [{ type: "text", text: textPrefix }];
-
-	for (const attachment of attachments) {
+	for (const attachment of turn.attachments) {
 		const attachmentData = attachment.base64Data ?? toAttachmentUrl(attachment.s3Path);
 
 		if (!attachmentData) {

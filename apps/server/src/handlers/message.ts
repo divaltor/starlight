@@ -12,7 +12,8 @@ import {
 	openrouter,
 	shouldReplyToMessage,
 	stripBotAnnotations,
-	toConversationMessage,
+	toConversationTurn,
+	toModelMessage,
 } from "@/utils/message";
 import { sleep } from "@/utils/tools";
 
@@ -77,31 +78,27 @@ groupChat
 			`Built conversation: ${messages.length} messages, directReply: ${!!directReplyEntry}, supplemental: ${directReplySupplementalContent.length}`,
 		);
 
-		const currentConversationMessage = toConversationMessage(
+		const currentConversationTurn = toConversationTurn(
 			{
 				messageId: triggerMessageId,
-				replyToMessageId: ctx.message.reply_to_message?.message_id ?? null,
-				messageThreadId,
-				fromId: ctx.message.from?.id ?? null,
-				fromUsername: ctx.message.from?.username ?? null,
-				fromFirstName: ctx.message.from?.first_name ?? null,
-				text: ctx.message.text ?? null,
-				caption: ctx.message.caption ?? null,
+				replyToMessageId: ctx.message.reply_to_message?.message_id,
+				messageThreadId: ctx.message.message_thread_id,
+				fromId: ctx.message.from?.id,
+				fromUsername: ctx.message.from?.username,
+				fromFirstName: ctx.message.from?.first_name,
+				text: ctx.message.text,
+				caption: ctx.message.caption,
 				attachments: ctx.attachments,
 			},
 			botId,
 			{
+				includeAttachmentData: true,
 				supplementalContent:
 					directReplySupplementalContent.length > 0 && !directReplyEntry
 						? directReplySupplementalContent
 						: undefined,
 			},
 		);
-
-		// TODO: Refactor to remove that, we're guaranteed to get not-empty message due handler filtering
-		if (!currentConversationMessage) {
-			return;
-		}
 
 		const memoryContext = await buildChatMemoryPromptContext({
 			chatId,
@@ -117,8 +114,8 @@ groupChat
 						},
 					]
 				: []),
-			...messages,
-			currentConversationMessage,
+			...messages.map((message) => toModelMessage(message)),
+			toModelMessage(currentConversationTurn),
 		];
 
 		knownMessageIds.add(triggerMessageId);

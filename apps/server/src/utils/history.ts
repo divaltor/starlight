@@ -2,7 +2,7 @@ import { logger } from "@/logger";
 import { extractMarkdown } from "@/services/markdown";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
-import { type ConversationMessage, toConversationMessage } from "@/utils/message";
+import { type ConversationTurn, toConversationTurn } from "@/utils/message";
 import type { Message } from "@grammyjs/types";
 import { env, type Prisma, prisma } from "@starlight/utils";
 
@@ -30,6 +30,10 @@ const messageHistorySelect = {
 	},
 } satisfies Prisma.MessageSelect;
 
+const conversationMessageWhere = {
+	OR: [{ text: { not: null } }, { caption: { not: null } }, { attachments: { some: {} } }],
+} satisfies Prisma.MessageWhereInput;
+
 export type StoredConversationMessage = Prisma.MessageGetPayload<{
 	select: typeof messageHistorySelect;
 }>;
@@ -44,7 +48,7 @@ interface BuildMessagesResult {
 	directReplyEntry: StoredConversationMessage | null;
 	directReplySupplementalContent: string[];
 	knownMessageIds: Set<number>;
-	messages: ConversationMessage[];
+	messages: ConversationTurn[];
 }
 
 export class History {
@@ -69,7 +73,7 @@ export class History {
 				messageId: {
 					not: currentMessageId,
 				},
-				OR: [{ text: { not: null } }, { caption: { not: null } }, { attachments: { some: {} } }],
+				...conversationMessageWhere,
 			},
 			select: messageHistorySelect,
 			orderBy: {
@@ -92,6 +96,7 @@ export class History {
 				where: {
 					chatId,
 					messageId: repliedMessage.message_id,
+					...conversationMessageWhere,
 				},
 				select: messageHistorySelect,
 			});
@@ -158,31 +163,28 @@ export class History {
 			inlineMessageIds.add(directReplyMessageId);
 		}
 
-		const messages: ConversationMessage[] = orderedHistoryEntries
-			.map((entry) => {
-				const isDirectReplyTarget =
-					directReplyMessageId !== null && entry.messageId === directReplyMessageId;
-				const shouldInline = inlineMessageIds.has(entry.messageId);
+		const messages = orderedHistoryEntries.map((entry) => {
+			const isDirectReplyTarget =
+				directReplyMessageId !== null && entry.messageId === directReplyMessageId;
 
-				const attachments = entry.attachments.map((attachment) => ({
-					...attachment,
-					summary: shouldInline ? null : attachment.summary,
-				}));
+			const attachments = entry.attachments.map((attachment) => ({
+				...attachment,
+				summary: inlineMessageIds.has(entry.messageId) ? null : attachment.summary,
+			}));
 
-				return toConversationMessage(
-					{
-						...entry,
-						fromId: entry.fromId,
-						attachments,
-					},
-					botId,
-					{
-						includeAttachmentData: shouldInline,
-						supplementalContent: isDirectReplyTarget ? directReplySupplementalContent : undefined,
-					},
-				);
-			})
-			.filter((entry): entry is ConversationMessage => entry !== null);
+			return toConversationTurn(
+				{
+					...entry,
+					fromId: entry.fromId,
+					attachments,
+				},
+				botId,
+				{
+					includeAttachmentData: inlineMessageIds.has(entry.messageId),
+					supplementalContent: isDirectReplyTarget ? directReplySupplementalContent : undefined,
+				},
+			);
+		});
 
 		const knownMessageIds = new Set(orderedHistoryEntries.map((entry) => entry.messageId));
 
