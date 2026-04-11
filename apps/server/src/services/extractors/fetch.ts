@@ -1,4 +1,5 @@
 import { http } from "@starlight/utils/http";
+import UserAgent from "user-agents";
 import type { Extractor, ExtractionResult } from "@/services/extractors/base";
 import { logger } from "@/logger";
 
@@ -16,6 +17,7 @@ export class FetchExtractor implements Extractor {
 			response = await http(url, {
 				headers: {
 					Accept: "text/markdown",
+					"User-Agent": new UserAgent().toString(),
 				},
 			});
 		} catch (error) {
