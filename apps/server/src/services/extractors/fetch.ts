@@ -1,4 +1,5 @@
 import { http } from "@starlight/utils/http";
+import { isTimeoutError } from "ky";
 import UserAgent from "user-agents";
 import type { Extractor, ExtractionResult } from "@/services/extractors/base";
 import { logger } from "@/logger";
@@ -19,14 +20,21 @@ export class FetchExtractor implements Extractor {
 					Accept: "text/markdown",
 					"User-Agent": new UserAgent().toString(),
 				},
-			});
-		} catch (error) {
-			if (error instanceof Error && error.name === "TimeoutError") {
-				logger.warn({ url }, "FetchExtractor: Fetch timeout");
-			} else {
-				logger.error({ error, url }, "FetchExtractor: Fetch failed");
-			}
+				hooks: {
+					beforeError: [
+						({ error }) => {
+							if (isTimeoutError(error)) {
+								logger.warn({ url }, "FetchExtractor: Fetch timeout");
+							} else {
+								logger.error({ error, url }, "FetchExtractor: Fetch failed");
+							}
 
+							return error;
+						},
+					],
+				},
+			});
+		} catch {
 			return null;
 		}
 
