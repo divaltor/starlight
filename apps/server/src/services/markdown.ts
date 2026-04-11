@@ -1,8 +1,10 @@
 import { FetchExtractor } from "@/services/extractors/fetch";
 import { WorkersExtractor } from "@/services/extractors/workers";
+import { ParallelExtractor } from "@/services/extractors/parallel";
 
 const fetchExtractor = new FetchExtractor();
 const workersExtractor = new WorkersExtractor();
+const parallelExtractor = new ParallelExtractor();
 
 export async function extractMarkdown(url: string): Promise<string | null> {
 	const fetchResult = await fetchExtractor.extract(url);
@@ -20,6 +22,14 @@ export async function extractMarkdown(url: string): Promise<string | null> {
 
 		if (workersResult) {
 			return workersResult.content;
+		}
+	}
+
+	if (parallelExtractor.isEnabled()) {
+		const parallelResult = await parallelExtractor.extract(url);
+
+		if (parallelResult) {
+			return parallelResult.content;
 		}
 	}
 
