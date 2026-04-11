@@ -30,6 +30,7 @@ async function searchInlineImagesWithLegacyQuery(
 	pageQueryLimit: number,
 ): Promise<InlineImageSearchResult[]> {
 	const allPhotos: InlineImageSearchResult[] = [];
+	const seenPhotoKeys = new Set<string>();
 	let tweetSkip = 0;
 
 	while (allPhotos.length < photoOffset + pageQueryLimit) {
@@ -88,6 +89,13 @@ async function searchInlineImagesWithLegacyQuery(
 
 		for (const tweet of tweets) {
 			for (const photo of tweet.photos) {
+				const dedupeKey = photo.perceptualHash?.trim() || photo.id;
+
+				if (seenPhotoKeys.has(dedupeKey)) {
+					continue;
+				}
+
+				seenPhotoKeys.add(dedupeKey);
 				allPhotos.push({
 					photo_id: photo.id,
 					s3_path: photo.s3Path as string,
@@ -198,6 +206,7 @@ composer.on("inline_query").filter(
 			200,
 		);
 		const queryTime = new Date().toISOString();
+		const photoDedupeKey = Prisma.sql`COALESCE(NULLIF(p.perceptual_hash, ''), p.id)`;
 
 		const authorFilter =
 			authors.length > 0
@@ -332,21 +341,37 @@ composer.on("inline_query").filter(
 						: Prisma.empty;
 
 				rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+					WITH ranked AS (
+						SELECT
+							p.id AS photo_id,
+							p.s3_path,
+							t.id AS tweet_id,
+							t.username,
+							p.height,
+							p.width,
+							p.created_at AS photo_created_at,
+							ROW_NUMBER() OVER (
+								PARTITION BY ${photoDedupeKey}
+								ORDER BY p.created_at DESC, p.id DESC
+							) AS duplicate_rank
+						FROM photos p
+						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						WHERE p.user_id = ${userId}
+							AND p.deleted_at IS NULL
+							AND p.s3_path IS NOT NULL
+							${recencyAuthorFilter}
+					)
 					SELECT
-						p.id AS photo_id,
-						p.s3_path,
-						t.id AS tweet_id,
-						t.username,
-						p.height,
-						p.width,
+						photo_id,
+						s3_path,
+						tweet_id,
+						username,
+						height,
+						width,
 						0.0 AS final_score
-					FROM photos p
-					JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
-					WHERE p.user_id = ${userId}
-						AND p.deleted_at IS NULL
-						AND p.s3_path IS NOT NULL
-						${recencyAuthorFilter}
-					ORDER BY p.created_at DESC, photo_id DESC
+					FROM ranked
+					WHERE duplicate_rank = 1
+					ORDER BY photo_created_at DESC, photo_id DESC
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
 				`);
@@ -432,6 +457,7 @@ composer.on("inline_query").filter(
 					scored AS (
 						SELECT
 							p.id AS photo_id,
+							${photoDedupeKey} AS dedupe_key,
 							p.s3_path,
 							p.height,
 							p.width,
@@ -452,9 +478,11 @@ composer.on("inline_query").filter(
 					fused AS (
 						SELECT
 							photo_id,
+							dedupe_key,
 							s3_path,
 							tweet_id,
 							username,
+							tweet_created_at,
 							height,
 							width,
 							(
@@ -466,9 +494,25 @@ composer.on("inline_query").filter(
 								(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime}::timestamptz - tweet_created_at)) / (180.0 * 24 * 3600.0))))
 							) AS final_score
 						FROM scored
+					),
+					deduped AS (
+						SELECT
+							photo_id,
+							s3_path,
+							tweet_id,
+							username,
+							height,
+							width,
+							final_score,
+							ROW_NUMBER() OVER (
+								PARTITION BY dedupe_key
+								ORDER BY final_score DESC NULLS LAST, tweet_created_at DESC, photo_id DESC
+							) AS duplicate_rank
+						FROM fused
 					)
 					SELECT photo_id, s3_path, tweet_id, username, height, width, final_score
-					FROM fused
+					FROM deduped
+					WHERE duplicate_rank = 1
 					ORDER BY final_score DESC NULLS LAST, photo_id DESC
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
@@ -480,6 +524,7 @@ composer.on("inline_query").filter(
 					WITH scored AS (
 						SELECT
 							p.id AS photo_id,
+							${photoDedupeKey} AS dedupe_key,
 							p.s3_path,
 							p.height,
 							p.width,
@@ -502,9 +547,11 @@ composer.on("inline_query").filter(
 					fused AS (
 						SELECT
 							photo_id,
+							dedupe_key,
 							s3_path,
 							tweet_id,
 							username,
+							tweet_created_at,
 							height,
 							width,
 							(
@@ -515,9 +562,25 @@ composer.on("inline_query").filter(
 								(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (180.0 * 24 * 3600.0))))
 							) AS final_score
 						FROM scored
+					),
+					deduped AS (
+						SELECT
+							photo_id,
+							s3_path,
+							tweet_id,
+							username,
+							height,
+							width,
+							final_score,
+							ROW_NUMBER() OVER (
+								PARTITION BY dedupe_key
+								ORDER BY final_score DESC NULLS LAST, tweet_created_at DESC, photo_id DESC
+							) AS duplicate_rank
+						FROM fused
 					)
 					SELECT photo_id, s3_path, tweet_id, username, height, width, final_score
-					FROM fused
+					FROM deduped
+					WHERE duplicate_rank = 1
 					ORDER BY final_score DESC NULLS LAST, photo_id DESC
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}

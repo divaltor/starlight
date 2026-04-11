@@ -166,8 +166,8 @@ export const searchImages = maybeAuthProcedure
 			`
 			: Prisma.sql`FALSE`;
 
-		const whereClause = cursorData
-			? Prisma.sql`WHERE final_score < ${cursorData.lastScore} OR (final_score = ${cursorData.lastScore} AND photo_id < ${cursorData.lastPhotoId})`
+		const paginationClause = cursorData
+			? Prisma.sql`AND (final_score < ${cursorData.lastScore} OR (final_score = ${cursorData.lastScore} AND photo_id < ${cursorData.lastPhotoId}))`
 			: Prisma.empty;
 
 		const images = await prisma.$queryRaw<SearchResult[]>(Prisma.sql`
@@ -203,12 +203,13 @@ export const searchImages = maybeAuthProcedure
 					SELECT id, user_id FROM lexical_candidates
 				) candidates
 			),
-			scored AS (
-				SELECT
-					p.id AS photo_id,
-					p.height,
-					p.width,
-					p.original_url,
+				scored AS (
+					SELECT
+						p.id AS photo_id,
+						COALESCE(NULLIF(p.perceptual_hash, ''), p.id) AS dedupe_key,
+						p.height,
+						p.width,
+						p.original_url,
 					p.s3_path,
 					t.username,
 					t.created_at AS tweet_created_at,
@@ -268,11 +269,12 @@ export const searchImages = maybeAuthProcedure
 				JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
 			),
 			fused AS (
-				SELECT
-					photo_id,
-					height,
-					width,
-					original_url,
+					SELECT
+						photo_id,
+						dedupe_key,
+						height,
+						width,
+						original_url,
 					s3_path,
 					username,
 					tweet_created_at,
@@ -287,7 +289,25 @@ export const searchImages = maybeAuthProcedure
 						(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime}::timestamptz - tweet_created_at)) / (180.0 * 24 * 3600.0))))
 					) AS final_score
 				FROM scored
-			)
+				),
+				deduped AS (
+					SELECT
+						photo_id,
+						height,
+						width,
+						original_url,
+						s3_path,
+						username,
+						tweet_created_at,
+						tweet_id,
+						is_nsfw,
+						final_score,
+						ROW_NUMBER() OVER (
+							PARTITION BY dedupe_key
+							ORDER BY final_score DESC NULLS LAST, tweet_created_at DESC, photo_id DESC
+						) AS duplicate_rank
+					FROM fused
+				)
 			SELECT
 				photo_id,
 				height,
@@ -299,8 +319,9 @@ export const searchImages = maybeAuthProcedure
 				tweet_id,
 				is_nsfw,
 				final_score
-			FROM fused
-			${whereClause}
+			FROM deduped
+			WHERE duplicate_rank = 1
+			${paginationClause}
 			ORDER BY final_score DESC NULLS LAST, photo_id DESC
 			LIMIT ${limit}
 		`);
