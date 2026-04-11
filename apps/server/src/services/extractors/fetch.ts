@@ -10,11 +10,23 @@ export class FetchExtractor implements Extractor {
 	async extract(url: string): Promise<ExtractionResult | null> {
 		logger.info("FetchExtractor: Starting extraction for %s", url);
 
-		const response = await http(url, {
-			headers: {
-				Accept: "text/markdown",
-			},
-		});
+		let response: Awaited<ReturnType<typeof http>>;
+
+		try {
+			response = await http(url, {
+				headers: {
+					Accept: "text/markdown",
+				},
+			});
+		} catch (error) {
+			if (error instanceof Error && error.name === "TimeoutError") {
+				logger.warn({ url }, "FetchExtractor: Fetch timeout");
+			} else {
+				logger.error({ error, url }, "FetchExtractor: Fetch failed");
+			}
+
+			return null;
+		}
 
 		if (!response.ok) {
 			logger.info("FetchExtractor: Failed to fetch %s, status %s", url, response.status);
