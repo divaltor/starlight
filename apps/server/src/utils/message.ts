@@ -316,11 +316,13 @@ export function shouldReplyToMessage(ctx: Context, msg: Message): boolean {
 		return false;
 	}
 
-	if (hasDirectBotMention(ctx, msg)) {
-		return true;
+	const hasBotMention = hasDirectBotMention(ctx, msg) || hasBotAliasMention(msg, env.BOT_ALIASES);
+
+	if (msg.forward_origin && hasBotMention) {
+		return false;
 	}
 
-	if (hasBotAliasMention(msg, env.BOT_ALIASES)) {
+	if (hasBotMention) {
 		return true;
 	}
 
