@@ -21,6 +21,8 @@ function createVideoKeyboard(
 	sourceUrl?: string,
 ): InlineKeyboard {
 	const keyboard = new InlineKeyboard();
+	const hasDescriptionAction = descriptionAction !== null;
+
 	if (descriptionAction === "add") {
 		keyboard.text("Add description", `video:add_desc:${videoId}:${ownerId}`);
 	} else if (descriptionAction === "remove") {
@@ -28,6 +30,10 @@ function createVideoKeyboard(
 	}
 
 	if (sourceUrl) {
+		if (hasDescriptionAction) {
+			keyboard.row();
+		}
+
 		keyboard.url("Open source", sourceUrl);
 	}
 
@@ -319,11 +325,11 @@ chats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, async (ctx) 
 	}
 
 	const showDescription = action === "add_desc";
-	const caption = showDescription ? (video.tweetText ?? undefined) : undefined;
 	const sourceUrl =
 		ctx.chat?.type === "group" || ctx.chat?.type === "supergroup"
 			? getTweetUrl(video.tweetId)
 			: undefined;
+	const caption = showDescription ? (video.tweetText ?? undefined) : undefined;
 
 	try {
 		await ctx.editMessageCaption({
