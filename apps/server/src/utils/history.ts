@@ -143,7 +143,7 @@ export class History {
 		// into history — it may already exist in the window or come from outside it
 		const orderedHistoryEntries = directReplyEntry
 			? [...history.filter((e) => e.messageId !== directReplyEntry.messageId), directReplyEntry]
-			: [...history];
+			: history;
 
 		// Sort chronologically so the model sees messages in natural order
 		orderedHistoryEntries.sort((left, right) => left.messageId - right.messageId);
