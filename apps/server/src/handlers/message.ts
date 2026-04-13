@@ -182,7 +182,11 @@ groupChat
 				continue;
 			}
 
-			if (reply.reply_to !== null && !knownMessageIds.has(reply.reply_to)) {
+			if (
+				reply.reply_to !== undefined &&
+				reply.reply_to !== null &&
+				!knownMessageIds.has(reply.reply_to)
+			) {
 				ctx.logger.debug(
 					{ replyTo: reply.reply_to },
 					"Skipping AI reply: reply_to message ID not in known messages",
@@ -190,17 +194,17 @@ groupChat
 				continue;
 			}
 
-			const replyToId = reply.reply_to ?? triggerMessageId;
+			const replyToId = reply.reply_to === null ? triggerMessageId : reply.reply_to;
 
 			try {
 				const sentMessage = await ctx.api.sendMessage(ctx.chat.id, replyText, {
-					reply_parameters: { message_id: replyToId },
+					...(replyToId === undefined ? {} : { reply_parameters: { message_id: replyToId } }),
 					message_thread_id: ctx.message.message_thread_id,
 				});
 
 				ctx.logger.debug(
 					{ messageId: sentMessage.message_id },
-					`Sent AI reply (replyTo: ${replyToId}, length: ${replyText.length})`,
+					`Sent AI reply (replyTo: ${replyToId ?? "none"}, length: ${replyText.length})`,
 				);
 
 				await saveMessage({ ctx, msg: sentMessage });

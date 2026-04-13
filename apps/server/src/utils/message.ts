@@ -35,10 +35,12 @@ const LOW_SIGNAL_TOKEN_ALLOWLIST = new Set([
 
 const SYSTEM_PROMPT = `
 ### Response Targeting ###
-- By default, reply to the triggering message (null reply_to)
+- For text replies, reply_to is optional
+- Omit reply_to to send a normal chat message without replying to any specific message
+- Use null reply_to to reply to the triggering message
 - Use a specific message #<id> only when replying to a different message in the conversation
 - You can either send a text reply or react to a specific message with an emoji
-- For text replies, use type="text" with text and reply_to
+- For text replies, use type="text" with text and optionally reply_to
 - For reactions, use type="reaction" with message_id and emoji
 - Allowed reaction emoji only: 🤣,😁,🤮,🤡,🤔,😭,🥰,😡
 - Rarely, if you genuinely don't want to add anything, respond with no actions at all

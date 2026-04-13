@@ -22,9 +22,11 @@ export const chatResponseSchema = z.object({
 				z.object({
 					type: z.literal("text"),
 					text: z.string().min(1).describe("Response text in character"),
-					reply_to: nullableMessageIdSchema.describe(
-						"Message #id to reply to, null to reply to the triggering message",
-					),
+					reply_to: nullableMessageIdSchema
+						.describe(
+							"Optional message #id to reply to. Omit to send normally to the chat, use null to reply to the triggering message",
+						)
+						.optional(),
 				}),
 				z.object({
 					type: z.literal("reaction"),
