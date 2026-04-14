@@ -1,6 +1,31 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod/v4";
 
+function parseTelegramIdList(
+	value: string,
+	envKey: string,
+	{ allowNegative = false }: { allowNegative?: boolean } = {},
+): number[] {
+	if (!value) {
+		return [];
+	}
+
+	const idPattern = allowNegative ? /^-?\d+$/ : /^\d+$/;
+
+	return [...new Set(value.split(",").map((id) => id.trim()))].filter(Boolean).map((id) => {
+		if (!idPattern.test(id)) {
+			throw new Error(`${envKey} contains invalid Telegram ID: ${id}`);
+		}
+
+		const numericId = Number(id);
+		if (!Number.isSafeInteger(numericId)) {
+			throw new Error(`${envKey} contains unsafe integer ID: ${id}`);
+		}
+
+		return numericId;
+	});
+}
+
 const env = createEnv({
 	server: {
 		APP_NAME: z.string().default("Starlight"),
@@ -62,24 +87,13 @@ const env = createEnv({
 		SUPERVISOR_IDS: z
 			.string()
 			.default("")
-			.transform((value) => {
-				if (!value) {
-					return [] as number[];
-				}
-
-				return [...new Set(value.split(",").map((id) => id.trim()))].filter(Boolean).map((id) => {
-					if (!/^\d+$/.test(id)) {
-						throw new Error(`SUPERVISOR_IDS contains invalid Telegram ID: ${id}`);
-					}
-
-					const numericId = Number(id);
-					if (!Number.isSafeInteger(numericId)) {
-						throw new Error(`SUPERVISOR_IDS contains unsafe integer ID: ${id}`);
-					}
-
-					return numericId;
-				});
-			}),
+			.transform((value) => parseTelegramIdList(value, "SUPERVISOR_IDS")),
+		WHITELIST_CHAT_IDS: z
+			.string()
+			.default("")
+			.transform((value) =>
+				parseTelegramIdList(value, "WHITELIST_CHAT_IDS", { allowNegative: true }),
+			),
 
 		BASE_FRONTEND_URL: z.string().default(""),
 		BASE_CDN_URL: z

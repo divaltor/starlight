@@ -1,4 +1,4 @@
-import { cleanupTweetText, extractTweetId, prisma } from "@starlight/utils";
+import { cleanupTweetText, env, extractTweetId, prisma } from "@starlight/utils";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
 import { bot } from "@/bot";
@@ -13,6 +13,12 @@ const composer = new Composer<Context>();
 const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
 const chats = composer.chatType(["private", "group", "supergroup"]);
+const whitelistedGroupChat = groupChat.filter((ctx) =>
+	env.WHITELIST_CHAT_IDS.includes(ctx.chat.id),
+);
+const whitelistedChats = chats.filter(
+	(ctx) => ctx.chat?.type === "private" || env.WHITELIST_CHAT_IDS.includes(ctx.chat.id),
+);
 
 function createVideoKeyboard(
 	videoId: string,
@@ -283,7 +289,7 @@ privateChat.on(":text").filter(
 	},
 );
 
-groupChat.command(["v", "video"]).filter(
+whitelistedGroupChat.command(["v", "video"]).filter(
 	(ctx) => !ctx.match.trim().startsWith("https://"),
 	async (ctx) => {
 		await tryDeleteMessage(ctx);
@@ -293,7 +299,7 @@ groupChat.command(["v", "video"]).filter(
 	},
 );
 
-groupChat.command(["v", "video"]).filter(
+whitelistedGroupChat.command(["v", "video"]).filter(
 	(ctx) => ctx.match.trim().startsWith("https://"),
 	async (ctx) => {
 		await tryDeleteMessage(ctx);
@@ -301,7 +307,7 @@ groupChat.command(["v", "video"]).filter(
 	},
 );
 
-chats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, async (ctx) => {
+whitelistedChats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, async (ctx) => {
 	const action = ctx.match[1];
 	const videoId = ctx.match[2]!;
 	const ownerId = Number(ctx.match[3]);
@@ -380,14 +386,14 @@ privateChat.on(":video", async (ctx) => {
 	await ctx.reply(getTweetUrl(video.tweetId));
 });
 
-composer.command("source").filter(
+whitelistedChats.command("source").filter(
 	(ctx) => ctx.msg.reply_to_message === undefined || ctx.msg.reply_to_message?.video === undefined,
 	(ctx) => {
 		ctx.reply("Please, reply to a message with a video.");
 	},
 );
 
-composer.command("source").filter(
+whitelistedChats.command("source").filter(
 	(ctx) => ctx.msg.reply_to_message !== undefined,
 	async (ctx) => {
 		const video = await prisma.video.findFirst({

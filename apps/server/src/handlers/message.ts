@@ -20,10 +20,13 @@ import { sleep } from "@/utils/tools";
 const composer = new Composer<Context>();
 
 const groupChat = composer.chatType(["group", "supergroup"]);
+const whitelistedGroupChat = groupChat.filter((ctx) =>
+	env.WHITELIST_CHAT_IDS.includes(ctx.chat.id),
+);
 
 const RESPONSE_DELAY_MS = 500;
 
-groupChat
+whitelistedGroupChat
 	.on("message")
 	.filter((ctx) => {
 		if (!openrouter) {
