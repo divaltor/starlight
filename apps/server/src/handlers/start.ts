@@ -2,8 +2,9 @@ import { Composer } from "grammy";
 import type { Context } from "@/types";
 
 const composer = new Composer<Context>();
+const privateChat = composer.chatType("private");
 
-composer.command("start", async (ctx) => {
+privateChat.command("start", async (ctx) => {
 	const username = ctx.me.username;
 
 	await ctx.reply(
