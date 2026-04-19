@@ -40,7 +40,7 @@ function createVideoKeyboard(
 			keyboard.row();
 		}
 
-		keyboard.url("Open source", sourceUrl);
+		keyboard.url("Source", sourceUrl);
 	}
 
 	return keyboard;
