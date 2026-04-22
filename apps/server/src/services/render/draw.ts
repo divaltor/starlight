@@ -1,6 +1,7 @@
 import type { Image, SKRSContext2D } from "@napi-rs/canvas";
 import { loadImage } from "@napi-rs/canvas";
 import { logger } from "@/logger";
+import type { ThemeColors } from "./themes";
 
 interface RoundedRectParams {
 	ctx: SKRSContext2D;
@@ -24,6 +25,155 @@ export function roundedRect(params: RoundedRectParams): void {
 	ctx.lineTo(x, y + radius);
 	ctx.quadraticCurveTo(x, y, x + radius, y);
 	ctx.closePath();
+}
+
+export const TRANSLATION_BADGE_FONT_SIZE = 11;
+export const TRANSLATION_BADGE_HEIGHT = 20;
+export const TRANSLATION_BADGE_GAP = 8;
+
+const TRANSLATION_BADGE_PADDING_X = 8;
+const TRANSLATION_BADGE_RADIUS = 10;
+const TRANSLATION_BADGE_ICON_SIZE = 14;
+const TRANSLATION_BADGE_ICON_GAP = 6;
+
+interface DrawTranslationBadgeParams {
+	colors: ThemeColors;
+	ctx: SKRSContext2D;
+	fontFamily: string;
+	label: string;
+	x: number;
+	y: number;
+}
+
+export function drawTranslationBadge(params: DrawTranslationBadgeParams): void {
+	const { ctx, colors, fontFamily, label, x, y } = params;
+
+	ctx.save();
+	ctx.font = `${TRANSLATION_BADGE_FONT_SIZE}px ${fontFamily}`;
+
+	const textWidth = ctx.measureText(label).width;
+	const badgeWidth = Math.ceil(
+		textWidth +
+			TRANSLATION_BADGE_PADDING_X * 2 +
+			TRANSLATION_BADGE_ICON_SIZE +
+			TRANSLATION_BADGE_ICON_GAP,
+	);
+
+	ctx.fillStyle = colors.background;
+	roundedRect({
+		ctx,
+		x,
+		y,
+		width: badgeWidth,
+		height: TRANSLATION_BADGE_HEIGHT,
+		radius: TRANSLATION_BADGE_RADIUS,
+	});
+	ctx.fill();
+
+	ctx.strokeStyle = colors.border;
+	ctx.lineWidth = 1;
+	roundedRect({
+		ctx,
+		x: x + 0.5,
+		y: y + 0.5,
+		width: badgeWidth - 1,
+		height: TRANSLATION_BADGE_HEIGHT - 1,
+		radius: TRANSLATION_BADGE_RADIUS,
+	});
+	ctx.stroke();
+
+	drawTranslateIcon({
+		ctx,
+		colors,
+		x: x + TRANSLATION_BADGE_PADDING_X,
+		y: y + (TRANSLATION_BADGE_HEIGHT - TRANSLATION_BADGE_ICON_SIZE) / 2,
+		size: TRANSLATION_BADGE_ICON_SIZE,
+		fontFamily,
+	});
+
+	ctx.fillStyle = colors.secondaryText;
+	ctx.fillText(
+		label,
+		x + TRANSLATION_BADGE_PADDING_X + TRANSLATION_BADGE_ICON_SIZE + TRANSLATION_BADGE_ICON_GAP,
+		y + 14,
+	);
+	ctx.restore();
+}
+
+interface DrawTranslateIconParams {
+	colors: ThemeColors;
+	ctx: SKRSContext2D;
+	fontFamily: string;
+	size: number;
+	x: number;
+	y: number;
+}
+
+function drawTranslateIcon(params: DrawTranslateIconParams): void {
+	const { ctx, colors, x, y, size, fontFamily } = params;
+	const backSize = Math.floor(size * 0.72);
+	const frontSize = Math.floor(size * 0.78);
+	const backX = x + size - backSize;
+	const backY = y;
+	const frontX = x;
+	const frontY = y + size - frontSize;
+
+	ctx.save();
+
+	ctx.fillStyle = colors.cardBackground;
+	roundedRect({
+		ctx,
+		x: backX,
+		y: backY,
+		width: backSize,
+		height: backSize,
+		radius: 3,
+	});
+	ctx.fill();
+
+	ctx.strokeStyle = colors.accent;
+	ctx.lineWidth = 1;
+	roundedRect({
+		ctx,
+		x: backX + 0.5,
+		y: backY + 0.5,
+		width: backSize - 1,
+		height: backSize - 1,
+		radius: 3,
+	});
+	ctx.stroke();
+
+	ctx.fillStyle = colors.background;
+	roundedRect({
+		ctx,
+		x: frontX,
+		y: frontY,
+		width: frontSize,
+		height: frontSize,
+		radius: 3,
+	});
+	ctx.fill();
+
+	ctx.strokeStyle = colors.accent;
+	ctx.lineWidth = 1.2;
+	roundedRect({
+		ctx,
+		x: frontX + 0.5,
+		y: frontY + 0.5,
+		width: frontSize - 1,
+		height: frontSize - 1,
+		radius: 3,
+	});
+	ctx.stroke();
+
+	ctx.fillStyle = colors.accent;
+	ctx.font = `bold ${Math.max(7, Math.floor(frontSize * 0.5))}px ${fontFamily}`;
+	ctx.fillText("A", frontX + 2.5, frontY + frontSize - 2.5);
+
+	ctx.font = `${Math.max(7, Math.floor(backSize * 0.58))}px ${fontFamily}`;
+	ctx.fillText("文", backX + 1.5, backY + backSize - 1.5);
+
+	ctx.restore();
 }
 
 interface DrawCircularImageParams {

@@ -36,6 +36,16 @@ function getTweetText(tweet: Pick<FxEmbedTweet, "text" | "translation">): string
 	return tweet.translation?.text ?? tweet.text;
 }
 
+function mapTranslationData(tweet: Pick<FxEmbedTweet, "translation">): TweetData["translation"] {
+	if (!tweet.translation) {
+		return null;
+	}
+
+	return {
+		sourceLanguage: tweet.translation.source_lang_en ?? tweet.translation.source_lang.toUpperCase(),
+	};
+}
+
 function stripLeadingMention(text: string, username: string): string {
 	const mentionPattern = new RegExp(`^@${username}\\s*`, "i");
 	return text.replace(mentionPattern, "").trim();
@@ -87,6 +97,7 @@ async function fetchReplyChain(
 		likes: tweet.likes,
 		retweets: tweet.retweets,
 		replies: tweet.replies,
+		translation: mapTranslationData(tweet),
 		quote: tweet.quote
 			? {
 					authorName: tweet.quote.author.name,
@@ -109,6 +120,7 @@ async function fetchReplyChain(
 					likes: tweet.quote.likes,
 					retweets: tweet.quote.retweets,
 					replies: tweet.quote.replies,
+					translation: mapTranslationData(tweet.quote),
 				}
 			: null,
 	};
@@ -173,6 +185,7 @@ export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 		likes: tweet.likes,
 		retweets: tweet.retweets,
 		replies: tweet.replies,
+		translation: mapTranslationData(tweet),
 		replyChain,
 		hasMoreInChain,
 		quote: tweet.quote
@@ -197,6 +210,7 @@ export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 					likes: tweet.quote.likes,
 					retweets: tweet.quote.retweets,
 					replies: tweet.quote.replies,
+					translation: mapTranslationData(tweet.quote),
 				}
 			: null,
 	};
