@@ -1,6 +1,22 @@
 import { z } from "zod";
 
-const reactionEmojiSchema = z.enum(["🤣", "😁", "🤮", "🤡", "🤔", "😭", "🥰", "😡"]);
+const reactionEmojiSchema = z.enum([
+	"🤣",
+	"😁",
+	"🤮",
+	"🤡",
+	"🤔",
+	"😭",
+	"🥰",
+	"😡",
+	"🔥",
+	"👏",
+	"👌",
+	"👎",
+	"👍",
+	"💔",
+	"💯",
+]);
 
 const nullableMessageIdSchema = z
 	.union([

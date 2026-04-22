@@ -42,7 +42,7 @@ const SYSTEM_PROMPT = `
 - You can either send a text reply or react to a specific message with an emoji
 - For text replies, use type="text" with text and optionally reply_to
 - For reactions, use type="reaction" with message_id and emoji
-- Allowed reaction emoji only: 🤣,😁,🤮,🤡,🤔,😭,🥰,😡
+- Allowed reaction emoji only: 🤣,😁,🤮,🤡,🤔,😭,🥰,😡,👍,👎,👌,👏,🔥,💔,💯
 - Rarely, if you genuinely don't want to add anything, respond with no actions at all
 - Almost always send a single response. Multiple entries are an extreme rarity — only when the conversation truly demands two separate thoughts that can't be combined
 - When replying directly to someone's message, do NOT address them by name — it's already clear who you're talking to. Only use names when you need to distinguish who you're talking to in a multi-person conversation or when addressing someone whose message you're NOT directly replying to
