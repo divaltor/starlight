@@ -6,8 +6,11 @@ const FXEMBED_BASE_URL = "https://api.fxtwitter.com";
 const FETCH_TIMEOUT_MS = 5000;
 const USER_AGENT = "StarlightBot/1.0 (Telegram Bot)";
 
-export async function fetchTweet(tweetId: string): Promise<FxEmbedTweet | null> {
-	const url = `${FXEMBED_BASE_URL}/status/${tweetId}`;
+export async function fetchTweet(
+	tweetId: string,
+	translateTo?: string,
+): Promise<FxEmbedTweet | null> {
+	const url = `${FXEMBED_BASE_URL}/status/${tweetId}${translateTo ? `/${translateTo}` : ""}`;
 
 	try {
 		const response = await http(url, {

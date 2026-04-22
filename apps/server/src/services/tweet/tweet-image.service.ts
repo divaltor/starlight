@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { logger } from "@/logger";
 import { fetchTweet } from "@/services/fxembed/fxembed.service";
-import type { FxEmbedArticle } from "@/services/fxembed/types";
+import type { FxEmbedArticle, FxEmbedTweet } from "@/services/fxembed/types";
 import {
 	type ArticleData,
 	type RenderResult,
@@ -11,6 +11,8 @@ import {
 import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";
+
+const TWEET_IMAGE_TRANSLATION_LANGUAGE = "en";
 
 function mapArticleData(article: FxEmbedArticle | undefined): ArticleData | null {
 	if (!article) {
@@ -28,6 +30,10 @@ function mapArticleData(article: FxEmbedArticle | undefined): ArticleData | null
 				}
 			: null,
 	};
+}
+
+function getTweetText(tweet: Pick<FxEmbedTweet, "text" | "translation">): string {
+	return tweet.translation?.text ?? tweet.text;
 }
 
 function stripLeadingMention(text: string, username: string): string {
@@ -51,12 +57,14 @@ async function fetchReplyChain(
 		return { chain: [], hasMore: true };
 	}
 
-	const tweet = await fetchTweet(tweetId);
+	const tweet = await fetchTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE);
 	if (!tweet) {
 		return { chain: [], hasMore: false };
 	}
 
-	const tweetText = childReplyingTo ? stripLeadingMention(tweet.text, childReplyingTo) : tweet.text;
+	const tweetText = childReplyingTo
+		? stripLeadingMention(getTweetText(tweet), childReplyingTo)
+		: getTweetText(tweet);
 
 	const tweetData: TweetData = {
 		authorName: tweet.author.name,
@@ -84,7 +92,7 @@ async function fetchReplyChain(
 					authorName: tweet.quote.author.name,
 					authorUsername: tweet.quote.author.screen_name,
 					authorAvatarUrl: tweet.quote.author.avatar_url,
-					text: tweet.quote.text,
+					text: getTweetText(tweet.quote),
 					createdAt: new Date(tweet.quote.created_timestamp * 1000),
 					media: tweet.quote.media
 						? {
@@ -123,7 +131,7 @@ async function fetchReplyChain(
 export type TweetImageResult = RenderResult;
 
 export async function prepareTweetData(tweetId: string): Promise<TweetData> {
-	const tweet = await fetchTweet(tweetId);
+	const tweet = await fetchTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE);
 
 	if (!tweet) {
 		logger.warn({ tweetId }, "Could not fetch tweet");
@@ -141,8 +149,8 @@ export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 
 	const tweetText =
 		tweet.replying_to && replyChain.length > 0
-			? stripLeadingMention(tweet.text, tweet.replying_to)
-			: tweet.text;
+			? stripLeadingMention(getTweetText(tweet), tweet.replying_to)
+			: getTweetText(tweet);
 
 	return {
 		authorName: tweet.author.name,
@@ -172,7 +180,7 @@ export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 					authorName: tweet.quote.author.name,
 					authorUsername: tweet.quote.author.screen_name,
 					authorAvatarUrl: tweet.quote.author.avatar_url,
-					text: tweet.quote.text,
+					text: getTweetText(tweet.quote),
 					createdAt: new Date(tweet.quote.created_timestamp * 1000),
 					media: tweet.quote.media
 						? {

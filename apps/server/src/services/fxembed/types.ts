@@ -42,6 +42,14 @@ export interface FxEmbedArticle {
 	title: string;
 }
 
+export interface FxEmbedTranslation {
+	provider?: string;
+	source_lang: string;
+	source_lang_en?: string;
+	target_lang: string;
+	text: string;
+}
+
 export interface FxEmbedTweet {
 	article?: FxEmbedArticle;
 	author: FxEmbedAuthor;
@@ -56,6 +64,7 @@ export interface FxEmbedTweet {
 	replying_to_status?: string | null;
 	retweets: number;
 	text: string;
+	translation?: FxEmbedTranslation;
 	url: string;
 	views?: number;
 }
