@@ -37,7 +37,7 @@ function getTweetText(tweet: Pick<FxEmbedTweet, "text" | "translation">): string
 }
 
 function mapTranslationData(tweet: Pick<FxEmbedTweet, "translation">): TweetData["translation"] {
-	if (!tweet.translation) {
+	if (!tweet.translation?.text) {
 		return null;
 	}
 
