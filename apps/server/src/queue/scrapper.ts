@@ -3,7 +3,6 @@ import type { User } from "@starlight/utils";
 import { env, prisma } from "@starlight/utils";
 import { type QueryTweetsResponse, Scraper, type Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, QueueEvents, Worker } from "bullmq";
-import UserAgent from "user-agents";
 import { bot } from "@/bot";
 import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";
@@ -96,12 +95,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			throw new Error("User ID not found");
 		}
 
-		const userAgent = new UserAgent({
-			platform: "MacIntel",
-			deviceCategory: "desktop",
-		});
-
-		const scrapper = new Scraper({ experimental: { xClientTransactionId: true, xpff: true } });
+		const scrapper = new Scraper({ experimental: { xClientTransactionId: false, xpff: false } });
 		await scrapper.setCookies(cookies.toString().split(";"));
 
 		let timeline: QueryTweetsResponse;
@@ -112,7 +106,6 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			logger.error(
 				{
 					userId,
-					userAgent: userAgent.toString(),
 					error: String(error),
 				},
 				"Unable to fetch timeline for user %s",
