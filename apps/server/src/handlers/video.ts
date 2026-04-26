@@ -213,6 +213,7 @@ async function handleVideoRequest(
 				try {
 					const result = await generateTweetImage(tweetId, "light");
 					await sendPhoto(new InputFile(result.buffer, `tweet-${tweetId}.jpg`), {
+						caption: getTweetUrl(tweetId),
 						message_thread_id: messageThreadId,
 					});
 					return;
