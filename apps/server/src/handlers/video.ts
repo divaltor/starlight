@@ -336,52 +336,46 @@ whitelistedChats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, a
 	}
 
 	const showDescription = action === "add_desc";
-	const translatedText = showDescription
-		? getTweetCaptionText(await fetchTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE))
-		: undefined;
-	const sourceUrl =
-		ctx.chat?.type === "group" || ctx.chat?.type === "supergroup"
-			? getTweetUrl(video.tweetId)
-			: undefined;
-	const caption = showDescription ? (translatedText ?? video.tweetText ?? undefined) : undefined;
+	let caption: string | undefined;
 
-	if (caption && caption !== video.tweetText) {
-		await prisma.video.update({
-			where: { id: videoId },
-			data: { tweetText: caption },
-		});
+	if (showDescription) {
+		const tweet = await fetchTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE);
+		caption = getTweetCaptionText(tweet) ?? video.tweetText ?? undefined;
+
+		if (caption && caption !== video.tweetText) {
+			await prisma.video.update({
+				where: { id: videoId },
+				data: { tweetText: caption },
+			});
+		}
 	}
 
-	try {
-		await ctx.editMessageCaption({
-			caption,
-			reply_markup: createVideoKeyboard(
-				videoId,
-				video.tweetText ? (showDescription ? "remove" : "add") : null,
-				ownerId,
-				sourceUrl,
-			),
-		});
-	} catch (error) {
-		if (error instanceof GrammyError) {
-			ctx.logger.warn({ error, videoId }, "Failed to edit message, resending video");
+	const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
+	const sourceUrl = isGroupChat ? getTweetUrl(video.tweetId) : undefined;
+	const keyboard = createVideoKeyboard(
+		videoId,
+		video.tweetText ? (showDescription ? "remove" : "add") : null,
+		ownerId,
+		sourceUrl,
+	);
 
-			await ctx.replyWithVideo(video.telegramFileId, {
-				width: video.width ?? undefined,
-				height: video.height ?? undefined,
-				supports_streaming: true,
-				caption,
-				reply_markup: createVideoKeyboard(
-					videoId,
-					video.tweetText ? (showDescription ? "remove" : "add") : null,
-					ownerId,
-					sourceUrl,
-				),
-				message_thread_id: ctx.msg?.message_thread_id,
-			});
-		} else {
+	try {
+		await ctx.editMessageCaption({ caption, reply_markup: keyboard });
+	} catch (error) {
+		if (!(error instanceof GrammyError)) {
 			throw error;
 		}
+
+		ctx.logger.warn({ error, videoId }, "Failed to edit message, resending video");
+
+		await ctx.replyWithVideo(video.telegramFileId, {
+			width: video.width ?? undefined,
+			height: video.height ?? undefined,
+			supports_streaming: true,
+			caption,
+			reply_markup: keyboard,
+			message_thread_id: ctx.msg?.message_thread_id,
+		});
 	}
 });
 
