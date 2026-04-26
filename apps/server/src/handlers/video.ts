@@ -9,6 +9,7 @@ import { downloadVideo, downloadVideoFromUrl, type VideoInformation } from "@/se
 import type { Context } from "@/types";
 
 const composer = new Composer<Context>();
+const TWEET_TRANSLATION_LANGUAGE = "en";
 
 const privateChat = composer.chatType("private");
 const groupChat = composer.chatType(["group", "supergroup"]);
@@ -19,6 +20,10 @@ const whitelistedGroupChat = groupChat.filter((ctx) =>
 const whitelistedChats = chats.filter(
 	(ctx) => ctx.chat?.type === "private" || env.WHITELIST_CHAT_IDS.includes(ctx.chat.id),
 );
+
+function getTweetCaptionText(tweet: Pick<FxEmbedTweet, "text" | "translation"> | null | undefined) {
+	return cleanupTweetText(tweet?.translation?.text ?? tweet?.text);
+}
 
 function createVideoKeyboard(
 	videoId: string,
@@ -156,7 +161,7 @@ async function handleVideoRequest(
 			if (isTwitterLink) {
 				const [downloadResult, tweetResult] = await Promise.allSettled([
 					downloadVideo(link, tempDir.name),
-					fetchTweet(tweetId),
+					fetchTweet(tweetId, TWEET_TRANSLATION_LANGUAGE),
 				]);
 
 				tweet = tweetResult.status === "fulfilled" ? tweetResult.value : null;
@@ -226,7 +231,7 @@ async function handleVideoRequest(
 			return;
 		}
 
-		const cleanedText = isTwitterLink ? cleanupTweetText(tweet?.text) : undefined;
+		const cleanedText = isTwitterLink ? getTweetCaptionText(tweet) : undefined;
 
 		for (const video of videos) {
 			try {
@@ -331,11 +336,21 @@ whitelistedChats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, a
 	}
 
 	const showDescription = action === "add_desc";
+	const translatedText = showDescription
+		? getTweetCaptionText(await fetchTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE))
+		: undefined;
 	const sourceUrl =
 		ctx.chat?.type === "group" || ctx.chat?.type === "supergroup"
 			? getTweetUrl(video.tweetId)
 			: undefined;
-	const caption = showDescription ? (video.tweetText ?? undefined) : undefined;
+	const caption = showDescription ? (translatedText ?? video.tweetText ?? undefined) : undefined;
+
+	if (caption && caption !== video.tweetText) {
+		await prisma.video.update({
+			where: { id: videoId },
+			data: { tweetText: caption },
+		});
+	}
 
 	try {
 		await ctx.editMessageCaption({
