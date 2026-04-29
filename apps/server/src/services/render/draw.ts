@@ -1,5 +1,6 @@
+import path from "node:path";
 import type { Image, SKRSContext2D } from "@napi-rs/canvas";
-import { loadImage } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { logger } from "@/logger";
 import type { ThemeColors } from "./themes";
 
@@ -30,38 +31,58 @@ export function roundedRect(params: RoundedRectParams): void {
 const TRANSLATION_ICON_SIZE = 13;
 const TRANSLATION_ICON_GAP = 4;
 const TRANSLATION_INLINE_GAP = 8;
+const TRANSLATION_SEPARATOR = "·";
+const TRANSLATION_SEPARATOR_GAP = 6;
+
+let translationIconPromise: Promise<Image> | null = null;
+
+export function loadTranslationIcon(): Promise<Image> {
+	translationIconPromise ??= loadImage(path.join(process.cwd(), "assets", "translate-badge.png"));
+	return translationIconPromise;
+}
 
 interface DrawTranslationSourceParams {
 	colors: ThemeColors;
 	ctx: SKRSContext2D;
 	fontFamily: string;
 	fontSize: number;
+	icon: Image;
 	language: string;
 	x: number;
 	y: number;
 }
 
 export function drawTranslationSource(params: DrawTranslationSourceParams): number {
-	const { ctx, colors, fontFamily, fontSize, language, x, y } = params;
+	const { ctx, colors, fontFamily, fontSize, icon, language, x, y } = params;
 	const label = `from ${language}`;
-	const iconY = y + fontSize - TRANSLATION_ICON_SIZE;
-	const textX = x + TRANSLATION_ICON_SIZE + TRANSLATION_ICON_GAP;
 
 	ctx.save();
+	ctx.font = `${fontSize}px ${fontFamily}`;
+
+	ctx.fillStyle = colors.secondaryText;
+	ctx.fillText(TRANSLATION_SEPARATOR, x, y + fontSize);
+	const separatorWidth = ctx.measureText(TRANSLATION_SEPARATOR).width;
+	const iconX = x + separatorWidth + TRANSLATION_SEPARATOR_GAP;
+	const iconY = y + fontSize - TRANSLATION_ICON_SIZE;
+	const textX = iconX + TRANSLATION_ICON_SIZE + TRANSLATION_ICON_GAP;
 
 	drawTranslateIcon({
 		ctx,
 		colors,
-		x,
+		icon,
+		x: iconX,
 		y: iconY,
 		size: TRANSLATION_ICON_SIZE,
-		fontFamily,
 	});
 
 	ctx.fillStyle = colors.text;
-	ctx.font = `${fontSize}px ${fontFamily}`;
 	ctx.fillText(label, textX, y + fontSize);
-	const width = TRANSLATION_ICON_SIZE + TRANSLATION_ICON_GAP + ctx.measureText(label).width;
+	const width =
+		separatorWidth +
+		TRANSLATION_SEPARATOR_GAP +
+		TRANSLATION_ICON_SIZE +
+		TRANSLATION_ICON_GAP +
+		ctx.measureText(label).width;
 	ctx.restore();
 
 	return width;
@@ -70,77 +91,21 @@ export function drawTranslationSource(params: DrawTranslationSourceParams): numb
 interface DrawTranslateIconParams {
 	colors: ThemeColors;
 	ctx: SKRSContext2D;
-	fontFamily: string;
+	icon: Image;
 	size: number;
 	x: number;
 	y: number;
 }
 
 function drawTranslateIcon(params: DrawTranslateIconParams): void {
-	const { ctx, colors, x, y, size, fontFamily } = params;
-	const backSize = Math.floor(size * 0.72);
-	const frontSize = Math.floor(size * 0.78);
-	const backX = x + size - backSize;
-	const backY = y;
-	const frontX = x;
-	const frontY = y + size - frontSize;
-
-	ctx.save();
-
-	ctx.fillStyle = colors.cardBackground;
-	roundedRect({
-		ctx,
-		x: backX,
-		y: backY,
-		width: backSize,
-		height: backSize,
-		radius: 3,
-	});
-	ctx.fill();
-
-	ctx.strokeStyle = colors.text;
-	ctx.lineWidth = 1;
-	roundedRect({
-		ctx,
-		x: backX + 0.5,
-		y: backY + 0.5,
-		width: backSize - 1,
-		height: backSize - 1,
-		radius: 3,
-	});
-	ctx.stroke();
-
-	ctx.fillStyle = colors.background;
-	roundedRect({
-		ctx,
-		x: frontX,
-		y: frontY,
-		width: frontSize,
-		height: frontSize,
-		radius: 3,
-	});
-	ctx.fill();
-
-	ctx.strokeStyle = colors.text;
-	ctx.lineWidth = 1.2;
-	roundedRect({
-		ctx,
-		x: frontX + 0.5,
-		y: frontY + 0.5,
-		width: frontSize - 1,
-		height: frontSize - 1,
-		radius: 3,
-	});
-	ctx.stroke();
-
-	ctx.fillStyle = colors.text;
-	ctx.font = `bold ${Math.max(7, Math.floor(frontSize * 0.5))}px ${fontFamily}`;
-	ctx.fillText("A", frontX + 2.5, frontY + frontSize - 2.5);
-
-	ctx.font = `${Math.max(7, Math.floor(backSize * 0.58))}px ${fontFamily}`;
-	ctx.fillText("文", backX + 1.5, backY + backSize - 1.5);
-
-	ctx.restore();
+	const { ctx, colors, icon, x, y, size } = params;
+	const iconCanvas = createCanvas(size, size);
+	const iconCtx = iconCanvas.getContext("2d");
+	iconCtx.drawImage(icon, 0, 0, size, size);
+	iconCtx.globalCompositeOperation = "source-in";
+	iconCtx.fillStyle = colors.text;
+	iconCtx.fillRect(0, 0, size, size);
+	ctx.drawImage(iconCanvas, x, y, size, size);
 }
 
 interface DrawCircularImageParams {
@@ -451,6 +416,7 @@ interface DrawAuthorInfoParams {
 	secondaryColor: string;
 	textColor: string;
 	themeColors?: ThemeColors;
+	translationIcon?: Image;
 	translationLanguage?: string | null;
 	username: string;
 	x: number;
@@ -469,6 +435,7 @@ export function drawAuthorInfo(params: DrawAuthorInfoParams): void {
 		textColor,
 		secondaryColor,
 		themeColors,
+		translationIcon,
 		translationLanguage,
 		inline = true,
 	} = params;
@@ -485,13 +452,14 @@ export function drawAuthorInfo(params: DrawAuthorInfoParams): void {
 		const usernameLabel = ` @${username}`;
 		ctx.fillText(usernameLabel, x + nameWidth, y + fontSize);
 
-		if (translationLanguage && themeColors) {
+		if (translationLanguage && themeColors && translationIcon) {
 			const usernameWidth = ctx.measureText(usernameLabel).width;
 			drawTranslationSource({
 				ctx,
 				colors: themeColors,
 				fontFamily,
 				fontSize,
+				icon: translationIcon,
 				language: translationLanguage,
 				x: x + nameWidth + usernameWidth + TRANSLATION_INLINE_GAP,
 				y,
