@@ -1,6 +1,5 @@
-import path from "node:path";
 import type { Image, SKRSContext2D } from "@napi-rs/canvas";
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { loadImage, Path2D } from "@napi-rs/canvas";
 import { logger } from "@/logger";
 import type { ThemeColors } from "./themes";
 
@@ -33,27 +32,22 @@ const TRANSLATION_ICON_GAP = 4;
 const TRANSLATION_INLINE_GAP = 8;
 const TRANSLATION_SEPARATOR = "·";
 const TRANSLATION_SEPARATOR_GAP = 6;
-
-let translationIconPromise: Promise<Image> | null = null;
-
-export function loadTranslationIcon(): Promise<Image> {
-	translationIconPromise ??= loadImage(path.join(process.cwd(), "assets", "translate-badge.png"));
-	return translationIconPromise;
-}
+const TRANSLATION_ICON_PATH = new Path2D(
+	"M12.745 20.54l10.97-8.19c.539-.4 1.307-.244 1.564.38 1.349 3.288.746 7.241-1.938 9.955-2.683 2.714-6.417 3.31-9.83 1.954l-3.728 1.745c5.347 3.697 11.84 2.782 15.898-1.324 3.219-3.255 4.216-7.692 3.284-11.693l.008.009c-1.351-5.878.332-8.227 3.782-13.031L33 0l-4.54 4.59v-.014L12.743 20.544m-2.263 1.987c-3.837-3.707-3.175-9.446.1-12.755 2.42-2.449 6.388-3.448 9.852-1.979l3.72-1.737c-.67-.49-1.53-1.017-2.515-1.387-4.455-1.854-9.789-.931-13.41 2.728-3.483 3.523-4.579 8.94-2.697 13.561 1.405 3.454-.899 5.898-3.22 8.364C1.49 30.2.666 31.074 0 32l10.478-9.466",
+);
 
 interface DrawTranslationSourceParams {
 	colors: ThemeColors;
 	ctx: SKRSContext2D;
 	fontFamily: string;
 	fontSize: number;
-	icon: Image;
 	language: string;
 	x: number;
 	y: number;
 }
 
 export function drawTranslationSource(params: DrawTranslationSourceParams): number {
-	const { ctx, colors, fontFamily, fontSize, icon, language, x, y } = params;
+	const { ctx, colors, fontFamily, fontSize, language, x, y } = params;
 	const label = `from ${language}`;
 
 	ctx.save();
@@ -69,7 +63,6 @@ export function drawTranslationSource(params: DrawTranslationSourceParams): numb
 	drawTranslateIcon({
 		ctx,
 		colors,
-		icon,
 		x: iconX,
 		y: iconY,
 		size: TRANSLATION_ICON_SIZE,
@@ -91,21 +84,19 @@ export function drawTranslationSource(params: DrawTranslationSourceParams): numb
 interface DrawTranslateIconParams {
 	colors: ThemeColors;
 	ctx: SKRSContext2D;
-	icon: Image;
 	size: number;
 	x: number;
 	y: number;
 }
 
 function drawTranslateIcon(params: DrawTranslateIconParams): void {
-	const { ctx, colors, icon, x, y, size } = params;
-	const iconCanvas = createCanvas(size, size);
-	const iconCtx = iconCanvas.getContext("2d");
-	iconCtx.drawImage(icon, 0, 0, size, size);
-	iconCtx.globalCompositeOperation = "source-in";
-	iconCtx.fillStyle = colors.text;
-	iconCtx.fillRect(0, 0, size, size);
-	ctx.drawImage(iconCanvas, x, y, size, size);
+	const { ctx, colors, x, y, size } = params;
+	ctx.save();
+	ctx.translate(x, y);
+	ctx.scale(size / 33, size / 32);
+	ctx.fillStyle = colors.text;
+	ctx.fill(TRANSLATION_ICON_PATH);
+	ctx.restore();
 }
 
 interface DrawCircularImageParams {
@@ -416,7 +407,6 @@ interface DrawAuthorInfoParams {
 	secondaryColor: string;
 	textColor: string;
 	themeColors?: ThemeColors;
-	translationIcon?: Image;
 	translationLanguage?: string | null;
 	username: string;
 	x: number;
@@ -435,7 +425,6 @@ export function drawAuthorInfo(params: DrawAuthorInfoParams): void {
 		textColor,
 		secondaryColor,
 		themeColors,
-		translationIcon,
 		translationLanguage,
 		inline = true,
 	} = params;
@@ -452,14 +441,13 @@ export function drawAuthorInfo(params: DrawAuthorInfoParams): void {
 		const usernameLabel = ` @${username}`;
 		ctx.fillText(usernameLabel, x + nameWidth, y + fontSize);
 
-		if (translationLanguage && themeColors && translationIcon) {
+		if (translationLanguage && themeColors) {
 			const usernameWidth = ctx.measureText(usernameLabel).width;
 			drawTranslationSource({
 				ctx,
 				colors: themeColors,
 				fontFamily,
 				fontSize,
-				icon: translationIcon,
 				language: translationLanguage,
 				x: x + nameWidth + usernameWidth + TRANSLATION_INLINE_GAP,
 				y,

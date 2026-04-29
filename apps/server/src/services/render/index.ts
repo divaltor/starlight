@@ -8,7 +8,6 @@ import {
 	drawTextLines,
 	drawTranslationSource,
 	formatNumber,
-	loadTranslationIcon,
 	roundedRect,
 	wrapText,
 } from "./draw";
@@ -474,21 +473,11 @@ interface DrawReplyChainParams {
 	replyToTextWidth: number;
 	replyToTextX: number;
 	startY: number;
-	translationIcon: Awaited<ReturnType<typeof loadTranslationIcon>>;
 }
 
 async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
-	const {
-		ctx,
-		items,
-		hasMoreInChain,
-		startY,
-		colors,
-		fontFamily,
-		replyToTextX,
-		replyToTextWidth,
-		translationIcon,
-	} = params;
+	const { ctx, items, hasMoreInChain, startY, colors, fontFamily, replyToTextX, replyToTextWidth } =
+		params;
 
 	let yOffset = startY;
 	const replyAvatarCenterX = LAYOUT.PADDING + REPLY_AVATAR_SIZE / 2;
@@ -530,7 +519,6 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 			textColor: colors.text,
 			secondaryColor: colors.secondaryText,
 			themeColors: colors,
-			translationIcon,
 			translationLanguage: getTranslationLanguage(item.tweet),
 			inline: true,
 		});
@@ -582,7 +570,6 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 				contentWidth: replyToTextWidth,
 				colors,
 				fontFamily,
-				translationIcon,
 			});
 		}
 
@@ -686,14 +673,12 @@ interface DrawQuoteTweetParams {
 	fontFamily: string;
 	quote: TweetData;
 	quoteLayout: NonNullable<TweetLayout["quote"]>;
-	translationIcon: Awaited<ReturnType<typeof loadTranslationIcon>>;
 	x: number;
 	y: number;
 }
 
 async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
-	const { ctx, quote, quoteLayout, x, y, contentWidth, colors, fontFamily, translationIcon } =
-		params;
+	const { ctx, quote, quoteLayout, x, y, contentWidth, colors, fontFamily } = params;
 
 	ctx.strokeStyle = colors.border;
 	ctx.lineWidth = QUOTE_BORDER_WIDTH;
@@ -731,7 +716,6 @@ async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
 		textColor: colors.text,
 		secondaryColor: colors.secondaryText,
 		themeColors: colors,
-		translationIcon,
 		translationLanguage: getTranslationLanguage(quote),
 		inline: true,
 	});
@@ -843,7 +827,6 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
 
 	const colors = themes[theme];
 	const fontFamily = getFontFamily();
-	const translationIcon = await loadTranslationIcon();
 
 	const layout = measureTweetLayout(tweet, fontFamily);
 
@@ -875,7 +858,6 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
 			fontFamily,
 			replyToTextX,
 			replyToTextWidth,
-			translationIcon,
 		});
 	}
 
@@ -904,7 +886,6 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
 			colors,
 			fontFamily,
 			fontSize: LAYOUT.FONT_SIZE_USERNAME,
-			icon: translationIcon,
 			language: translationLanguage,
 			x: layout.textX + ctx.measureText(usernameLabel).width + 8,
 			y: yOffset + LAYOUT.USERNAME_OFFSET_Y - LAYOUT.FONT_SIZE_USERNAME,
@@ -955,7 +936,6 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
 			containerWidth: layout.contentWidth,
 			colors,
 			fontFamily,
-			translationIcon,
 		});
 
 		yOffset += layout.mainTweet.articleLayout.height + mediaGapAfter;
