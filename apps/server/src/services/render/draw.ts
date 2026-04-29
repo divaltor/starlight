@@ -27,77 +27,44 @@ export function roundedRect(params: RoundedRectParams): void {
 	ctx.closePath();
 }
 
-export const TRANSLATION_BADGE_FONT_SIZE = 11;
-export const TRANSLATION_BADGE_HEIGHT = 20;
-export const TRANSLATION_BADGE_GAP = 8;
+const TRANSLATION_ICON_SIZE = 13;
+const TRANSLATION_ICON_GAP = 4;
+const TRANSLATION_INLINE_GAP = 8;
 
-const TRANSLATION_BADGE_PADDING_X = 8;
-const TRANSLATION_BADGE_RADIUS = 10;
-const TRANSLATION_BADGE_ICON_SIZE = 14;
-const TRANSLATION_BADGE_ICON_GAP = 6;
-
-interface DrawTranslationBadgeParams {
+interface DrawTranslationSourceParams {
 	colors: ThemeColors;
 	ctx: SKRSContext2D;
 	fontFamily: string;
-	label: string;
+	fontSize: number;
+	language: string;
 	x: number;
 	y: number;
 }
 
-export function drawTranslationBadge(params: DrawTranslationBadgeParams): void {
-	const { ctx, colors, fontFamily, label, x, y } = params;
+export function drawTranslationSource(params: DrawTranslationSourceParams): number {
+	const { ctx, colors, fontFamily, fontSize, language, x, y } = params;
+	const label = `from ${language}`;
+	const iconY = y + fontSize - TRANSLATION_ICON_SIZE;
+	const textX = x + TRANSLATION_ICON_SIZE + TRANSLATION_ICON_GAP;
 
 	ctx.save();
-	ctx.font = `${TRANSLATION_BADGE_FONT_SIZE}px ${fontFamily}`;
-
-	const textWidth = ctx.measureText(label).width;
-	const badgeWidth = Math.ceil(
-		textWidth +
-			TRANSLATION_BADGE_PADDING_X * 2 +
-			TRANSLATION_BADGE_ICON_SIZE +
-			TRANSLATION_BADGE_ICON_GAP,
-	);
-
-	ctx.fillStyle = colors.background;
-	roundedRect({
-		ctx,
-		x,
-		y,
-		width: badgeWidth,
-		height: TRANSLATION_BADGE_HEIGHT,
-		radius: TRANSLATION_BADGE_RADIUS,
-	});
-	ctx.fill();
-
-	ctx.strokeStyle = colors.border;
-	ctx.lineWidth = 1;
-	roundedRect({
-		ctx,
-		x: x + 0.5,
-		y: y + 0.5,
-		width: badgeWidth - 1,
-		height: TRANSLATION_BADGE_HEIGHT - 1,
-		radius: TRANSLATION_BADGE_RADIUS,
-	});
-	ctx.stroke();
 
 	drawTranslateIcon({
 		ctx,
 		colors,
-		x: x + TRANSLATION_BADGE_PADDING_X,
-		y: y + (TRANSLATION_BADGE_HEIGHT - TRANSLATION_BADGE_ICON_SIZE) / 2,
-		size: TRANSLATION_BADGE_ICON_SIZE,
+		x,
+		y: iconY,
+		size: TRANSLATION_ICON_SIZE,
 		fontFamily,
 	});
 
-	ctx.fillStyle = colors.secondaryText;
-	ctx.fillText(
-		label,
-		x + TRANSLATION_BADGE_PADDING_X + TRANSLATION_BADGE_ICON_SIZE + TRANSLATION_BADGE_ICON_GAP,
-		y + 14,
-	);
+	ctx.fillStyle = colors.text;
+	ctx.font = `${fontSize}px ${fontFamily}`;
+	ctx.fillText(label, textX, y + fontSize);
+	const width = TRANSLATION_ICON_SIZE + TRANSLATION_ICON_GAP + ctx.measureText(label).width;
 	ctx.restore();
+
+	return width;
 }
 
 interface DrawTranslateIconParams {
@@ -131,7 +98,7 @@ function drawTranslateIcon(params: DrawTranslateIconParams): void {
 	});
 	ctx.fill();
 
-	ctx.strokeStyle = colors.accent;
+	ctx.strokeStyle = colors.text;
 	ctx.lineWidth = 1;
 	roundedRect({
 		ctx,
@@ -154,7 +121,7 @@ function drawTranslateIcon(params: DrawTranslateIconParams): void {
 	});
 	ctx.fill();
 
-	ctx.strokeStyle = colors.accent;
+	ctx.strokeStyle = colors.text;
 	ctx.lineWidth = 1.2;
 	roundedRect({
 		ctx,
@@ -166,7 +133,7 @@ function drawTranslateIcon(params: DrawTranslateIconParams): void {
 	});
 	ctx.stroke();
 
-	ctx.fillStyle = colors.accent;
+	ctx.fillStyle = colors.text;
 	ctx.font = `bold ${Math.max(7, Math.floor(frontSize * 0.5))}px ${fontFamily}`;
 	ctx.fillText("A", frontX + 2.5, frontY + frontSize - 2.5);
 
@@ -483,6 +450,8 @@ interface DrawAuthorInfoParams {
 	name: string;
 	secondaryColor: string;
 	textColor: string;
+	themeColors?: ThemeColors;
+	translationLanguage?: string | null;
 	username: string;
 	x: number;
 	y: number;
@@ -499,6 +468,8 @@ export function drawAuthorInfo(params: DrawAuthorInfoParams): void {
 		fontFamily,
 		textColor,
 		secondaryColor,
+		themeColors,
+		translationLanguage,
 		inline = true,
 	} = params;
 
@@ -511,7 +482,21 @@ export function drawAuthorInfo(params: DrawAuthorInfoParams): void {
 
 		ctx.fillStyle = secondaryColor;
 		ctx.font = `${fontSize}px ${fontFamily}`;
-		ctx.fillText(` @${username}`, x + nameWidth, y + fontSize);
+		const usernameLabel = ` @${username}`;
+		ctx.fillText(usernameLabel, x + nameWidth, y + fontSize);
+
+		if (translationLanguage && themeColors) {
+			const usernameWidth = ctx.measureText(usernameLabel).width;
+			drawTranslationSource({
+				ctx,
+				colors: themeColors,
+				fontFamily,
+				fontSize,
+				language: translationLanguage,
+				x: x + nameWidth + usernameWidth + TRANSLATION_INLINE_GAP,
+				y,
+			});
+		}
 	} else {
 		ctx.fillText(name, x, y + fontSize);
 

@@ -6,11 +6,9 @@ import {
 	drawAvatarWithFallback,
 	drawMediaBlock,
 	drawTextLines,
-	drawTranslationBadge,
+	drawTranslationSource,
 	formatNumber,
 	roundedRect,
-	TRANSLATION_BADGE_GAP,
-	TRANSLATION_BADGE_HEIGHT,
 	wrapText,
 } from "./draw";
 import { getFontFamily, registerFonts } from "./fonts";
@@ -235,13 +233,19 @@ function calculateArticleLayout(
 	};
 }
 
-function getTranslationLabel(tweet: Pick<TweetData, "translation">): string | null {
-	const sourceLanguage = tweet.translation?.sourceLanguage;
-	return sourceLanguage ? `Translated from ${sourceLanguage}` : null;
-}
+const languageDisplayNames = new Intl.DisplayNames(["en"], { type: "language" });
 
-function getTranslationBlockHeight(tweet: Pick<TweetData, "translation">): number {
-	return getTranslationLabel(tweet) ? TRANSLATION_BADGE_HEIGHT + TRANSLATION_BADGE_GAP : 0;
+function getTranslationLanguage(tweet: Pick<TweetData, "translation">): string | null {
+	const sourceLanguage = tweet.translation?.sourceLanguage;
+	if (!sourceLanguage) {
+		return null;
+	}
+
+	try {
+		return languageDisplayNames.of(sourceLanguage.replace("_", "-")) ?? sourceLanguage;
+	} catch {
+		return sourceLanguage;
+	}
 }
 
 function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
@@ -279,8 +283,6 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 	const quoteContentWidth = contentWidth - QUOTE_PADDING * 2;
 
 	if (tweet.quote) {
-		const quoteTranslationBlockHeight = getTranslationBlockHeight(tweet.quote);
-
 		measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
 		const quoteTextLines = wrapText(
 			measureCtx,
@@ -309,10 +311,7 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 
 		const quoteHeight = Math.floor(
 			QUOTE_PADDING * 2 +
-				Math.max(
-					QUOTE_AVATAR_SIZE,
-					QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + quoteTranslationBlockHeight + quoteTextHeight,
-				) +
+				Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + quoteTextHeight) +
 				(quoteMediaHeight > 0 ? LAYOUT.AVATAR_GAP + quoteMediaHeight : 0) +
 				(quoteArticleLayout ? LAYOUT.AVATAR_GAP + quoteArticleLayout.height : 0),
 		);
@@ -339,8 +338,6 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 		const chainQuoteContentWidth = replyToTextWidth - QUOTE_PADDING * 2;
 
 		for (const chainTweet of tweet.replyChain) {
-			const chainTranslationBlockHeight = getTranslationBlockHeight(chainTweet);
-
 			measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
 			const chainTextLines = wrapText(measureCtx, chainTweet.text, replyToTextWidth);
 			const chainTextHeight = calculateTextHeight(
@@ -358,8 +355,6 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 
 			let chainQuoteLayout: TweetLayout["quote"] = null;
 			if (chainTweet.quote) {
-				const chainQuoteTranslationBlockHeight = getTranslationBlockHeight(chainTweet.quote);
-
 				measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
 				const chainQuoteTextLines = wrapText(
 					measureCtx,
@@ -388,10 +383,7 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 					QUOTE_PADDING * 2 +
 						Math.max(
 							QUOTE_AVATAR_SIZE,
-							QUOTE_FONT_SIZE_NAME +
-								LAYOUT.TEXT_GAP +
-								chainQuoteTranslationBlockHeight +
-								chainQuoteTextHeight,
+							QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + chainQuoteTextHeight,
 						) +
 						(chainQuoteMediaHeight > 0 ? LAYOUT.AVATAR_GAP + chainQuoteMediaHeight : 0) +
 						(chainQuoteArticleLayout ? LAYOUT.AVATAR_GAP + chainQuoteArticleLayout.height : 0),
@@ -413,11 +405,7 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 					LAYOUT.AVATAR_GAP +
 					Math.max(
 						0,
-						chainTextHeight -
-							REPLY_AVATAR_SIZE +
-							REPLY_FONT_SIZE_NAME +
-							LAYOUT.TEXT_GAP +
-							chainTranslationBlockHeight,
+						chainTextHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + LAYOUT.TEXT_GAP,
 					) +
 					(chainMediaHeight > 0 ? LAYOUT.AVATAR_GAP + chainMediaHeight + LAYOUT.MEDIA_GAP : 0) +
 					(chainQuoteLayout
@@ -441,7 +429,6 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 	const headerHeight = LAYOUT.AVATAR_SIZE;
 	const statsHeight = LAYOUT.STATS_HEIGHT;
 	const mediaGapAfter = LAYOUT.MEDIA_GAP_BOTTOM;
-	const mainTranslationBlockHeight = getTranslationBlockHeight(tweet);
 
 	const hasMainMediaOrArticle = mainMediaHeight > 0 || mainArticleLayout;
 
@@ -450,7 +437,6 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 		totalReplyChainHeight +
 		headerHeight +
 		LAYOUT.AVATAR_GAP +
-		mainTranslationBlockHeight +
 		mainTextHeight +
 		(mainMediaHeight > 0 ? LAYOUT.AVATAR_GAP + mainMediaHeight + mediaGapAfter : 0) +
 		(mainArticleLayout ? LAYOUT.AVATAR_GAP + mainArticleLayout.height + mediaGapAfter : 0) +
@@ -532,22 +518,12 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 			fontFamily,
 			textColor: colors.text,
 			secondaryColor: colors.secondaryText,
+			themeColors: colors,
+			translationLanguage: getTranslationLanguage(item.tweet),
 			inline: true,
 		});
 
 		let replyTextStartY = yOffset + REPLY_FONT_SIZE_NAME + LAYOUT.TEXT_GAP;
-		const replyTranslationLabel = getTranslationLabel(item.tweet);
-		if (replyTranslationLabel) {
-			drawTranslationBadge({
-				ctx,
-				colors,
-				fontFamily,
-				label: replyTranslationLabel,
-				x: replyToTextX,
-				y: replyTextStartY,
-			});
-			replyTextStartY += TRANSLATION_BADGE_HEIGHT + TRANSLATION_BADGE_GAP;
-		}
 
 		const replyTextY = drawTextLines({
 			ctx,
@@ -739,22 +715,12 @@ async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
 		fontFamily,
 		textColor: colors.text,
 		secondaryColor: colors.secondaryText,
+		themeColors: colors,
+		translationLanguage: getTranslationLanguage(quote),
 		inline: true,
 	});
 
 	let quoteTextStartY = quoteY + QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP;
-	const quoteTranslationLabel = getTranslationLabel(quote);
-	if (quoteTranslationLabel) {
-		drawTranslationBadge({
-			ctx,
-			colors,
-			fontFamily,
-			label: quoteTranslationLabel,
-			x: quoteTextX,
-			y: quoteTextStartY,
-		});
-		quoteTextStartY += TRANSLATION_BADGE_HEIGHT + TRANSLATION_BADGE_GAP;
-	}
 
 	quoteY = drawTextLines({
 		ctx,
@@ -910,22 +876,23 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
 
 	ctx.fillStyle = colors.secondaryText;
 	ctx.font = `${LAYOUT.FONT_SIZE_USERNAME}px ${fontFamily}`;
-	ctx.fillText(`@${tweet.authorUsername}`, layout.textX, yOffset + LAYOUT.USERNAME_OFFSET_Y);
+	const usernameLabel = `@${tweet.authorUsername}`;
+	ctx.fillText(usernameLabel, layout.textX, yOffset + LAYOUT.USERNAME_OFFSET_Y);
 
-	yOffset += headerHeight + LAYOUT.AVATAR_GAP;
-
-	const translationLabel = getTranslationLabel(tweet);
-	if (translationLabel) {
-		drawTranslationBadge({
+	const translationLanguage = getTranslationLanguage(tweet);
+	if (translationLanguage) {
+		drawTranslationSource({
 			ctx,
 			colors,
 			fontFamily,
-			label: translationLabel,
-			x: LAYOUT.PADDING,
-			y: yOffset,
+			fontSize: LAYOUT.FONT_SIZE_USERNAME,
+			language: translationLanguage,
+			x: layout.textX + ctx.measureText(usernameLabel).width + 8,
+			y: yOffset + LAYOUT.USERNAME_OFFSET_Y - LAYOUT.FONT_SIZE_USERNAME,
 		});
-		yOffset += TRANSLATION_BADGE_HEIGHT + TRANSLATION_BADGE_GAP;
 	}
+
+	yOffset += headerHeight + LAYOUT.AVATAR_GAP;
 
 	yOffset = drawTextLines({
 		ctx,
