@@ -1,5 +1,5 @@
 import type { Image, SKRSContext2D } from "@napi-rs/canvas";
-import { loadImage, Path2D } from "@napi-rs/canvas";
+import { loadImage } from "@napi-rs/canvas";
 import { logger } from "@/logger";
 import type { ThemeColors } from "./themes";
 
@@ -27,15 +27,8 @@ export function roundedRect(params: RoundedRectParams): void {
 	ctx.closePath();
 }
 
-const TRANSLATION_ICON_GAP = 4;
-const TRANSLATION_INLINE_GAP = 8;
 const TRANSLATION_SEPARATOR = "·";
 const TRANSLATION_SEPARATOR_GAP = 6;
-const TRANSLATION_ICON_VIEWBOX_WIDTH = 33;
-const TRANSLATION_ICON_VIEWBOX_HEIGHT = 32;
-const TRANSLATION_ICON_PATH = new Path2D(
-	"M12.745 20.54l10.97-8.19c.539-.4 1.307-.244 1.564.38 1.349 3.288.746 7.241-1.938 9.955-2.683 2.714-6.417 3.31-9.83 1.954l-3.728 1.745c5.347 3.697 11.84 2.782 15.898-1.324 3.219-3.255 4.216-7.692 3.284-11.693l.008.009c-1.351-5.878.332-8.227 3.782-13.031L33 0l-4.54 4.59v-.014L12.743 20.544m-2.263 1.987c-3.837-3.707-3.175-9.446.1-12.755 2.42-2.449 6.388-3.448 9.852-1.979l3.72-1.737c-.67-.49-1.53-1.017-2.515-1.387-4.455-1.854-9.789-.931-13.41 2.728-3.483 3.523-4.579 8.94-2.697 13.561 1.405 3.454-.899 5.898-3.22 8.364C1.49 30.2.666 31.074 0 32l10.478-9.466",
-);
 
 interface DrawTranslationSourceParams {
 	colors: ThemeColors;
@@ -49,7 +42,7 @@ interface DrawTranslationSourceParams {
 
 export function drawTranslationSource(params: DrawTranslationSourceParams): number {
 	const { ctx, colors, fontFamily, fontSize, language, x, y } = params;
-	const label = `from ${language}`;
+	const label = `Translated from ${language}`;
 
 	ctx.save();
 	ctx.font = `${fontSize}px ${fontFamily}`;
@@ -57,51 +50,14 @@ export function drawTranslationSource(params: DrawTranslationSourceParams): numb
 	ctx.fillStyle = colors.secondaryText;
 	ctx.fillText(TRANSLATION_SEPARATOR, x, y + fontSize);
 	const separatorWidth = ctx.measureText(TRANSLATION_SEPARATOR).width;
-	const iconHeight = fontSize;
-	const iconWidth = (iconHeight * TRANSLATION_ICON_VIEWBOX_WIDTH) / TRANSLATION_ICON_VIEWBOX_HEIGHT;
-	const iconX = x + separatorWidth + TRANSLATION_SEPARATOR_GAP;
-	const iconY = y + (fontSize - iconHeight) / 2;
-	const textX = iconX + iconWidth + TRANSLATION_ICON_GAP;
-
-	drawTranslateIcon({
-		ctx,
-		colors,
-		x: iconX,
-		y: iconY,
-		height: iconHeight,
-		width: iconWidth,
-	});
+	const textX = x + separatorWidth + TRANSLATION_SEPARATOR_GAP;
 
 	ctx.fillStyle = colors.text;
 	ctx.fillText(label, textX, y + fontSize);
-	const width =
-		separatorWidth +
-		TRANSLATION_SEPARATOR_GAP +
-		iconWidth +
-		TRANSLATION_ICON_GAP +
-		ctx.measureText(label).width;
+	const width = separatorWidth + TRANSLATION_SEPARATOR_GAP + ctx.measureText(label).width;
 	ctx.restore();
 
 	return width;
-}
-
-interface DrawTranslateIconParams {
-	colors: ThemeColors;
-	ctx: SKRSContext2D;
-	height: number;
-	width: number;
-	x: number;
-	y: number;
-}
-
-function drawTranslateIcon(params: DrawTranslateIconParams): void {
-	const { ctx, colors, x, y, width, height } = params;
-	ctx.save();
-	ctx.translate(x, y);
-	ctx.scale(width / TRANSLATION_ICON_VIEWBOX_WIDTH, height / TRANSLATION_ICON_VIEWBOX_HEIGHT);
-	ctx.fillStyle = colors.text;
-	ctx.fill(TRANSLATION_ICON_PATH);
-	ctx.restore();
 }
 
 interface DrawCircularImageParams {
