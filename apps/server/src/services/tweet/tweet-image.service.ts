@@ -1,7 +1,8 @@
 import sharp from "sharp";
+import { http } from "@starlight/utils/http";
 import { logger } from "@/logger";
 import { fetchTweet } from "@/services/fxembed/fxembed.service";
-import type { FxEmbedArticle, FxEmbedTweet } from "@/services/fxembed/types";
+import type { FxEmbedArticle, FxEmbedMosaicPhoto, FxEmbedTweet } from "@/services/fxembed/types";
 import {
 	type ArticleData,
 	type RenderResult,
@@ -13,6 +14,7 @@ import { s3 } from "@/storage";
 export type Theme = "light" | "dark";
 
 const TWEET_IMAGE_TRANSLATION_LANGUAGE = "en";
+const MOSAIC_METADATA_TIMEOUT_MS = 5000;
 
 function mapArticleData(article: FxEmbedArticle | undefined): ArticleData | null {
 	if (!article) {
@@ -46,20 +48,47 @@ function mapTranslationData(tweet: Pick<FxEmbedTweet, "translation">): TweetData
 	};
 }
 
-function mapMediaData(tweet: Pick<FxEmbedTweet, "media">): TweetData["media"] {
+async function getMosaicDimensions(
+	mosaic: FxEmbedMosaicPhoto,
+): Promise<{ width: number; height: number }> {
+	if (mosaic.width && mosaic.height) {
+		return { width: mosaic.width, height: mosaic.height };
+	}
+
+	try {
+		const response = await http(mosaic.formats.jpeg, { timeout: MOSAIC_METADATA_TIMEOUT_MS });
+		if (response.ok) {
+			const buffer = Buffer.from(await response.arrayBuffer());
+			const metadata = await sharp(buffer).metadata();
+			if (metadata.width && metadata.height) {
+				return { width: metadata.width, height: metadata.height };
+			}
+		}
+	} catch (error) {
+		logger.warn({ error, url: mosaic.formats.jpeg }, "Failed to read mosaic dimensions");
+	}
+
+	return { width: 1200, height: 900 };
+}
+
+async function mapMediaData(tweet: Pick<FxEmbedTweet, "media">): Promise<TweetData["media"]> {
 	if (!tweet.media) {
 		return null;
 	}
 
+	let mosaic: NonNullable<TweetData["media"]>["mosaic"];
+	if (tweet.media.mosaic) {
+		const dimensions = await getMosaicDimensions(tweet.media.mosaic);
+		mosaic = {
+			url: tweet.media.mosaic.url ?? tweet.media.mosaic.formats.jpeg,
+			width: dimensions.width,
+			height: dimensions.height,
+			formats: tweet.media.mosaic.formats,
+		};
+	}
+
 	return {
-		mosaic: tweet.media.mosaic
-			? {
-					url: tweet.media.mosaic.url ?? tweet.media.mosaic.formats.jpeg,
-					width: tweet.media.mosaic.width ?? 1200,
-					height: tweet.media.mosaic.height ?? 900,
-					formats: tweet.media.mosaic.formats,
-				}
-			: undefined,
+		mosaic,
 		photos: tweet.media.photos,
 		videos: tweet.media.videos?.map((v) => ({
 			thumbnailUrl: v.thumbnail_url,
@@ -106,7 +135,7 @@ async function fetchReplyChain(
 		authorAvatarUrl: tweet.author.avatar_url,
 		text: tweetText,
 		createdAt: new Date(tweet.created_timestamp * 1000),
-		media: mapMediaData(tweet),
+		media: await mapMediaData(tweet),
 		article: mapArticleData(tweet.article),
 		likes: tweet.likes,
 		retweets: tweet.retweets,
@@ -119,7 +148,7 @@ async function fetchReplyChain(
 					authorAvatarUrl: tweet.quote.author.avatar_url,
 					text: getTweetText(tweet.quote),
 					createdAt: new Date(tweet.quote.created_timestamp * 1000),
-					media: mapMediaData(tweet.quote),
+					media: await mapMediaData(tweet.quote),
 					article: mapArticleData(tweet.quote.article),
 					likes: tweet.quote.likes,
 					retweets: tweet.quote.retweets,
@@ -174,7 +203,7 @@ export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 		authorAvatarUrl: tweet.author.avatar_url,
 		text: tweetText,
 		createdAt: new Date(tweet.created_timestamp * 1000),
-		media: mapMediaData(tweet),
+		media: await mapMediaData(tweet),
 		article: mapArticleData(tweet.article),
 		likes: tweet.likes,
 		retweets: tweet.retweets,
@@ -189,7 +218,7 @@ export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 					authorAvatarUrl: tweet.quote.author.avatar_url,
 					text: getTweetText(tweet.quote),
 					createdAt: new Date(tweet.quote.created_timestamp * 1000),
-					media: mapMediaData(tweet.quote),
+					media: await mapMediaData(tweet.quote),
 					article: mapArticleData(tweet.quote.article),
 					likes: tweet.quote.likes,
 					retweets: tweet.quote.retweets,
