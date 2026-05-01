@@ -108,40 +108,23 @@ composer.on("inline_query").filter(
 		try {
 			const tweetData = await prepareTweetData(tweetId);
 
-			const tweetDataWithoutChain = {
-				...tweetData,
-				replyChain: [],
-				hasMoreInChain: false,
-			};
-
-			const [lightResult, darkResult, lightNoChainResult, darkNoChainResult] = await Promise.all([
+			const [lightResult, darkResult] = await Promise.all([
 				renderTweetImage(tweetData, "light"),
 				renderTweetImage(tweetData, "dark"),
-				renderTweetImage(tweetDataWithoutChain, "light"),
-				renderTweetImage(tweetDataWithoutChain, "dark"),
 			]);
 
 			const lightS3Path = `tweets/${tweetId}/light.jpg`;
 			const darkS3Path = `tweets/${tweetId}/dark.jpg`;
-			const lightNoChainS3Path = `tweets/${tweetId}/light-no-chain.jpg`;
-			const darkNoChainS3Path = `tweets/${tweetId}/dark-no-chain.jpg`;
 
 			await Promise.all([
 				s3.write(lightS3Path, lightResult.buffer, { type: "image/jpeg" }),
 				s3.write(darkS3Path, darkResult.buffer, { type: "image/jpeg" }),
-				s3.write(lightNoChainS3Path, lightNoChainResult.buffer, { type: "image/jpeg" }),
-				s3.write(darkNoChainS3Path, darkNoChainResult.buffer, { type: "image/jpeg" }),
 			]);
 
-			ctx.logger.debug(
-				{ tweetId, lightS3Path, darkS3Path, lightNoChainS3Path, darkNoChainS3Path },
-				"Uploaded tweet images to S3",
-			);
+			ctx.logger.debug({ tweetId, lightS3Path, darkS3Path }, "Uploaded tweet images to S3");
 
 			const lightUrl = `${env.BASE_CDN_URL}/${lightS3Path}`;
 			const darkUrl = `${env.BASE_CDN_URL}/${darkS3Path}`;
-			const lightNoChainUrl = `${env.BASE_CDN_URL}/${lightNoChainS3Path}`;
-			const darkNoChainUrl = `${env.BASE_CDN_URL}/${darkNoChainS3Path}`;
 
 			const results = [
 				InlineQueryResultBuilder.photo(`tweet:${tweetId}:light`, lightUrl, {
@@ -156,23 +139,57 @@ composer.on("inline_query").filter(
 					photo_width: darkResult.width,
 					photo_height: darkResult.height,
 				}),
-				InlineQueryResultBuilder.photo(`tweet:${tweetId}:light:no-chain`, lightNoChainUrl, {
-					thumbnail_url: lightNoChainUrl,
-					caption: `https://x.com/i/status/${tweetId}`,
-					photo_width: lightNoChainResult.width,
-					photo_height: lightNoChainResult.height,
-				}),
-				InlineQueryResultBuilder.photo(`tweet:${tweetId}:dark:no-chain`, darkNoChainUrl, {
-					thumbnail_url: darkNoChainUrl,
-					caption: `https://x.com/i/status/${tweetId}`,
-					photo_width: darkNoChainResult.width,
-					photo_height: darkNoChainResult.height,
-				}),
 			];
 
-			ctx.logger.info(
-				`Generated images for tweet ${tweetId}: light ${lightResult.width}x${lightResult.height} (${(lightResult.buffer.length / 1024).toFixed(1)}KB), dark ${darkResult.width}x${darkResult.height} (${(darkResult.buffer.length / 1024).toFixed(1)}KB), light no chain ${lightNoChainResult.width}x${lightNoChainResult.height} (${(lightNoChainResult.buffer.length / 1024).toFixed(1)}KB), dark no chain ${darkNoChainResult.width}x${darkNoChainResult.height} (${(darkNoChainResult.buffer.length / 1024).toFixed(1)}KB)`,
-			);
+			let generatedImagesLog = `Generated images for tweet ${tweetId}: light ${lightResult.width}x${lightResult.height} (${(lightResult.buffer.length / 1024).toFixed(1)}KB), dark ${darkResult.width}x${darkResult.height} (${(darkResult.buffer.length / 1024).toFixed(1)}KB)`;
+
+			if (tweetData.replyChain.length > 0) {
+				const tweetDataWithoutChain = {
+					...tweetData,
+					replyChain: [],
+					hasMoreInChain: false,
+				};
+
+				const [lightNoChainResult, darkNoChainResult] = await Promise.all([
+					renderTweetImage(tweetDataWithoutChain, "light"),
+					renderTweetImage(tweetDataWithoutChain, "dark"),
+				]);
+
+				const lightNoChainS3Path = `tweets/${tweetId}/light-no-chain.jpg`;
+				const darkNoChainS3Path = `tweets/${tweetId}/dark-no-chain.jpg`;
+
+				await Promise.all([
+					s3.write(lightNoChainS3Path, lightNoChainResult.buffer, { type: "image/jpeg" }),
+					s3.write(darkNoChainS3Path, darkNoChainResult.buffer, { type: "image/jpeg" }),
+				]);
+
+				ctx.logger.debug(
+					{ tweetId, lightNoChainS3Path, darkNoChainS3Path },
+					"Uploaded tweet images without chain to S3",
+				);
+
+				const lightNoChainUrl = `${env.BASE_CDN_URL}/${lightNoChainS3Path}`;
+				const darkNoChainUrl = `${env.BASE_CDN_URL}/${darkNoChainS3Path}`;
+
+				results.push(
+					InlineQueryResultBuilder.photo(`tweet:${tweetId}:light:no-chain`, lightNoChainUrl, {
+						thumbnail_url: lightNoChainUrl,
+						caption: `https://x.com/i/status/${tweetId}`,
+						photo_width: lightNoChainResult.width,
+						photo_height: lightNoChainResult.height,
+					}),
+					InlineQueryResultBuilder.photo(`tweet:${tweetId}:dark:no-chain`, darkNoChainUrl, {
+						thumbnail_url: darkNoChainUrl,
+						caption: `https://x.com/i/status/${tweetId}`,
+						photo_width: darkNoChainResult.width,
+						photo_height: darkNoChainResult.height,
+					}),
+				);
+
+				generatedImagesLog += `, light no chain ${lightNoChainResult.width}x${lightNoChainResult.height} (${(lightNoChainResult.buffer.length / 1024).toFixed(1)}KB), dark no chain ${darkNoChainResult.width}x${darkNoChainResult.height} (${(darkNoChainResult.buffer.length / 1024).toFixed(1)}KB)`;
+			}
+
+			ctx.logger.info(generatedImagesLog);
 
 			await ctx.answerInlineQuery(results);
 
