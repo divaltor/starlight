@@ -12,6 +12,17 @@ export interface FxEmbedPhoto {
 	width: number;
 }
 
+export interface FxEmbedMosaicPhoto {
+	formats: {
+		jpeg: string;
+		webp: string;
+	};
+	height?: number;
+	type: "mosaic_photo";
+	url?: string;
+	width?: number;
+}
+
 export interface FxEmbedVideo {
 	height: number;
 	thumbnail_url: string;
@@ -21,6 +32,7 @@ export interface FxEmbedVideo {
 }
 
 export interface FxEmbedMedia {
+	mosaic?: FxEmbedMosaicPhoto;
 	photos?: FxEmbedPhoto[];
 	videos?: FxEmbedVideo[];
 }

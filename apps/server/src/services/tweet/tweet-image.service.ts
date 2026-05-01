@@ -46,6 +46,30 @@ function mapTranslationData(tweet: Pick<FxEmbedTweet, "translation">): TweetData
 	};
 }
 
+function mapMediaData(tweet: Pick<FxEmbedTweet, "media">): TweetData["media"] {
+	if (!tweet.media) {
+		return null;
+	}
+
+	return {
+		mosaic: tweet.media.mosaic
+			? {
+					url: tweet.media.mosaic.url ?? tweet.media.mosaic.formats.jpeg,
+					width: tweet.media.mosaic.width ?? 1200,
+					height: tweet.media.mosaic.height ?? 900,
+					formats: tweet.media.mosaic.formats,
+				}
+			: undefined,
+		photos: tweet.media.photos,
+		videos: tweet.media.videos?.map((v) => ({
+			thumbnailUrl: v.thumbnail_url,
+			width: v.width,
+			height: v.height,
+			type: v.type,
+		})),
+	};
+}
+
 function stripLeadingMention(text: string, username: string): string {
 	const mentionPattern = new RegExp(`^@${username}\\s*`, "i");
 	return text.replace(mentionPattern, "").trim();
@@ -82,17 +106,7 @@ async function fetchReplyChain(
 		authorAvatarUrl: tweet.author.avatar_url,
 		text: tweetText,
 		createdAt: new Date(tweet.created_timestamp * 1000),
-		media: tweet.media
-			? {
-					photos: tweet.media.photos,
-					videos: tweet.media.videos?.map((v) => ({
-						thumbnailUrl: v.thumbnail_url,
-						width: v.width,
-						height: v.height,
-						type: v.type,
-					})),
-				}
-			: null,
+		media: mapMediaData(tweet),
 		article: mapArticleData(tweet.article),
 		likes: tweet.likes,
 		retweets: tweet.retweets,
@@ -105,17 +119,7 @@ async function fetchReplyChain(
 					authorAvatarUrl: tweet.quote.author.avatar_url,
 					text: getTweetText(tweet.quote),
 					createdAt: new Date(tweet.quote.created_timestamp * 1000),
-					media: tweet.quote.media
-						? {
-								photos: tweet.quote.media.photos,
-								videos: tweet.quote.media.videos?.map((v) => ({
-									thumbnailUrl: v.thumbnail_url,
-									width: v.width,
-									height: v.height,
-									type: v.type,
-								})),
-							}
-						: null,
+					media: mapMediaData(tweet.quote),
 					article: mapArticleData(tweet.quote.article),
 					likes: tweet.quote.likes,
 					retweets: tweet.quote.retweets,
@@ -170,17 +174,7 @@ export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 		authorAvatarUrl: tweet.author.avatar_url,
 		text: tweetText,
 		createdAt: new Date(tweet.created_timestamp * 1000),
-		media: tweet.media
-			? {
-					photos: tweet.media.photos,
-					videos: tweet.media.videos?.map((v) => ({
-						thumbnailUrl: v.thumbnail_url,
-						width: v.width,
-						height: v.height,
-						type: v.type,
-					})),
-				}
-			: null,
+		media: mapMediaData(tweet),
 		article: mapArticleData(tweet.article),
 		likes: tweet.likes,
 		retweets: tweet.retweets,
@@ -195,17 +189,7 @@ export async function prepareTweetData(tweetId: string): Promise<TweetData> {
 					authorAvatarUrl: tweet.quote.author.avatar_url,
 					text: getTweetText(tweet.quote),
 					createdAt: new Date(tweet.quote.created_timestamp * 1000),
-					media: tweet.quote.media
-						? {
-								photos: tweet.quote.media.photos,
-								videos: tweet.quote.media.videos?.map((v) => ({
-									thumbnailUrl: v.thumbnail_url,
-									width: v.width,
-									height: v.height,
-									type: v.type,
-								})),
-							}
-						: null,
+					media: mapMediaData(tweet.quote),
 					article: mapArticleData(tweet.quote.article),
 					likes: tweet.quote.likes,
 					retweets: tweet.quote.retweets,

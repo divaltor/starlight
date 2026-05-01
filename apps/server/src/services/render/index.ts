@@ -9,6 +9,7 @@ import {
 	drawTranslationSource,
 	formatNumber,
 	roundedRect,
+	type TextLine,
 	wrapText,
 } from "./draw";
 import { getFontFamily, registerFonts } from "./fonts";
@@ -38,6 +39,15 @@ export interface TweetData {
 	hasMoreInChain?: boolean;
 	likes?: number | null;
 	media?: {
+		mosaic?: {
+			formats: {
+				jpeg: string;
+				webp: string;
+			};
+			height: number;
+			url: string;
+			width: number;
+		};
 		photos?: Array<{ url: string; width: number; height: number }>;
 		videos?: Array<{
 			thumbnailUrl: string;
@@ -80,6 +90,11 @@ const ARTICLE_PADDING = 12;
 const ARTICLE_BORDER_WIDTH = 1;
 const ARTICLE_TITLE_FONT_SIZE = 15;
 const ARTICLE_PREVIEW_FONT_SIZE = 14;
+const MAIN_TEXT_MAX_LINES = 16;
+const QUOTE_TEXT_MAX_LINES = 6;
+const REPLY_TEXT_MAX_LINES = 5;
+const ARTICLE_TITLE_MAX_LINES = 3;
+const ARTICLE_PREVIEW_MAX_LINES = 3;
 
 interface ReplyChainItem {
 	height: number;
@@ -91,6 +106,13 @@ interface ReplyChainItem {
 }
 
 type MediaItem =
+	| {
+			formats: { jpeg: string; webp: string };
+			height: number;
+			type: "mosaic_photo";
+			url: string;
+			width: number;
+	  }
 	| { type: "photo"; url: string; width: number; height: number }
 	| {
 			type: "video" | "gif";
@@ -142,6 +164,10 @@ function getFirstMedia(media: TweetData["media"]): MediaItem | null {
 		return null;
 	}
 
+	if (media.mosaic) {
+		return { type: "mosaic_photo", ...media.mosaic };
+	}
+
 	const firstPhoto = media.photos?.at(0);
 	if (firstPhoto) {
 		return { type: "photo", ...firstPhoto };
@@ -155,6 +181,18 @@ function getFirstMedia(media: TweetData["media"]): MediaItem | null {
 	return null;
 }
 
+function getMediaImageUrl(media: MediaItem): string {
+	if (media.type === "mosaic_photo") {
+		return media.formats.jpeg;
+	}
+
+	if (media.type === "photo") {
+		return media.url;
+	}
+
+	return media.thumbnailUrl;
+}
+
 function calculateTextHeight(
 	lines: { isParagraphEnd: boolean }[],
 	fontSize: number,
@@ -165,15 +203,34 @@ function calculateTextHeight(
 	return Math.floor(lines.length * fontSize * lineHeight + paragraphCount * paragraphGap);
 }
 
+function truncateLines(lines: TextLine[], maxLines: number): TextLine[] {
+	if (lines.length <= maxLines) {
+		return lines;
+	}
+
+	const visibleLines = lines.slice(0, maxLines);
+	const lastLine = visibleLines.at(-1);
+	if (lastLine) {
+		visibleLines[visibleLines.length - 1] = {
+			...lastLine,
+			isParagraphEnd: false,
+			text: `${lastLine.text.replace(/\s+$/, "")}...`,
+		};
+	}
+
+	return visibleLines;
+}
+
 function calculateMediaHeight(
 	media: MediaItem | null,
 	containerWidth: number,
+	maxHeight = Math.floor(containerWidth * 0.8),
 ): { height: number; isVideo: boolean } {
 	if (!media) {
 		return { height: 0, isVideo: false };
 	}
 	const aspectRatio = media.width / media.height;
-	const height = Math.floor(containerWidth / aspectRatio);
+	const height = Math.min(Math.floor(containerWidth / aspectRatio), maxHeight);
 	const isVideo = media.type === "video" || media.type === "gif";
 	return { height, isVideo };
 }
@@ -198,7 +255,10 @@ function calculateArticleLayout(
 	}
 
 	ctx.font = `bold ${ARTICLE_TITLE_FONT_SIZE}px ${fontFamily}`;
-	const titleLines = wrapText(ctx, article.title, articleContentWidth);
+	const titleLines = truncateLines(
+		wrapText(ctx, article.title, articleContentWidth),
+		ARTICLE_TITLE_MAX_LINES,
+	);
 	const titleHeight = calculateTextHeight(
 		titleLines,
 		ARTICLE_TITLE_FONT_SIZE,
@@ -207,7 +267,10 @@ function calculateArticleLayout(
 	);
 
 	ctx.font = `${ARTICLE_PREVIEW_FONT_SIZE}px ${fontFamily}`;
-	const previewLines = wrapText(ctx, article.previewText, articleContentWidth);
+	const previewLines = truncateLines(
+		wrapText(ctx, article.previewText, articleContentWidth),
+		ARTICLE_PREVIEW_MAX_LINES,
+	);
 	const previewHeight = calculateTextHeight(
 		previewLines,
 		ARTICLE_PREVIEW_FONT_SIZE,
@@ -258,7 +321,10 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 	const measureCtx = measureCanvas.getContext("2d");
 
 	measureCtx.font = `${LAYOUT.FONT_SIZE_TEXT}px ${fontFamily}`;
-	const mainTextLines = wrapText(measureCtx, tweet.text, textWidth);
+	const mainTextLines = truncateLines(
+		wrapText(measureCtx, tweet.text, textWidth),
+		MAIN_TEXT_MAX_LINES,
+	);
 	const mainTextHeight = calculateTextHeight(
 		mainTextLines,
 		LAYOUT.FONT_SIZE_TEXT,
@@ -284,10 +350,13 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 
 	if (tweet.quote) {
 		measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
-		const quoteTextLines = wrapText(
-			measureCtx,
-			tweet.quote.text,
-			quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP,
+		const quoteTextLines = truncateLines(
+			wrapText(
+				measureCtx,
+				tweet.quote.text,
+				quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP,
+			),
+			QUOTE_TEXT_MAX_LINES,
 		);
 		const quoteTextHeight = calculateTextHeight(
 			quoteTextLines,
@@ -300,6 +369,7 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 		const { height: quoteMediaHeight, isVideo: quoteMediaIsVideo } = calculateMediaHeight(
 			quoteMedia,
 			quoteContentWidth,
+			Math.floor(quoteContentWidth * 0.6),
 		);
 
 		const quoteArticleLayout = calculateArticleLayout(
@@ -339,7 +409,10 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 
 		for (const chainTweet of tweet.replyChain) {
 			measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
-			const chainTextLines = wrapText(measureCtx, chainTweet.text, replyToTextWidth);
+			const chainTextLines = truncateLines(
+				wrapText(measureCtx, chainTweet.text, replyToTextWidth),
+				REPLY_TEXT_MAX_LINES,
+			);
 			const chainTextHeight = calculateTextHeight(
 				chainTextLines,
 				REPLY_FONT_SIZE_TEXT,
@@ -351,15 +424,19 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 			const { height: chainMediaHeight, isVideo: chainMediaIsVideo } = calculateMediaHeight(
 				chainMedia,
 				replyToTextWidth,
+				Math.floor(replyToTextWidth * 0.6),
 			);
 
 			let chainQuoteLayout: TweetLayout["quote"] = null;
 			if (chainTweet.quote) {
 				measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
-				const chainQuoteTextLines = wrapText(
-					measureCtx,
-					chainTweet.quote.text,
-					chainQuoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP,
+				const chainQuoteTextLines = truncateLines(
+					wrapText(
+						measureCtx,
+						chainTweet.quote.text,
+						chainQuoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP,
+					),
+					QUOTE_TEXT_MAX_LINES,
 				);
 				const chainQuoteTextHeight = calculateTextHeight(
 					chainQuoteTextLines,
@@ -370,7 +447,11 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 
 				const chainQuoteMedia = getFirstMedia(chainTweet.quote.media);
 				const { height: chainQuoteMediaHeight, isVideo: chainQuoteMediaIsVideo } =
-					calculateMediaHeight(chainQuoteMedia, chainQuoteContentWidth);
+					calculateMediaHeight(
+						chainQuoteMedia,
+						chainQuoteContentWidth,
+						Math.floor(chainQuoteContentWidth * 0.6),
+					);
 
 				const chainQuoteArticleLayout = calculateArticleLayout(
 					measureCtx,
@@ -540,7 +621,7 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 		let mediaEndY = replyTextY;
 		const chainMedia = getFirstMedia(item.tweet.media);
 		if (chainMedia && item.mediaHeight > 0) {
-			const chainImageUrl = chainMedia.type === "photo" ? chainMedia.url : chainMedia.thumbnailUrl;
+			const chainImageUrl = getMediaImageUrl(chainMedia);
 			await drawMediaBlock({
 				ctx,
 				imageUrl: chainImageUrl,
@@ -736,7 +817,7 @@ async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
 
 	const quoteMedia = getFirstMedia(quote.media);
 	if (quoteMedia && quoteLayout.mediaHeight > 0) {
-		const quoteImageUrl = quoteMedia.type === "photo" ? quoteMedia.url : quoteMedia.thumbnailUrl;
+		const quoteImageUrl = getMediaImageUrl(quoteMedia);
 		await drawMediaBlock({
 			ctx,
 			imageUrl: quoteImageUrl,
@@ -909,7 +990,7 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
 	if (mainMedia && layout.mainTweet.mediaHeight > 0) {
 		yOffset += LAYOUT.AVATAR_GAP;
 
-		const imageUrl = mainMedia.type === "photo" ? mainMedia.url : mainMedia.thumbnailUrl;
+		const imageUrl = getMediaImageUrl(mainMedia);
 		await drawMediaBlock({
 			ctx,
 			imageUrl,

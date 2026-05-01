@@ -388,7 +388,7 @@ export async function drawMediaBlock(params: DrawMediaBlockParams): Promise<void
 		ctx.fillStyle = backgroundColor;
 		ctx.fillRect(x, y, width, height);
 
-		ctx.drawImage(image, x, y, width, height);
+		drawImageCover({ ctx, image, x, y, width, height });
 		ctx.restore();
 
 		if (isVideo) {
