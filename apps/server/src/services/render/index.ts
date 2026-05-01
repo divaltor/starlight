@@ -95,6 +95,8 @@ const QUOTE_TEXT_MAX_LINES = 6;
 const REPLY_TEXT_MAX_LINES = 5;
 const ARTICLE_TITLE_MAX_LINES = 3;
 const ARTICLE_PREVIEW_MAX_LINES = 3;
+const MEDIA_MIN_ASPECT_RATIO = 3 / 4;
+const MEDIA_MAX_ASPECT_RATIO = 2;
 
 interface ReplyChainItem {
 	height: number;
@@ -224,12 +226,15 @@ function truncateLines(lines: TextLine[], maxLines: number): TextLine[] {
 function calculateMediaHeight(
 	media: MediaItem | null,
 	containerWidth: number,
-	maxHeight = Math.floor(containerWidth * 0.8),
+	maxHeight = Math.floor(containerWidth / MEDIA_MIN_ASPECT_RATIO),
 ): { height: number; isVideo: boolean } {
 	if (!media) {
 		return { height: 0, isVideo: false };
 	}
-	const aspectRatio = media.width / media.height;
+	const aspectRatio = Math.min(
+		Math.max(media.width / media.height, MEDIA_MIN_ASPECT_RATIO),
+		MEDIA_MAX_ASPECT_RATIO,
+	);
 	const height = Math.min(Math.floor(containerWidth / aspectRatio), maxHeight);
 	const isVideo = media.type === "video" || media.type === "gif";
 	return { height, isVideo };
