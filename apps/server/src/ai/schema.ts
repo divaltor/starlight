@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 const reactionEmojiSchema = z.enum([
-	"🤣",
 	"😁",
 	"🤮",
 	"🤡",
