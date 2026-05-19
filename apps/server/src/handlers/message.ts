@@ -148,6 +148,8 @@ whitelistedGroupChat
 
 		ctx.logger.debug(`Received ${output.replies.length} AI actions`);
 
+		let sentTextCount = 0;
+
 		for (const reply of output.replies) {
 			if (reply.type === "reaction") {
 				if (!knownMessageIds.has(reply.message_id)) {
@@ -185,19 +187,14 @@ whitelistedGroupChat
 				continue;
 			}
 
-			if (
-				reply.reply_to !== undefined &&
-				reply.reply_to !== null &&
-				!knownMessageIds.has(reply.reply_to)
-			) {
-				ctx.logger.debug(
-					{ replyTo: reply.reply_to },
-					"Skipping AI reply: reply_to message ID not in known messages",
-				);
-				continue;
-			}
+			// undefined → plain chat message; null → reply to trigger; number → reply to that id
+			const replyToId = reply.reply_to === null ? triggerMessageId : (reply.reply_to ?? undefined);
 
-			const replyToId = reply.reply_to === null ? triggerMessageId : reply.reply_to;
+			// Between burst messages, show typing and use a short human-like pause
+			if (sentTextCount > 0) {
+				await ctx.replyWithChatAction("typing").catch(() => {});
+				await sleep(1_500, { minMs: 1_200, maxMs: 3_500 });
+			}
 
 			try {
 				const sentMessage = await ctx.api.sendMessage(ctx.chat.id, replyText, {
@@ -211,10 +208,8 @@ whitelistedGroupChat
 				);
 
 				await saveMessage({ ctx, msg: sentMessage });
-				await sleep(5_000, {
-					minMs: 5_000,
-					maxMs: 10_000,
-				});
+				knownMessageIds.add(sentMessage.message_id);
+				sentTextCount += 1;
 			} catch (error) {
 				if (error instanceof GrammyError) {
 					ctx.logger.debug(
