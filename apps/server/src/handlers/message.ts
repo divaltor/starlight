@@ -2,7 +2,7 @@ import { env, prisma } from "@starlight/utils";
 import { Output, generateText } from "ai";
 import { Composer, GrammyError } from "grammy";
 import { chatResponseSchema } from "@/ai/schema";
-import type { Context } from "@/bot";
+import { bot, type Context } from "@/bot";
 import { saveMessage } from "@/middlewares/message";
 import { getLangfuseTelemetry } from "@/otel";
 import { buildChatMemoryPromptContext } from "@/services/chat-memory";
@@ -197,7 +197,9 @@ whitelistedGroupChat
 			}
 
 			try {
-				const sentMessage = await ctx.api.sendMessage(ctx.chat.id, replyText, {
+				// Use bot.api (not ctx.api) to bypass the autoQuote transformer that would
+				// otherwise force-inject reply_parameters pointing at the triggering message.
+				const sentMessage = await bot.api.sendMessage(ctx.chat.id, replyText, {
 					...(replyToId === undefined ? {} : { reply_parameters: { message_id: replyToId } }),
 					message_thread_id: ctx.message.message_thread_id,
 				});
