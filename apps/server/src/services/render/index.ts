@@ -203,7 +203,23 @@ function calculateTextHeight(
 	return Math.floor(lines.length * fontSize * lineHeight + paragraphCount * paragraphGap);
 }
 
-function truncateLines(lines: TextLine[], maxLines: number): TextLine[] {
+function truncateTextToWidth(ctx: SKRSContext2D, text: string, maxWidth: number): string {
+	const ellipsis = "...";
+	let truncatedText = text.replace(/\s+$/, "");
+
+	while (truncatedText && ctx.measureText(`${truncatedText}${ellipsis}`).width > maxWidth) {
+		truncatedText = truncatedText.slice(0, -1).replace(/\s+$/, "");
+	}
+
+	return `${truncatedText}${ellipsis}`;
+}
+
+function truncateLines(
+	ctx: SKRSContext2D,
+	lines: TextLine[],
+	maxLines: number,
+	maxWidth: number,
+): TextLine[] {
 	if (lines.length <= maxLines) {
 		return lines;
 	}
@@ -214,7 +230,7 @@ function truncateLines(lines: TextLine[], maxLines: number): TextLine[] {
 		visibleLines[visibleLines.length - 1] = {
 			...lastLine,
 			isParagraphEnd: false,
-			text: `${lastLine.text.replace(/\s+$/, "")}...`,
+			text: truncateTextToWidth(ctx, lastLine.text, maxWidth),
 		};
 	}
 
@@ -255,8 +271,10 @@ function calculateArticleLayout(
 
 	ctx.font = `bold ${ARTICLE_TITLE_FONT_SIZE}px ${fontFamily}`;
 	const titleLines = truncateLines(
+		ctx,
 		wrapText(ctx, article.title, articleContentWidth),
 		ARTICLE_TITLE_MAX_LINES,
+		articleContentWidth,
 	);
 	const titleHeight = calculateTextHeight(
 		titleLines,
@@ -267,8 +285,10 @@ function calculateArticleLayout(
 
 	ctx.font = `${ARTICLE_PREVIEW_FONT_SIZE}px ${fontFamily}`;
 	const previewLines = truncateLines(
+		ctx,
 		wrapText(ctx, article.previewText, articleContentWidth),
 		ARTICLE_PREVIEW_MAX_LINES,
+		articleContentWidth,
 	);
 	const previewHeight = calculateTextHeight(
 		previewLines,
@@ -321,8 +341,10 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 
 	measureCtx.font = `${LAYOUT.FONT_SIZE_TEXT}px ${fontFamily}`;
 	const mainTextLines = truncateLines(
+		measureCtx,
 		wrapText(measureCtx, tweet.text, textWidth),
 		MAIN_TEXT_MAX_LINES,
+		textWidth,
 	);
 	const mainTextHeight = calculateTextHeight(
 		mainTextLines,
@@ -349,13 +371,12 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 
 	if (tweet.quote) {
 		measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
+		const quoteTextWidth = quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
 		const quoteTextLines = truncateLines(
-			wrapText(
-				measureCtx,
-				tweet.quote.text,
-				quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP,
-			),
+			measureCtx,
+			wrapText(measureCtx, tweet.quote.text, quoteTextWidth),
 			QUOTE_TEXT_MAX_LINES,
+			quoteTextWidth,
 		);
 		const quoteTextHeight = calculateTextHeight(
 			quoteTextLines,
@@ -408,8 +429,10 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 		for (const chainTweet of tweet.replyChain) {
 			measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
 			const chainTextLines = truncateLines(
+				measureCtx,
 				wrapText(measureCtx, chainTweet.text, replyToTextWidth),
 				REPLY_TEXT_MAX_LINES,
+				replyToTextWidth,
 			);
 			const chainTextHeight = calculateTextHeight(
 				chainTextLines,
@@ -427,13 +450,12 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 			let chainQuoteLayout: TweetLayout["quote"] = null;
 			if (chainTweet.quote) {
 				measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
+				const chainQuoteTextWidth = chainQuoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
 				const chainQuoteTextLines = truncateLines(
-					wrapText(
-						measureCtx,
-						chainTweet.quote.text,
-						chainQuoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP,
-					),
+					measureCtx,
+					wrapText(measureCtx, chainTweet.quote.text, chainQuoteTextWidth),
 					QUOTE_TEXT_MAX_LINES,
+					chainQuoteTextWidth,
 				);
 				const chainQuoteTextHeight = calculateTextHeight(
 					chainQuoteTextLines,
