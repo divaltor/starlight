@@ -187,8 +187,8 @@ whitelistedGroupChat
 				continue;
 			}
 
-			// undefined → plain chat message; null → reply to trigger; number → reply to that id
-			const replyToId = reply.reply_to === null ? triggerMessageId : (reply.reply_to ?? undefined);
+			// null/undefined → plain chat message; number → reply to that specific id
+			const replyToId = reply.reply_to ?? undefined;
 
 			// Between burst messages, show typing and use a short human-like pause
 			if (sentTextCount > 0) {
