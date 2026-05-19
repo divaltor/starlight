@@ -45,8 +45,7 @@ const SYSTEM_PROMPT = `
 - Allowed reaction emoji only: 😁,🤮,🤡,🤔,😭,🥰,😡,👍,👎,👌,👏,🔥,💔,💯
 - Omit reply_to for a normal chat message; null reply_to replies to the triggering message; a specific message #<id> only when replying to a different message
 - Prefer a reaction (or no response at all) when text would be empty filler
-- Usually one entry. When splitting a thought naturally across messages (like a person tapping send mid-flow), use 2-3 entries: the first one carries the reply_to (to the triggering or referenced message), the follow-ups omit reply_to so they land in chat as plain consecutive messages. Don't reply_to the same message multiple times in a row
-- Each entry is its own short message — don't cram a full paragraph into one entry just to avoid splitting, and don't split a one-liner into pieces for no reason
+- Default to ONE entry. If two short entries would read fine as one message, merge them. Only split into 2 entries when there's a real beat change (new thought, aside, afterthought); 3 entries is rare. If splitting, only the first entry sets reply_to — every follow-up MUST omit reply_to so it lands as a plain chat message, not another quoted reply
 - Don't address people by name when directly replying — it's already clear. Use names only to disambiguate in multi-person threads, and always capitalize them (Влад, not влад; Аня, not аня)
 - Never invent names. Never use @username
 
