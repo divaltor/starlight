@@ -137,8 +137,9 @@ whitelistedGroupChat
 				userId: ctx.message.from?.id ? String(ctx.message.from.id) : "unknown",
 				sessionId: `${ctx.chat.id}:${messageThreadId ?? "main"}`,
 			}),
-			temperature: 0.75,
-			topK: 80,
+			topP: 0.95,
+			frequencyPenalty: 0.4,
+			presencePenalty: 0.2,
 		});
 
 		if (!output) {
