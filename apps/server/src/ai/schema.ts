@@ -35,7 +35,7 @@ export const chatResponseSchema = z.object({
 		.array(
 			z.discriminatedUnion("type", [
 				z.object({
-					type: z.literal("text"),
+					type: z.literal(["text", "message"]),
 					text: z.string().min(1).describe("Response text in character"),
 					reply_to: nullableMessageIdSchema
 						.describe(
