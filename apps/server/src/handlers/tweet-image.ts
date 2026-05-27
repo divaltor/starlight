@@ -37,7 +37,7 @@ async function tryDeleteMessage(ctx: Context): Promise<void> {
 	}
 }
 
-chats.command("q").filter(
+chats.command("quote").filter(
 	(ctx) => ctx.match.trim() !== "" && extractTweetId(ctx.match.trim()) === null,
 	async (ctx) => {
 		ctx.logger.debug(
@@ -48,7 +48,7 @@ chats.command("q").filter(
 	},
 );
 
-chats.command("q").filter(
+chats.command("quote").filter(
 	(ctx) => extractTweetId(ctx.match.trim()) !== null,
 	async (ctx) => {
 		const tweetId = extractTweetId(ctx.match.trim()) as string;
