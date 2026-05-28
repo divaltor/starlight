@@ -1,61 +1,72 @@
-import { http } from "@starlight/utils/http";
-import { isTimeoutError } from "ky";
+import { HttpClient, HttpClientResponse } from "@effect/platform";
+import { Effect } from "effect";
 import UserAgent from "user-agents";
-import type { Extractor, ExtractionResult } from "@/services/extractors/base";
-import { logger } from "@/logger";
+import type { ExtractionResult } from "@/services/extractors/base";
 
-export class FetchExtractor implements Extractor {
-	isEnabled(): boolean {
-		return true;
+const extract = Effect.fn("FetchExtractor.extract")(function* (url: string) {
+	yield* Effect.logInfo(`FetchExtractor: Starting extraction for ${url}`);
+	const client = yield* HttpClient.HttpClient;
+
+	const response = yield* client
+		.get(url, {
+			headers: {
+				Accept: "text/markdown",
+				"User-Agent": new UserAgent().toString(),
+			},
+		})
+		.pipe(
+			Effect.catchAll((error) =>
+				Effect.logError("FetchExtractor: Fetch failed", { error, url }).pipe(Effect.as(null)),
+			),
+		);
+
+	if (!response) {
+		return null;
 	}
 
-	async extract(url: string): Promise<ExtractionResult | null> {
-		logger.info("FetchExtractor: Starting extraction for %s", url);
+	const okResponse = yield* HttpClientResponse.filterStatusOk(response).pipe(
+		Effect.catchAll(() =>
+			Effect.logInfo(`FetchExtractor: Failed to fetch ${url}, status ${response.status}`).pipe(
+				Effect.as(null),
+			),
+		),
+	);
 
-		let response: Awaited<ReturnType<typeof http>>;
-
-		try {
-			response = await http(url, {
-				headers: {
-					Accept: "text/markdown",
-					"User-Agent": new UserAgent().toString(),
-				},
-				hooks: {
-					beforeError: [
-						({ error }) => {
-							if (isTimeoutError(error)) {
-								logger.warn({ url }, "FetchExtractor: Fetch timeout");
-							} else {
-								logger.error({ error, url }, "FetchExtractor: Fetch failed");
-							}
-
-							return error;
-						},
-					],
-				},
-			});
-		} catch {
-			return null;
-		}
-
-		if (!response.ok) {
-			logger.info("FetchExtractor: Failed to fetch %s, status %s", url, response.status);
-			return null;
-		}
-
-		const contentType = response.headers.get("content-type");
-		const body = await response.text();
-
-		if (contentType?.includes("text/markdown")) {
-			logger.info(
-				"FetchExtractor: Extracted markdown content from %s (%s bytes)",
-				url,
-				body.length,
-			);
-			return { kind: "markdown", content: body };
-		}
-
-		logger.info("FetchExtractor: Extracted HTML content from %s (%s bytes)", url, body.length);
-		return { kind: "html", content: body };
+	if (!okResponse) {
+		return null;
 	}
+
+	const contentType = okResponse.headers["content-type"];
+	const body = yield* okResponse.text.pipe(
+		Effect.catchAll((error) =>
+			Effect.logError("FetchExtractor: Failed to read response body", { error, url }).pipe(
+				Effect.as(null),
+			),
+		),
+	);
+
+	if (!body) {
+		return null;
+	}
+
+	if (contentType?.includes("text/markdown")) {
+		yield* Effect.logInfo(
+			`FetchExtractor: Extracted markdown content from ${url} (${body.length} bytes)`,
+		);
+		return { kind: "markdown", content: body } satisfies ExtractionResult;
+	}
+
+	yield* Effect.logInfo(
+		`FetchExtractor: Extracted HTML content from ${url} (${body.length} bytes)`,
+	);
+	return { kind: "html", content: body } satisfies ExtractionResult;
+});
+
+export namespace FetchExtractor {
+	export class Service extends Effect.Service<Service>()("starlight/extractors/FetchExtractor", {
+		effect: Effect.succeed({
+			isEnabled: () => true,
+			extract,
+		}),
+	}) {}
 }

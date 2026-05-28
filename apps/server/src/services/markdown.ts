@@ -1,20 +1,22 @@
+import { FetchHttpClient } from "@effect/platform";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { FetchExtractor } from "@/services/extractors/fetch";
 import { WorkersExtractor } from "@/services/extractors/workers";
 import { ParallelExtractor } from "@/services/extractors/parallel";
 
-const fetchExtractor = new FetchExtractor();
-const workersExtractor = new WorkersExtractor();
-const parallelExtractor = new ParallelExtractor();
+export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (url: string) {
+	const fetchExtractor = yield* FetchExtractor.Service;
+	const workersExtractor = yield* WorkersExtractor.Service;
+	const parallelExtractor = yield* ParallelExtractor.Service;
 
-export async function extractMarkdown(url: string): Promise<string | null> {
-	const fetchResult = await fetchExtractor.extract(url);
+	const fetchResult = yield* fetchExtractor.extract(url);
 
 	if (fetchResult?.kind === "markdown") {
 		return fetchResult.content;
 	}
 
 	if (fetchResult?.kind === "html" && workersExtractor.isEnabled()) {
-		const workersResult = await workersExtractor.extract({
+		const workersResult = yield* workersExtractor.extract({
 			name: "page.html",
 			data: fetchResult.content,
 			type: "text/html",
@@ -26,7 +28,7 @@ export async function extractMarkdown(url: string): Promise<string | null> {
 	}
 
 	if (parallelExtractor.isEnabled()) {
-		const parallelResult = await parallelExtractor.extract(url);
+		const parallelResult = yield* parallelExtractor.extract(url);
 
 		if (parallelResult) {
 			return parallelResult.content;
@@ -34,4 +36,17 @@ export async function extractMarkdown(url: string): Promise<string | null> {
 	}
 
 	return null;
+});
+
+const runtime = ManagedRuntime.make(
+	Layer.mergeAll(
+		FetchHttpClient.layer,
+		FetchExtractor.Service.Default,
+		WorkersExtractor.Service.Default,
+		ParallelExtractor.Service.Default,
+	),
+);
+
+export function extractMarkdown(url: string): Promise<string | null> {
+	return runtime.runPromise(extractMarkdownEffect(url));
 }

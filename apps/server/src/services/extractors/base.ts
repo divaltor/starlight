@@ -7,8 +7,3 @@ export interface ExtractionFile {
 	data: BlobPart;
 	type: string;
 }
-
-export interface Extractor {
-	isEnabled(): boolean;
-	extract(url: string): Promise<ExtractionResult | null>;
-}
