@@ -5,7 +5,6 @@ description = "Image classification API for Starlight"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
-  "axiom-py>=0.9.1",
   "einops>=0.8.1",
   "fake-useragent>=2.2.0",
   "fastapi>=0.119.0",

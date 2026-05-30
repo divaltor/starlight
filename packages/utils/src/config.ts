@@ -54,10 +54,6 @@ const env = createEnv({
 		AWS_SECRET_ACCESS_KEY: z.string(),
 		AWS_ENDPOINT: z.string().optional(),
 
-		AXIOM_BASE_URL: z.url().default("https://api.axiom.co"),
-		AXIOM_DATASET: z.string().default("starlight"),
-		AXIOM_TOKEN: z.string().optional(),
-
 		NODE_ENV: z.enum(["development", "production"]).optional().default("development"),
 
 		LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),

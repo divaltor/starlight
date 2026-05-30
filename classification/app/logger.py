@@ -2,8 +2,6 @@ import logging.config
 from typing import Any
 
 import structlog
-from axiom_py.client import Client
-from axiom_py.structlog import AxiomProcessor
 from opentelemetry import trace
 
 from app.config import config
@@ -95,11 +93,6 @@ def configure_logger() -> None:
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
     ]
-
-    if config.AXIOM_API_TOKEN:
-        client = Client(config.AXIOM_API_TOKEN)
-        # AxiomProcessor must run before wrap_for_formatter so it receives a dict
-        base_processors.append(AxiomProcessor(client, config.AXIOM_DATASET))
 
     # wrap_for_formatter should be last; it converts event_dict for the formatter.
     base_processors.append(structlog.stdlib.ProcessorFormatter.wrap_for_formatter)
