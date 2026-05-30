@@ -126,7 +126,7 @@ export class History {
 		const directReplyUrls =
 			this.extractURLsFromMessage(repliedMessage) ?? this.extractURLsFromMessage(message) ?? [];
 
-		// TODO: Store that in DB or Redis too as processed link and re-fresh after TTL is expired
+		// TODO: Store that in DB as processed link and re-fresh after TTL is expired
 		const extractedReplyPages = await Promise.all(
 			directReplyUrls.map((url) => this.extractPageMarkdown(url)),
 		);

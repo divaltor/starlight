@@ -35,7 +35,6 @@
     "date-fns": "^4.1.0",
     "effect": "^3.21.2",
     "grammy": "catalog:",
-    "ioredis": "catalog:",
     "pg": "^8.21.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",

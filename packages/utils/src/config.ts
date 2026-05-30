@@ -38,7 +38,6 @@ const env = createEnv({
 				[...new Set(value.split(",").map((alias) => alias.trim().toLowerCase()))].filter(Boolean),
 			),
 
-		REDIS_URL: z.url({ protocol: /^rediss?$/ }),
 		DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
 
 		CORS_ORIGIN: z.string().default("http://localhost:3001"),

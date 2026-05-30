@@ -1,12 +1,5 @@
 import { env } from "@starlight/utils";
-import Redis from "ioredis";
 import { Cookie } from "tough-cookie";
-
-export const redis = new Redis(env.REDIS_URL, {
-	connectTimeout: 3,
-	enableReadyCheck: true,
-	maxRetriesPerRequest: null,
-});
 
 export interface RFC6265Cookie {
 	domain: string;

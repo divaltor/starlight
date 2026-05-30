@@ -1,13 +1,4 @@
 services:
-  redis:
-    image: redis:8-alpine
-    ports:
-      - 6379:6379
-    volumes:
-      - redis_data:/data
-    networks:
-      - starlight
-
   postgresql:
     image: pgvector/pgvector:pg17-trixie
     environment:
@@ -28,7 +19,6 @@ services:
     env_file:
       - apps/server/.env
     depends_on:
-      - redis
       - postgresql
     networks:
       - starlight
@@ -42,7 +32,6 @@ services:
     ports:
       - 3000:3000
     depends_on:
-      - redis
       - postgresql
     networks:
       - starlight
@@ -59,7 +48,6 @@ services:
       - starlight
 
 volumes:
-  redis_data:
   postgresql_data:
 
 networks:
