@@ -50,7 +50,7 @@ export const searchImages = maybeAuthProcedure
 			databaseUserId = dbUser.id;
 		}
 
-		const hashedQuery = BigInt(Bun.hash.xxHash3(query));
+		const hashedQuery = BigInt.asIntN(64, BigInt(Bun.hash.xxHash3(query)));
 		let text: number[];
 
 		const [cached] = await prisma.$queryRaw<Array<{ embedding: string }>>(

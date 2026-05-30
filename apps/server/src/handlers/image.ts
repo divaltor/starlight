@@ -129,7 +129,7 @@ async function getInlineQueryEmbedding(query: string) {
 		return null;
 	}
 
-	const queryHash = BigInt(Bun.hash.xxHash3(query));
+	const queryHash = BigInt.asIntN(64, BigInt(Bun.hash.xxHash3(query)));
 
 	const [cached] = await prisma.$queryRaw<Array<{ embedding: string }>>(
 		Prisma.sql`SELECT embedding FROM embedding_cache WHERE query = ${queryHash}`,
