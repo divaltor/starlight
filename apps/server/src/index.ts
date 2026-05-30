@@ -1,6 +1,7 @@
 import { initTelemetry, shutdownTelemetry } from "@/instrumentation";
 import { run } from "@grammyjs/runner";
 import { bot } from "@/bot";
+import "@/services/runtime";
 import chatMemberHandler from "@/handlers/chat-member";
 import imageHandler from "@/handlers/image";
 import messageHandler from "@/handlers/message";

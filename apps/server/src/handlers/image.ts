@@ -1,11 +1,12 @@
 import { FormattedString } from "@grammyjs/parse-mode";
 import { CookieEncryption } from "@starlight/crypto";
+import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
-import { http } from "@starlight/utils/http";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { webAppKeyboard } from "@/bot";
 import { RETRY } from "@/queue/absurd";
 import { getScheduledScrapperGeneration, scrapperApp } from "@/queue/scrapper";
+import { runtime } from "@/services/runtime";
 import { Cookies } from "@/storage";
 import type { Context } from "@/types";
 
@@ -140,33 +141,20 @@ async function getInlineQueryEmbedding(query: string) {
 		return JSON.parse(cached.embedding) as number[];
 	}
 
-	const response = await http(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
-		method: "post",
-		headers: {
-			"Content-Type": "application/json",
-			"X-API-Token": env.ML_API_TOKEN,
-			"X-Request-Id": Bun.randomUUIDv7(),
-		},
-		json: {
-			tags: query,
-			encoding_mode: "retrieval.query",
-		},
-	});
+	const text = await runtime.runPromise(
+		EmbeddingsService.Service.use((s) => s.generateText(query)),
+	);
 
-	if (!response.ok) {
-		throw new Error(`Inline image search embeddings failed: ${response.status}`);
+	if (!text) {
+		throw new Error("Inline image search embeddings failed");
 	}
 
-	const data = (await response.json()) as {
-		text: number[];
-	};
-
-	const vecStr = `[${data.text.join(",")}]`;
+	const vecStr = `[${text.join(",")}]`;
 	await prisma.$executeRaw(
 		Prisma.sql`INSERT INTO embedding_cache (query, embedding, updated_at) VALUES (${queryHash}, ${vecStr}::vector, NOW()) ON CONFLICT (query) DO UPDATE SET embedding = EXCLUDED.embedding, updated_at = NOW()`,
 	);
 
-	return data.text;
+	return text;
 }
 
 const cookieEncryption = new CookieEncryption(

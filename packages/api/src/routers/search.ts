@@ -1,9 +1,10 @@
 import { ORPCError } from "@orpc/client";
 import { env, Prisma, prisma } from "@starlight/utils";
-import { http } from "@starlight/utils/http";
 import z from "zod";
 import { publicProcedure } from "..";
 import { maybeAuthProcedure } from "../middlewares/auth";
+import { EmbeddingsService } from "../services/embeddings";
+import { runtime } from "../services/runtime";
 import type { SearchResult } from "../types/tweets";
 import { Cursor, type SearchCursorPayload } from "../utils/cursor";
 import { transformSearchResults } from "../utils/transformations";
@@ -60,30 +61,17 @@ export const searchImages = maybeAuthProcedure
 		if (cached) {
 			text = JSON.parse(cached.embedding) as number[];
 		} else {
-			const response = await http(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
-				method: "post",
-				headers: {
-					"Content-Type": "application/json",
-					"X-API-Token": env.ML_API_TOKEN,
-					"X-Request-Id": context.requestId,
-				},
-				json: {
-					tags: query,
-					encoding_mode: "retrieval.query",
-				},
-			});
+			const result = await runtime.runPromise(
+				EmbeddingsService.Service.use((s) => s.generateText(query, context.requestId)),
+			);
 
-			if (!response.ok) {
+			if (!result) {
 				throw new ORPCError("Failed to search images", {
 					status: 500,
 				});
 			}
 
-			const data = (await response.json()) as {
-				text: number[];
-			};
-
-			text = data.text;
+			text = result;
 
 			const vecStr = `[${text.join(",")}]`;
 			await prisma.$executeRaw(

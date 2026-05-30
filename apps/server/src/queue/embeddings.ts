@@ -1,18 +1,14 @@
 import { Absurd } from "absurd-sdk";
+import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { DbNull, env, Prisma, prisma } from "@starlight/utils";
-import { http } from "@starlight/utils/http";
 import { logger } from "@/logger";
 import { QUEUES } from "@/queue/absurd";
+import { runtime } from "@/services/runtime";
 
 interface ClassificationJobData {
 	photoId: string;
 	requestId?: string;
 	userId: string;
-}
-
-interface EmbeddingResponse {
-	image: number[] | null;
-	text: number[];
 }
 
 export const embeddingsApp = new Absurd({
@@ -68,51 +64,26 @@ embeddingsApp.registerTask<ClassificationJobData>({ name: "embeddings" }, async 
 		throw new Error("Photo has no URL for embeddings");
 	}
 
-	let response: Response;
+	const characters = photo.classification?.characters ?? [];
+	const tags = photo.classification?.tags ?? [];
 
-	const headers: Record<string, string> = {
-		"Content-Type": "application/json",
-		"X-API-Token": env.ML_API_TOKEN,
-		"X-Request-Id": requestId,
-	};
+	const result = await runtime.runPromise(
+		EmbeddingsService.Service.use((s) =>
+			s.generate(
+				photo.s3Url!,
+				characters.length === 0 ? tags : [...characters, ...tags],
+				requestId,
+			),
+		),
+	);
 
-	try {
-		const characters = photo.classification?.characters ?? [];
-		const tags = photo.classification?.tags ?? [];
-
-		response = await http(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
-			method: "post",
-			headers,
-			json: {
-				image: photo.s3Url,
-				tags: characters.length === 0 ? tags : [...characters, ...tags],
-			},
-		});
-	} catch (error) {
-		logger.error({ photoId, userId, requestId, error }, "Failed request to embeddings service");
-		throw error;
+	if (!result) {
+		logger.error({ photoId, userId, requestId }, "Failed to generate embeddings");
+		throw new Error("Embeddings generation failed");
 	}
 
-	if (!response.ok) {
-		const text = await response.text();
-		logger.error(
-			{ photoId, userId, requestId, status: response.status, body: text },
-			"Embeddings service error",
-		);
-		throw new Error(`Classification service error: ${response.status}`);
-	}
-
-	let data: EmbeddingResponse;
-
-	try {
-		data = await response.json();
-	} catch (error) {
-		logger.error({ photoId, userId, requestId, error }, "Failed to parse embeddings response");
-		throw error;
-	}
-
-	const textVecStr = `[${data.text.join(",")}]`;
-	const imageVecStr = `[${(data.image ?? []).join(",")}]`;
+	const textVecStr = `[${result.text.join(",")}]`;
+	const imageVecStr = `[${(result.image ?? []).join(",")}]`;
 
 	await prisma.$executeRaw(
 		Prisma.sql`UPDATE photos SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE id = ${photoId} AND user_id = ${userId}`,
