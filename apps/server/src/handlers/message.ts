@@ -109,17 +109,10 @@ whitelistedGroupChat
 		});
 
 		const allMessages = [
-			...(memoryContext
-				? [
-						{
-							role: "system" as const,
-							content: memoryContext,
-						},
-					]
-				: []),
 			...messages.map((message) => toModelMessage(message)),
 			toModelMessage(currentConversationTurn),
 		];
+		const system = [getSystemPrompt(), memoryContext].filter(Boolean).join("\n\n");
 
 		knownMessageIds.add(triggerMessageId);
 
@@ -128,7 +121,7 @@ whitelistedGroupChat
 		const { output } = await generateText({
 			model: openrouter!(env.OPENROUTER_MODEL),
 			output: Output.object({ schema: chatResponseSchema }),
-			system: getSystemPrompt(),
+			system,
 			messages: allMessages,
 			experimental_telemetry: getLangfuseTelemetry("message-reply", {
 				chatId: String(ctx.chat.id),
