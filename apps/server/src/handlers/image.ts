@@ -162,7 +162,7 @@ async function getInlineQueryEmbedding(query: string) {
 
 	const vecStr = `[${data.text.join(",")}]`;
 	await prisma.$executeRaw(
-		Prisma.sql`INSERT INTO embedding_cache (query, embedding) VALUES (${queryHash}, ${vecStr}::vector) ON CONFLICT (query) DO UPDATE SET embedding = EXCLUDED.embedding, updated_at = NOW()`,
+		Prisma.sql`INSERT INTO embedding_cache (query, embedding, updated_at) VALUES (${queryHash}, ${vecStr}::vector, NOW()) ON CONFLICT (query) DO UPDATE SET embedding = EXCLUDED.embedding, updated_at = NOW()`,
 	);
 
 	return data.text;

@@ -87,7 +87,7 @@ export const searchImages = maybeAuthProcedure
 
 			const vecStr = `[${text.join(",")}]`;
 			await prisma.$executeRaw(
-				Prisma.sql`INSERT INTO embedding_cache (query, embedding) VALUES (${hashedQuery}, ${vecStr}::vector) ON CONFLICT (query) DO UPDATE SET embedding = EXCLUDED.embedding, updated_at = NOW()`,
+				Prisma.sql`INSERT INTO embedding_cache (query, embedding, updated_at) VALUES (${hashedQuery}, ${vecStr}::vector, NOW()) ON CONFLICT (query) DO UPDATE SET embedding = EXCLUDED.embedding, updated_at = NOW()`,
 			);
 		}
 
