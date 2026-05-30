@@ -3,10 +3,9 @@ import { CookieEncryption } from "@starlight/crypto";
 import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
-import { RateLimiterRedis } from "rate-limiter-flexible";
 import { webAppKeyboard } from "@/bot";
 import { scrapperQueue } from "@/queue/scrapper";
-import { Cookies, redis } from "@/storage";
+import { Cookies } from "@/storage";
 import type { Context } from "@/types";
 
 const INLINE_QUERY_PAGE_SIZE = 50;
@@ -168,13 +167,6 @@ async function getInlineQueryEmbedding(query: string) {
 
 	return data.text;
 }
-
-const scrapperRateLimiter = new RateLimiterRedis({
-	storeClient: redis,
-	points: 1, // 1 parsing schedule per 15 minutes
-	duration: 60 * 15, // per 15 minutes
-	keyPrefix: "scrapper",
-});
 
 const cookieEncryption = new CookieEncryption(
 	env.COOKIE_ENCRYPTION_KEY,
@@ -691,7 +683,6 @@ privateChat.command("scrapper").filter(
 	async (ctx) => Boolean(ctx.user?.cookies),
 	async (ctx) => {
 		const scheduledJob = await scrapperQueue.getJobScheduler(`scrapper-${ctx.user?.id}`);
-		const args = ctx.match;
 
 		if (!scheduledJob) {
 			ctx.logger.debug("Upserting job scheduler for user %s", ctx.user?.id);
@@ -718,17 +709,6 @@ privateChat.command("scrapper").filter(
 				},
 			);
 			return;
-		}
-
-		if (args !== "safe") {
-			try {
-				await scrapperRateLimiter.consume(ctx.from.id);
-			} catch {
-				await ctx.reply(
-					"Sorry, but we already collected images for you. You can start a job each 15 minutes only for your convenience to not accidentally block your account.",
-				);
-				return;
-			}
 		}
 
 		await scrapperQueue.add(
