@@ -302,3 +302,13 @@ model Attachment {
   @@index([s3Path])
   @@map("attachments")
 }
+
+model EmbeddingCache {
+  query     BigInt                       @id @map("query")
+  embedding Unsupported("vector(1024)")  @map("embedding")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("embedding_cache")
+}

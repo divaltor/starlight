@@ -1,4 +1,3 @@
-import { Decoder, Encoder } from "@msgpack/msgpack";
 import { ORPCError } from "@orpc/client";
 import { env, Prisma, prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
@@ -7,11 +6,7 @@ import { publicProcedure } from "..";
 import { maybeAuthProcedure } from "../middlewares/auth";
 import type { SearchResult } from "../types/tweets";
 import { Cursor, type SearchCursorPayload } from "../utils/cursor";
-import { redis } from "../utils/redis";
 import { transformSearchResults } from "../utils/transformations";
-
-const encoder = new Encoder();
-const decoder = new Decoder();
 
 export const searchImages = maybeAuthProcedure
 	.input(
@@ -55,19 +50,15 @@ export const searchImages = maybeAuthProcedure
 			databaseUserId = dbUser.id;
 		}
 
-		const hashedQuery = Bun.hash.xxHash3(query);
-		const ttlKey = `query:${hashedQuery}`;
+		const hashedQuery = BigInt(Bun.hash.xxHash3(query));
 		let text: number[];
-		let memberExists: Buffer | null = null;
 
-		try {
-			memberExists = await redis.getexBuffer(ttlKey, "EX", 60 * 60 * 24 * 90);
-		} catch {
-			// Redis unavailable, proceed without cache
-		}
+		const [cached] = await prisma.$queryRaw<Array<{ embedding: string }>>(
+			Prisma.sql`SELECT embedding FROM embedding_cache WHERE query = ${hashedQuery}`,
+		);
 
-		if (memberExists) {
-			text = decoder.decode(memberExists) as number[];
+		if (cached) {
+			text = JSON.parse(cached.embedding) as number[];
 		} else {
 			const response = await http(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
 				method: "post",
@@ -94,11 +85,10 @@ export const searchImages = maybeAuthProcedure
 
 			text = data.text;
 
-			try {
-				await redis.setex(ttlKey, 60 * 60 * 24 * 7, Buffer.from(encoder.encode(text)));
-			} catch {
-				// Redis unavailable, skip caching
-			}
+			const vecStr = `[${text.join(",")}]`;
+			await prisma.$executeRaw(
+				Prisma.sql`INSERT INTO embedding_cache (query, embedding) VALUES (${hashedQuery}, ${vecStr}::vector) ON CONFLICT (query) DO UPDATE SET embedding = EXCLUDED.embedding, updated_at = NOW()`,
+			);
 		}
 
 		let cursorData: SearchCursorPayload | null = null;

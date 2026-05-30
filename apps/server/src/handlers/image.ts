@@ -130,16 +130,14 @@ async function getInlineQueryEmbedding(query: string) {
 		return null;
 	}
 
-	const cacheKey = `inline-query:${Bun.hash.xxHash3(query)}`;
+	const queryHash = BigInt(Bun.hash.xxHash3(query));
 
-	try {
-		const cachedEmbedding = await redis.get(cacheKey);
+	const [cached] = await prisma.$queryRaw<Array<{ embedding: string }>>(
+		Prisma.sql`SELECT embedding FROM embedding_cache WHERE query = ${queryHash}`,
+	);
 
-		if (cachedEmbedding) {
-			return JSON.parse(cachedEmbedding) as number[];
-		}
-	} catch {
-		// Redis unavailable, proceed without cache
+	if (cached) {
+		return JSON.parse(cached.embedding) as number[];
 	}
 
 	const response = await http(new URL("/v1/embeddings", env.ML_BASE_URL).toString(), {
@@ -163,11 +161,10 @@ async function getInlineQueryEmbedding(query: string) {
 		text: number[];
 	};
 
-	try {
-		await redis.setex(cacheKey, 60 * 60 * 24 * 7, JSON.stringify(data.text));
-	} catch {
-		// Redis unavailable, skip caching
-	}
+	const vecStr = `[${data.text.join(",")}]`;
+	await prisma.$executeRaw(
+		Prisma.sql`INSERT INTO embedding_cache (query, embedding) VALUES (${queryHash}, ${vecStr}::vector) ON CONFLICT (query) DO UPDATE SET embedding = EXCLUDED.embedding, updated_at = NOW()`,
+	);
 
 	return data.text;
 }
