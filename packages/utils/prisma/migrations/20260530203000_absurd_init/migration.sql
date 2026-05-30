@@ -30,8 +30,6 @@
 -- without losing context.  Events are uniquely indexed and use first-write-wins
 -- semantics: the first emission per name is cached, later emits are ignored.
 
-create extension if not exists "uuid-ossp";
-
 create schema if not exists absurd;
 
 -- Returns either the actual current timestamp or a fake one if
@@ -2231,12 +2229,14 @@ declare
   b bytea;
   rnd bytea;
   i int;
+  generated uuid;
 begin
   if v_server_num >= 180000 then
-    return uuidv7 ();
+    execute 'select uuidv7()' into generated;
+    return generated;
   end if;
   ts_ms := floor(extract(epoch from absurd.current_time()) * 1000)::bigint;
-  rnd := uuid_send(uuid_generate_v4 ());
+  rnd := uuid_send(gen_random_uuid());
   b := repeat(E'\\000', 16)::bytea;
   for i in 0..5 loop
     b := set_byte(b, i, ((ts_ms >> ((5 - i) * 8)) & 255)::int);
