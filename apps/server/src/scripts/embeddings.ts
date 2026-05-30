@@ -1,16 +1,16 @@
 import { prisma } from "@starlight/utils";
 import { logger } from "@/logger";
-import { embeddingsQueue } from "@/queue/embeddings";
-import { redis } from "@/storage";
+import { RETRY } from "@/queue/absurd";
+import { embeddingsApp } from "@/queue/embeddings";
 
 // Manual script: enqueue embeddings jobs for ALL available photos (no batching)
 // Usage: bun run apps/server/src/scripts/enqueue-all-embeddings.ts
 // Optional env vars:
 //   DRY_RUN=1             (only log, do not enqueue)
-//   CLEAR_QUEUE=1         (drain waiting & delayed jobs before enqueueing)
+//   CLEAR_QUEUE=1         (drop and recreate the Absurd queue before enqueueing)
 //   FORCE=1               (enqueue even if jobs existed previously; bypass dedupe)
 // Notes:
-//   FORCE only bypasses queue job de-duplication. The worker still skips
+//   FORCE only bypasses queue task de-duplication. The worker still skips
 //   photos that already have embeddings saved.
 
 const DRY_RUN = process.env.DRY_RUN === "1";
@@ -18,6 +18,12 @@ const CLEAR_QUEUE = process.env.CLEAR_QUEUE === "1" || process.env.CLEAR === "1"
 const FORCE = process.env.FORCE === "1";
 
 async function main() {
+	await embeddingsApp.createQueue();
+	await embeddingsApp.setQueuePolicy(undefined, {
+		cleanupLimit: 2000,
+		cleanupTtl: "1 day",
+	});
+
 	logger.info(
 		{
 			dryRun: DRY_RUN,
@@ -28,12 +34,13 @@ async function main() {
 	);
 
 	if (CLEAR_QUEUE) {
-		try {
-			await embeddingsQueue.drain(true);
-			logger.info("Embeddings queue drained (waiting & delayed jobs removed)");
-		} catch (error) {
-			logger.error({ error }, "Failed to drain embeddings queue");
-		}
+		await embeddingsApp.dropQueue();
+		await embeddingsApp.createQueue();
+		await embeddingsApp.setQueuePolicy(undefined, {
+			cleanupLimit: 2000,
+			cleanupTtl: "1 day",
+		});
+		logger.info("Embeddings queue dropped and recreated");
 	}
 
 	const photos = await prisma.$queryRaw<{ id: string; userId: string }[]>`
@@ -51,16 +58,20 @@ async function main() {
 	let enqueued = 0;
 
 	if (!DRY_RUN && photos.length > 0) {
-		await embeddingsQueue.addBulk(
-			photos.map((p) => {
-				const base = `embed-${p.id}-${p.userId}`;
-				const jobId = FORCE ? `${base}-${Date.now()}` : base;
-				return {
-					name: `embed-${p.id}`,
-					data: { photoId: p.id, userId: p.userId },
-					// Only enable deduplication when not forcing
-					opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
-				};
+		await Promise.all(
+			photos.map((photo) => {
+				const data = { photoId: photo.id, userId: photo.userId };
+
+				return FORCE
+					? embeddingsApp.spawn("embeddings", data, {
+							maxAttempts: 5,
+							retryStrategy: RETRY.embeddings,
+						})
+					: embeddingsApp.spawn("embeddings", data, {
+							idempotencyKey: `embed-${data.photoId}-${data.userId}`,
+							maxAttempts: 5,
+							retryStrategy: RETRY.embeddings,
+						});
 			}),
 		);
 		enqueued = photos.length;
@@ -83,13 +94,10 @@ main()
 		process.exitCode = 1;
 	})
 	.finally(async () => {
-		await embeddingsQueue.close().catch((error) => {
-			logger.error({ error }, "Failed to close embeddings queue");
+		await embeddingsApp.close().catch((error) => {
+			logger.error({ error }, "Failed to close embeddings queue client");
 		});
 		await prisma.$disconnect().catch((error) => {
 			logger.error({ error }, "Failed to disconnect from database");
-		});
-		await redis.quit().catch((error) => {
-			logger.error({ error }, "Failed to quit Redis");
 		});
 	});

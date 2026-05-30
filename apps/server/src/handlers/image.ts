@@ -4,7 +4,8 @@ import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { webAppKeyboard } from "@/bot";
-import { scrapperQueue } from "@/queue/scrapper";
+import { RETRY } from "@/queue/absurd";
+import { getScheduledScrapperGeneration, scrapperApp } from "@/queue/scrapper";
 import { Cookies } from "@/storage";
 import type { Context } from "@/types";
 
@@ -682,23 +683,32 @@ privateChat.command("scrapper").filter(
 privateChat.command("scrapper").filter(
 	async (ctx) => Boolean(ctx.user?.cookies),
 	async (ctx) => {
-		const scheduledJob = await scrapperQueue.getJobScheduler(`scrapper-${ctx.user?.id}`);
+		const user = ctx.user!;
+		const generation = getScheduledScrapperGeneration();
 
-		if (!scheduledJob) {
-			ctx.logger.debug("Upserting job scheduler for user %s", ctx.user?.id);
+		const scheduledJob = await scrapperApp.spawn(
+			"scheduled-feed-scrapper",
+			{
+				generation,
+				userId: user.id,
+				limit: 300,
+			},
+			{
+				idempotencyKey: `scheduled-scrapper-${user.id}-${generation}`,
+				maxAttempts: 3,
+				retryStrategy: RETRY.scrapper,
+			},
+		);
 
-			await scrapperQueue.upsertJobScheduler(
-				`scrapper-${ctx.user?.id}`,
+		if (scheduledJob.created) {
+			ctx.logger.debug("Scheduled scrapper for user %s", user.id);
+
+			await scrapperApp.spawn(
+				"feed-scrapper",
+				{ userId: user.id, count: 0, limit: 300 },
 				{
-					every: 1000 * 60 * 60 * 6, // 6 hours
-				},
-				{
-					data: {
-						userId: ctx.user?.id as string,
-						count: 0,
-						limit: 300, // 1000 is too much for free users
-					},
-					name: `scrapper-${ctx.user?.id}`,
+					maxAttempts: 3,
+					retryStrategy: RETRY.scrapper,
 				},
 			);
 
@@ -711,17 +721,12 @@ privateChat.command("scrapper").filter(
 			return;
 		}
 
-		await scrapperQueue.add(
-			"scrapper",
+		await scrapperApp.spawn(
+			"feed-scrapper",
+			{ userId: user.id, count: 0, limit: 100 },
 			{
-				userId: ctx.user?.id as string,
-				count: 0,
-				limit: 100,
-			},
-			{
-				deduplication: {
-					id: `scrapper-${ctx.user?.id}`,
-				},
+				maxAttempts: 3,
+				retryStrategy: RETRY.scrapper,
 			},
 		);
 

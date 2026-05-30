@@ -1,3 +1,4 @@
+import { Absurd } from "absurd-sdk";
 import {
 	ChatMemoryScope,
 	attachmentLabelFromMimeType,
@@ -6,12 +7,11 @@ import {
 	prisma,
 } from "@starlight/utils";
 import { generateText } from "ai";
-import { Queue, QueueEvents, Worker } from "bullmq";
 import { bot } from "@/bot";
 import { logger } from "@/logger";
 import { getLangfuseTelemetry } from "@/otel";
+import { QUEUES, RETRY } from "@/queue/absurd";
 import { GLOBAL_MEMORY_WINDOW_SIZE, TOPIC_MEMORY_WINDOW_SIZE } from "@/services/chat-memory";
-import { redis } from "@/storage";
 import { formatSenderName, openrouter } from "@/utils/message";
 
 const MAX_WINDOWS_PER_JOB = 4;
@@ -147,14 +147,15 @@ type MemoryWindowMessage = Prisma.MessageGetPayload<{
 	select: typeof memoryMessageSelect;
 }>;
 
-export const memoryQueue = new Queue<ChatMemoryJobData>("chat-memory", {
-	connection: redis,
-	defaultJobOptions: {
-		attempts: 5,
-		backoff: { type: "exponential", delay: 20_000 },
-		removeOnComplete: true,
-		removeOnFail: true,
+export const memoryApp = new Absurd({
+	db: env.DATABASE_URL,
+	log: {
+		log: logger.debug.bind(logger),
+		info: logger.info.bind(logger),
+		warn: logger.warn.bind(logger),
+		error: logger.error.bind(logger),
 	},
+	queueName: QUEUES.memory,
 });
 
 function formatWindowMessage(
@@ -210,29 +211,6 @@ function buildTranscript(entries: MemoryWindowMessage[], scope: ChatMemoryScopeV
 	return lines.join("\n");
 }
 
-async function addMemoryJob(jobName: string, jobData: ChatMemoryJobData, jobId: string) {
-	if (jobData.forceRebuild) {
-		await memoryQueue.add(jobName, jobData);
-		return;
-	}
-
-	try {
-		await memoryQueue.add(jobName, jobData, {
-			jobId,
-		});
-	} catch (error) {
-		const isDuplicate =
-			error instanceof Error &&
-			error.message.toLowerCase().includes("job") &&
-			error.message.toLowerCase().includes("exists");
-		if (isDuplicate) {
-			return;
-		}
-
-		throw error;
-	}
-}
-
 export async function scheduleChatMemorySummaries(params: {
 	chatId: bigint;
 	messageId: number;
@@ -243,7 +221,7 @@ export async function scheduleChatMemorySummaries(params: {
 	const threadKey = params.messageThreadId ?? 0;
 
 	await Promise.all([
-		addMemoryJob(
+		memoryApp.spawn(
 			"topic",
 			{
 				chatId,
@@ -252,9 +230,13 @@ export async function scheduleChatMemorySummaries(params: {
 				triggerMessageId: params.messageId,
 				forceRebuild: params.forceRebuild,
 			},
-			`memory-topic-${chatId}-${threadKey}`,
+			{
+				idempotencyKey: params.forceRebuild ? undefined : `memory-topic-${chatId}-${threadKey}`,
+				maxAttempts: 5,
+				retryStrategy: RETRY.memory,
+			},
 		),
-		addMemoryJob(
+		memoryApp.spawn(
 			"global",
 			{
 				chatId,
@@ -263,7 +245,11 @@ export async function scheduleChatMemorySummaries(params: {
 				triggerMessageId: params.messageId,
 				forceRebuild: params.forceRebuild,
 			},
-			`memory-global-${chatId}`,
+			{
+				idempotencyKey: params.forceRebuild ? undefined : `memory-global-${chatId}`,
+				maxAttempts: 5,
+				retryStrategy: RETRY.memory,
+			},
 		),
 	]);
 }
@@ -499,117 +485,100 @@ async function processWindow(params: {
 	return true;
 }
 
-export const memoryWorker = new Worker<ChatMemoryJobData>(
-	"chat-memory",
-	async (job) => {
-		if (!openrouter) {
-			logger.debug("OPENROUTER_API_KEY is not set, skipping memory job");
-			return;
+async function processMemoryJob(jobName: string, data: ChatMemoryJobData) {
+	if (!openrouter) {
+		logger.debug("OPENROUTER_API_KEY is not set, skipping memory job");
+		return;
+	}
+
+	const chatId = BigInt(data.chatId);
+	const threadKey = data.scope === ChatMemoryScope.topic ? data.threadKey : 0;
+
+	const chat = await prisma.chat.findUnique({
+		where: {
+			id: chatId,
+		},
+		select: {
+			id: true,
+		},
+	});
+
+	if (!chat) {
+		logger.warn({ chatId: data.chatId }, "Chat not found for memory job");
+		return;
+	}
+
+	let processedWindows = 0;
+
+	try {
+		for (let index = 0; index < MAX_WINDOWS_PER_JOB; index++) {
+			const processed = await processWindow({
+				chatId,
+				scope: data.scope,
+				threadKey,
+				forceRebuild: index === 0 ? data.forceRebuild : false,
+			});
+
+			if (!processed) {
+				break;
+			}
+
+			processedWindows++;
 		}
-
-		const chatId = BigInt(job.data.chatId);
-		const threadKey = job.data.scope === ChatMemoryScope.topic ? job.data.threadKey : 0;
-
-		const chat = await prisma.chat.findUnique({
+	} catch (error) {
+		await prisma.chatMemoryCursor.upsert({
 			where: {
-				id: chatId,
+				chatId_scope_threadKey: {
+					chatId,
+					scope: data.scope,
+					threadKey,
+				},
 			},
-			select: {
-				id: true,
+			create: {
+				chatId,
+				scope: data.scope,
+				threadKey,
+				failureCount: 1,
+			},
+			update: {
+				failureCount: {
+					increment: 1,
+				},
 			},
 		});
 
-		if (!chat) {
-			logger.warn({ chatId: job.data.chatId }, "Chat not found for memory job");
-			return;
-		}
+		throw error;
+	}
 
-		let processedWindows = 0;
-
-		try {
-			for (let index = 0; index < MAX_WINDOWS_PER_JOB; index++) {
-				const processed = await processWindow({
-					chatId,
-					scope: job.data.scope,
-					threadKey,
-					forceRebuild: index === 0 ? job.data.forceRebuild : false,
-				});
-
-				if (!processed) {
-					break;
-				}
-
-				processedWindows++;
-			}
-		} catch (error) {
-			await prisma.chatMemoryCursor.upsert({
-				where: {
-					chatId_scope_threadKey: {
-						chatId,
-						scope: job.data.scope,
-						threadKey,
-					},
-				},
-				create: {
-					chatId,
-					scope: job.data.scope,
-					threadKey,
-					failureCount: 1,
-				},
-				update: {
-					failureCount: {
-						increment: 1,
-					},
-				},
-			});
-
-			throw error;
-		}
-
-		if (processedWindows === MAX_WINDOWS_PER_JOB) {
-			await memoryQueue.add(job.name, {
-				...job.data,
-				forceRebuild: false,
-			});
-		}
-
-		logger.debug(
+	if (processedWindows === MAX_WINDOWS_PER_JOB) {
+		await memoryApp.spawn(
+			jobName,
 			{
-				chatId: chatId.toString(),
-				processedWindows,
-				scope: job.data.scope,
-				threadKey,
-				triggerMessageId: job.data.triggerMessageId,
+				...data,
+				forceRebuild: false,
 			},
-			"Processed chat memory job",
+			{
+				maxAttempts: 5,
+				retryStrategy: RETRY.memory,
+			},
 		);
-	},
-	{
-		connection: redis,
-		concurrency: 2,
-		autorun: false,
-		lockDuration: 1000 * 60 * 5,
-	},
-);
+	}
 
-memoryWorker.on("failed", (job) => {
-	logger.error(
+	logger.debug(
 		{
-			chatId: job?.data?.chatId,
-			error: job?.failedReason,
-			jobId: job?.id,
-			scope: job?.data?.scope,
-			stack: job?.stacktrace,
-			threadKey: job?.data?.threadKey,
+			chatId: chatId.toString(),
+			processedWindows,
+			scope: data.scope,
+			threadKey,
+			triggerMessageId: data.triggerMessageId,
 		},
-		"Chat memory job failed",
+		"Processed chat memory job",
 	);
-});
+}
 
-const memoryEvents = new QueueEvents("chat-memory", {
-	connection: redis,
-});
-
-memoryEvents.on("failed", ({ failedReason, jobId }) => {
-	logger.error({ failedReason, jobId }, "Chat memory job failed");
-});
+memoryApp.registerTask<ChatMemoryJobData>({ name: "topic" }, (data) =>
+	processMemoryJob("topic", data),
+);
+memoryApp.registerTask<ChatMemoryJobData>({ name: "global" }, (data) =>
+	processMemoryJob("global", data),
+);

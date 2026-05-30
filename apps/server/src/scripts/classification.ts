@@ -1,17 +1,17 @@
 import { prisma } from "@starlight/utils";
 import { logger } from "@/logger";
-import { classificationQueue } from "@/queue/classification";
-import { redis } from "@/storage";
+import { RETRY } from "@/queue/absurd";
+import { classificationApp } from "@/queue/classification";
 
 // Manual script: enqueue classification jobs for ALL available photos (no batching)
 // Usage: bun run apps/server/src/scripts/enqueue-all-classifications.ts
 // Optional env vars:
 //   DRY_RUN=1             (only log, do not enqueue)
-//   CLEAR_QUEUE=1         (drain waiting & delayed jobs before enqueueing)
+//   CLEAR_QUEUE=1         (drop and recreate the Absurd queue before enqueueing)
 //   FORCE=1               (enqueue even if jobs existed previously; bypass dedupe)
 //   ALL_PICTURES=1        (enqueue all pictures)
 // Notes:
-//   FORCE only bypasses queue job de-duplication. The worker still skips
+//   FORCE only bypasses queue task de-duplication. The worker still skips
 //   photos that already have a classification saved.
 
 const DRY_RUN = process.env.DRY_RUN === "1";
@@ -21,6 +21,12 @@ const FORCE = process.env.FORCE === "1";
 const ALL_PICTURES = process.env.ALL_PICTURES === "1";
 
 async function main() {
+	await classificationApp.createQueue();
+	await classificationApp.setQueuePolicy(undefined, {
+		cleanupLimit: 2000,
+		cleanupTtl: "1 day",
+	});
+
 	logger.info(
 		{
 			dryRun: DRY_RUN,
@@ -32,12 +38,13 @@ async function main() {
 	);
 
 	if (CLEAR_QUEUE) {
-		try {
-			await classificationQueue.drain(true);
-			logger.info("Classification queue drained (waiting & delayed jobs removed)");
-		} catch (error) {
-			logger.error({ error }, "Failed to drain classification queue");
-		}
+		await classificationApp.dropQueue();
+		await classificationApp.createQueue();
+		await classificationApp.setQueuePolicy(undefined, {
+			cleanupLimit: 2000,
+			cleanupTtl: "1 day",
+		});
+		logger.info("Classification queue dropped and recreated");
 	}
 
 	const photos = ALL_PICTURES
@@ -65,16 +72,20 @@ async function main() {
 
 	let enqueued = 0;
 	if (!DRY_RUN && photos.length > 0) {
-		await classificationQueue.addBulk(
-			photos.map((p) => {
-				const base = `classify-${p.id}-${p.userId}`;
-				const jobId = FORCE ? `${base}-${Date.now()}` : base;
-				return {
-					name: `classify-${p.id}`,
-					data: { photoId: p.id, userId: p.userId },
-					// Only enable deduplication when not forcing
-					opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
-				};
+		await Promise.all(
+			photos.map((photo) => {
+				const data = { photoId: photo.id, userId: photo.userId };
+
+				return FORCE
+					? classificationApp.spawn("classification", data, {
+							maxAttempts: 5,
+							retryStrategy: RETRY.classification,
+						})
+					: classificationApp.spawn("classification", data, {
+							idempotencyKey: `classify-${data.photoId}-${data.userId}`,
+							maxAttempts: 5,
+							retryStrategy: RETRY.classification,
+						});
 			}),
 		);
 		enqueued = photos.length;
@@ -98,13 +109,10 @@ main()
 		process.exitCode = 1;
 	})
 	.finally(async () => {
-		await classificationQueue.close().catch((error) => {
-			logger.error({ error }, "Failed to close classification queue");
+		await classificationApp.close().catch((error) => {
+			logger.error({ error }, "Failed to close classification queue client");
 		});
 		await prisma.$disconnect().catch((error) => {
 			logger.error({ error }, "Failed to disconnect from database");
-		});
-		await redis.quit().catch((error) => {
-			logger.error({ error }, "Failed to quit Redis");
 		});
 	});

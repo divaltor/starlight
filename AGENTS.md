@@ -1,14 +1,14 @@
 ## Architecture & Data Flow
 
 ```
-Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL (pgvector) <── API (oRPC)
+Bot/Mini App ──> Scraper (Absurd) ──> AI (CLIP/pHash) ──> PostgreSQL (pgvector) <── API (oRPC)
 ```
 
 ## Project Structure
 
 | Path              | Purpose                                                             |
 | ----------------- | ------------------------------------------------------------------- |
-| `apps/server`     | Grammy Telegram bot, and BullMQ worker implementations.             |
+| `apps/server`     | Grammy Telegram bot, and Absurd worker implementations.             |
 | `apps/web`        | React 19 Telegram Mini App dashboard (Uber-style aesthetics).       |
 | `packages/api`    | API Layer: oRPC router definitions and shared contract types.       |
 | `packages/utils`  | Infrastructure: Prisma schema, database client, and business logic. |
@@ -24,6 +24,7 @@ Bot/Mini App ──> Scraper (BullMQ) ──> AI (CLIP/pHash) ──> PostgreSQL
 6. Use pre-defined types from libraries\Prisma generated files where is possible. Use Pick, Omit and other Typescript type-helpers to extract required values instead of creating own types with same information.
 7. Instead of `fetch` -> `http` from `@/starlight/utils/http` module
 8. Align on pre-existing types from libraries and generated code; avoid creating redundant helper types or defensive type-safety checks for scenarios that cannot happen in trusted internal code.
+9. In Grammy handlers, `ctx.<obj>` is guaranteed by middleware; use `ctx.<obj>!` instead of defensive existence checks.
 
 ## Maintenance & Tasks
 

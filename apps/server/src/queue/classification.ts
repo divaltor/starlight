@@ -1,9 +1,9 @@
+import { Absurd } from "absurd-sdk";
 import { env, prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
-import { Queue, QueueEvents, Worker } from "bullmq";
 import { logger } from "@/logger";
-import { embeddingsQueue } from "@/queue/embeddings";
-import { redis } from "@/storage";
+import { QUEUES, RETRY } from "@/queue/absurd";
+import { embeddingsApp } from "@/queue/embeddings";
 import type { Classification } from "@/types";
 
 interface ClassificationJobData {
@@ -12,25 +12,26 @@ interface ClassificationJobData {
 	userId: string;
 }
 
-export const classificationQueue = new Queue<ClassificationJobData>("classification", {
-	connection: redis,
-	defaultJobOptions: {
-		attempts: 5,
-		backoff: { type: "exponential", delay: 30_000 }, // 30s, 90s, 270s
-		removeOnComplete: true,
-		removeOnFail: true,
+export const classificationApp = new Absurd({
+	db: env.DATABASE_URL,
+	log: {
+		log: logger.debug.bind(logger),
+		info: logger.info.bind(logger),
+		warn: logger.warn.bind(logger),
+		error: logger.error.bind(logger),
 	},
+	queueName: QUEUES.classification,
 });
 
-export const classificationWorker = new Worker<ClassificationJobData>(
-	"classification",
-	async (job) => {
+classificationApp.registerTask<ClassificationJobData>(
+	{ name: "classification" },
+	async (params, ctx) => {
 		if (!env.ENABLE_CLASSIFICATION) {
-			logger.warn({ jobId: job.id }, "Classification skipped: feature disabled");
+			logger.warn({ jobId: ctx.taskID }, "Classification skipped: feature disabled");
 			return;
 		}
 
-		const { photoId, userId, requestId: incomingRequestId } = job.data;
+		const { photoId, userId, requestId: incomingRequestId } = params;
 		const requestId = incomingRequestId || Bun.randomUUIDv7();
 
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
@@ -120,50 +121,16 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			data: { classification: data },
 		});
 
-		await embeddingsQueue.add(
-			`embed-${photoId}`,
+		await embeddingsApp.spawn(
+			"embeddings",
 			{ photoId, userId, requestId },
 			{
-				jobId: `embed-${photoId}-${userId}`,
-				deduplication: { id: `embed-${photoId}-${userId}` },
+				idempotencyKey: `embed-${photoId}-${userId}`,
+				maxAttempts: 5,
+				retryStrategy: RETRY.embeddings,
 			},
 		);
 
 		logger.info({ photoId, userId, requestId }, "Photo %s classified", photoId);
 	},
-	{
-		connection: redis,
-		concurrency: 1,
-		autorun: false,
-		lockDuration: 1000 * 60 * 5,
-	},
 );
-
-classificationWorker.on("failed", (job) => {
-	logger.error(
-		{
-			jobId: job?.id,
-			photoId: job?.data?.photoId,
-			userId: job?.data?.userId,
-			error: job?.failedReason,
-			stack: job?.stacktrace,
-		},
-		"Classification job failed",
-	);
-});
-
-const classificationEvents = new QueueEvents("classification", {
-	connection: redis,
-});
-
-classificationEvents.on("completed", ({ jobId }) => {
-	logger.debug({ jobId }, "Classification job completed");
-});
-
-classificationEvents.on("failed", ({ jobId, failedReason }) => {
-	logger.error({ jobId, failedReason }, "Classification job failed");
-});
-
-classificationEvents.on("added", ({ jobId }) => {
-	logger.debug({ jobId }, "Classification job added");
-});
