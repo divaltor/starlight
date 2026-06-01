@@ -29,6 +29,7 @@ export function roundedRect(params: RoundedRectParams): void {
 
 const TRANSLATION_SEPARATOR = "·";
 const TRANSLATION_SEPARATOR_GAP = 6;
+const TRANSLATION_INLINE_GAP = 8;
 
 interface DrawTranslationSourceParams {
 	colors: ThemeColors;

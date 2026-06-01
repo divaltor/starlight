@@ -2,7 +2,11 @@ import { logger } from "@/logger";
 import { extractMarkdown } from "@/services/markdown";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
-import { type ConversationTurn, toConversationTurn } from "@/utils/message";
+import {
+	type ConversationAttachment,
+	type ConversationTurn,
+	toConversationTurn,
+} from "@/utils/message";
 import type { Message } from "@grammyjs/types";
 import { env, type Prisma, prisma } from "@starlight/utils";
 
@@ -38,14 +42,9 @@ export type StoredConversationMessage = Prisma.MessageGetPayload<{
 	select: typeof messageHistorySelect;
 }>;
 
-interface ExtractedPageMarkdown {
-	markdown: string;
-	source: string;
-	url: string;
-}
-
 interface BuildMessagesResult {
 	directReplyEntry: StoredConversationMessage | null;
+	directReplySupplementalAttachments: ConversationAttachment[];
 	directReplySupplementalContent: string[];
 	knownMessageIds: Set<number>;
 	messages: ConversationTurn[];
@@ -126,14 +125,23 @@ export class History {
 		const directReplyUrls =
 			this.extractURLsFromMessage(repliedMessage) ?? this.extractURLsFromMessage(message) ?? [];
 
-		// TODO: Store that in DB as processed link and re-fresh after TTL is expired
 		const extractedReplyPages = await Promise.all(
-			directReplyUrls.map((url) => this.extractPageMarkdown(url)),
+			directReplyUrls.map(async (url) => {
+				try {
+					return await extractMarkdown(url);
+				} catch (error) {
+					logger.warn({ error, url }, "Failed to extract markdown from reply URL");
+					return null;
+				}
+			}),
 		);
 
 		const directReplySupplementalContent = extractedReplyPages
 			.filter((page): page is NonNullable<typeof page> => page !== null)
 			.map((page) => `URL: ${page.url}\nSource: ${page.source}\n${page.markdown}`);
+		const directReplySupplementalAttachments = extractedReplyPages
+			.filter((page): page is NonNullable<typeof page> => page !== null)
+			.flatMap((page) => page.attachments);
 
 		logger.debug(
 			`Extracted ${directReplySupplementalContent.length}/${directReplyUrls.length} URLs for supplemental context`,
@@ -181,6 +189,9 @@ export class History {
 				botId,
 				{
 					includeAttachmentData: inlineMessageIds.has(entry.messageId),
+					supplementalAttachments: isDirectReplyTarget
+						? directReplySupplementalAttachments
+						: undefined,
 					supplementalContent: isDirectReplyTarget ? directReplySupplementalContent : undefined,
 				},
 			);
@@ -194,6 +205,7 @@ export class History {
 
 		return {
 			directReplyEntry,
+			directReplySupplementalAttachments,
 			directReplySupplementalContent,
 			knownMessageIds,
 			messages,
@@ -283,24 +295,5 @@ export class History {
 		}
 
 		return urls;
-	}
-
-	private static async extractPageMarkdown(url: string): Promise<ExtractedPageMarkdown | null> {
-		try {
-			const markdown = await extractMarkdown(url);
-
-			if (!markdown) {
-				return null;
-			}
-
-			return {
-				url: url,
-				source: "extractor",
-				markdown: markdown,
-			};
-		} catch (error) {
-			logger.warn({ error, url }, "Failed to extract markdown from reply URL");
-			return null;
-		}
 	}
 }

@@ -2,9 +2,10 @@ import { cleanupTweetText, env, extractTweetId, prisma } from "@starlight/utils"
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
 import { bot } from "@/bot";
-import { fetchTweet } from "@/services/fxembed/fxembed.service";
 import type { FxEmbedTweet } from "@/services/fxembed/types";
+import { runtime } from "@/services/runtime";
 import { generateTweetImage } from "@/services/tweet/tweet-image.service";
+import { TwitterApi } from "@/services/twitter-api";
 import { downloadVideo, downloadVideoFromUrl, type VideoInformation } from "@/services/video";
 import type { Context } from "@/types";
 
@@ -161,7 +162,7 @@ async function handleVideoRequest(
 			if (isTwitterLink) {
 				const [downloadResult, tweetResult] = await Promise.allSettled([
 					downloadVideo(link, tempDir.name),
-					fetchTweet(tweetId, TWEET_TRANSLATION_LANGUAGE),
+					runtime.runPromise(TwitterApi.getFxTweet(tweetId, TWEET_TRANSLATION_LANGUAGE)),
 				]);
 
 				tweet = tweetResult.status === "fulfilled" ? tweetResult.value : null;
@@ -340,7 +341,9 @@ whitelistedChats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, a
 	let caption: string | undefined;
 
 	if (showDescription) {
-		const tweet = await fetchTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE);
+		const tweet = await runtime.runPromise(
+			TwitterApi.getFxTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE),
+		);
 		caption = getTweetCaptionText(tweet) ?? video.tweetText ?? undefined;
 
 		if (caption && caption !== video.tweetText) {

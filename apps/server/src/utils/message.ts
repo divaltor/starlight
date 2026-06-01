@@ -203,6 +203,7 @@ export interface ConversationAttachment {
 
 export interface ToConversationTurnOptions {
 	includeAttachmentData?: boolean;
+	supplementalAttachments?: ConversationAttachment[];
 	supplementalContent?: string[];
 }
 
@@ -456,10 +457,14 @@ function toAttachmentUrl(s3Path: string): URL | null {
 export function toConversationTurn(
 	entry: ConversationTurnEntry,
 	botId: number,
-	{ includeAttachmentData = true, supplementalContent = [] }: ToConversationTurnOptions = {},
+	{
+		includeAttachmentData = true,
+		supplementalAttachments = [],
+		supplementalContent = [],
+	}: ToConversationTurnOptions = {},
 ): ConversationTurn {
 	const content = entry.text?.trim() ?? entry.caption?.trim() ?? null;
-	const attachments = entry.attachments;
+	const attachments = [...entry.attachments, ...supplementalAttachments];
 	const replyToMessageId = entry.replyToMessageId ?? null;
 	const messageThreadId = entry.messageThreadId ?? null;
 

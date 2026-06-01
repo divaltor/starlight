@@ -1,7 +1,6 @@
 import sharp from "sharp";
 import { http } from "@starlight/utils/http";
 import { logger } from "@/logger";
-import { fetchTweet } from "@/services/fxembed/fxembed.service";
 import type { FxEmbedArticle, FxEmbedMosaicPhoto, FxEmbedTweet } from "@/services/fxembed/types";
 import {
 	type ArticleData,
@@ -9,6 +8,8 @@ import {
 	renderTweetImage,
 	type TweetData,
 } from "@/services/render";
+import { runtime } from "@/services/runtime";
+import { TwitterApi } from "@/services/twitter-api";
 import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";
@@ -120,7 +121,9 @@ async function fetchReplyChain(
 		return { chain: [], hasMore: true };
 	}
 
-	const tweet = await fetchTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE);
+	const tweet = await runtime.runPromise(
+		TwitterApi.getFxTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE),
+	);
 	if (!tweet) {
 		return { chain: [], hasMore: false };
 	}
@@ -176,7 +179,9 @@ async function fetchReplyChain(
 export type TweetImageResult = RenderResult;
 
 export async function prepareTweetData(tweetId: string): Promise<TweetData> {
-	const tweet = await fetchTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE);
+	const tweet = await runtime.runPromise(
+		TwitterApi.getFxTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE),
+	);
 
 	if (!tweet) {
 		logger.warn({ tweetId }, "Could not fetch tweet");
