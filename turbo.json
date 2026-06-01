@@ -10,7 +10,9 @@
       "outputs": ["dist/**"],
       "env": ["DATABASE_URL"]
     },
-    "lint": {},
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
     "format": {},
     "start": {
       "cache": false,

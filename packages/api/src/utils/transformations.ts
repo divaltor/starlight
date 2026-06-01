@@ -8,8 +8,8 @@ function transformTweetsBase<T extends Pick<Tweet, "id" | "createdAt" | "usernam
 		Pick<Photo, "id" | "originalUrl"> & {
 			s3Url?: string;
 			is_nsfw?: boolean;
-			height?: number;
-			width?: number;
+			height?: number | null;
+			width?: number | null;
 		}
 	>,
 ): TweetData[] {
@@ -21,8 +21,8 @@ function transformTweetsBase<T extends Pick<Tweet, "id" | "createdAt" | "usernam
 				id: photo.id,
 				url: photo.s3Url || photo.originalUrl,
 				is_nsfw: photo.is_nsfw,
-				height: photo.height,
-				width: photo.width,
+				height: photo.height ?? undefined,
+				width: photo.width ?? undefined,
 				alt: `${tweet.username}-${photo.id}.${extension}`,
 			};
 		});
@@ -42,8 +42,8 @@ export const transformTweets = (
 	tweets: (Tweet & {
 		photos: (Photo & {
 			s3Url: string | undefined;
-			height?: number;
-			width?: number;
+			height?: number | null;
+			width?: number | null;
 		})[];
 	})[],
 ) => transformTweetsBase(tweets, (t) => t.photos);

@@ -192,7 +192,7 @@ composer.on("inline_query").filter(
 						authors.map(
 							(author) => Prisma.sql`strpos(lower(COALESCE(t.username, '')), ${author}) > 0`,
 						),
-						Prisma.sql` OR `,
+						" OR ",
 					)})`
 				: Prisma.empty;
 
@@ -208,7 +208,7 @@ composer.on("inline_query").filter(
 									ELSE 0.0
 								END`,
 						),
-						Prisma.sql`, `,
+						", ",
 					)})`
 				: Prisma.sql`0.0`;
 
@@ -314,7 +314,7 @@ composer.on("inline_query").filter(
 								authors.map(
 									(author) => Prisma.sql`strpos(lower(COALESCE(t.username, '')), ${author}) > 0`,
 								),
-								Prisma.sql` OR `,
+								" OR ",
 							)})`
 						: Prisma.empty;
 

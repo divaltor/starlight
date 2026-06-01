@@ -320,7 +320,7 @@ function DeleteConfirmDialog({
 				</AlertDialogHeader>
 				<AlertDialogFooter>
 					<AlertDialogCancel>Cancel</AlertDialogCancel>
-					<AlertDialogAction variant="destructive" onPress={onConfirm}>
+					<AlertDialogAction variant="destructive" onClick={onConfirm}>
 						Delete
 					</AlertDialogAction>
 				</AlertDialogFooter>

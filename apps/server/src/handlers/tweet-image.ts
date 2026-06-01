@@ -139,7 +139,7 @@ composer.on("inline_query").filter(
 
 			let generatedImagesLog = `Generated images for tweet ${tweetId}: light ${lightResult.width}x${lightResult.height} (${(lightResult.buffer.length / 1024).toFixed(1)}KB), dark ${darkResult.width}x${darkResult.height} (${(darkResult.buffer.length / 1024).toFixed(1)}KB)`;
 
-			if (tweetData.replyChain.length > 0) {
+			if (tweetData.replyChain?.length) {
 				const tweetDataWithoutChain = {
 					...tweetData,
 					replyChain: [],

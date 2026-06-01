@@ -104,7 +104,7 @@ function AlertDialogCancel({
 		<Button
 			variant={variant}
 			className={className}
-			onPress={() => onOpenChange(false)}
+			onClick={() => onOpenChange(false)}
 			{...props}
 		/>
 	);

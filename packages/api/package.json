@@ -13,7 +13,7 @@
   "type": "module",
   "scripts": {
     "build": "bun run -b tsdown",
-    "lint": "oxlint --fix",
+    "lint": "oxlint --fix && tsgo -b",
     "format": "oxfmt"
   },
   "devDependencies": {
@@ -24,7 +24,6 @@
     "typescript": "^6"
   },
   "dependencies": {
-    "@effect/platform": "^0.96.0",
     "@orpc/client": "catalog:",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
@@ -33,7 +32,7 @@
     "@starlight/utils": "workspace:*",
     "@telegram-apps/init-data-node": "^2.0.10",
     "date-fns": "^4.1.0",
-    "effect": "^3.21.2",
+    "effect": "4.0.0-beta.66",
     "grammy": "catalog:",
     "zod": "catalog:"
   }
