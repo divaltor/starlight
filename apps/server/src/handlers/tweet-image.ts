@@ -22,21 +22,6 @@ function createThemeKeyboard(tweetId: string, currentTheme: Theme, userId: numbe
 	);
 }
 
-async function tryDeleteMessage(ctx: Context): Promise<void> {
-	try {
-		await ctx.deleteMessage();
-	} catch (error) {
-		if (error instanceof GrammyError) {
-			ctx.logger.debug(
-				{ error: error.message },
-				"Could not delete user message (missing permissions)",
-			);
-		} else {
-			throw error;
-		}
-	}
-}
-
 chats.command("quote").filter(
 	(ctx) => ctx.match.trim() !== "" && extractTweetId(ctx.match.trim()) === null,
 	async (ctx) => {
@@ -68,7 +53,18 @@ chats.command("quote").filter(
 				message_thread_id: ctx.msg.message_thread_id,
 			});
 
-			await tryDeleteMessage(ctx);
+			try {
+				await ctx.deleteMessage();
+			} catch (error) {
+				if (error instanceof GrammyError) {
+					ctx.logger.debug(
+						{ error: error.message },
+						"Could not delete user message (missing permissions)",
+					);
+				} else {
+					throw error;
+				}
+			}
 		} catch (error) {
 			ctx.logger.error({ error, tweetId }, "Failed to generate tweet image");
 
