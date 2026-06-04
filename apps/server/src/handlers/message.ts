@@ -26,11 +26,23 @@ const whitelistedGroupChat = groupChat.filter((ctx) =>
 
 const RESPONSE_DELAY_MS = 500;
 
+const Q_COMMAND_REGEX = /^\/q(@\w+)?(\s|$)/i;
+
 whitelistedGroupChat
 	.on("message")
 	.filter((ctx) => {
 		if (!openrouter) {
 			ctx.logger.debug("OPENROUTER_API_KEY is not set, skipping AI reply");
+			return false;
+		}
+
+		return true;
+	})
+	.filter((ctx) => {
+		const text = ctx.message.text ?? ctx.message.caption;
+
+		if (text && Q_COMMAND_REGEX.test(text)) {
+			ctx.logger.debug("Skipping AI reply for /q command");
 			return false;
 		}
 
