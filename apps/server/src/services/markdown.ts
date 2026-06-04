@@ -59,7 +59,6 @@ export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (url
 			}
 
 			markdownParts.push(`URL: ${tweet.url ?? url}`);
-			markdownParts.push("Extractable attachments: photos");
 
 			return {
 				attachments,
