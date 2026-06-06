@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "langfuse": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "--python",
+        "3.12",
+        "langfuse-mcp",
+        "--tools",
+        "traces,observations,exceptions,prompts",
+        "--read-only"
+      ],
+      "environment": {
+        "LANGFUSE_PUBLIC_KEY": "{env:LANGFUSE_PUBLIC_KEY}",
+        "LANGFUSE_SECRET_KEY": "{env:LANGFUSE_SECRET_KEY}",
+        "LANGFUSE_HOST": "{env:LANGFUSE_BASE_URL}",
+        "LANGFUSE_MAX_AGE_DAYS": "30"
+      },
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
