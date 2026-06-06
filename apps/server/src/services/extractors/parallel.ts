@@ -6,7 +6,12 @@ import {
 	HttpClientRequest,
 	HttpClientResponse,
 } from "effect/unstable/http";
-import { ExtractionError, type ExtractionResult } from "@/services/extractors/base";
+import {
+	ExtractionError,
+	type ExtractionResult,
+	type SearchInput,
+	type SearchResult,
+} from "@/services/extractors/base";
 
 const PARALLEL_TIMEOUT_MS = 10_000;
 
@@ -30,10 +35,22 @@ const ParallelExtractResponse = Schema.Struct({
 	),
 });
 
+const ParallelSearchResponse = Schema.Struct({
+	results: Schema.Array(
+		Schema.Struct({
+			url: Schema.String,
+			title: Schema.optional(Schema.NullOr(Schema.String)),
+			publish_date: Schema.optional(Schema.NullOr(Schema.String)),
+			excerpts: Schema.Array(Schema.String),
+		}),
+	),
+});
+
 export namespace ParallelExtractor {
 	export interface Interface {
 		readonly isEnabled: () => boolean;
 		readonly extract: (url: string) => Effect.Effect<ExtractionResult | null, ExtractionError>;
+		readonly search: (input: SearchInput) => Effect.Effect<SearchResult[], ExtractionError>;
 	}
 
 	export class Service extends Context.Service<Service, Interface>()(
@@ -116,9 +133,101 @@ export namespace ParallelExtractor {
 				return { kind: "markdown", content } satisfies ExtractionResult;
 			});
 
+			const search = Effect.fn("ParallelExtractor.search")(function* (input: SearchInput) {
+				const maxResults = Math.min(input.maxResults ?? 3, 3);
+				yield* Effect.logInfo(`ParallelExtractor: Searching for ${input.query}`);
+
+				const request = yield* HttpClientRequest.post(
+					`${env.PARALLEL_API_BASE_URL}/v1/search`,
+				).pipe(
+					HttpClientRequest.setHeaders({
+						"x-api-key": env.PARALLEL_API_KEY!,
+					}),
+					HttpClientRequest.bodyJson({
+						objective: input.query,
+						search_queries: [input.query],
+						mode: "basic",
+						max_chars_total: 6_000,
+						advanced_settings: {
+							excerpt_settings: {
+								max_chars_per_result: 2_000,
+							},
+							max_results: maxResults,
+						},
+					}),
+					Effect.mapError((error) =>
+						ExtractionError.fromCause({
+							extractor: "ParallelExtractor",
+							message: "Failed to encode search request body",
+							cause: error,
+						}),
+					),
+				);
+
+				const response = yield* client.execute(request).pipe(
+					Effect.timeout(Duration.millis(PARALLEL_TIMEOUT_MS)),
+					Effect.mapError((error) =>
+						ExtractionError.fromCause({
+							extractor: "ParallelExtractor",
+							message: "Search API request failed",
+							cause: error,
+						}),
+					),
+				);
+
+				const okResponse = yield* HttpClientResponse.filterStatusOk(response).pipe(
+					Effect.catch(() =>
+						Effect.logInfo(
+							`ParallelExtractor: Search API request failed for ${input.query}, status ${response.status}`,
+						).pipe(Effect.as(null)),
+					),
+				);
+
+				if (!okResponse) {
+					return [];
+				}
+
+				const data = yield* HttpClientResponse.schemaBodyJson(ParallelSearchResponse)(
+					okResponse,
+				).pipe(
+					Effect.mapError((error) =>
+						ExtractionError.fromCause({
+							extractor: "ParallelExtractor",
+							message: "Failed to parse search API response",
+							cause: error,
+						}),
+					),
+				);
+
+				const results: SearchResult[] = [];
+
+				for (const result of data.results) {
+					const content = result.excerpts.join("\n\n").trim();
+
+					if (!content) {
+						continue;
+					}
+
+					results.push({
+						content,
+						publishedDate: result.publish_date,
+						source: "parallel",
+						title: result.title,
+						url: result.url,
+					});
+
+					if (results.length >= maxResults) {
+						break;
+					}
+				}
+
+				return results;
+			});
+
 			return Service.of({
 				isEnabled: () => !!env.PARALLEL_API_KEY,
 				extract,
+				search,
 			});
 		}),
 	);

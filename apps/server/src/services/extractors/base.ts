@@ -10,6 +10,19 @@ export interface ExtractionFile {
 	type: string;
 }
 
+export interface SearchInput {
+	query: string;
+	maxResults?: number;
+}
+
+export interface SearchResult {
+	content: string;
+	publishedDate?: string | null;
+	source: "exa" | "parallel";
+	title?: string | null;
+	url: string;
+}
+
 export class ExtractionError extends Schema.TaggedErrorClass<ExtractionError>()("ExtractionError", {
 	extractor: Schema.String,
 	message: Schema.String,

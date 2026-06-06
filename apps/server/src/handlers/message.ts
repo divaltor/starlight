@@ -1,7 +1,8 @@
 import { env, prisma } from "@starlight/utils";
-import { Output, generateText } from "ai";
+import { Output, generateText, stepCountIs } from "ai";
 import { Composer, GrammyError } from "grammy";
 import { chatResponseSchema } from "@/ai/schema";
+import { createAvailableTools } from "@/ai/tools/registry";
 import { bot, type Context } from "@/bot";
 import { saveMessage } from "@/middlewares/message";
 import { getLangfuseTelemetry } from "@/otel";
@@ -139,11 +140,14 @@ whitelistedGroupChat
 
 		ctx.logger.debug(`Sending ${allMessages.length} messages to AI (memory: ${!!memoryContext})`);
 
+		const availableTools = createAvailableTools();
+
 		const { output } = await generateText({
 			model: openrouter!(env.OPENROUTER_MODEL),
 			output: Output.object({ schema: chatResponseSchema }),
 			system,
 			messages: allMessages,
+			...(availableTools.tools ? { tools: availableTools.tools, stopWhen: stepCountIs(2) } : {}),
 			experimental_telemetry: getLangfuseTelemetry("message-reply", {
 				chatId: String(ctx.chat.id),
 				messageId: String(triggerMessageId),
@@ -225,6 +229,21 @@ whitelistedGroupChat
 				);
 
 				await saveMessage({ ctx, msg: sentMessage });
+
+				if (availableTools.searchContext.length > 0) {
+					await prisma.message.update({
+						where: {
+							messageId_chatId: {
+								chatId,
+								messageId: sentMessage.message_id,
+							},
+						},
+						data: {
+							text: `${sentMessage.text ?? replyText}\n\n[search context]\n${availableTools.searchContext.join("\n\n")}`,
+						},
+					});
+				}
+
 				knownMessageIds.add(sentMessage.message_id);
 				sentTextCount += 1;
 			} catch (error) {
