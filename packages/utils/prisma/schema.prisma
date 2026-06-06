@@ -273,7 +273,6 @@ model Message {
   @@index([chatId, date(sort: Desc)])
   @@index([fromId])
   @@index([mediaType])
-  @@index([text])
   @@index([deletedAt])
   @@index([chatId, messageThreadId, messageId])
   @@index([chatId, messageId])
