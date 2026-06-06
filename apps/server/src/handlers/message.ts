@@ -236,20 +236,6 @@ whitelistedGroupChat
 
 				await saveMessage({ ctx, msg: sentMessage });
 
-				if (availableTools.searchContext.length > 0) {
-					await prisma.message.update({
-						where: {
-							messageId_chatId: {
-								chatId,
-								messageId: sentMessage.message_id,
-							},
-						},
-						data: {
-							text: `${sentMessage.text ?? replyText}\n\n[search context]\n${availableTools.searchContext.join("\n\n")}`,
-						},
-					});
-				}
-
 				knownMessageIds.add(sentMessage.message_id);
 				sentTextCount += 1;
 			} catch (error) {
