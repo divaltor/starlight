@@ -16,6 +16,7 @@ import {
 	stripBotAnnotations,
 	toConversationTurn,
 	toModelMessage,
+	withOpenRouterGeminiCacheControl,
 } from "@/utils/message";
 import { sleep } from "@/utils/tools";
 
@@ -100,6 +101,23 @@ whitelistedGroupChat
 			`Built conversation: ${messages.length} messages, directReply: ${!!directReplyEntry}, supplemental: ${directReplySupplementalContent.length}`,
 		);
 
+		const memoryContext = await buildChatMemoryPromptContext({
+			chatId,
+			messageThreadId,
+		});
+		const recentToolContext = await buildRecentToolContext({
+			chatId,
+			messageThreadId,
+		});
+		const dynamicContext = [memoryContext, recentToolContext].filter(Boolean).join("\n\n");
+
+		const supplementalContent = [
+			...(directReplySupplementalContent.length > 0 && !directReplyEntry
+				? directReplySupplementalContent
+				: []),
+			...(dynamicContext ? [dynamicContext] : []),
+		];
+
 		const currentConversationTurn = toConversationTurn(
 			{
 				messageId: triggerMessageId,
@@ -119,29 +137,18 @@ whitelistedGroupChat
 					directReplySupplementalAttachments.length > 0 && !directReplyEntry
 						? directReplySupplementalAttachments
 						: undefined,
-				supplementalContent:
-					directReplySupplementalContent.length > 0 && !directReplyEntry
-						? directReplySupplementalContent
-						: undefined,
+				supplementalContent: supplementalContent.length > 0 ? supplementalContent : undefined,
 			},
 		);
 
-		const memoryContext = await buildChatMemoryPromptContext({
-			chatId,
-			messageThreadId,
-		});
-		const recentToolContext = await buildRecentToolContext({
-			chatId,
-			messageThreadId,
-		});
-
-		const allMessages = [
-			...messages.map((message) => toModelMessage(message)),
-			toModelMessage(currentConversationTurn),
-		];
-		const system = [getSystemPrompt(), memoryContext, recentToolContext]
-			.filter(Boolean)
-			.join("\n\n");
+		const allMessages = withOpenRouterGeminiCacheControl(
+			[
+				...messages.map((message) => toModelMessage(message)),
+				toModelMessage(currentConversationTurn),
+			],
+			env.OPENROUTER_MODEL,
+		);
+		const system = getSystemPrompt();
 
 		knownMessageIds.add(triggerMessageId);
 

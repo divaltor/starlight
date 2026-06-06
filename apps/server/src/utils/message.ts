@@ -61,6 +61,8 @@ export interface UserConversationTurn {
 
 export type ConversationTurn = AssistantConversationTurn | UserConversationTurn;
 
+const OPENROUTER_GEMINI_3_FLASH_MODEL_PREFIX = "google/gemini-3-flash";
+
 export interface ConversationAttachment {
 	base64Data?: string;
 	mimeType: string;
@@ -455,4 +457,48 @@ export function toModelMessage(
 		role: "user",
 		content: parts,
 	};
+}
+
+export function withOpenRouterGeminiCacheControl(
+	messages: ModelMessage[],
+	model: string,
+): ModelMessage[] {
+	if (!model.startsWith(OPENROUTER_GEMINI_3_FLASH_MODEL_PREFIX)) {
+		return messages;
+	}
+
+	// Gemini uses the last cache_control breakpoint as "cache everything up to here".
+	// Skip the current request so volatile user text, memory, and tool context stay uncached.
+	for (let messageIndex = messages.length - 2; messageIndex >= 0; messageIndex -= 1) {
+		const message = messages[messageIndex];
+
+		if (!message || message.role !== "user" || !Array.isArray(message.content)) {
+			continue;
+		}
+
+		if (!message.content.every((part) => part.type === "text")) {
+			continue;
+		}
+
+		for (let partIndex = message.content.length - 1; partIndex >= 0; partIndex -= 1) {
+			const part = message.content[partIndex];
+
+			if (!part || part.type !== "text") {
+				continue;
+			}
+
+			message.content[partIndex] = {
+				...part,
+				providerOptions: {
+					openrouter: {
+						cache_control: { type: "ephemeral" },
+					},
+				},
+			};
+
+			return messages;
+		}
+	}
+
+	return messages;
 }
