@@ -7,6 +7,7 @@ import {
 	HttpClientResponse,
 } from "effect/unstable/http";
 import { ExtractionError } from "@/services/extractors/base";
+import { ExaExtractor } from "@/services/extractors/exa";
 import { FetchExtractor } from "@/services/extractors/fetch";
 import { WorkersExtractor } from "@/services/extractors/workers";
 import { ParallelExtractor } from "@/services/extractors/parallel";
@@ -70,6 +71,7 @@ export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (url
 	}
 
 	const fetchExtractor = yield* FetchExtractor.Service;
+	const exaExtractor = yield* ExaExtractor.Service;
 	const workersExtractor = yield* WorkersExtractor.Service;
 	const parallelExtractor = yield* ParallelExtractor.Service;
 
@@ -80,6 +82,26 @@ export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (url
 	if (fetchResult?.kind === "markdown") {
 		markdown = fetchResult.content;
 		source = "fetch";
+	}
+
+	if (!markdown && exaExtractor.isEnabled()) {
+		const exaResult = yield* exaExtractor.extract(url).pipe(Effect.catch(ignoreExtractionError));
+
+		if (exaResult) {
+			markdown = exaResult.content;
+			source = "exa";
+		}
+	}
+
+	if (!markdown && parallelExtractor.isEnabled()) {
+		const parallelResult = yield* parallelExtractor
+			.extract(url)
+			.pipe(Effect.catch(ignoreExtractionError));
+
+		if (parallelResult) {
+			markdown = parallelResult.content;
+			source = "parallel";
+		}
 	}
 
 	if (!markdown && fetchResult?.kind === "html" && workersExtractor.isEnabled()) {
@@ -94,17 +116,6 @@ export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (url
 		if (workersResult) {
 			markdown = workersResult.content;
 			source = "workers";
-		}
-	}
-
-	if (!markdown && parallelExtractor.isEnabled()) {
-		const parallelResult = yield* parallelExtractor
-			.extract(url)
-			.pipe(Effect.catch(ignoreExtractionError));
-
-		if (parallelResult) {
-			markdown = parallelResult.content;
-			source = "parallel";
 		}
 	}
 

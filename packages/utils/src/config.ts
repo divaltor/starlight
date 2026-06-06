@@ -70,6 +70,9 @@ const env = createEnv({
 		PARALLEL_API_KEY: z.string().optional(),
 		PARALLEL_EXTRACT_BETA: z.string().default("search-extract-2025-10-10"),
 
+		EXA_API_BASE_URL: z.url().default("https://api.exa.ai"),
+		EXA_API_KEY: z.string().optional(),
+
 		LANGFUSE_PUBLIC_KEY: z.string().optional(),
 		LANGFUSE_SECRET_KEY: z.string().optional(),
 		LANGFUSE_BASE_URL: z.url().default("https://cloud.langfuse.com"),

@@ -8,36 +8,39 @@ import {
 } from "effect/unstable/http";
 import { ExtractionError, type ExtractionResult } from "@/services/extractors/base";
 
-const PARALLEL_TIMEOUT_MS = 10_000;
+const EXA_TIMEOUT_MS = 10_000;
 
-const ParallelExtractResponse = Schema.Struct({
+const ExaContentsResponse = Schema.Struct({
 	results: Schema.Array(
 		Schema.Struct({
 			url: Schema.String,
-			title: Schema.optional(Schema.NullOr(Schema.String)),
-			publish_date: Schema.optional(Schema.NullOr(Schema.String)),
-			full_content: Schema.optional(Schema.NullOr(Schema.String)),
-			excerpts: Schema.Array(Schema.String),
+			text: Schema.optional(Schema.String),
 		}),
 	),
-	errors: Schema.Array(
-		Schema.Struct({
-			url: Schema.String,
-			error_type: Schema.String,
-			http_status_code: Schema.NullOr(Schema.Number),
-			content: Schema.NullOr(Schema.String),
-		}),
+	statuses: Schema.optional(
+		Schema.Array(
+			Schema.Struct({
+				id: Schema.String,
+				status: Schema.String,
+				error: Schema.optional(
+					Schema.Struct({
+						tag: Schema.String,
+						httpStatusCode: Schema.optional(Schema.NullOr(Schema.Number)),
+					}),
+				),
+			}),
+		),
 	),
 });
 
-export namespace ParallelExtractor {
+export namespace ExaExtractor {
 	export interface Interface {
 		readonly isEnabled: () => boolean;
 		readonly extract: (url: string) => Effect.Effect<ExtractionResult | null, ExtractionError>;
 	}
 
 	export class Service extends Context.Service<Service, Interface>()(
-		"starlight/extractors/ParallelExtractor",
+		"starlight/extractors/ExaExtractor",
 	) {}
 
 	export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
@@ -45,23 +48,21 @@ export namespace ParallelExtractor {
 		Effect.gen(function* () {
 			const client = yield* HttpClient.HttpClient;
 
-			const extract = Effect.fn("ParallelExtractor.extract")(function* (url: string) {
-				yield* Effect.logInfo(`ParallelExtractor: Starting extraction for ${url}`);
+			const extract = Effect.fn("ExaExtractor.extract")(function* (url: string) {
+				yield* Effect.logInfo(`ExaExtractor: Starting extraction for ${url}`);
 
-				const request = yield* HttpClientRequest.post(
-					`${env.PARALLEL_API_BASE_URL}/v1/extract`,
-				).pipe(
+				const request = yield* HttpClientRequest.post(`${env.EXA_API_BASE_URL}/contents`).pipe(
 					HttpClientRequest.setHeaders({
-						"x-api-key": env.PARALLEL_API_KEY!,
+						"x-api-key": env.EXA_API_KEY!,
 					}),
 					HttpClientRequest.bodyJson({
-						urls: [url],
-						objective:
-							"Extract the main topic, key points, and a brief summary of the page content",
+						ids: [url],
+						text: true,
+						livecrawlTimeout: 10_000,
 					}),
 					Effect.mapError((error) =>
 						ExtractionError.fromCause({
-							extractor: "ParallelExtractor",
+							extractor: "ExaExtractor",
 							message: "Failed to encode request body",
 							cause: error,
 						}),
@@ -69,10 +70,10 @@ export namespace ParallelExtractor {
 				);
 
 				const response = yield* client.execute(request).pipe(
-					Effect.timeout(Duration.millis(PARALLEL_TIMEOUT_MS)),
+					Effect.timeout(Duration.millis(EXA_TIMEOUT_MS)),
 					Effect.mapError((error) =>
 						ExtractionError.fromCause({
-							extractor: "ParallelExtractor",
+							extractor: "ExaExtractor",
 							message: "API request failed",
 							cause: error,
 						}),
@@ -82,7 +83,7 @@ export namespace ParallelExtractor {
 				const okResponse = yield* HttpClientResponse.filterStatusOk(response).pipe(
 					Effect.catch(() =>
 						Effect.logInfo(
-							`ParallelExtractor: API request failed for ${url}, status ${response.status}`,
+							`ExaExtractor: API request failed for ${url}, status ${response.status}`,
 						).pipe(Effect.as(null)),
 					),
 				);
@@ -91,33 +92,38 @@ export namespace ParallelExtractor {
 					return null;
 				}
 
-				const data = yield* HttpClientResponse.schemaBodyJson(ParallelExtractResponse)(
-					okResponse,
-				).pipe(
+				const data = yield* HttpClientResponse.schemaBodyJson(ExaContentsResponse)(okResponse).pipe(
 					Effect.mapError((error) =>
 						ExtractionError.fromCause({
-							extractor: "ParallelExtractor",
+							extractor: "ExaExtractor",
 							message: "Failed to parse API response",
 							cause: error,
 						}),
 					),
 				);
 
-				const result = data.results[0];
-				if (!result?.excerpts?.length) {
-					yield* Effect.logInfo(`ParallelExtractor: No excerpts found for ${url}`);
+				const status = data.statuses?.find((item) => item.id === url);
+				if (status?.status === "error") {
+					yield* Effect.logInfo(
+						`ExaExtractor: Failed to extract ${url}, error ${status.error?.tag ?? "unknown"}`,
+					);
 					return null;
 				}
 
-				const content = result.excerpts.join("\n\n");
+				const result = data.results.find((item) => item.url === url) ?? data.results[0];
+				if (!result?.text) {
+					yield* Effect.logInfo(`ExaExtractor: No text found for ${url}`);
+					return null;
+				}
+
 				yield* Effect.logInfo(
-					`ParallelExtractor: Extracted ${result.excerpts.length} excerpts from ${url} (${content.length} bytes)`,
+					`ExaExtractor: Extracted text from ${url} (${result.text.length} bytes)`,
 				);
-				return { kind: "markdown", content } satisfies ExtractionResult;
+				return { kind: "markdown", content: result.text } satisfies ExtractionResult;
 			});
 
 			return Service.of({
-				isEnabled: () => !!env.PARALLEL_API_KEY,
+				isEnabled: () => !!env.EXA_API_KEY,
 				extract,
 			});
 		}),

@@ -1,5 +1,5 @@
 import env from "@starlight/utils/config";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Schema } from "effect";
 import {
 	FetchHttpClient,
 	HttpClient,
@@ -11,6 +11,8 @@ import {
 	type ExtractionFile,
 	type ExtractionResult,
 } from "@/services/extractors/base";
+
+const WORKERS_TIMEOUT_MS = 10_000;
 
 const WorkersExtractResponse = Schema.Struct({
 	result: Schema.Array(
@@ -63,6 +65,7 @@ export namespace WorkersExtractor {
 						),
 					)
 					.pipe(
+						Effect.timeout(Duration.millis(WORKERS_TIMEOUT_MS)),
 						Effect.mapError((error) =>
 							ExtractionError.fromCause({
 								extractor: "WorkersExtractor",

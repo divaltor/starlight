@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Duration, Effect, Layer } from "effect";
 import {
 	FetchHttpClient,
 	HttpClient,
@@ -7,6 +7,8 @@ import {
 } from "effect/unstable/http";
 import UserAgent from "user-agents";
 import { ExtractionError, type ExtractionResult } from "@/services/extractors/base";
+
+const FETCH_TIMEOUT_MS = 10_000;
 
 export namespace FetchExtractor {
 	export interface Interface {
@@ -34,6 +36,7 @@ export namespace FetchExtractor {
 						),
 					)
 					.pipe(
+						Effect.timeout(Duration.millis(FETCH_TIMEOUT_MS)),
 						Effect.mapError((error) =>
 							ExtractionError.fromCause({
 								extractor: "FetchExtractor",
