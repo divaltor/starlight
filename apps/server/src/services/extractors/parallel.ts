@@ -12,16 +12,18 @@ const ParallelExtractResponse = Schema.Struct({
 	results: Schema.Array(
 		Schema.Struct({
 			url: Schema.String,
-			title: Schema.NullOr(Schema.String),
-			full_content: Schema.NullOr(Schema.String),
-			excerpts: Schema.NullOr(Schema.Array(Schema.String)),
+			title: Schema.optional(Schema.NullOr(Schema.String)),
+			publish_date: Schema.optional(Schema.NullOr(Schema.String)),
+			full_content: Schema.optional(Schema.NullOr(Schema.String)),
+			excerpts: Schema.Array(Schema.String),
 		}),
 	),
 	errors: Schema.Array(
 		Schema.Struct({
 			url: Schema.String,
 			error_type: Schema.String,
-			content: Schema.String,
+			http_status_code: Schema.NullOr(Schema.Number),
+			content: Schema.NullOr(Schema.String),
 		}),
 	),
 });
@@ -45,18 +47,15 @@ export namespace ParallelExtractor {
 				yield* Effect.logInfo(`ParallelExtractor: Starting extraction for ${url}`);
 
 				const request = yield* HttpClientRequest.post(
-					`${env.PARALLEL_API_BASE_URL}/v1beta/extract`,
+					`${env.PARALLEL_API_BASE_URL}/v1/extract`,
 				).pipe(
 					HttpClientRequest.setHeaders({
 						"x-api-key": env.PARALLEL_API_KEY!,
-						"parallel-beta": env.PARALLEL_EXTRACT_BETA,
 					}),
 					HttpClientRequest.bodyJson({
 						urls: [url],
 						objective:
 							"Extract the main topic, key points, and a brief summary of the page content",
-						full_content: false,
-						excerpts: true,
 					}),
 					Effect.mapError((error) =>
 						ExtractionError.fromCause({
