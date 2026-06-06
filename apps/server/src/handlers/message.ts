@@ -7,6 +7,7 @@ import { bot, type Context } from "@/bot";
 import { saveMessage } from "@/middlewares/message";
 import { getLangfuseTelemetry } from "@/otel";
 import { buildChatMemoryPromptContext } from "@/services/chat-memory";
+import { buildRecentToolContext } from "@/services/message-parts";
 import { History } from "@/utils/history";
 import {
 	getSystemPrompt,
@@ -129,12 +130,18 @@ whitelistedGroupChat
 			chatId,
 			messageThreadId,
 		});
+		const recentToolContext = await buildRecentToolContext({
+			chatId,
+			messageThreadId,
+		});
 
 		const allMessages = [
 			...messages.map((message) => toModelMessage(message)),
 			toModelMessage(currentConversationTurn),
 		];
-		const system = [getSystemPrompt(), memoryContext].filter(Boolean).join("\n\n");
+		const system = [getSystemPrompt(), memoryContext, recentToolContext]
+			.filter(Boolean)
+			.join("\n\n");
 
 		knownMessageIds.add(triggerMessageId);
 
@@ -174,6 +181,7 @@ whitelistedGroupChat
 		ctx.logger.debug(`Received ${output.replies.length} AI actions`);
 
 		let sentTextCount = 0;
+		let savedMessageParts = false;
 
 		for (const reply of output.replies) {
 			if (reply.type === "reaction") {
@@ -235,6 +243,18 @@ whitelistedGroupChat
 				);
 
 				await saveMessage({ ctx, msg: sentMessage });
+
+				if (availableTools.messageParts.length > 0 && !savedMessageParts) {
+					await prisma.messagePart.createMany({
+						data: availableTools.messageParts.map((part) => ({
+							chatId,
+							messageId: sentMessage.message_id,
+							type: part.type,
+							data: part,
+						})),
+					});
+					savedMessageParts = true;
+				}
 
 				knownMessageIds.add(sentMessage.message_id);
 				sentTextCount += 1;

@@ -1,17 +1,19 @@
 import type { generateText, Tool, ToolSet } from "ai";
 import { isSearchEnabled } from "@/services/search";
 import { createSearchWebTool, SEARCH_WEB_TOOL_ID } from "@/ai/tools/search-web";
+import type { SearchToolResultPart } from "@/types";
 
 type PrepareStep = NonNullable<Parameters<typeof generateText>[0]["prepareStep"]>;
 
 interface ToolRegistryItem {
 	id: string;
 	isAvailable: () => boolean;
-	create: (searchContext: string[]) => Tool;
+	create: (searchContext: string[], messageParts: SearchToolResultPart[]) => Tool;
 }
 
 export function createAvailableTools() {
 	const searchContext: string[] = [];
+	const messageParts: SearchToolResultPart[] = [];
 	const registry = [
 		{
 			id: SEARCH_WEB_TOOL_ID,
@@ -22,7 +24,7 @@ export function createAvailableTools() {
 
 	const tools = registry.reduce<ToolSet>((availableTools, item) => {
 		if (item.isAvailable()) {
-			availableTools[item.id] = item.create(searchContext);
+			availableTools[item.id] = item.create(searchContext, messageParts);
 		}
 
 		return availableTools;
@@ -40,5 +42,6 @@ export function createAvailableTools() {
 		tools: Object.keys(tools).length > 0 ? tools : undefined,
 		prepareStep,
 		searchContext,
+		messageParts,
 	};
 }

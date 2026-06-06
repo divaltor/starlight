@@ -268,6 +268,7 @@ model Message {
   // Relations
   chat        Chat         @relation(fields: [chatId], references: [id], onDelete: Cascade)
   attachments Attachment[]
+  parts       MessagePart[]
 
   @@id([messageId, chatId])
   @@index([chatId, date(sort: Desc)])
@@ -277,6 +278,27 @@ model Message {
   @@index([chatId, messageThreadId, messageId])
   @@index([chatId, messageId])
   @@map("messages")
+}
+
+model MessagePart {
+  id String @id @default(uuid(7)) @db.Uuid
+
+  messageId Int    @map("message_id")
+  chatId    BigInt @map("chat_id")
+
+  type String
+
+  /// [MessagePartDataType]
+  data Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  message Message @relation(fields: [messageId, chatId], references: [messageId, chatId], onDelete: Cascade)
+
+  @@index([messageId, chatId])
+  @@index([chatId, type, createdAt(sort: Desc)])
+  @@map("message_parts")
 }
 
 model Attachment {

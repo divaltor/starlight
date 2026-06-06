@@ -38,6 +38,26 @@ export interface Classification {
 	tags: string[];
 }
 
+export interface SearchToolResultPart {
+	type: "tool";
+	toolName: "search_web";
+	input: {
+		query: string;
+	};
+	output: {
+		results: Array<{
+			content: string;
+			index: number;
+			publishedDate?: string;
+			source: string;
+			title?: string;
+			url: string;
+		}>;
+	};
+}
+
+export type MessagePartData = SearchToolResultPart;
+
 export type Context = FileFlavor<HydrateFlavor<BaseContext & ExtendedContext>>;
 
 declare global {
@@ -48,5 +68,6 @@ declare global {
 		type MessageEntitiesType = MessageEntity[];
 		type ForwardOriginType = MessageOrigin;
 		type TelegramMessageType = Message;
+		type MessagePartDataType = MessagePartData;
 	}
 }
