@@ -1,15 +1,10 @@
 import sharp from "sharp";
 import { http } from "@starlight/utils/http";
-import { logger } from "@/logger";
-import type { FxEmbedArticle, FxEmbedMosaicPhoto, FxEmbedTweet } from "@/services/fxembed/types";
-import {
-	type ArticleData,
-	type RenderResult,
-	renderTweetImage,
-	type TweetData,
-} from "@/services/render";
-import { runtime } from "@/services/runtime";
-import { TwitterApi } from "@/services/twitter-api";
+import { Effect } from "effect";
+import type { TweetData } from "@/services/render";
+import { renderTweetImage, type RenderResult } from "@/services/render";
+import { type FxEmbedTweet, type FxEmbedMosaicPhoto } from "@/services/fxembed/types";
+import { TwitterApi, TwitterApiError } from "@/services/twitter-api";
 import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";
@@ -17,92 +12,98 @@ export type Theme = "light" | "dark";
 const TWEET_IMAGE_TRANSLATION_LANGUAGE = "en";
 const MOSAIC_METADATA_TIMEOUT_MS = 5000;
 
-function mapArticleData(article: FxEmbedArticle | undefined): ArticleData | null {
-	if (!article) {
-		return null;
-	}
-
-	return {
-		title: article.title,
-		previewText: article.preview_text,
-		coverMedia: article.cover_media
-			? {
-					url: article.cover_media.media_info.original_img_url,
-					width: article.cover_media.media_info.original_img_width,
-					height: article.cover_media.media_info.original_img_height,
-				}
-			: null,
-	};
-}
-
-function getTweetText(tweet: Pick<FxEmbedTweet, "text" | "translation">): string {
-	return tweet.translation?.text ?? tweet.text;
-}
-
-function mapTranslationData(tweet: Pick<FxEmbedTweet, "translation">): TweetData["translation"] {
-	if (!tweet.translation?.text) {
-		return null;
-	}
-
-	return {
-		sourceLanguage: tweet.translation.source_lang_en ?? tweet.translation.source_lang.toUpperCase(),
-	};
-}
-
-async function getMosaicDimensions(
-	mosaic: FxEmbedMosaicPhoto,
-): Promise<{ width: number; height: number }> {
-	if (mosaic.width && mosaic.height) {
-		return { width: mosaic.width, height: mosaic.height };
-	}
-
-	try {
-		const response = await http(mosaic.formats.jpeg, { timeout: MOSAIC_METADATA_TIMEOUT_MS });
-		if (response.ok) {
-			const buffer = Buffer.from(await response.arrayBuffer());
-			const metadata = await sharp(buffer).metadata();
-			if (metadata.width && metadata.height) {
-				return { width: metadata.width, height: metadata.height };
+const getMosaicDimensions = Effect.fn("getMosaicDimensions")(
+	(mosaic: FxEmbedMosaicPhoto): Effect.Effect<{ width: number; height: number }, never, never> =>
+		Effect.gen(function* () {
+			if (mosaic.width && mosaic.height) {
+				return { width: mosaic.width, height: mosaic.height };
 			}
-		}
-	} catch (error) {
-		logger.warn({ error, url: mosaic.formats.jpeg }, "Failed to read mosaic dimensions");
-	}
 
-	return { width: 1200, height: 900 };
-}
+			const dimensions = yield* Effect.tryPromise({
+				try: async () => {
+					const response = await http(mosaic.formats.jpeg, { timeout: MOSAIC_METADATA_TIMEOUT_MS });
+					if (!response.ok) {
+						throw new Error(`Failed to fetch mosaic: ${response.status}`);
+					}
+					const buffer = Buffer.from(await response.arrayBuffer());
+					const metadata = await sharp(buffer).metadata();
+					if (!metadata.width || !metadata.height) {
+						throw new Error("Missing metadata");
+					}
+					return { width: metadata.width, height: metadata.height };
+				},
+				catch: (error) => error,
+			}).pipe(
+				Effect.tapError((error) =>
+					Effect.logWarning("Failed to read mosaic dimensions", {
+						error,
+						url: mosaic.formats.jpeg,
+					}),
+				),
+				Effect.orElseSucceed(() => ({ width: 1200, height: 900 })),
+			);
 
-async function mapMediaData(tweet: Pick<FxEmbedTweet, "media">): Promise<TweetData["media"]> {
-	if (!tweet.media) {
-		return null;
-	}
+			return dimensions;
+		}),
+);
 
-	let mosaic: NonNullable<TweetData["media"]>["mosaic"];
-	if (tweet.media.mosaic) {
-		const dimensions = await getMosaicDimensions(tweet.media.mosaic);
-		mosaic = {
-			url: tweet.media.mosaic.url ?? tweet.media.mosaic.formats.jpeg,
-			width: dimensions.width,
-			height: dimensions.height,
-			formats: tweet.media.mosaic.formats,
-		};
-	}
+const mapMediaData = Effect.fn("mapMediaData")(
+	(media: FxEmbedTweet["media"]): Effect.Effect<TweetData["media"], never, never> =>
+		Effect.gen(function* () {
+			if (!media) {
+				return null;
+			}
 
-	return {
-		mosaic,
-		photos: tweet.media.photos,
-		videos: tweet.media.videos?.map((v) => ({
-			thumbnailUrl: v.thumbnail_url,
-			width: v.width,
-			height: v.height,
-			type: v.type,
-		})),
-	};
-}
+			let mosaic: NonNullable<TweetData["media"]>["mosaic"];
+			if (media.mosaic) {
+				const dimensions = yield* getMosaicDimensions(media.mosaic);
+				mosaic = {
+					url: media.mosaic.url ?? media.mosaic.formats.jpeg,
+					width: dimensions.width,
+					height: dimensions.height,
+					formats: media.mosaic.formats,
+				};
+			}
 
-function stripLeadingMention(text: string, username: string): string {
-	const mentionPattern = new RegExp(`^@${username}\\s*`, "i");
-	return text.replace(mentionPattern, "").trim();
+			return {
+				mosaic,
+				photos: media.photos?.map((p) => ({ url: p.url, width: p.width, height: p.height })),
+				videos: media.videos?.map((v) => ({
+					thumbnailUrl: v.thumbnail_url,
+					width: v.width,
+					height: v.height,
+					type: v.type,
+				})),
+			};
+		}),
+);
+
+function buildTweetData(
+	tweet: FxEmbedTweet,
+	textOverride?: string,
+): Effect.Effect<TweetData, never, never> {
+	return Effect.gen(function* () {
+		const media = yield* mapMediaData(tweet.media);
+
+		const quote = tweet.quote
+			? yield* buildTweetData(tweet.quote, tweet.quote.getDisplayText())
+			: null;
+
+		return {
+			authorName: tweet.author.name,
+			authorUsername: tweet.author.screen_name,
+			authorAvatarUrl: tweet.author.avatar_url,
+			text: textOverride ?? tweet.getDisplayText(),
+			createdAt: new Date(tweet.created_timestamp * 1000),
+			media,
+			article: tweet.article?.toArticleData() ?? null,
+			likes: tweet.likes,
+			retweets: tweet.retweets,
+			replies: tweet.replies,
+			translation: tweet.translation?.toTranslationData() ?? null,
+			quote,
+		} satisfies TweetData;
+	});
 }
 
 const MAX_REPLY_CHAIN_DEPTH = 3;
@@ -112,167 +113,153 @@ interface ReplyChainResult {
 	hasMore: boolean;
 }
 
-async function fetchReplyChain(
+function fetchReplyChain(
 	tweetId: string,
 	depth = 0,
 	childReplyingTo?: string,
-): Promise<ReplyChainResult> {
-	if (depth >= MAX_REPLY_CHAIN_DEPTH) {
-		return { chain: [], hasMore: true };
-	}
+): Effect.Effect<ReplyChainResult, TwitterApiError, TwitterApi.Service> {
+	return Effect.gen(function* () {
+		if (depth >= MAX_REPLY_CHAIN_DEPTH) {
+			return { chain: [], hasMore: true };
+		}
 
-	const tweet = await runtime.runPromise(
-		TwitterApi.getFxTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE),
-	);
-	if (!tweet) {
-		return { chain: [], hasMore: false };
-	}
+		const twitterApi = yield* TwitterApi.Service;
+		const tweet = yield* twitterApi.getFxTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE);
 
-	const tweetText = childReplyingTo
-		? stripLeadingMention(getTweetText(tweet), childReplyingTo)
-		: getTweetText(tweet);
+		if (!tweet) {
+			return { chain: [], hasMore: false };
+		}
 
-	const tweetData: TweetData = {
-		authorName: tweet.author.name,
-		authorUsername: tweet.author.screen_name,
-		authorAvatarUrl: tweet.author.avatar_url,
-		text: tweetText,
-		createdAt: new Date(tweet.created_timestamp * 1000),
-		media: await mapMediaData(tweet),
-		article: mapArticleData(tweet.article),
-		likes: tweet.likes,
-		retweets: tweet.retweets,
-		replies: tweet.replies,
-		translation: mapTranslationData(tweet),
-		quote: tweet.quote
-			? {
-					authorName: tweet.quote.author.name,
-					authorUsername: tweet.quote.author.screen_name,
-					authorAvatarUrl: tweet.quote.author.avatar_url,
-					text: getTweetText(tweet.quote),
-					createdAt: new Date(tweet.quote.created_timestamp * 1000),
-					media: await mapMediaData(tweet.quote),
-					article: mapArticleData(tweet.quote.article),
-					likes: tweet.quote.likes,
-					retweets: tweet.quote.retweets,
-					replies: tweet.quote.replies,
-					translation: mapTranslationData(tweet.quote),
-				}
-			: null,
-	};
+		const tweetText = childReplyingTo
+			? tweet.stripLeadingMention(childReplyingTo)
+			: tweet.getDisplayText();
 
-	if (tweet.replying_to_status) {
-		const parentResult = await fetchReplyChain(
-			tweet.replying_to_status,
-			depth + 1,
-			tweet.replying_to ?? undefined,
-		);
-		return {
-			chain: [...parentResult.chain, tweetData],
-			hasMore: parentResult.hasMore,
-		};
-	}
+		const tweetData = yield* buildTweetData(tweet, tweetText);
 
-	return { chain: [tweetData], hasMore: false };
+		if (tweet.replying_to_status) {
+			const parentResult = yield* fetchReplyChain(
+				tweet.replying_to_status,
+				depth + 1,
+				tweet.replying_to ?? undefined,
+			);
+			return {
+				chain: [...parentResult.chain, tweetData],
+				hasMore: parentResult.hasMore,
+			};
+		}
+
+		return { chain: [tweetData], hasMore: false };
+	});
 }
+
+export const prepareTweetData = Effect.fn("prepareTweetData")(
+	(tweetId: string): Effect.Effect<TweetData, TwitterApiError | Error, TwitterApi.Service> =>
+		Effect.gen(function* () {
+			const twitterApi = yield* TwitterApi.Service;
+			const tweet = yield* twitterApi.getFxTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE);
+
+			if (!tweet) {
+				yield* Effect.logWarning("Could not fetch tweet", { tweetId });
+				return yield* Effect.fail(new Error("Tweet not found"));
+			}
+
+			let replyChain: TweetData[] = [];
+			let hasMoreInChain = false;
+
+			if (tweet.replying_to_status) {
+				const chainResult = yield* fetchReplyChain(tweet.replying_to_status);
+				replyChain = chainResult.chain;
+				hasMoreInChain = chainResult.hasMore;
+			}
+
+			const tweetText =
+				tweet.replying_to && replyChain.length > 0
+					? tweet.stripLeadingMention(tweet.replying_to)
+					: tweet.getDisplayText();
+
+			const base = yield* buildTweetData(tweet, tweetText);
+
+			return {
+				...base,
+				replyChain,
+				hasMoreInChain,
+			};
+		}),
+);
 
 export type TweetImageResult = RenderResult;
 
-export async function prepareTweetData(tweetId: string): Promise<TweetData> {
-	const tweet = await runtime.runPromise(
-		TwitterApi.getFxTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE),
-	);
+export const generateTweetImage = Effect.fn("generateTweetImage")(
+	(
+		tweetId: string,
+		theme: Theme = "light",
+	): Effect.Effect<RenderResult, TwitterApiError | Error, TwitterApi.Service> =>
+		Effect.gen(function* () {
+			const s3Path = `tweets/${tweetId}/${theme}.jpg`;
+			const s3File = s3.file(s3Path);
 
-	if (!tweet) {
-		logger.warn({ tweetId }, "Could not fetch tweet");
-		throw new Error("Tweet not found");
-	}
+			const cachedResult = yield* Effect.tryPromise({
+				try: async () => {
+					if (await s3File.exists()) {
+						const buffer = Buffer.from(await s3File.arrayBuffer());
+						const metadata = await sharp(buffer).metadata();
+						return {
+							buffer,
+							width: metadata.width ?? 1100,
+							height: metadata.height ?? 1200,
+						} satisfies RenderResult;
+					}
+					return null;
+				},
+				catch: (error) => error,
+			}).pipe(
+				Effect.tapError((error) =>
+					Effect.logWarning("Failed to read cached image from S3, falling back to API", {
+						error,
+						tweetId,
+						theme,
+						s3Path,
+					}),
+				),
+				Effect.orElseSucceed(() => null),
+			);
 
-	let replyChain: TweetData[] = [];
-	let hasMoreInChain = false;
+			if (cachedResult) {
+				yield* Effect.logDebug("Found cached tweet image in S3", { tweetId, theme, s3Path });
+				return cachedResult;
+			}
 
-	if (tweet.replying_to_status) {
-		const chainResult = await fetchReplyChain(tweet.replying_to_status);
-		replyChain = chainResult.chain;
-		hasMoreInChain = chainResult.hasMore;
-	}
+			const tweetData = yield* prepareTweetData(tweetId);
 
-	const tweetText =
-		tweet.replying_to && replyChain.length > 0
-			? stripLeadingMention(getTweetText(tweet), tweet.replying_to)
-			: getTweetText(tweet);
+			yield* Effect.logDebug("Rendering tweet image", { tweetId, theme });
 
-	return {
-		authorName: tweet.author.name,
-		authorUsername: tweet.author.screen_name,
-		authorAvatarUrl: tweet.author.avatar_url,
-		text: tweetText,
-		createdAt: new Date(tweet.created_timestamp * 1000),
-		media: await mapMediaData(tweet),
-		article: mapArticleData(tweet.article),
-		likes: tweet.likes,
-		retweets: tweet.retweets,
-		replies: tweet.replies,
-		translation: mapTranslationData(tweet),
-		replyChain,
-		hasMoreInChain,
-		quote: tweet.quote
-			? {
-					authorName: tweet.quote.author.name,
-					authorUsername: tweet.quote.author.screen_name,
-					authorAvatarUrl: tweet.quote.author.avatar_url,
-					text: getTweetText(tweet.quote),
-					createdAt: new Date(tweet.quote.created_timestamp * 1000),
-					media: await mapMediaData(tweet.quote),
-					article: mapArticleData(tweet.quote.article),
-					likes: tweet.quote.likes,
-					retweets: tweet.quote.retweets,
-					replies: tweet.quote.replies,
-					translation: mapTranslationData(tweet.quote),
-				}
-			: null,
-	};
-}
+			const result = yield* Effect.tryPromise({
+				try: () => renderTweetImage(tweetData, theme),
+				catch: (error) => new Error(`Failed to render tweet image: ${error}`),
+			});
 
-export async function generateTweetImage(
-	tweetId: string,
-	theme: Theme = "light",
-): Promise<TweetImageResult> {
-	const s3Path = `tweets/${tweetId}/${theme}.jpg`;
-	const s3File = s3.file(s3Path);
+			const uploaded = yield* Effect.tryPromise({
+				try: async () => {
+					await s3.write(s3Path, result.buffer, { type: "image/jpeg" });
+					return true;
+				},
+				catch: (error) => error,
+			}).pipe(
+				Effect.tapError((error) =>
+					Effect.logWarning("Failed to upload rendered image to S3", {
+						error,
+						tweetId,
+						theme,
+						s3Path,
+					}),
+				),
+				Effect.orElseSucceed(() => false),
+			);
 
-	try {
-		if (await s3File.exists()) {
-			logger.debug({ tweetId, theme, s3Path }, "Found cached tweet image in S3");
+			if (uploaded) {
+				yield* Effect.logDebug("Uploaded rendered tweet image to S3", { tweetId, theme, s3Path });
+			}
 
-			const cachedBuffer = Buffer.from(await s3File.arrayBuffer());
-			const metadata = await sharp(cachedBuffer).metadata();
-
-			return {
-				buffer: cachedBuffer,
-				width: metadata.width ?? 1100,
-				height: metadata.height ?? 1200,
-			};
-		}
-	} catch (error) {
-		logger.warn(
-			{ error, tweetId, theme, s3Path },
-			"Failed to read cached image from S3, falling back to API",
-		);
-	}
-
-	const tweetData = await prepareTweetData(tweetId);
-
-	logger.debug({ tweetId, theme }, "Rendering tweet image");
-
-	const result = await renderTweetImage(tweetData, theme);
-
-	try {
-		await s3.write(s3Path, result.buffer, { type: "image/jpeg" });
-		logger.debug({ tweetId, theme, s3Path }, "Uploaded rendered tweet image to S3");
-	} catch (error) {
-		logger.warn({ error, tweetId, theme, s3Path }, "Failed to upload rendered image to S3");
-	}
-
-	return result;
-}
+			return result;
+		}),
+);

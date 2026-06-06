@@ -7,7 +7,8 @@ import {
 	HttpClientResponse,
 } from "effect/unstable/http";
 import { Cookies } from "@/storage";
-import type { FxEmbedResponse, FxEmbedTweet } from "@/services/fxembed/types";
+import { FxEmbedResponseSchema } from "@/services/fxembed/types";
+import type { FxEmbedTweet } from "@/services/fxembed/types";
 
 const FXEMBED_BASE_URL = "https://api.fxtwitter.com";
 const FETCH_TIMEOUT_MS = 5000;
@@ -105,14 +106,29 @@ export namespace TwitterApi {
 					return null;
 				}
 
-				const data = (yield* okResponse.json.pipe(
+				const raw = yield* okResponse.json.pipe(
+					Effect.mapError((error) =>
+						TwitterApiError.fromCause({
+							message: "Failed to read FxTwitter response body",
+							cause: error,
+						}),
+					),
+				);
+
+				const decoded = Schema.decodeUnknownEffect(FxEmbedResponseSchema)(raw) as Effect.Effect<
+					typeof FxEmbedResponseSchema.Type,
+					Schema.SchemaError,
+					never
+				>;
+
+				const data = yield* decoded.pipe(
 					Effect.mapError((error) =>
 						TwitterApiError.fromCause({
 							message: "Failed to parse FxTwitter response",
 							cause: error,
 						}),
 					),
-				)) as unknown as FxEmbedResponse;
+				);
 
 				if (data.code !== 200 || !data.tweet) {
 					yield* Effect.logWarning("FxEmbed returned non-200", {

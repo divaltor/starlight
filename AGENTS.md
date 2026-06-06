@@ -24,6 +24,7 @@ Bot/Mini App ──> Scraper (Absurd) ──> AI (CLIP/pHash) ──> PostgreSQL
 6. Use pre-defined types from libraries\Prisma generated files where is possible. Use Pick, Omit and other Typescript type-helpers to extract required values instead of creating own types with same information.
 7. Align on pre-existing types from libraries and generated code; avoid creating redundant helper types or defensive type-safety checks for scenarios that cannot happen in trusted internal code.
 8. In Grammy handlers, `ctx.<obj>` is guaranteed by middleware; use `ctx.<obj>!` instead of defensive existence checks.
+9. When user asks about EffectTS - use EffectTS skill
 
 ## Maintenance & Tasks
 

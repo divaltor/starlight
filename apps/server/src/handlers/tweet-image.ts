@@ -6,6 +6,7 @@ import {
 	prepareTweetData,
 	type Theme,
 } from "@/services/tweet/tweet-image.service";
+import { runtime } from "@/services/runtime";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
 
@@ -43,7 +44,7 @@ chats.command("quote").filter(
 		await ctx.replyWithChatAction("upload_photo");
 
 		try {
-			const result = await generateTweetImage(tweetId, "light");
+			const result = await runtime.runPromise(generateTweetImage(tweetId, "light"));
 
 			ctx.logger.debug({ tweetId }, "Tweet image generated successfully");
 
@@ -102,7 +103,7 @@ composer.on("inline_query").filter(
 		}
 
 		try {
-			const tweetData = await prepareTweetData(tweetId);
+			const tweetData = await runtime.runPromise(prepareTweetData(tweetId));
 
 			const [lightResult, darkResult] = await Promise.all([
 				renderTweetImage(tweetData, "light"),
@@ -228,7 +229,7 @@ chats.callbackQuery(/^tweet_img:toggle:(\d+):(light|dark):(\d+)$/, async (ctx) =
 	});
 
 	try {
-		const result = await generateTweetImage(tweetId, newTheme);
+		const result = await runtime.runPromise(generateTweetImage(tweetId, newTheme));
 
 		ctx.logger.debug({ tweetId, newTheme }, "Theme toggle image generated");
 

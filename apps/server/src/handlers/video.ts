@@ -22,8 +22,9 @@ const whitelistedChats = chats.filter(
 	(ctx) => ctx.chat?.type === "private" || env.WHITELIST_CHAT_IDS.includes(ctx.chat.id),
 );
 
-function getTweetCaptionText(tweet: Pick<FxEmbedTweet, "text" | "translation"> | null | undefined) {
-	return cleanupTweetText(tweet?.translation?.text ?? tweet?.text);
+function getTweetCaptionText(tweet: FxEmbedTweet | null | undefined) {
+	if (!tweet) return undefined;
+	return cleanupTweetText(tweet.getDisplayText());
 }
 
 function createVideoKeyboard(
@@ -212,7 +213,7 @@ async function handleVideoRequest(
 				ctx.logger.info({ tweetId }, "No video in tweet, generating image instead");
 
 				try {
-					const result = await generateTweetImage(tweetId, "light");
+					const result = await runtime.runPromise(generateTweetImage(tweetId, "light"));
 					await sendPhoto(new InputFile(result.buffer, `tweet-${tweetId}.jpg`), {
 						caption: getTweetUrl(tweetId),
 						message_thread_id: messageThreadId,
