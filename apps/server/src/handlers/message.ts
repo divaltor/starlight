@@ -109,13 +109,11 @@ whitelistedGroupChat
 			chatId,
 			messageThreadId,
 		});
-		const dynamicContext = [memoryContext, recentToolContext].filter(Boolean).join("\n\n");
-
 		const supplementalContent = [
 			...(directReplySupplementalContent.length > 0 && !directReplyEntry
 				? directReplySupplementalContent
 				: []),
-			...(dynamicContext ? [dynamicContext] : []),
+			...(recentToolContext ? [recentToolContext] : []),
 		];
 
 		const currentConversationTurn = toConversationTurn(
@@ -143,6 +141,15 @@ whitelistedGroupChat
 
 		const allMessages = withOpenRouterGeminiCacheControl(
 			[
+				// Memory changes slowly, so keep it before conversation turns where Gemini can cache it.
+				...(memoryContext
+					? [
+							{
+								role: "user" as const,
+								content: [{ type: "text" as const, text: memoryContext }],
+							},
+						]
+					: []),
 				...messages.map((message) => toModelMessage(message)),
 				toModelMessage(currentConversationTurn),
 			],
