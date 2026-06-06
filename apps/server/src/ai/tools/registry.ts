@@ -1,6 +1,8 @@
-import type { Tool, ToolSet } from "ai";
+import type { generateText, Tool, ToolSet } from "ai";
 import { isSearchEnabled } from "@/services/search";
 import { createSearchWebTool, SEARCH_WEB_TOOL_ID } from "@/ai/tools/search-web";
+
+type PrepareStep = NonNullable<Parameters<typeof generateText>[0]["prepareStep"]>;
 
 interface ToolRegistryItem {
 	id: string;
@@ -26,8 +28,17 @@ export function createAvailableTools() {
 		return availableTools;
 	}, {});
 
+	const prepareStep: PrepareStep = ({ steps }) => {
+		const searchUsed = steps.some((step) =>
+			step.toolCalls.some((toolCall) => toolCall.toolName === SEARCH_WEB_TOOL_ID),
+		);
+
+		return searchUsed ? { activeTools: [] } : undefined;
+	};
+
 	return {
 		tools: Object.keys(tools).length > 0 ? tools : undefined,
+		prepareStep,
 		searchContext,
 	};
 }

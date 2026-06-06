@@ -147,7 +147,13 @@ whitelistedGroupChat
 			output: Output.object({ schema: chatResponseSchema }),
 			system,
 			messages: allMessages,
-			...(availableTools.tools ? { tools: availableTools.tools, stopWhen: stepCountIs(2) } : {}),
+			...(availableTools.tools
+				? {
+						tools: availableTools.tools,
+						stopWhen: stepCountIs(3),
+						prepareStep: availableTools.prepareStep,
+					}
+				: {}),
 			experimental_telemetry: getLangfuseTelemetry("message-reply", {
 				chatId: String(ctx.chat.id),
 				messageId: String(triggerMessageId),
