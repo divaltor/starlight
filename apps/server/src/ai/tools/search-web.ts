@@ -1,11 +1,11 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { searchWeb } from "@/services/search";
-import type { SearchToolResultPart } from "@/types";
+import { SearchToolResultPart, type ToolResultPart } from "@/types";
 
 export const SEARCH_WEB_TOOL_ID = "search_web";
 
-export function createSearchWebTool(searchContext: string[], messageParts: SearchToolResultPart[]) {
+export function createSearchWebTool(searchContext: string[], messageParts: ToolResultPart[]) {
 	return tool({
 		description:
 			"Search the live web when current or external information is needed. Returns up to 3 pages with source URLs. Use at most 2 searches, and cite useful URLs in your response.",
@@ -24,12 +24,14 @@ export function createSearchWebTool(searchContext: string[], messageParts: Searc
 			}));
 
 			if (compactResults.length > 0) {
-				messageParts.push({
-					type: "tool",
-					toolName: SEARCH_WEB_TOOL_ID,
-					input: { query },
-					output: { results: compactResults },
-				});
+				messageParts.push(
+					new SearchToolResultPart({
+						type: "tool",
+						toolName: SEARCH_WEB_TOOL_ID,
+						input: { query },
+						output: { results: compactResults },
+					}),
+				);
 
 				searchContext.push(
 					`Search query: ${query}\n${compactResults

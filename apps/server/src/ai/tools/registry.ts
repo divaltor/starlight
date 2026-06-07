@@ -1,20 +1,26 @@
 import type { generateText, Tool, ToolSet } from "ai";
+import { createFetchPageTool, FETCH_PAGE_TOOL_ID } from "@/ai/tools/fetch-page";
 import { isSearchEnabled } from "@/services/search";
 import { createSearchWebTool, SEARCH_WEB_TOOL_ID } from "@/ai/tools/search-web";
-import type { SearchToolResultPart } from "@/types";
+import type { ToolResultPart } from "@/types";
 
 type PrepareStep = NonNullable<Parameters<typeof generateText>[0]["prepareStep"]>;
 
 interface ToolRegistryItem {
 	id: string;
 	isAvailable: () => boolean;
-	create: (searchContext: string[], messageParts: SearchToolResultPart[]) => Tool;
+	create: (searchContext: string[], messageParts: ToolResultPart[]) => Tool;
 }
 
 export function createAvailableTools() {
 	const searchContext: string[] = [];
-	const messageParts: SearchToolResultPart[] = [];
+	const messageParts: ToolResultPart[] = [];
 	const registry = [
+		{
+			id: FETCH_PAGE_TOOL_ID,
+			isAvailable: () => true,
+			create: (_searchContext, messageParts) => createFetchPageTool(messageParts),
+		},
 		{
 			id: SEARCH_WEB_TOOL_ID,
 			isAvailable: isSearchEnabled,
@@ -31,11 +37,12 @@ export function createAvailableTools() {
 	}, {});
 
 	const prepareStep: PrepareStep = ({ steps }) => {
-		const searchUsed = steps.some((step) =>
-			step.toolCalls.some((toolCall) => toolCall.toolName === SEARCH_WEB_TOOL_ID),
+		const usedToolNames = new Set(
+			steps.flatMap((step) => step.toolCalls.map((toolCall) => toolCall.toolName)),
 		);
+		const activeTools = Object.keys(tools).filter((toolName) => !usedToolNames.has(toolName));
 
-		return searchUsed ? { activeTools: [] } : undefined;
+		return activeTools.length === Object.keys(tools).length ? undefined : { activeTools };
 	};
 
 	return {

@@ -89,16 +89,10 @@ whitelistedGroupChat
 
 		await ctx.replyWithChatAction("typing");
 
-		const {
-			messages,
-			directReplyEntry,
-			directReplySupplementalAttachments,
-			directReplySupplementalContent,
-			knownMessageIds,
-		} = await History.build(ctx);
+		const { messages, directReplyEntry, knownMessageIds } = await History.build(ctx);
 
 		ctx.logger.debug(
-			`Built conversation: ${messages.length} messages, directReply: ${!!directReplyEntry}, supplemental: ${directReplySupplementalContent.length}`,
+			`Built conversation: ${messages.length} messages, directReply: ${!!directReplyEntry}`,
 		);
 
 		const memoryContext = await buildChatMemoryPromptContext({
@@ -124,12 +118,6 @@ whitelistedGroupChat
 					}
 				: message,
 		);
-		const supplementalContent = [
-			...(directReplySupplementalContent.length > 0 && !directReplyEntry
-				? directReplySupplementalContent
-				: []),
-		];
-
 		const currentConversationTurn = toConversationTurn(
 			{
 				messageId: triggerMessageId,
@@ -145,11 +133,6 @@ whitelistedGroupChat
 			botId,
 			{
 				includeAttachmentData: true,
-				supplementalAttachments:
-					directReplySupplementalAttachments.length > 0 && !directReplyEntry
-						? directReplySupplementalAttachments
-						: undefined,
-				supplementalContent: supplementalContent.length > 0 ? supplementalContent : undefined,
 			},
 		);
 

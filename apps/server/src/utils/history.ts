@@ -1,13 +1,7 @@
 import { logger } from "@/logger";
-import { extractMarkdown } from "@/services/markdown";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
-import {
-	type ConversationAttachment,
-	type ConversationTurn,
-	toConversationTurn,
-} from "@/utils/message";
-import type { Message } from "@grammyjs/types";
+import { type ConversationTurn, toConversationTurn } from "@/utils/message";
 import { env, type Prisma, prisma } from "@starlight/utils";
 
 const messageHistorySelect = {
@@ -44,8 +38,6 @@ export type StoredConversationMessage = Prisma.MessageGetPayload<{
 
 interface BuildMessagesResult {
 	directReplyEntry: StoredConversationMessage | null;
-	directReplySupplementalAttachments: ConversationAttachment[];
-	directReplySupplementalContent: string[];
 	knownMessageIds: Set<number>;
 	messages: ConversationTurn[];
 }
@@ -121,32 +113,6 @@ export class History {
 			}
 		}
 
-		// Extract URLs: prioritize trigger message, then fall back to reply context
-		const directReplyUrls =
-			this.extractURLsFromMessage(repliedMessage) ?? this.extractURLsFromMessage(message) ?? [];
-
-		const extractedReplyPages = await Promise.all(
-			directReplyUrls.map(async (url) => {
-				try {
-					return await extractMarkdown(url);
-				} catch (error) {
-					logger.warn({ error, url }, "Failed to extract markdown from reply URL");
-					return null;
-				}
-			}),
-		);
-
-		const directReplySupplementalContent = extractedReplyPages
-			.filter((page): page is NonNullable<typeof page> => page !== null)
-			.map((page) => `URL: ${page.url}\nSource: ${page.source}\n${page.markdown}`);
-		const directReplySupplementalAttachments = extractedReplyPages
-			.filter((page): page is NonNullable<typeof page> => page !== null)
-			.flatMap((page) => page.attachments);
-
-		logger.debug(
-			`Extracted ${directReplySupplementalContent.length}/${directReplyUrls.length} URLs for supplemental context`,
-		);
-
 		// Deduplicate and merge the enriched direct reply entry (with inlined video attachments)
 		// into history — it may already exist in the window or come from outside it
 		const orderedHistoryEntries = directReplyEntry
@@ -172,9 +138,6 @@ export class History {
 		}
 
 		const messages = orderedHistoryEntries.map((entry) => {
-			const isDirectReplyTarget =
-				directReplyMessageId !== null && entry.messageId === directReplyMessageId;
-
 			const attachments = entry.attachments.map((attachment) => ({
 				...attachment,
 				summary: inlineMessageIds.has(entry.messageId) ? null : attachment.summary,
@@ -189,10 +152,6 @@ export class History {
 				botId,
 				{
 					includeAttachmentData: inlineMessageIds.has(entry.messageId),
-					supplementalAttachments: isDirectReplyTarget
-						? directReplySupplementalAttachments
-						: undefined,
-					supplementalContent: isDirectReplyTarget ? directReplySupplementalContent : undefined,
 				},
 			);
 		});
@@ -205,8 +164,6 @@ export class History {
 
 		return {
 			directReplyEntry,
-			directReplySupplementalAttachments,
-			directReplySupplementalContent,
 			knownMessageIds,
 			messages,
 		};
@@ -252,48 +209,5 @@ export class History {
 			...entry,
 			attachments,
 		};
-	}
-
-	private static extractURLsFromMessage(msg?: Message): string[] | null {
-		if (!msg) {
-			return null;
-		}
-
-		const text = msg.text ?? msg.caption;
-
-		if (!text) {
-			return null;
-		}
-
-		const entities = (msg.text ? msg.entities : msg.caption_entities) ?? [];
-
-		if (entities.length === 0) {
-			return null;
-		}
-
-		const urls: string[] = [];
-		for (const entity of entities) {
-			let candidate: string | null = null;
-
-			if (entity.type === "text_link") {
-				candidate = entity.url;
-			}
-
-			if (entity.type === "url") {
-				candidate = text.slice(entity.offset, entity.offset + entity.length);
-			}
-
-			if (!candidate) {
-				continue;
-			}
-
-			urls.push(candidate);
-
-			if (urls.length >= env.MAX_DIRECT_REPLY_URLS) {
-				break;
-			}
-		}
-
-		return urls;
 	}
 }
