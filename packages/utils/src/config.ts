@@ -80,6 +80,7 @@ const env = createEnv({
 
 		HISTORY_LIMIT: z.number().default(17),
 		ATTACHMENT_INLINE_OFFSET: z.number().default(7),
+		MESSAGE_PART_CONTEXT_RECENT_MESSAGE_LIMIT: z.number().default(5),
 		MAX_DIRECT_REPLY_URLS: z.number().default(2),
 		IGNORE_USER_CHANCE: z.number().gte(0).lte(1).default(0.75),
 		SUPERVISOR_IDS: z

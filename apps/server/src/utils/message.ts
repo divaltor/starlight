@@ -40,7 +40,7 @@ export function getSystemPrompt(now: Date = new Date()): string {
 
 export interface AssistantConversationTurn {
 	attachments: [];
-	context: [];
+	context: string[];
 	includeAttachmentData: false;
 	messageId: number;
 	replyToMessageId: number | null;
@@ -403,6 +403,16 @@ export function toModelMessage(
 	options: ToModelMessageOptions = {},
 ): ModelMessage {
 	if (turn.role === "assistant") {
+		if (turn.context.length > 0) {
+			return {
+				role: "assistant",
+				content: [
+					{ type: "text", text: turn.text },
+					...turn.context.map((block) => ({ type: "text" as const, text: block })),
+				],
+			};
+		}
+
 		return {
 			role: "assistant",
 			content: turn.text,
@@ -467,23 +477,23 @@ export function withOpenRouterGeminiCacheControl(
 		return messages;
 	}
 
-	// Gemini uses the last cache_control breakpoint as "cache everything up to here".
-	// Skip the current request so volatile user text, memory, and tool context stay uncached.
-	for (let messageIndex = messages.length - 2; messageIndex >= 0; messageIndex -= 1) {
-		const message = messages[messageIndex];
-
-		if (!message || message.role !== "user" || !Array.isArray(message.content)) {
-			continue;
+	const markCacheControl = (message: ModelMessage, matchText?: string): boolean => {
+		if (!Array.isArray(message.content)) {
+			return false;
 		}
 
 		if (!message.content.every((part) => part.type === "text")) {
-			continue;
+			return false;
 		}
 
 		for (let partIndex = message.content.length - 1; partIndex >= 0; partIndex -= 1) {
 			const part = message.content[partIndex];
 
 			if (!part || part.type !== "text") {
+				continue;
+			}
+
+			if (matchText && !part.text.includes(matchText)) {
 				continue;
 			}
 
@@ -496,6 +506,30 @@ export function withOpenRouterGeminiCacheControl(
 				},
 			};
 
+			return true;
+		}
+
+		return false;
+	};
+
+	// Gemini uses the last cache_control breakpoint as "cache everything up to here".
+	// Prefer cached tool context attached to its assistant message; otherwise cache stable history.
+	for (let messageIndex = messages.length - 2; messageIndex >= 0; messageIndex -= 1) {
+		const message = messages[messageIndex];
+
+		if (!message) {
+			continue;
+		}
+
+		if (markCacheControl(message, "### RECENT TOOL CONTEXT")) {
+			return messages;
+		}
+	}
+
+	for (let messageIndex = messages.length - 2; messageIndex >= 0; messageIndex -= 1) {
+		const message = messages[messageIndex];
+
+		if (message?.role === "user" && markCacheControl(message)) {
 			return messages;
 		}
 	}

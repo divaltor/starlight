@@ -7,7 +7,7 @@ import { bot, type Context } from "@/bot";
 import { saveMessage } from "@/middlewares/message";
 import { getLangfuseTelemetry } from "@/otel";
 import { buildChatMemoryPromptContext } from "@/services/chat-memory";
-import { buildRecentToolContext } from "@/services/message-parts";
+import { buildRecentToolContextByMessageId } from "@/services/message-parts";
 import { History } from "@/utils/history";
 import {
 	getSystemPrompt,
@@ -105,15 +105,29 @@ whitelistedGroupChat
 			chatId,
 			messageThreadId,
 		});
-		const recentToolContext = await buildRecentToolContext({
+		const recentToolContextMessageIds = [
+			...messages
+				.slice(-env.MESSAGE_PART_CONTEXT_RECENT_MESSAGE_LIMIT)
+				.map((message) => message.messageId),
+			...(directReplyEntry ? [directReplyEntry.messageId] : []),
+		];
+		const recentToolContextByMessageId = await buildRecentToolContextByMessageId({
 			chatId,
 			messageThreadId,
+			messageIds: recentToolContextMessageIds,
 		});
+		const messagesWithToolContext = messages.map((message) =>
+			message.role === "assistant" && recentToolContextByMessageId.has(message.messageId)
+				? {
+						...message,
+						context: [...message.context, recentToolContextByMessageId.get(message.messageId)!],
+					}
+				: message,
+		);
 		const supplementalContent = [
 			...(directReplySupplementalContent.length > 0 && !directReplyEntry
 				? directReplySupplementalContent
 				: []),
-			...(recentToolContext ? [recentToolContext] : []),
 		];
 
 		const currentConversationTurn = toConversationTurn(
@@ -150,7 +164,7 @@ whitelistedGroupChat
 							},
 						]
 					: []),
-				...messages.map((message) => toModelMessage(message)),
+				...messagesWithToolContext.map((message) => toModelMessage(message)),
 				toModelMessage(currentConversationTurn),
 			],
 			env.OPENROUTER_MODEL,
