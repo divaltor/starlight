@@ -477,7 +477,7 @@ export function withOpenRouterGeminiCacheControl(
 		return messages;
 	}
 
-	const markCacheControl = (message: ModelMessage, matchText?: string): boolean => {
+	const markCacheControl = (message: ModelMessage, matchText: string): boolean => {
 		if (!Array.isArray(message.content)) {
 			return false;
 		}
@@ -493,7 +493,7 @@ export function withOpenRouterGeminiCacheControl(
 				continue;
 			}
 
-			if (matchText && !part.text.includes(matchText)) {
+			if (!part.text.includes(matchText)) {
 				continue;
 			}
 
@@ -512,25 +512,27 @@ export function withOpenRouterGeminiCacheControl(
 		return false;
 	};
 
-	// Gemini uses the last cache_control breakpoint as "cache everything up to here".
-	// Prefer cached tool context attached to its assistant message; otherwise cache stable history.
-	for (let messageIndex = messages.length - 2; messageIndex >= 0; messageIndex -= 1) {
-		const message = messages[messageIndex];
-
-		if (!message) {
+	// OpenRouter/Gemini uses only the last cache_control breakpoint as the cached prefix.
+	//
+	// In this code path the system prompt is passed via generateText({ system }) as a plain
+	// string, so there is no content block where we can attach provider metadata without
+	// moving it into messages.
+	//
+	// Keep caching on the slow-changing text memory block instead;
+	// never fall back to recent chat history, because media-heavy or tiny latest messages make
+	// the breakpoint unstable and previously produced zero cached tokens in Langfuse.
+	for (const message of messages) {
+		if (message.role === "system") {
+			message.providerOptions = {
+				openrouter: {
+					cache_control: { type: "ephemeral" },
+				},
+			};
 			continue;
 		}
 
-		if (markCacheControl(message, "### RECENT TOOL CONTEXT")) {
-			return messages;
-		}
-	}
-
-	for (let messageIndex = messages.length - 2; messageIndex >= 0; messageIndex -= 1) {
-		const message = messages[messageIndex];
-
-		if (message?.role === "user" && markCacheControl(message)) {
-			return messages;
+		if (message.role === "user" && markCacheControl(message, "### MEMORY CONTEXT")) {
+			continue;
 		}
 	}
 
