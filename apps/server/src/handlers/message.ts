@@ -1,5 +1,5 @@
 import { env, prisma } from "@starlight/utils";
-import { Output, generateText, stepCountIs } from "ai";
+import { APICallError, Output, generateText, stepCountIs } from "ai";
 import { Composer, GrammyError } from "grammy";
 import { chatResponseSchema } from "@/ai/schema";
 import { createAvailableTools } from "@/ai/tools/registry";
@@ -199,6 +199,23 @@ whitelistedGroupChat
 			topP: 0.95,
 			frequencyPenalty: 0.4,
 			presencePenalty: 0.2,
+		}).catch((error: unknown) => {
+			if (APICallError.isInstance(error)) {
+				ctx.logger.error(
+					{
+						error: {
+							name: error.name,
+							message: error.message,
+							statusCode: error.statusCode,
+							isRetryable: error.isRetryable,
+						},
+					},
+					"AI provider returned error",
+				);
+				return { output: null };
+			}
+
+			throw error;
 		});
 
 		if (!output) {
