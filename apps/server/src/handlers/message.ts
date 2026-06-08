@@ -1,5 +1,6 @@
 import { env, prisma } from "@starlight/utils";
 import { APICallError, Output, generateText, stepCountIs } from "ai";
+import { Schema } from "effect";
 import { Composer, GrammyError } from "grammy";
 import { chatResponseSchema } from "@/ai/schema";
 import { createAvailableTools } from "@/ai/tools/registry";
@@ -9,6 +10,7 @@ import { getLangfuseTelemetry } from "@/otel";
 import { buildChatMemoryPromptContext } from "@/services/chat-memory";
 import { buildRecentToolContextByMessageId } from "@/services/message-parts";
 import { History } from "@/utils/history";
+import { ToolResultPart } from "@/types";
 import {
 	getSystemPrompt,
 	openrouter,
@@ -278,7 +280,7 @@ whitelistedGroupChat
 							chatId,
 							messageId: sentMessage.message_id,
 							type: part.type,
-							data: part,
+							data: Schema.encodeSync(ToolResultPart)(part),
 						})),
 					});
 					savedMessageParts = true;
