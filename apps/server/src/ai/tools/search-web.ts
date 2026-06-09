@@ -8,7 +8,7 @@ export const SEARCH_WEB_TOOL_ID = "search_web";
 export function createSearchWebTool(searchContext: string[], messageParts: ToolResultPart[]) {
 	return tool({
 		description:
-			"Search the live web when current or external information is needed. Returns up to 3 pages with source URLs. Use at most 2 searches, and cite useful URLs in your response.",
+			"Search the live web only when you need to discover sources, verify current facts, or answer a question without a specific URL. If the user already provided a URL, do not search first; use fetch_page for that URL instead. Returns up to 3 pages with source URLs. Use at most 2 searches, and cite useful URLs in your response.",
 		inputSchema: z.object({
 			query: z.string().min(3).max(300).describe("A concise, self-contained web search query."),
 		}),

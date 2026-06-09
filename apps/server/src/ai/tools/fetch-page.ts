@@ -10,9 +10,9 @@ const MAX_PAGE_CONTENT_LENGTH = 6_000;
 export function createFetchPageTool(messageParts: ToolResultPart[]) {
 	return tool({
 		description:
-			"Fetch and read a specific page URL when the conversation includes a link and page contents are needed to answer. Use only for URLs the user is asking about.",
+			"Fetch and read a specific URL that the user already provided. Use this instead of web search when a message contains a link and the answer depends on that page's contents. Do not use for discovering pages or answering broad/current questions without a specific URL.",
 		inputSchema: z.object({
-			url: z.string().url().describe("The page URL to fetch and summarize/read."),
+			url: z.url().describe("The page URL to fetch and summarize/read."),
 		}),
 		execute: async ({ url }) => {
 			const page = await extractMarkdown(url);
