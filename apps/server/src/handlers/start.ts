@@ -1,11 +1,14 @@
 import { Composer } from "grammy";
 import type { Context } from "@/types";
+import env from "@starlight/utils/config";
 
 const composer = new Composer<Context>();
 const privateChat = composer.chatType("private");
 
 privateChat.command("start", async (ctx) => {
 	const username = ctx.me.username;
+
+	const appUrl = env.BASE_FRONTEND_URL ? `\n\n${env.BASE_FRONTEND_URL}` : "";
 
 	await ctx.reply(
 		`Привет, я <b>Старка</b> ✨
@@ -15,7 +18,7 @@ privateChat.command("start", async (ctx) => {
 Так же могу скачивать посты с Twitter'а (X), просто отправь мне ссылку на пост. Можно использовать /q (url) или @${username} (url) для этого
 
 Еще могу сохранять твои залайканные аниме картинки с Twitter'а, для этого скорми мне печеньки (cookies) в приложении. Все зашифровано и никто ничего не сможет прочитать, на свой страх и риск!
-После этого можно будет смотреть свой каталог, искать картинки и делиться с друзьями`,
+После этого можно будет смотреть свой каталог, искать картинки и делиться с друзьями${appUrl}`,
 		{ parse_mode: "HTML" },
 	);
 });
