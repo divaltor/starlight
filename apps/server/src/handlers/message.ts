@@ -1,5 +1,6 @@
 import { env, prisma } from "@starlight/utils";
 import { APICallError, Output, generateText, stepCountIs } from "ai";
+import { Schema } from "effect";
 import { Composer, GrammyError } from "grammy";
 import { chatResponseSchema } from "@/ai/schema";
 import { createAvailableTools } from "@/ai/tools/registry";
@@ -8,6 +9,7 @@ import { saveMessage } from "@/middlewares/message";
 import { getLangfuseTelemetry } from "@/otel";
 import { buildChatMemoryPromptContext } from "@/services/chat-memory";
 import { buildRecentToolContextByMessageId } from "@/services/message-parts";
+import { ToolResultPart } from "@/types";
 import { History } from "@/utils/history";
 import {
 	getSystemPrompt,
@@ -278,7 +280,9 @@ whitelistedGroupChat
 							chatId,
 							messageId: sentMessage.message_id,
 							type: part.type,
-							data: part,
+							// Store the encoded plain object, not the Schema.Class instance with methods.
+							// Prisma JSON rejects functions while serializing raw class instances.
+							data: Schema.encodeSync(ToolResultPart)(part),
 						})),
 					});
 					savedMessageParts = true;

@@ -108,7 +108,7 @@ export class FetchPageToolResultPart extends Schema.Class<FetchPageToolResultPar
 export const ToolResultPart = Schema.Union([SearchToolResultPart, FetchPageToolResultPart]);
 export type ToolResultPart = typeof ToolResultPart.Type;
 
-export type MessagePartData = ToolResultPart;
+export type MessagePartData = typeof ToolResultPart.Encoded;
 
 export type Context = FileFlavor<HydrateFlavor<BaseContext & ExtendedContext>>;
 
