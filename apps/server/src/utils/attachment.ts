@@ -1,6 +1,5 @@
 import type { Attachment as PrismaAttachment } from "@starlight/utils";
 import type { Message } from "grammy/types";
-import sharp from "sharp";
 import { logger } from "@/logger";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
@@ -58,10 +57,10 @@ async function convertImage(
 	format: "jpeg" | "webp",
 	quality: number,
 ): Promise<Uint8Array> {
-	const pipeline = sharp(payload).rotate();
+	const pipeline = new Bun.Image(payload);
 	return format === "jpeg"
-		? await pipeline.jpeg({ quality }).toBuffer()
-		: await pipeline.webp({ quality }).toBuffer();
+		? await pipeline.jpeg({ quality }).bytes()
+		: await pipeline.webp({ quality }).bytes();
 }
 
 async function preparePhotoAttachment(

@@ -1,4 +1,3 @@
-import sharp from "sharp";
 import { http } from "@starlight/utils/http";
 import { Effect } from "effect";
 import type { TweetData } from "@/services/render";
@@ -26,7 +25,7 @@ const getMosaicDimensions = Effect.fn("getMosaicDimensions")(
 						throw new Error(`Failed to fetch mosaic: ${response.status}`);
 					}
 					const buffer = Buffer.from(await response.arrayBuffer());
-					const metadata = await sharp(buffer).metadata();
+					const metadata = await new Bun.Image(buffer).metadata();
 					if (!metadata.width || !metadata.height) {
 						throw new Error("Missing metadata");
 					}
@@ -202,7 +201,7 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
 				try: async () => {
 					if (await s3File.exists()) {
 						const buffer = Buffer.from(await s3File.arrayBuffer());
-						const metadata = await sharp(buffer).metadata();
+						const metadata = await new Bun.Image(buffer).metadata();
 						return {
 							buffer,
 							width: metadata.width ?? 1100,

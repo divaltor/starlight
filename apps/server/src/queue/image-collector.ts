@@ -2,7 +2,6 @@ import { Absurd } from "absurd-sdk";
 import { env, prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import type { Tweet } from "@the-convocation/twitter-scraper";
-import sharp from "sharp";
 import UserAgent from "user-agents";
 import { logger } from "@/logger";
 import { QUEUES, RETRY } from "@/queue/absurd";
@@ -129,9 +128,7 @@ imagesApp.registerTask<ImageCollectorJobData>({ name: "images-collector" }, asyn
 		const [, hash, metadata] = await Promise.all([
 			s3.write(`media/${photoName}`, imageBuffer),
 			calculatePerceptualHash(imageBuffer),
-			sharp(imageBuffer)
-				.metadata()
-				.catch(() => ({ height: null, width: null })),
+			new Bun.Image(imageBuffer).metadata().catch(() => ({ height: null, width: null })),
 		]);
 
 		await prisma.photo.update({

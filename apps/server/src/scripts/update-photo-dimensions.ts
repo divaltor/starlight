@@ -1,5 +1,4 @@
 import { prisma } from "@starlight/utils";
-import sharp from "sharp";
 import { logger } from "@/logger";
 import { s3 } from "@/storage";
 
@@ -71,8 +70,7 @@ async function main() {
 					// Download image from S3
 					const imageBuffer = await s3.file(photo.s3Path).arrayBuffer();
 
-					// Get metadata using sharp
-					const metadata = await sharp(imageBuffer)
+					const metadata = await new Bun.Image(imageBuffer)
 						.metadata()
 						.catch(() => ({ height: null, width: null }));
 
