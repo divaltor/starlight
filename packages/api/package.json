@@ -29,7 +29,7 @@
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
     "@telegram-apps/init-data-node": "^2.0.10",
-    "date-fns": "^4.1.0",
+    "date-fns": "^4.4.0",
     "effect": "4.0.0-beta.66",
     "zod": "catalog:"
   }
