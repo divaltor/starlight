@@ -1,5 +1,4 @@
 import type { TweetData } from "@starlight/api/src/types/tweets";
-import { http } from "@starlight/utils/http";
 import { X } from "lucide-react";
 import { useCallback, useState } from "react";
 import Lightbox from "yet-another-react-lightbox-lite";
@@ -58,8 +57,7 @@ export function TweetImageGrid({
 		if (!photo?.url) return;
 
 		try {
-			const response = await http(photo.url);
-			if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+			const response = await fetch(photo.url, { mode: "no-cors" });
 			const blob = await response.blob();
 			const blobUrl = window.URL.createObjectURL(blob);
 			const link = document.createElement("a");
@@ -71,6 +69,7 @@ export function TweetImageGrid({
 			window.URL.revokeObjectURL(blobUrl);
 		} catch (error) {
 			console.error("Download failed:", error);
+			window.open(photo.url, "_blank", "noopener,noreferrer");
 		}
 	}, [lightboxIndex, tweet.photos]);
 
