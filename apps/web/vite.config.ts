@@ -18,4 +18,14 @@ export default defineConfig({
 	],
 	resolve: { tsconfigPaths: true },
 	server: { allowedHosts: true },
+	build: {
+		rollupOptions: {
+			output: {
+				manualChunks(id) {
+					if (id.includes("@telegram-apps/")) return "telegram-sdk";
+					if (id.includes("valibot")) return "telegram-sdk";
+				},
+			},
+		},
+	},
 });
