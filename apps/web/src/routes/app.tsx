@@ -5,9 +5,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle, Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, lazy, Suspense } from "react";
 import NotFound from "@/components/not-found";
-import { TweetImageGrid } from "@/components/tweet-image-grid";
+const TweetImageGrid = lazy(() =>
+	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
+);
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSearch } from "@/hooks/use-search";
@@ -180,15 +182,17 @@ function TwitterArtViewer() {
 			{displayItems.length > 0 && (
 				<div className="flex-1">
 					<div className="mx-auto max-w-7xl">
-						<Masonry
-							columnGutter={16}
-							itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
-							itemKey={(tweet) => tweet.id}
-							items={displayItems}
-							onRender={currentInfiniteLoader}
-							overscanBy={MASONRY_OVERSCAN_BY}
-							render={renderMasonryItem}
-						/>
+						<Suspense fallback={null}>
+							<Masonry
+								columnGutter={16}
+								itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
+								itemKey={(tweet) => tweet.id}
+								items={displayItems}
+								onRender={currentInfiniteLoader}
+								overscanBy={MASONRY_OVERSCAN_BY}
+								render={renderMasonryItem}
+							/>
+						</Suspense>
 					</div>
 				</div>
 			)}
