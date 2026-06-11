@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import type * as React from "react";
-import { Input as AriaInput } from "react-aria-components";
+import { Input as AriaInput } from "react-aria-components/Input";
 
 import { cn } from "@/lib/utils";
 

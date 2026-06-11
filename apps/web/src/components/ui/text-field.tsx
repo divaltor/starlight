@@ -1,12 +1,10 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import type * as React from "react";
-import {
-	TextField as AriaTextField,
-	FieldError,
-	Label,
-	Text,
-	TextArea,
-} from "react-aria-components";
+import { FieldError } from "react-aria-components/FieldError";
+import { Label } from "react-aria-components/Label";
+import { Text } from "react-aria-components/Text";
+import { TextArea } from "react-aria-components/TextArea";
+import { TextField as AriaTextField } from "react-aria-components/TextField";
 
 import { cn } from "@/lib/utils";
 import { Input } from "./input";

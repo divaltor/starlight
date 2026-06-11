@@ -1,13 +1,13 @@
 import { X } from "lucide-react";
 import type * as React from "react";
-import type { DialogProps } from "react-aria-components";
+import { Button as AriaButton } from "react-aria-components/Button";
+import type { DialogProps } from "react-aria-components/Dialog";
 import {
-	Button as AriaButton,
 	Dialog as AriaDialog,
 	DialogTrigger as AriaDialogTrigger,
-	Modal as AriaModal,
-	Heading,
-} from "react-aria-components";
+} from "react-aria-components/Dialog";
+import { Heading } from "react-aria-components/Heading";
+import { Modal as AriaModal } from "react-aria-components/Modal";
 import { cn } from "@/lib/utils";
 
 interface DialogContentProps extends Omit<React.ComponentProps<typeof AriaDialog>, "children"> {

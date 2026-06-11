@@ -1,7 +1,9 @@
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Button, Menu, MenuItem, MenuSection, MenuTrigger, Popover } from "react-aria-components";
+import { Button } from "react-aria-components/Button";
+import { Menu, MenuItem, MenuSection, MenuTrigger } from "react-aria-components/Menu";
+import { Popover } from "react-aria-components/Popover";
 
 import { cn } from "@/lib/utils";
 
