@@ -1,11 +1,11 @@
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import { StandardRPCJsonSerializer } from "@orpc/client/standard";
-import type { RouterClient } from "@orpc/server";
 import { createRouterClient } from "@orpc/server";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
-import { createContext } from "@starlight/api/context";
+import type { AppRouterClient } from "@starlight/api/routers/index";
 import { appRouter } from "@starlight/api/routers/index";
+import { createContext } from "@starlight/api/context";
 import { defaultShouldDehydrateQuery, QueryClient } from "@tanstack/react-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
@@ -51,7 +51,7 @@ const getORPCClient = createIsomorphicFn()
 			},
 		}),
 	)
-	.client((): RouterClient<typeof appRouter> => {
+	.client((): AppRouterClient => {
 		let rawInitData: string;
 
 		try {
@@ -70,6 +70,6 @@ const getORPCClient = createIsomorphicFn()
 		);
 	});
 
-export const client: RouterClient<typeof appRouter> = getORPCClient();
+export const client: AppRouterClient = getORPCClient();
 
 export const orpc = createTanstackQueryUtils(client);

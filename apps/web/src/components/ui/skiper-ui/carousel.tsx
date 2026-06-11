@@ -1,8 +1,10 @@
 "use client";
 
-import { domAnimation, LazyMotion } from "motion/react";
+import { LazyMotion } from "motion/react";
 // biome-ignore lint/performance/noNamespaceImport: motion/react-m is designed for namespace component access like m.div
 import * as m from "motion/react-m";
+
+const loadDomAnimation = () => import("motion/react").then((m) => m.domAnimation);
 import { EffectCards } from "swiper/modules";
 import { Swiper, SwiperSlide } from "swiper/react";
 import "swiper/css/effect-cards";
@@ -40,7 +42,7 @@ const Carousel = ({
 	) => ReactNode;
 }) => {
 	return (
-		<LazyMotion features={domAnimation}>
+		<LazyMotion features={loadDomAnimation}>
 			<m.div
 				animate={{ opacity: 1, translateY: 0 }}
 				className={cn("relative w-full max-w-3xl", className)}
