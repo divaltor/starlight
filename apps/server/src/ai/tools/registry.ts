@@ -1,41 +1,21 @@
-import type { generateText, Tool, ToolSet } from "ai";
-import { createFetchPageTool, FETCH_PAGE_TOOL_ID } from "@/ai/tools/fetch-page";
+import type { generateText, ToolSet } from "ai";
+import { createWebLookupTool, WEB_LOOKUP_TOOL_ID } from "@/ai/tools/web-lookup";
 import { isSearchEnabled } from "@/services/search";
-import { createSearchWebTool, SEARCH_WEB_TOOL_ID } from "@/ai/tools/search-web";
 import type { ToolResultPart } from "@/types";
 
 type PrepareStep = NonNullable<Parameters<typeof generateText>[0]["prepareStep"]>;
 
-interface ToolRegistryItem {
-	id: string;
-	isAvailable: () => boolean;
-	create: (searchContext: string[], messageParts: ToolResultPart[]) => Tool;
-}
-
 export function createAvailableTools() {
-	const searchContext: string[] = [];
 	const messageParts: ToolResultPart[] = [];
-	const registry = [
-		{
-			id: FETCH_PAGE_TOOL_ID,
-			isAvailable: () => true,
-			create: (_searchContext, messageParts) => createFetchPageTool(messageParts),
-		},
-		{
-			id: SEARCH_WEB_TOOL_ID,
-			isAvailable: isSearchEnabled,
-			create: createSearchWebTool,
-		},
-	] satisfies ToolRegistryItem[];
 
-	const tools = registry.reduce<ToolSet>((availableTools, item) => {
-		if (item.isAvailable()) {
-			availableTools[item.id] = item.create(searchContext, messageParts);
-		}
+	const tools: ToolSet = {
+		[WEB_LOOKUP_TOOL_ID]: createWebLookupTool(messageParts, {
+			searchEnabled: isSearchEnabled(),
+		}),
+	};
 
-		return availableTools;
-	}, {});
-
+	// Each web tool may be used at most once per run: once it has been called,
+	// drop it so the model answers instead of padding extra tool steps.
 	const prepareStep: PrepareStep = ({ steps }) => {
 		const usedToolNames = new Set(
 			steps.flatMap((step) => step.toolCalls.map((toolCall) => toolCall.toolName)),
@@ -48,7 +28,6 @@ export function createAvailableTools() {
 	return {
 		tools: Object.keys(tools).length > 0 ? tools : undefined,
 		prepareStep,
-		searchContext,
 		messageParts,
 	};
 }

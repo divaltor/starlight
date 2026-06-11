@@ -170,7 +170,7 @@ whitelistedGroupChat
 			...(availableTools.tools
 				? {
 						tools: availableTools.tools,
-						stopWhen: stepCountIs(3),
+						stopWhen: stepCountIs(2),
 						prepareStep: availableTools.prepareStep,
 					}
 				: {}),
