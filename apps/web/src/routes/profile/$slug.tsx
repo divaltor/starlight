@@ -7,6 +7,9 @@ import { TweetImageGrid } from "@/components/tweet-image-grid";
 import { useTweets } from "@/hooks/use-tweets";
 import { orpc } from "@/utils/orpc";
 
+const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
+const MASONRY_OVERSCAN_BY = 1.25;
+
 function SharedProfileViewer() {
 	const { slug } = useParams({ from: "/profile/$slug" });
 
@@ -69,8 +72,11 @@ function SharedProfileViewer() {
 					<div className="mx-auto max-w-7xl">
 						<Masonry
 							columnGutter={16}
+							itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
+							itemKey={(tweet) => tweet.id}
 							items={tweets}
 							onRender={infiniteLoader}
+							overscanBy={MASONRY_OVERSCAN_BY}
 							render={renderMasonryItem}
 						/>
 					</div>

@@ -16,6 +16,9 @@ import { cn } from "@/lib/utils";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { client, orpc } from "@/utils/orpc";
 
+const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
+const MASONRY_OVERSCAN_BY = 1.25;
+
 function TwitterArtViewer() {
 	const { updateButtons, rawInitData } = useTelegramContext();
 	const queryClient = useQueryClient();
@@ -71,12 +74,19 @@ function TwitterArtViewer() {
 
 	const { tweets, isLoading, isFetchingNextPage, hasNextPage, error, fetchNextPage } = useTweets();
 
-	const deletePhotoMutation = useMutation({
+	const { mutate: deletePhoto } = useMutation({
 		mutationFn: (photoId: string) => client.tweets.delete({ photoId }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["tweets"] });
 		},
 	});
+
+	const handleDeleteImage = useCallback(
+		(photoId: string) => {
+			deletePhoto(photoId);
+		},
+		[deletePhoto],
+	);
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -115,14 +125,10 @@ function TwitterArtViewer() {
 	const renderMasonryItem = useCallback(
 		({ data, width }: { data: TweetData; width: number }) => (
 			<div className="mb-1" style={{ width }}>
-				<TweetImageGrid
-					tweet={data}
-					showActions
-					onDeleteImage={(photoId) => deletePhotoMutation.mutate(photoId)}
-				/>
+				<TweetImageGrid tweet={data} showActions onDeleteImage={handleDeleteImage} />
 			</div>
 		),
-		[deletePhotoMutation],
+		[handleDeleteImage],
 	);
 
 	// Show error state
@@ -176,8 +182,11 @@ function TwitterArtViewer() {
 					<div className="mx-auto max-w-7xl">
 						<Masonry
 							columnGutter={16}
+							itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
+							itemKey={(tweet) => tweet.id}
 							items={displayItems}
 							onRender={currentInfiniteLoader}
+							overscanBy={MASONRY_OVERSCAN_BY}
 							render={renderMasonryItem}
 						/>
 					</div>

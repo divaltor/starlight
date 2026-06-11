@@ -1,6 +1,9 @@
 import type { SearchPageResult, TweetData } from "@starlight/api/src/types/tweets";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { orpc } from "@/utils/orpc";
+
+const EMPTY_RESULTS: TweetData[] = [];
 
 interface UseSearchOptions {
 	limit?: number;
@@ -30,9 +33,13 @@ export function useSearch(options: UseSearchOptions) {
 		);
 
 	const isEnabled = !!query.trim();
+	const results = useMemo(
+		() => data?.pages.flatMap((page) => page.results) ?? EMPTY_RESULTS,
+		[data?.pages],
+	);
 
 	return {
-		results: data?.pages.flatMap((page) => page.results) ?? ([] as TweetData[]),
+		results,
 		isLoading: isEnabled && status === "pending",
 		isFetching,
 		isFetchingNextPage,

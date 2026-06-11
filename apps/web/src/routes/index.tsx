@@ -13,6 +13,9 @@ import { cn } from "@/lib/utils";
 import { LayoutManager } from "@/utils/layout";
 import { orpc } from "@/utils/orpc";
 
+const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
+const MASONRY_OVERSCAN_BY = 1.25;
+
 const examples = [
 	"mumei",
 	"hololive girls",
@@ -128,8 +131,11 @@ export default function DiscoverPage() {
 					<div className="w-full max-w-7xl">
 						<Masonry
 							columnGutter={16}
+							itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
+							itemKey={(tweet) => tweet.id}
 							items={results}
 							onRender={infiniteLoader}
+							overscanBy={MASONRY_OVERSCAN_BY}
 							render={renderMasonryItem}
 						/>
 					</div>
