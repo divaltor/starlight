@@ -2,7 +2,7 @@ import type { TweetData } from "@starlight/api/src/types/tweets";
 import { http } from "@starlight/utils/http";
 import { X } from "lucide-react";
 import { useCallback, useState } from "react";
-import Lightbox, { IconButton } from "yet-another-react-lightbox-lite";
+import Lightbox from "yet-another-react-lightbox-lite";
 import "yet-another-react-lightbox-lite/styles.css";
 import {
 	AlertDialog,
@@ -161,7 +161,23 @@ export function TweetImageGrid({
 					slides={slides}
 					toolbar={{
 						buttons: [
-							<IconButton key="download" label="Download image" onClick={handleDownload} />,
+							<button
+								key="download"
+								type="button"
+								className="yarll__button"
+								aria-label="Download image"
+								onClick={handleDownload}
+							>
+								<svg
+									aria-hidden="true"
+									className="yarll__icon"
+									fill="currentColor"
+									viewBox="0 0 32 32"
+									xmlns="http://www.w3.org/2000/svg"
+								>
+									<path d="M20.5 14.3 17.1 18V10h-2.2v7.9l-3.4-3.6L10 16l6 6.1 6-6.1ZM23 23H9v2h14Z" />
+								</svg>
+							</button>,
 						],
 					}}
 					zoom={{ maxZoom: 8 }}
@@ -264,7 +280,25 @@ export function TweetImageGrid({
 				setIndex={setLightboxIndex}
 				slides={slides}
 				toolbar={{
-					buttons: [<IconButton key="download" label="Download image" onClick={handleDownload} />],
+					buttons: [
+						<button
+							key="download"
+							type="button"
+							className="yarll__button"
+							aria-label="Download image"
+							onClick={handleDownload}
+						>
+							<svg
+								aria-hidden="true"
+								className="yarll__icon"
+								fill="currentColor"
+								viewBox="0 0 32 32"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path d="M20.5 14.3 17.1 18V10h-2.2v7.9l-3.4-3.6L10 16l6 6.1 6-6.1ZM23 23H9v2h14Z" />
+							</svg>
+						</button>,
+					],
 				}}
 				zoom={{ maxZoom: 8 }}
 			/>
