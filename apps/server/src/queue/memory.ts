@@ -16,6 +16,12 @@ import { formatSenderName, openrouter } from "@/utils/message";
 
 const MAX_WINDOWS_PER_JOB = 4;
 const MAX_SUMMARY_TOKENS = 8192;
+// Coalesce bursts of incoming messages into a single scheduled job, while still
+// allowing future messages to trigger new jobs. The idempotency key is pinned to
+// the task row for its whole lifetime (absurd only frees it on cleanup), so a
+// static key would permanently block re-scheduling. A rotating time bucket keeps
+// dedup within a short window without blocking later runs.
+const MEMORY_SCHEDULE_BUCKET_MS = 60_000;
 
 function buildTopicMemorySystemPrompt(botUsername: string): string {
 	return `
@@ -219,6 +225,7 @@ export async function scheduleChatMemorySummaries(params: {
 }) {
 	const chatId = params.chatId.toString();
 	const threadKey = params.messageThreadId ?? 0;
+	const bucket = Math.floor(Date.now() / MEMORY_SCHEDULE_BUCKET_MS);
 
 	await Promise.all([
 		memoryApp.spawn(
@@ -231,7 +238,9 @@ export async function scheduleChatMemorySummaries(params: {
 				forceRebuild: params.forceRebuild,
 			},
 			{
-				idempotencyKey: params.forceRebuild ? undefined : `memory-topic-${chatId}-${threadKey}`,
+				idempotencyKey: params.forceRebuild
+					? undefined
+					: `memory-topic-${chatId}-${threadKey}-${bucket}`,
 				maxAttempts: 5,
 				retryStrategy: RETRY.memory,
 			},
@@ -246,7 +255,7 @@ export async function scheduleChatMemorySummaries(params: {
 				forceRebuild: params.forceRebuild,
 			},
 			{
-				idempotencyKey: params.forceRebuild ? undefined : `memory-global-${chatId}`,
+				idempotencyKey: params.forceRebuild ? undefined : `memory-global-${chatId}-${bucket}`,
 				maxAttempts: 5,
 				retryStrategy: RETRY.memory,
 			},
