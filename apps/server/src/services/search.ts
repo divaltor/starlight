@@ -24,18 +24,18 @@ export const searchWebEffect = Effect.fn("searchWeb")(function* (query: string) 
 	const exaExtractor = yield* ExaExtractor.Service;
 	const parallelExtractor = yield* ParallelExtractor.Service;
 
-	if (exaExtractor.isEnabled()) {
-		const exaResults = yield* exaExtractor
+	if (parallelExtractor.isEnabled()) {
+		const parallelResults = yield* parallelExtractor
 			.search({ query, maxResults: MAX_SEARCH_RESULTS })
 			.pipe(Effect.catch(ignoreSearchError));
 
-		if (exaResults.length > 0) {
-			return exaResults;
+		if (parallelResults.length > 0) {
+			return parallelResults;
 		}
 	}
 
-	if (parallelExtractor.isEnabled()) {
-		return yield* parallelExtractor
+	if (exaExtractor.isEnabled()) {
+		return yield* exaExtractor
 			.search({ query, maxResults: MAX_SEARCH_RESULTS })
 			.pipe(Effect.catch(ignoreSearchError));
 	}
