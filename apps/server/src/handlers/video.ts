@@ -1,3 +1,4 @@
+import { FormattedString } from "@grammyjs/parse-mode";
 import { cleanupTweetText, env, extractTweetId, prisma } from "@starlight/utils";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
@@ -22,9 +23,21 @@ const whitelistedChats = chats.filter(
 	(ctx) => ctx.chat?.type === "private" || env.WHITELIST_CHAT_IDS.includes(ctx.chat.id),
 );
 
-function getTweetCaptionText(tweet: FxEmbedTweet | null | undefined) {
+function buildTweetCaption(tweet: FxEmbedTweet | null | undefined): FormattedString | undefined {
 	if (!tweet) return undefined;
-	return cleanupTweetText(tweet.getDisplayText());
+
+	const mainText = cleanupTweetText(tweet.getDisplayText());
+	const quoteText = cleanupTweetText(tweet.quote?.getDisplayText());
+
+	if (!quoteText) {
+		return mainText ? new FormattedString(mainText) : undefined;
+	}
+
+	if (!mainText) {
+		return FormattedString.blockquote(quoteText);
+	}
+
+	return new FormattedString(`${mainText}\n\n`).blockquote(quoteText);
 }
 
 function createVideoKeyboard(
@@ -234,7 +247,7 @@ async function handleVideoRequest(
 			return;
 		}
 
-		const cleanedText = isTwitterLink ? getTweetCaptionText(tweet) : undefined;
+		const cleanedText = isTwitterLink ? buildTweetCaption(tweet)?.caption : undefined;
 
 		for (const video of videos) {
 			try {
@@ -339,18 +352,20 @@ whitelistedChats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, a
 	}
 
 	const showDescription = action === "add_desc";
-	let caption: string | undefined;
+	let caption: FormattedString | undefined;
 
 	if (showDescription) {
 		const tweet = await runtime.runPromise(
 			TwitterApi.getFxTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE),
 		);
-		caption = getTweetCaptionText(tweet) ?? video.tweetText ?? undefined;
+		caption =
+			buildTweetCaption(tweet) ??
+			(video.tweetText ? new FormattedString(video.tweetText) : undefined);
 
-		if (caption && caption !== video.tweetText) {
+		if (caption && caption.caption !== video.tweetText) {
 			await prisma.video.update({
 				where: { id: videoId },
-				data: { tweetText: caption },
+				data: { tweetText: caption.caption },
 			});
 		}
 	}
@@ -365,7 +380,11 @@ whitelistedChats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, a
 	);
 
 	try {
-		await ctx.editMessageCaption({ caption, reply_markup: keyboard });
+		await ctx.editMessageCaption({
+			caption: caption?.caption,
+			caption_entities: caption?.caption_entities,
+			reply_markup: keyboard,
+		});
 	} catch (error) {
 		if (!(error instanceof GrammyError)) {
 			throw error;
@@ -377,7 +396,8 @@ whitelistedChats.callbackQuery(/^video:(add_desc|remove_desc):([^:]+):(\d+)$/, a
 			width: video.width ?? undefined,
 			height: video.height ?? undefined,
 			supports_streaming: true,
-			caption,
+			caption: caption?.caption,
+			caption_entities: caption?.caption_entities,
 			reply_markup: keyboard,
 			message_thread_id: ctx.msg?.message_thread_id,
 		});
