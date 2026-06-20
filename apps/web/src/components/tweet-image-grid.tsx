@@ -57,7 +57,8 @@ export function TweetImageGrid({
 		if (!photo?.url) return;
 
 		try {
-			const response = await fetch(photo.url, { mode: "no-cors" });
+			const response = await fetch(photo.url);
+			if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`);
 			const blob = await response.blob();
 			const blobUrl = window.URL.createObjectURL(blob);
 			const link = document.createElement("a");
