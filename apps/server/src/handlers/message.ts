@@ -1,5 +1,5 @@
 import { env, prisma } from "@starlight/utils";
-import { APICallError, Output, generateText, stepCountIs } from "ai";
+import { APICallError, Output, generateText, isStepCount } from "ai";
 import { Schema } from "effect";
 import { Composer, GrammyError } from "grammy";
 import { chatResponseSchema } from "@/ai/schema";
@@ -165,16 +165,16 @@ whitelistedGroupChat
 		const { output } = await generateText({
 			model: openrouter!(env.OPENROUTER_MODEL),
 			output: Output.object({ schema: chatResponseSchema }),
-			system,
+			instructions: system,
 			messages: allMessages,
 			...(availableTools.tools
 				? {
 						tools: availableTools.tools,
-						stopWhen: stepCountIs(2),
+						stopWhen: isStepCount(2),
 						prepareStep: availableTools.prepareStep,
 					}
 				: {}),
-			experimental_telemetry: getLangfuseTelemetry("message-reply", {
+			telemetry: getLangfuseTelemetry("message-reply", {
 				chatId: String(ctx.chat.id),
 				messageId: String(triggerMessageId),
 				messageThreadId: String(messageThreadId ?? "main"),

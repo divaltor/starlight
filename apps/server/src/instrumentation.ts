@@ -2,8 +2,10 @@ import { PinoInstrumentation } from "@opentelemetry/instrumentation-pino";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { PrismaInstrumentation } from "@prisma/instrumentation";
+import { OpenTelemetry } from "@ai-sdk/otel";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
 import env from "@starlight/utils/config";
+import { registerTelemetry } from "ai";
 import { logger } from "@/logger";
 
 let sdk: NodeSDK | undefined;
@@ -21,6 +23,7 @@ export function initTelemetry() {
 	}
 
 	logger.info("Telemetry is established");
+	registerTelemetry(new OpenTelemetry());
 
 	const spanProcessors: SpanProcessor[] = [
 		new LangfuseSpanProcessor({

@@ -1,5 +1,5 @@
 import type { Message, MessageEntity } from "@grammyjs/types";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { attachmentLabelFromMimeType, env } from "@starlight/utils";
 import type { FilePart, ImagePart, ModelMessage, TextPart } from "ai";
 import { format } from "date-fns";
@@ -93,9 +93,12 @@ interface ConversationTurnEntry {
 }
 
 export const openrouter = env.OPENROUTER_API_KEY
-	? createOpenRouter({
+	? createOpenAICompatible({
 			apiKey: env.OPENROUTER_API_KEY,
+			baseURL: "https://openrouter.ai/api/v1",
 			headers: { "X-OpenRouter-Title": env.APP_NAME },
+			name: "openrouter",
+			supportsStructuredOutputs: true,
 		})
 	: null;
 
@@ -514,7 +517,7 @@ export function withOpenRouterGeminiCacheControl(
 
 	// OpenRouter/Gemini uses only the last cache_control breakpoint as the cached prefix.
 	//
-	// In this code path the system prompt is passed via generateText({ system }) as a plain
+	// In this code path the system prompt is passed via generateText({ instructions }) as a plain
 	// string, so there is no content block where we can attach provider metadata without
 	// moving it into messages.
 	//

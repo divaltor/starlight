@@ -299,12 +299,12 @@ async function summarizeWindow(params: {
 	const { text } = await generateText({
 		model: openrouter(env.OPENROUTER_MODEL),
 		maxOutputTokens: MAX_SUMMARY_TOKENS,
-		system:
+		instructions:
 			params.scope === ChatMemoryScope.topic
 				? buildTopicMemorySystemPrompt(botUsername)
 				: buildGlobalMemorySystemPrompt(botUsername),
 		messages: [{ role: "user", content: userPrompt }],
-		experimental_telemetry: getLangfuseTelemetry("chat-memory", {
+		telemetry: getLangfuseTelemetry("chat-memory", {
 			chatId: String(params.chatId),
 			scope: params.scope,
 			threadKey: String(params.threadKey === 0 ? "main" : params.threadKey),
