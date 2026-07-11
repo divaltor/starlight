@@ -4,8 +4,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { TweetImageGrid } from "@/components/tweet-image-grid";
+import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
+const TweetImageGrid = lazy(() =>
+	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
+);
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSearch } from "@/hooks/use-search";
@@ -129,15 +131,17 @@ export default function DiscoverPage() {
 				{results.length > 0 ? (
 					// Results
 					<div className="w-full max-w-7xl">
-						<Masonry
-							columnGutter={16}
-							itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
-							itemKey={(tweet) => tweet.id}
-							items={results}
-							onRender={infiniteLoader}
-							overscanBy={MASONRY_OVERSCAN_BY}
-							render={renderMasonryItem}
-						/>
+						<Suspense fallback={null}>
+							<Masonry
+								columnGutter={16}
+								itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
+								itemKey={(tweet) => tweet.id}
+								items={results}
+								onRender={infiniteLoader}
+								overscanBy={MASONRY_OVERSCAN_BY}
+								render={renderMasonryItem}
+							/>
+						</Suspense>
 					</div>
 				) : (
 					// Hero Section with centered search and floating images on large screen
@@ -222,31 +226,33 @@ export default function DiscoverPage() {
 				placedData.length > 0 &&
 				!isLoading &&
 				results.length === 0 && (
-					<div className="pointer-events-none absolute inset-0 overflow-hidden">
-						{placedData.map(({ position, index }) => {
-							const tweet = randomImages[index];
-							const isVisible = visibleIndices.includes(index);
-							return (
-								<div
-									className={cn(
-										"pointer-events-auto absolute transition-opacity duration-700 ease-in-out",
-										isVisible ? "opacity-85" : "opacity-0",
-									)}
-									key={tweet.id}
-									style={{
-										top: `${position.top}%`,
-										left: `${position.left}%`,
-										width: "250px",
-										height: "auto",
-										transform: "translate(-50%, -50%)",
-										zIndex: 1,
-									}}
-								>
-									<TweetImageGrid showArtistOnHover tweet={tweet} />
-								</div>
-							);
-						})}
-					</div>
+					<Suspense fallback={null}>
+						<div className="pointer-events-none absolute inset-0 overflow-hidden">
+							{placedData.map(({ position, index }) => {
+								const tweet = randomImages[index];
+								const isVisible = visibleIndices.includes(index);
+								return (
+									<div
+										className={cn(
+											"pointer-events-auto absolute transition-opacity duration-700 ease-in-out",
+											isVisible ? "opacity-85" : "opacity-0",
+										)}
+										key={tweet.id}
+										style={{
+											top: `${position.top}%`,
+											left: `${position.left}%`,
+											width: "250px",
+											height: "auto",
+											transform: "translate(-50%, -50%)",
+											zIndex: 1,
+										}}
+									>
+										<TweetImageGrid showArtistOnHover tweet={tweet} />
+									</div>
+								);
+							})}
+						</div>
+					</Suspense>
 				)}
 
 			{/* Sticky Search Bar - only when results */}

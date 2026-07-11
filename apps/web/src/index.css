@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "photoswipe/style.css";
 @plugin "@tailwindcss/typography";
 @plugin "daisyui";
 
