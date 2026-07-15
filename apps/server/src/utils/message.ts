@@ -78,6 +78,7 @@ export interface ToConversationTurnOptions {
 
 export interface ToModelMessageOptions {
 	includeAttachmentData?: boolean;
+	isLiveTurn?: boolean;
 }
 
 interface ConversationTurnEntry {
@@ -424,7 +425,7 @@ export function toModelMessage(
 
 	const includeAttachmentData = options.includeAttachmentData ?? turn.includeAttachmentData;
 	const parts: Array<TextPart | ImagePart | FilePart> = [];
-	const messageLabel = `Message #${turn.messageId} from ${turn.senderName}`;
+	const messageLabel = `${options.isLiveTurn ? "LIVE MESSAGE" : "Message"} #${turn.messageId} from ${turn.senderName}`;
 
 	parts.push({ type: "text", text: messageLabel });
 

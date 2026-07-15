@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ModelMessage } from "ai";
-import { withOpenRouterGeminiCacheControl } from "@/utils/message";
+import { toModelMessage, withOpenRouterGeminiCacheControl } from "@/utils/message";
 
 const GEMINI_MODEL = "google/gemini-3-flash-preview";
 const OTHER_MODEL = "google/gemini-2.5-flash";
@@ -10,6 +10,30 @@ const cacheControlProviderOptions = {
 		cache_control: { type: "ephemeral" },
 	},
 };
+
+test("labels the current user turn as the live message", () => {
+	const result = toModelMessage(
+		{
+			attachments: [],
+			context: [],
+			includeAttachmentData: false,
+			messageId: 42,
+			replyToMessageId: null,
+			role: "user",
+			senderName: "Vlad",
+			text: "комсы",
+		},
+		{ isLiveTurn: true },
+	);
+
+	expect(result).toEqual({
+		role: "user",
+		content: [
+			{ type: "text", text: "LIVE MESSAGE #42 from Vlad" },
+			{ type: "text", text: "комсы" },
+		],
+	});
+});
 
 describe("withOpenRouterGeminiCacheControl", () => {
 	test("marks memory context and not recent text-only chat history", () => {

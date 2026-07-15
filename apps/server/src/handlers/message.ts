@@ -150,7 +150,7 @@ whitelistedGroupChat
 						]
 					: []),
 				...messagesWithToolContext.map((message) => toModelMessage(message)),
-				toModelMessage(currentConversationTurn),
+				toModelMessage(currentConversationTurn, { isLiveTurn: true }),
 			],
 			env.OPENROUTER_MODEL,
 		);
@@ -212,13 +212,22 @@ whitelistedGroupChat
 
 		let sentTextCount = 0;
 		let savedMessageParts = false;
+		const allowedResponseTargetIds = new Set([
+			triggerMessageId,
+			...(currentConversationTurn.replyToMessageId === null
+				? []
+				: [currentConversationTurn.replyToMessageId]),
+		]);
 
 		for (const reply of output.replies) {
 			if (reply.type === "reaction") {
-				if (!knownMessageIds.has(reply.message_id)) {
+				if (
+					!knownMessageIds.has(reply.message_id) ||
+					!allowedResponseTargetIds.has(reply.message_id)
+				) {
 					ctx.logger.debug(
 						{ messageId: reply.message_id },
-						"Skipping AI reaction: message ID not in known messages",
+						"Skipping AI reaction: message is not the live turn or its direct reply target",
 					);
 					continue;
 				}
@@ -252,6 +261,13 @@ whitelistedGroupChat
 
 			// null/undefined → plain chat message; number → reply to that specific id
 			const replyToId = reply.reply_to ?? undefined;
+			if (replyToId !== undefined && !allowedResponseTargetIds.has(replyToId)) {
+				ctx.logger.debug(
+					{ messageId: replyToId },
+					"Skipping AI reply: target is not the live turn or its direct reply target",
+				);
+				continue;
+			}
 
 			// Between burst messages, show typing and use a short human-like pause
 			if (sentTextCount > 0) {
