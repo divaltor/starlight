@@ -39,7 +39,7 @@ export const chatResponseSchema = z.object({
 					text: z.string().min(1).describe("Response text in character"),
 					reply_to: nullableMessageIdSchema
 						.describe(
-							"How this message attaches in chat. Omit (undefined) to send as a plain chat message with no quote — this is the default and what most replies should do, so it lands naturally in the conversation flow. Use null only when the message needs to attach directly to the message that triggered you (a pointed direct response). Use a specific message #id only when reaching back to a different earlier message",
+							"How this message attaches in chat. Omit or use null to send as a plain chat message with no quote — this is the default and what most replies should do, so it lands naturally in the conversation flow. Use a specific allowed message #id only when the response should visibly quote the LIVE MESSAGE or the older message it directly replies to",
 						)
 						.optional(),
 				}),
