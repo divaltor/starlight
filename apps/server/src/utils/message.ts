@@ -1,7 +1,7 @@
 import type { Message, MessageEntity } from "@grammyjs/types";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { attachmentLabelFromMimeType, env } from "@starlight/utils";
-import type { FilePart, ImagePart, ModelMessage, TextPart } from "ai";
+import type { FilePart, ModelMessage, TextPart } from "ai";
 import { format } from "date-fns";
 import type { Context } from "@/bot";
 import SYSTEM_PROMPT from "@/utils/system-prompt.txt" with { type: "text" };
@@ -424,7 +424,7 @@ export function toModelMessage(
 	}
 
 	const includeAttachmentData = options.includeAttachmentData ?? turn.includeAttachmentData;
-	const parts: Array<TextPart | ImagePart | FilePart> = [];
+	const parts: Array<TextPart | FilePart> = [];
 	const messageLabel = `${options.isLiveTurn ? "LIVE MESSAGE" : "Message"} #${turn.messageId} from ${turn.senderName}`;
 
 	parts.push({ type: "text", text: messageLabel });
@@ -453,8 +453,8 @@ export function toModelMessage(
 
 		if (attachment.mimeType.startsWith("image/")) {
 			parts.push({
-				type: "image",
-				image: attachmentData,
+				type: "file",
+				data: attachmentData,
 				mediaType: attachment.mimeType,
 			});
 			continue;

@@ -313,7 +313,6 @@ async function summarizeWindow(params: {
 			sessionId: `${params.chatId}:${params.threadKey === 0 ? "main" : params.threadKey}`,
 		}),
 		temperature: 0.35,
-		topK: 60,
 	});
 
 	if (!text) {
