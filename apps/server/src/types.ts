@@ -85,6 +85,7 @@ export class FetchPageToolResultPart extends Schema.Class<FetchPageToolResultPar
 	toolName: Schema.Literal("fetch_page"),
 	input: Schema.Struct({
 		url: Schema.String,
+		objective: Schema.optional(Schema.String),
 	}),
 	output: Schema.Struct({
 		page: Schema.NullOr(
@@ -97,7 +98,8 @@ export class FetchPageToolResultPart extends Schema.Class<FetchPageToolResultPar
 	}),
 }) {
 	formatContext(messageId: number): string {
-		return `Tool context for assistant message #${messageId}\nTool: ${this.toolName}\nURL: ${this.input.url}\n${
+		const objective = this.input.objective ? `\nObjective: ${this.input.objective}` : "";
+		return `Tool context for assistant message #${messageId}\nTool: ${this.toolName}\nURL: ${this.input.url}${objective}\n${
 			this.output.page
 				? `Fetched URL: ${this.output.page.url}\nSource: ${this.output.page.source}\n${this.output.page.content}`
 				: "No page content found"

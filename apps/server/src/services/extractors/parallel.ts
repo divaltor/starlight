@@ -49,7 +49,10 @@ const ParallelSearchResponse = Schema.Struct({
 export namespace ParallelExtractor {
 	export interface Interface {
 		readonly isEnabled: () => boolean;
-		readonly extract: (url: string) => Effect.Effect<ExtractionResult | null, ExtractionError>;
+		readonly extract: (
+			url: string,
+			objective?: string,
+		) => Effect.Effect<ExtractionResult | null, ExtractionError>;
 		readonly search: (input: SearchInput) => Effect.Effect<SearchResult[], ExtractionError>;
 	}
 
@@ -62,7 +65,10 @@ export namespace ParallelExtractor {
 		Effect.gen(function* () {
 			const client = yield* HttpClient.HttpClient;
 
-			const extract = Effect.fn("ParallelExtractor.extract")(function* (url: string) {
+			const extract = Effect.fn("ParallelExtractor.extract")(function* (
+				url: string,
+				objective?: string,
+			) {
 				yield* Effect.logInfo(`ParallelExtractor: Starting extraction for ${url}`);
 
 				const request = yield* HttpClientRequest.post(
@@ -74,7 +80,18 @@ export namespace ParallelExtractor {
 					HttpClientRequest.bodyJson({
 						urls: [url],
 						objective:
-							"Extract the main topic, key points, and a brief summary of the page content",
+							objective ??
+							"Extract the main article content. Exclude navigation, edit controls, media controls, sidebars, footers, and site boilerplate.",
+						max_chars_total: 6_000,
+						client_model: env.OPENROUTER_MODEL,
+						advanced_settings: {
+							fetch_policy: {
+								timeout_seconds: 10,
+							},
+							excerpt_settings: {
+								max_chars_per_result: 6_000,
+							},
+						},
 					}),
 					Effect.mapError((error) =>
 						ExtractionError.fromCause({
@@ -148,7 +165,11 @@ export namespace ParallelExtractor {
 						search_queries: [input.query],
 						mode: "basic",
 						max_chars_total: 6_000,
+						client_model: env.OPENROUTER_MODEL,
 						advanced_settings: {
+							fetch_policy: {
+								timeout_seconds: 10,
+							},
 							excerpt_settings: {
 								max_chars_per_result: 2_000,
 							},

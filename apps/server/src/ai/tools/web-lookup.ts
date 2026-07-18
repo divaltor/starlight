@@ -40,6 +40,14 @@ export function createWebLookupTool(
 						: 'Always "url": read the page at the provided URL.',
 				),
 			url: z.url().optional().describe('Required when mode="url". The exact page URL to read.'),
+			objective: z
+				.string()
+				.min(3)
+				.max(5000)
+				.optional()
+				.describe(
+					'When mode="url", describe what information to extract from the page. Omit only when the entire page is needed.',
+				),
 			query: z
 				.string()
 				.min(3)
@@ -47,13 +55,13 @@ export function createWebLookupTool(
 				.optional()
 				.describe('Required when mode="search". A concise, self-contained web search query.'),
 		}),
-		execute: async ({ mode, url, query }) => {
+		execute: async ({ mode, url, objective, query }) => {
 			// Route to fetch when we have a concrete URL — either via mode="url",
 			// or when the model put a URL into the search query by mistake.
 			const fetchTarget = mode === "url" ? url : query && looksLikeUrl(query) ? query : undefined;
 
 			if (fetchTarget) {
-				const page = await extractMarkdown(fetchTarget);
+				const page = await extractMarkdown(fetchTarget, objective);
 
 				if (!page) {
 					return { page: null };
@@ -69,7 +77,7 @@ export function createWebLookupTool(
 					new FetchPageToolResultPart({
 						type: "tool",
 						toolName: "fetch_page",
-						input: { url: fetchTarget },
+						input: { url: fetchTarget, objective },
 						output: { page: compactPage },
 					}),
 				);

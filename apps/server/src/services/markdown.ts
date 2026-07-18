@@ -25,7 +25,10 @@ export interface ExtractedMarkdown {
 const ignoreExtractionError = (error: ExtractionError) =>
 	Effect.logError(`${error.extractor}: ${error.message}`, { error }).pipe(Effect.as(null));
 
-export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (url: string) {
+export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (
+	url: string,
+	objective?: string,
+) {
 	const tweetId = extractTweetId(url);
 	if (tweetId) {
 		const twitterApi = yield* TwitterApi.Service;
@@ -95,7 +98,7 @@ export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (url
 
 	if (!markdown && parallelExtractor.isEnabled()) {
 		const parallelResult = yield* parallelExtractor
-			.extract(url)
+			.extract(url, objective)
 			.pipe(Effect.catch(ignoreExtractionError));
 
 		if (parallelResult) {
@@ -124,6 +127,11 @@ export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (url
 		: null;
 });
 
-export function extractMarkdown(url: string): Promise<ExtractedMarkdown | null> {
-	return runtime.runPromise(extractMarkdownEffect(url).pipe(Effect.provide(FetchHttpClient.layer)));
+export function extractMarkdown(
+	url: string,
+	objective?: string,
+): Promise<ExtractedMarkdown | null> {
+	return runtime.runPromise(
+		extractMarkdownEffect(url, objective).pipe(Effect.provide(FetchHttpClient.layer)),
+	);
 }

@@ -74,8 +74,13 @@ export namespace ExaExtractor {
 						"x-api-key": env.EXA_API_KEY!,
 					}),
 					HttpClientRequest.bodyJson({
-						ids: [url],
-						text: true,
+						urls: [url],
+						text: {
+							maxCharacters: 6_000,
+							verbosity: "compact",
+							includeSections: ["body"],
+						},
+						maxAgeHours: 0,
 						livecrawlTimeout: 10_000,
 					}),
 					Effect.mapError((error) =>
