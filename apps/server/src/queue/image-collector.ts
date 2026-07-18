@@ -71,6 +71,9 @@ imagesApp.registerTask<ImageCollectorJobData>({ name: "images-collector" }, asyn
 		tweetRecord.photos.length,
 	);
 
+	const refreshedPhotoIds = new Set<string>();
+	const refreshTimestamp = new Date();
+
 	for (const photo of tweetRecord.photos) {
 		if (photo.s3Path && photo.perceptualHash) {
 			logger.debug(
@@ -109,11 +112,22 @@ imagesApp.registerTask<ImageCollectorJobData>({ name: "images-collector" }, asyn
 		const similarPhotos = await findDuplicatesByImageContent(imageBuffer);
 
 		if (similarPhotos.length > 0) {
+			const existingPhoto = similarPhotos.find((similarPhoto) => similarPhoto.userId === userId);
+
+			if (existingPhoto && !refreshedPhotoIds.has(existingPhoto.id)) {
+				await prisma.photo.update({
+					where: { photoId: { id: existingPhoto.id, userId } },
+					data: { updatedAt: refreshTimestamp },
+				});
+				refreshedPhotoIds.add(existingPhoto.id);
+			}
+
 			logger.info(
 				{
 					tweetId: tweet.id,
 					photoId: photo.id,
 					userId,
+					refreshedPhotoId: existingPhoto?.id,
 					similarPhotos,
 				},
 				"Found similar photos, skipping saving photo",
