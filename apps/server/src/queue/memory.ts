@@ -314,7 +314,6 @@ async function summarizeWindow(params: {
 		messages: [{ role: "user", content: userPrompt }],
 		telemetry: langfuseTelemetry?.telemetry,
 		runtimeContext: langfuseTelemetry?.runtimeContext,
-		temperature: 0.35,
 	});
 
 	if (!text) {

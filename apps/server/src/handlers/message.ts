@@ -183,9 +183,6 @@ whitelistedGroupChat
 				: {}),
 			telemetry: langfuseTelemetry?.telemetry,
 			runtimeContext: langfuseTelemetry?.runtimeContext,
-			topP: 0.95,
-			frequencyPenalty: 0.4,
-			presencePenalty: 0.2,
 		}).catch((error: unknown) => {
 			if (APICallError.isInstance(error)) {
 				ctx.logger.error(
