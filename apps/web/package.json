@@ -6,7 +6,7 @@
     "start": "bun run .output/server/index.mjs",
     "build": "bunx --bun vite build",
     "dev": "bunx --bun vite dev --port=3001",
-    "lint": "oxlint --fix && tsgo --noEmit",
+    "lint": "oxlint --fix && tsc --noEmit",
     "format": "oxfmt"
   },
   "dependencies": {

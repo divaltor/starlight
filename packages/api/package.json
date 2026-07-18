@@ -13,7 +13,7 @@
   "type": "module",
   "scripts": {
     "build": "bun run -b tsdown",
-    "lint": "oxlint --fix && tsgo -b",
+    "lint": "oxlint --fix && tsc -b",
     "format": "oxfmt"
   },
   "devDependencies": {

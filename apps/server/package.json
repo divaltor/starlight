@@ -6,7 +6,7 @@
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "build": "bun run -b tsdown",
-    "lint": "oxlint --fix && tsgo --noEmit",
+    "lint": "oxlint --fix && tsc --noEmit",
     "format": "oxfmt",
     "test": "bun test",
     "queue:classify": "bun run src/scripts/classification.ts",

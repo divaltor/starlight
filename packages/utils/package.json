@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "bun run db:generate && bun run -b tsdown",
-    "lint": "oxlint --fix && tsgo -b",
+    "lint": "oxlint --fix && tsc -b",
     "format": "oxfmt",
     "db:deploy": "prisma --config prisma.config.ts migrate deploy",
     "db:generate": "prisma --config prisma.config.ts generate",
