@@ -4,6 +4,8 @@ export type ExtractionResult =
 	| { kind: "markdown"; content: string }
 	| { kind: "html"; content: string };
 
+export type FetchExtractionResult = ExtractionResult | { kind: "unsupported"; contentType: string };
+
 export interface ExtractionFile {
 	name: string;
 	data: BlobPart;

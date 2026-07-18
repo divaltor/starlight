@@ -26,8 +26,8 @@ export function createWebLookupTool(
 	const modes = searchEnabled ? (["url", "search"] as const) : (["url"] as const);
 
 	const description = searchEnabled
-		? 'Access the web. Use mode="url" to read a specific page whose URL appears anywhere in the conversation (including follow-ups like "what\'s there?" or "summarize it" about a link sent earlier). Use mode="search" only to discover sources or verify current facts when there is no URL to read. Never search for a URL just to read it, and never do both for the same thing.'
-		: 'Read a specific web page whose URL appears anywhere in the conversation (including follow-ups like "what\'s there?" or "summarize it" about a link sent earlier). Always use mode="url" with that exact URL.';
+		? 'Access the web. Use mode="url" only to read a web page whose URL is explicitly written in conversation message text or a caption (including follow-ups like "what\'s there?" or "summarize it" about a link sent earlier). Attachment, file, image, video, and other media URLs are not page links and must never be passed to this tool. Use mode="search" only to discover sources or verify current facts when there is no page URL to read. Never search for a URL just to read it, and never do both for the same thing.'
+		: 'Read a web page only when its URL is explicitly written in conversation message text or a caption (including follow-ups like "what\'s there?" or "summarize it" about a link sent earlier). Attachment, file, image, video, and other media URLs are not page links and must never be passed to this tool. Always use mode="url" with the exact page URL from the text.';
 
 	return tool({
 		description,
@@ -36,10 +36,15 @@ export function createWebLookupTool(
 				.enum(modes)
 				.describe(
 					searchEnabled
-						? 'Use "url" when a specific URL is available anywhere in the conversation; use "search" only to discover sources when there is no URL.'
-						: 'Always "url": read the page at the provided URL.',
+						? 'Use "url" when a page URL is explicitly written in message text or a caption; use "search" only to discover sources when there is no page URL. Never use attachment or media URLs.'
+						: 'Always "url": read the page URL explicitly written in message text or a caption. Never use attachment or media URLs.',
 				),
-			url: z.url().optional().describe('Required when mode="url". The exact page URL to read.'),
+			url: z
+				.url()
+				.optional()
+				.describe(
+					'Required when mode="url". The exact page URL copied from message text or a caption, never an attachment, file, image, video, or other media URL.',
+				),
 			objective: z
 				.string()
 				.min(3)

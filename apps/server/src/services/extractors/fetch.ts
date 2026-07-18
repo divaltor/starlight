@@ -6,14 +6,18 @@ import {
 	HttpClientResponse,
 } from "effect/unstable/http";
 import UserAgent from "user-agents";
-import { ExtractionError, type ExtractionResult } from "@/services/extractors/base";
+import {
+	ExtractionError,
+	type ExtractionResult,
+	type FetchExtractionResult,
+} from "@/services/extractors/base";
 
 const FETCH_TIMEOUT_MS = 10_000;
 
 export namespace FetchExtractor {
 	export interface Interface {
 		readonly isEnabled: () => boolean;
-		readonly extract: (url: string) => Effect.Effect<ExtractionResult | null, ExtractionError>;
+		readonly extract: (url: string) => Effect.Effect<FetchExtractionResult | null, ExtractionError>;
 	}
 
 	export class Service extends Context.Service<Service, Interface>()(
@@ -59,6 +63,22 @@ export namespace FetchExtractor {
 				}
 
 				const contentType = okResponse.headers["content-type"];
+				const normalizedContentType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
+
+				if (
+					normalizedContentType &&
+					!normalizedContentType.startsWith("text/") &&
+					normalizedContentType !== "application/xhtml+xml"
+				) {
+					yield* Effect.logInfo(
+						`FetchExtractor: Skipping unsupported content from ${url} (type: ${normalizedContentType})`,
+					);
+					return {
+						kind: "unsupported",
+						contentType: normalizedContentType,
+					} satisfies FetchExtractionResult;
+				}
+
 				const body = yield* okResponse.text.pipe(
 					Effect.mapError((error) =>
 						ExtractionError.fromCause({
@@ -69,7 +89,7 @@ export namespace FetchExtractor {
 					),
 				);
 
-				if (contentType?.includes("text/markdown")) {
+				if (normalizedContentType === "text/markdown") {
 					yield* Effect.logInfo(
 						`FetchExtractor: Extracted markdown content from ${url} (${body.length} bytes)`,
 					);

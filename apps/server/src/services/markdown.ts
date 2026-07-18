@@ -82,6 +82,13 @@ export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (
 	let markdown: string | null = null;
 	let source: string | null = null;
 
+	if (fetchResult?.kind === "unsupported") {
+		yield* Effect.logInfo(
+			`extractMarkdown: Skipping non-text URL ${url} (type: ${fetchResult.contentType})`,
+		);
+		return null;
+	}
+
 	if (fetchResult?.kind === "markdown") {
 		markdown = fetchResult.content;
 		source = "fetch";
