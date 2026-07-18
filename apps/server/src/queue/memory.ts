@@ -295,6 +295,14 @@ async function summarizeWindow(params: {
 	].join("\n");
 
 	const botUsername = bot.botInfo.username;
+	const langfuseTelemetry = getLangfuseTelemetry("chat-memory", {
+		chatId: String(params.chatId),
+		scope: params.scope,
+		threadKey: String(params.threadKey === 0 ? "main" : params.threadKey),
+		startMessageId: String(params.startMessageId),
+		endMessageId: String(params.endMessageId),
+		sessionId: `${params.chatId}:${params.threadKey === 0 ? "main" : params.threadKey}`,
+	});
 
 	const { text } = await generateText({
 		model: openrouter(env.OPENROUTER_MODEL),
@@ -304,14 +312,8 @@ async function summarizeWindow(params: {
 				? buildTopicMemorySystemPrompt(botUsername)
 				: buildGlobalMemorySystemPrompt(botUsername),
 		messages: [{ role: "user", content: userPrompt }],
-		telemetry: getLangfuseTelemetry("chat-memory", {
-			chatId: String(params.chatId),
-			scope: params.scope,
-			threadKey: String(params.threadKey === 0 ? "main" : params.threadKey),
-			startMessageId: String(params.startMessageId),
-			endMessageId: String(params.endMessageId),
-			sessionId: `${params.chatId}:${params.threadKey === 0 ? "main" : params.threadKey}`,
-		}),
+		telemetry: langfuseTelemetry?.telemetry,
+		runtimeContext: langfuseTelemetry?.runtimeContext,
 		temperature: 0.35,
 	});
 

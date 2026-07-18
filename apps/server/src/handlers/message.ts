@@ -161,6 +161,13 @@ whitelistedGroupChat
 		ctx.logger.debug(`Sending ${allMessages.length} messages to AI (memory: ${!!memoryContext})`);
 
 		const availableTools = createAvailableTools();
+		const langfuseTelemetry = getLangfuseTelemetry("message-reply", {
+			chatId: String(ctx.chat.id),
+			messageId: String(triggerMessageId),
+			messageThreadId: String(messageThreadId ?? "main"),
+			userId: ctx.message.from?.id ? String(ctx.message.from.id) : "unknown",
+			sessionId: `${ctx.chat.id}:${messageThreadId ?? "main"}`,
+		});
 
 		const { output } = await generateText({
 			model: openrouter!(env.OPENROUTER_MODEL),
@@ -174,13 +181,8 @@ whitelistedGroupChat
 						prepareStep: availableTools.prepareStep,
 					}
 				: {}),
-			telemetry: getLangfuseTelemetry("message-reply", {
-				chatId: String(ctx.chat.id),
-				messageId: String(triggerMessageId),
-				messageThreadId: String(messageThreadId ?? "main"),
-				userId: ctx.message.from?.id ? String(ctx.message.from.id) : "unknown",
-				sessionId: `${ctx.chat.id}:${messageThreadId ?? "main"}`,
-			}),
+			telemetry: langfuseTelemetry?.telemetry,
+			runtimeContext: langfuseTelemetry?.runtimeContext,
 			topP: 0.95,
 			frequencyPenalty: 0.4,
 			presencePenalty: 0.2,

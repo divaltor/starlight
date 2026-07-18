@@ -23,7 +23,7 @@ export function initTelemetry() {
 	}
 
 	logger.info("Telemetry is established");
-	registerTelemetry(new OpenTelemetry());
+	registerTelemetry(new OpenTelemetry({ runtimeContext: true }));
 
 	const spanProcessors: SpanProcessor[] = [
 		new LangfuseSpanProcessor({
