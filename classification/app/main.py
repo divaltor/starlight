@@ -25,7 +25,7 @@ configure_logger()
 
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
-    application.state.http_session = AsyncSession()
+    application.state.http_session = AsyncSession(disable_http3=True)
 
     try:
         yield
