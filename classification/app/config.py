@@ -1,4 +1,4 @@
-from typing import Final
+from typing import Final, Literal
 
 from pydantic_settings import BaseSettings
 
@@ -10,6 +10,7 @@ class Config(BaseSettings):
 
     ENABLE_EMBEDDINGS: bool = False
     ENABLE_CLASSIFICATION: bool = False
+    MODEL_DEVICE: Literal['auto', 'cpu', 'cuda'] = 'auto'
 
     LOG_LEVEL: str = 'DEBUG'
     DISABLE_OPENAPI: bool = False

@@ -7,6 +7,7 @@ from huggingface_hub import hf_hub_download
 from transformers import AutoConfig, AutoImageProcessor
 from transformers.pipelines import pipeline
 
+from app.device import resolve_model_device
 from app.imgutils.camie import get_camie_tags
 from app.imgutils.utils import open_onnx_model
 from app.models import ClassificationResult, ImageRequest
@@ -14,6 +15,7 @@ from app.otel import pipeline_span
 from app.utils import preprocess_image
 
 logger = structlog.get_logger()
+model_device = resolve_model_device()
 
 NSFW_MODEL_ID = 'spiele/nsfw_image_detector-ONNX'
 
@@ -27,10 +29,12 @@ nsfw_output_name = nsfw_session.get_outputs()[0].name
 aesthetic_pipe = pipeline(
     'image-classification',
     model='cafeai/cafe_aesthetic',
+    device=model_device,
 )
 style_pipe = pipeline(
     'image-classification',
     model='cafeai/cafe_style',
+    device=model_device,
 )
 
 

@@ -5,6 +5,7 @@ import torch
 from fastapi import APIRouter, Body, HTTPException, Request
 from sentence_transformers import SentenceTransformer
 
+from app.device import resolve_model_device
 from app.models import EmbeddingPayload, EmbeddingResponse
 from app.otel import pipeline_span
 from app.utils import preprocess_image
@@ -13,12 +14,14 @@ if TYPE_CHECKING:
     from numpy import ndarray
 
 logger = structlog.get_logger()
+model_device = resolve_model_device()
 
 
 embedding_model = SentenceTransformer(
     'jinaai/jina-clip-v2',
     trust_remote_code=True,
     truncate_dim=1024,
+    device=model_device,
 )
 
 router = APIRouter()
