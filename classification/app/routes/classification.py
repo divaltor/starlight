@@ -1,15 +1,13 @@
 from typing import Annotated, Any
 
-import numpy as np
 import structlog
+import torch
 from fastapi import APIRouter, Body, HTTPException, Request
-from huggingface_hub import hf_hub_download
-from transformers import AutoConfig, AutoImageProcessor
-from transformers.pipelines import pipeline
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+from transformers.pipelines import ImageClassificationPipeline, pipeline
 
 from app.device import resolve_model_device
 from app.imgutils.camie import get_camie_tags
-from app.imgutils.utils import open_onnx_model
 from app.models import ClassificationResult, ImageRequest
 from app.otel import pipeline_span
 from app.utils import preprocess_image
@@ -17,49 +15,42 @@ from app.utils import preprocess_image
 logger = structlog.get_logger()
 model_device = resolve_model_device()
 
-NSFW_MODEL_ID = 'spiele/nsfw_image_detector-ONNX'
+NSFW_MODEL_ID = 'Freepik/nsfw_image_detector'
+AESTHETIC_MODEL_ID = 'cafeai/cafe_aesthetic'
+STYLE_MODEL_ID = 'cafeai/cafe_style'
 
-processor = AutoImageProcessor.from_pretrained('spiele/nsfw_image_detector-ONNX')
-nsfw_config = AutoConfig.from_pretrained(NSFW_MODEL_ID)
-nsfw_session = open_onnx_model(
-    hf_hub_download(repo_id=NSFW_MODEL_ID, filename='model_quantized.onnx', subfolder='onnx'),
-)
-nsfw_input_name = nsfw_session.get_inputs()[0].name
-nsfw_output_name = nsfw_session.get_outputs()[0].name
-aesthetic_pipe = pipeline(
-    'image-classification',
-    model='cafeai/cafe_aesthetic',
-    device=model_device,
-)
-style_pipe = pipeline(
-    'image-classification',
-    model='cafeai/cafe_style',
-    device=model_device,
-)
+
+def create_classification_pipeline(
+    model_id: str,
+    dtype: torch.dtype,
+) -> ImageClassificationPipeline:
+    image_processor = AutoImageProcessor.from_pretrained(model_id, use_fast=False)
+    model = AutoModelForImageClassification.from_pretrained(model_id, torch_dtype=dtype)
+    return pipeline(
+        'image-classification',
+        model=model,
+        image_processor=image_processor,
+        device=model_device,
+    )
+
+
+classification_dtype = torch.float16 if model_device == 'cuda' else torch.float32
+# BF16 has the same 8-bit exponent as FP32, so downcasting the FP32 checkpoint is
+# less likely to overflow or underflow intermediate activations than FP16's 5-bit
+# exponent. This is preferable for threshold-sensitive NSFW scores, and costs no
+# extra model memory over FP16 because both use 16 bits and run natively on ROCm.
+nsfw_dtype = torch.bfloat16 if model_device == 'cuda' else torch.float32
+
+nsfw_pipe = create_classification_pipeline(NSFW_MODEL_ID, nsfw_dtype)
+aesthetic_pipe = create_classification_pipeline(AESTHETIC_MODEL_ID, classification_dtype)
+style_pipe = create_classification_pipeline(STYLE_MODEL_ID, classification_dtype)
 
 
 router = APIRouter()
 
 
 def classify_nsfw(image: Any) -> list[dict[str, str | float]]:
-    pixel_values = processor(images=image, return_tensors='np')['pixel_values'].astype(np.float32)
-    logits = nsfw_session.run([nsfw_output_name], {nsfw_input_name: pixel_values})[0][0]
-    probabilities = np.exp(logits - np.max(logits))
-    probabilities /= probabilities.sum()
-
-    return sorted(
-        [
-            {
-                'label': str(
-                    nsfw_config.id2label.get(index, nsfw_config.id2label.get(str(index), index)),
-                ),
-                'score': float(score),
-            }
-            for index, score in enumerate(probabilities.tolist())
-        ],
-        key=lambda result: float(result['score']),
-        reverse=True,
-    )
+    return nsfw_pipe(image)  # type: ignore[return-value]
 
 
 @router.post('/classify')
@@ -78,13 +69,13 @@ async def classify(
 ) -> ClassificationResult:
     try:
         img = await preprocess_image(image.image, request.app.state.http_session)
-        with pipeline_span('nsfw_classification', 'Freepik/nsfw_image_detector'):
+        with pipeline_span('nsfw_classification', NSFW_MODEL_ID):
             nsfw_outputs = classify_nsfw(img)
 
-        with pipeline_span('aesthetic_classification', 'cafeai/cafe_aesthetic'):
+        with pipeline_span('aesthetic_classification', AESTHETIC_MODEL_ID):
             aestetic_outputs = aesthetic_pipe(img)
 
-        with pipeline_span('style_classification', 'cafeai/cafe_style'):
+        with pipeline_span('style_classification', STYLE_MODEL_ID):
             style_outputs = style_pipe(img)
 
         with pipeline_span('tag_generation', 'Camais03/camie-tagger-v2'):

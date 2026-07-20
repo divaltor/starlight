@@ -1,6 +1,6 @@
 """
 Overview:
-    Image tagging utilities for the Camie Tagger ONNX model.
+    Image tagging utilities for the Camie Tagger model.
 
 Notes:
     - Only `general`, `character`, and `rating` categories are produced.
@@ -19,17 +19,17 @@ from collections import defaultdict
 from operator import itemgetter
 from typing import TYPE_CHECKING, Any, BinaryIO
 
-import numpy as np
+import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
+from safetensors.torch import load_file
 
-from app.imgutils.utils import open_onnx_model, ts_lru_cache
+from app.device import resolve_model_device
+from app.imgutils.camie_model import ImageTagger
+from app.imgutils.utils import ts_lru_cache
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-
-    import torch
-    from onnxruntime import InferenceSession
 
 ImageTyping = str | os.PathLike[str] | bytes | bytearray | BinaryIO | Image.Image
 
@@ -47,6 +47,7 @@ def _get_overlap_tags() -> Mapping[str, list[str]]:
         return json.load(file)
 
 
+@ts_lru_cache()
 def _get_metadata_file() -> Mapping[str, Any]:
     json_file = hf_hub_download(_REPO_ID, 'camie-tagger-v2-metadata.json', repo_type='model')
     with pathlib.Path(json_file).open('rb') as f:
@@ -118,14 +119,35 @@ def underline(tag: str) -> str:
 
 
 @ts_lru_cache()
-def _get_camie_model() -> InferenceSession:
-    return open_onnx_model(
-        hf_hub_download(
-            repo_id=_REPO_ID,
-            repo_type='model',
-            filename='camie-tagger-v2.onnx',
-        ),
+def _get_camie_model() -> ImageTagger:
+    metadata = _get_metadata_file()
+    model_info = metadata['model_info']
+    model = ImageTagger(
+        total_tags=metadata['dataset_info']['total_tags'],
+        model_name=model_info['backbone'],
+        num_heads=model_info['num_attention_heads'],
+        tag_context_size=model_info['tag_context_size'],
+        img_size=model_info['img_size'],
     )
+    model.load_state_dict(
+        load_file(
+            hf_hub_download(
+                repo_id=_REPO_ID,
+                repo_type='model',
+                filename='camie-tagger-v2.safetensors',
+            ),
+        ),
+        strict=True,
+    )
+    device = resolve_model_device()
+    # Camie uses FP16 rather than BF16 because its top-k candidate selection and
+    # thresholded tag scores benefit from FP16's additional mantissa precision
+    # (10 fraction bits versus BF16's 7). The checkpoint was verified against the
+    # previous ONNX output without threshold disagreements, and its activation range
+    # is safe in FP16, so BF16's wider exponent range provides no practical benefit.
+    # FP16 still halves model memory and runs through native ROCm kernels on the GPU.
+    dtype = torch.float16 if device == 'cuda' else torch.float32
+    return model.to(device=device, dtype=dtype).eval()
 
 
 def _load_image(img: ImageTyping) -> Image.Image:
@@ -206,19 +228,17 @@ def get_camie_tags(
     idx_to_tag: dict[str, str] = tag_mapping['idx_to_tag']
     tag_to_category: dict[str, str] = tag_mapping['tag_to_category']
 
-    session = _get_camie_model()
+    model = _get_camie_model()
 
     pil_img = _load_image(img)
     img_tensor = preprocess_image(pil_img, image_size=metadata['model_info']['img_size'])
-    img_numpy = img_tensor.unsqueeze(0).numpy()
-
-    input_name = session.get_inputs()[0].name
-    outputs = session.run(None, {input_name: img_numpy})
-
-    main_logits = outputs[1] if len(outputs) >= 2 else outputs[0]
-
-    main_probs = 1.0 / (1.0 + np.exp(-main_logits))
-    probs = main_probs[0]
+    device = resolve_model_device()
+    # Inputs must match the cached model dtype; probabilities are converted back to
+    # FP32 below before CPU-side sorting, thresholding, and serialization.
+    dtype = torch.float16 if device == 'cuda' else torch.float32
+    inputs = img_tensor.unsqueeze(0).to(device=device, dtype=dtype)
+    with torch.inference_mode():
+        probs = torch.sigmoid(model(inputs))[0].float().cpu().tolist()
 
     wanted_categories = {'general', 'character'}
     thresholds = {
@@ -228,8 +248,7 @@ def get_camie_tags(
 
     tags_by_category: dict[str, list[tuple[str, float]]] = defaultdict(list)
 
-    for idx in range(probs.shape[0]):
-        prob = float(probs[idx])
+    for idx, prob in enumerate(probs):
         idx_str = str(idx)
         tag_name = idx_to_tag.get(idx_str)
         if not tag_name:

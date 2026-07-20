@@ -9,6 +9,7 @@ services:
       - ${CLASSIFICATION_ENV_FILE:-.env}
     environment:
       MODEL_DEVICE: cuda
+      TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL: "1"
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri/renderD128:/dev/dri/renderD128

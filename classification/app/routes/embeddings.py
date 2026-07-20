@@ -22,6 +22,10 @@ embedding_model = SentenceTransformer(
     trust_remote_code=True,
     truncate_dim=1024,
     device=model_device,
+    config_kwargs={
+        'use_text_flash_attn': False,
+        'use_vision_xformers': False,
+    },
 )
 
 router = APIRouter()
