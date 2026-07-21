@@ -26,7 +26,7 @@ export const summarize = Effect.fn("MemorySummarizer.summarize")(function* (
 			const result = await generateText({
 				model,
 				...generationOptions,
-				reasoning: "low",
+				reasoning: "minimal",
 				maxOutputTokens: MAX_SUMMARY_TOKENS,
 				instructions: input.instructions,
 				messages: [{ role: "user", content: input.prompt }],

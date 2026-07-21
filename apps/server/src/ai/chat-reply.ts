@@ -33,7 +33,7 @@ export const generate = Effect.fn("ChatReply.generate")(function* (
 			const result = await generateText({
 				model,
 				...generationOptions,
-				reasoning: "low",
+				reasoning: "minimal",
 				output: Output.object({ schema: chatResponseSchema }),
 				instructions: input.instructions,
 				messages: input.messages,
