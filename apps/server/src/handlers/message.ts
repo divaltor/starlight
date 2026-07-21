@@ -1,12 +1,9 @@
 import { env, prisma } from "@starlight/utils";
-import { APICallError, Output, generateText, isStepCount } from "ai";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Composer, GrammyError } from "grammy";
-import { chatResponseSchema } from "@/ai/schema";
-import { createAvailableTools } from "@/ai/tools/registry";
+import * as ChatReply from "@/ai/chat-reply";
 import { bot, type Context } from "@/bot";
 import { saveMessage } from "@/middlewares/message";
-import { getLangfuseTelemetry } from "@/otel";
 import { buildChatMemoryPromptContext } from "@/services/chat-memory";
 import { buildRecentToolContextByMessageId } from "@/services/message-parts";
 import { ToolResultPart } from "@/types";
@@ -160,52 +157,44 @@ whitelistedGroupChat
 
 		ctx.logger.debug(`Sending ${allMessages.length} messages to AI (memory: ${!!memoryContext})`);
 
-		const availableTools = createAvailableTools();
-		const langfuseTelemetry = getLangfuseTelemetry("message-reply", {
-			chatId: String(ctx.chat.id),
-			messageId: String(triggerMessageId),
-			messageThreadId: String(messageThreadId ?? "main"),
-			userId: ctx.message.from?.id ? String(ctx.message.from.id) : "unknown",
-			sessionId: `${ctx.chat.id}:${messageThreadId ?? "main"}`,
-		});
-
-		const { output } = await generateText({
-			model: openrouter!(env.OPENROUTER_MODEL),
-			output: Output.object({ schema: chatResponseSchema }),
-			instructions: system,
-			messages: allMessages,
-			...(availableTools.tools
-				? {
-						tools: availableTools.tools,
-						stopWhen: isStepCount(2),
-						prepareStep: availableTools.prepareStep,
-					}
-				: {}),
-			telemetry: langfuseTelemetry?.telemetry,
-			runtimeContext: langfuseTelemetry?.runtimeContext,
-		}).catch((error: unknown) => {
-			if (APICallError.isInstance(error)) {
-				ctx.logger.error(
-					{
-						error: {
-							name: error.name,
-							message: error.message,
-							statusCode: error.statusCode,
-							isRetryable: error.isRetryable,
-						},
+		const generated = await Effect.runPromise(
+			ChatReply.generate({
+				instructions: system,
+				messages: allMessages,
+				trace: {
+					sessionId: `${ctx.chat.id}:${messageThreadId ?? "main"}`,
+					attributes: {
+						chatId: String(ctx.chat.id),
+						messageId: String(triggerMessageId),
+						messageThreadId: String(messageThreadId ?? "main"),
+						userId: ctx.message.from?.id ? String(ctx.message.from.id) : "unknown",
 					},
-					"AI provider returned error",
-				);
-				return { output: null };
-			}
+				},
+			}).pipe(
+				Effect.catchTag("LlmProviderError", (error) =>
+					Effect.sync(() => {
+						ctx.logger.error(
+							{
+								error: {
+									name: error.providerErrorName,
+									message: error.message,
+									statusCode: error.statusCode,
+									isRetryable: error.isRetryable,
+								},
+							},
+							"AI provider returned error",
+						);
+					}).pipe(Effect.as(null)),
+				),
+			),
+		);
 
-			throw error;
-		});
-
-		if (!output) {
+		if (!generated?.output) {
 			ctx.logger.debug("No output from AI");
 			return;
 		}
+
+		const { output, messageParts } = generated;
 
 		ctx.logger.debug(`Received ${output.replies.length} AI actions`);
 
@@ -289,9 +278,9 @@ whitelistedGroupChat
 
 				await saveMessage({ ctx, msg: sentMessage });
 
-				if (availableTools.messageParts.length > 0 && !savedMessageParts) {
+				if (messageParts.length > 0 && !savedMessageParts) {
 					await prisma.messagePart.createMany({
-						data: availableTools.messageParts.map((part) => ({
+						data: messageParts.map((part) => ({
 							chatId,
 							messageId: sentMessage.message_id,
 							type: part.type,

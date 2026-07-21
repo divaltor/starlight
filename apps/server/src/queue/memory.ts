@@ -6,16 +6,15 @@ import {
 	type Prisma,
 	prisma,
 } from "@starlight/utils";
-import { generateText } from "ai";
+import { Effect } from "effect";
+import * as MemorySummarizer from "@/ai/memory-summarizer";
 import { bot } from "@/bot";
 import { logger } from "@/logger";
-import { getLangfuseTelemetry } from "@/otel";
 import { QUEUES, RETRY } from "@/queue/absurd";
 import { GLOBAL_MEMORY_WINDOW_SIZE, TOPIC_MEMORY_WINDOW_SIZE } from "@/services/chat-memory";
 import { formatSenderName, openrouter } from "@/utils/message";
 
 const MAX_WINDOWS_PER_JOB = 4;
-const MAX_SUMMARY_TOKENS = 8192;
 // Coalesce bursts of incoming messages into a single scheduled job, while still
 // allowing future messages to trigger new jobs. The idempotency key is pinned to
 // the task row for its whole lifetime (absurd only frees it on cleanup), so a
@@ -295,32 +294,26 @@ async function summarizeWindow(params: {
 	].join("\n");
 
 	const botUsername = bot.botInfo.username;
-	const langfuseTelemetry = getLangfuseTelemetry("chat-memory", {
-		chatId: String(params.chatId),
-		scope: params.scope,
-		threadKey: String(params.threadKey === 0 ? "main" : params.threadKey),
-		startMessageId: String(params.startMessageId),
-		endMessageId: String(params.endMessageId),
-		sessionId: `${params.chatId}:${params.threadKey === 0 ? "main" : params.threadKey}`,
-	});
 
-	const { text } = await generateText({
-		model: openrouter(env.OPENROUTER_MODEL),
-		maxOutputTokens: MAX_SUMMARY_TOKENS,
-		instructions:
-			params.scope === ChatMemoryScope.topic
-				? buildTopicMemorySystemPrompt(botUsername)
-				: buildGlobalMemorySystemPrompt(botUsername),
-		messages: [{ role: "user", content: userPrompt }],
-		telemetry: langfuseTelemetry?.telemetry,
-		runtimeContext: langfuseTelemetry?.runtimeContext,
-	});
-
-	if (!text) {
-		throw new Error("Memory summarization returned empty output");
-	}
-
-	return text;
+	return Effect.runPromise(
+		MemorySummarizer.summarize({
+			instructions:
+				params.scope === ChatMemoryScope.topic
+					? buildTopicMemorySystemPrompt(botUsername)
+					: buildGlobalMemorySystemPrompt(botUsername),
+			prompt: userPrompt,
+			trace: {
+				sessionId: `${params.chatId}:${params.threadKey === 0 ? "main" : params.threadKey}`,
+				attributes: {
+					chatId: String(params.chatId),
+					scope: params.scope,
+					threadKey: String(params.threadKey === 0 ? "main" : params.threadKey),
+					startMessageId: String(params.startMessageId),
+					endMessageId: String(params.endMessageId),
+				},
+			},
+		}),
+	);
 }
 
 async function processWindow(params: {
