@@ -58,7 +58,7 @@ const env = createEnv({
 		LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),
 
 		OPENROUTER_API_KEY: z.string().optional(),
-		OPENROUTER_MODEL: z.string().default("google/gemini-3-flash-preview"),
+		OPENROUTER_MODEL: z.string().default("google/gemini-3.5-flash-lite"),
 		EXA_API_BASE_URL: z.url().default("https://api.exa.ai"),
 		EXA_API_KEY: z.string().optional(),
 

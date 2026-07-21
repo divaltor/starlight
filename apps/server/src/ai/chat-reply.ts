@@ -6,6 +6,8 @@ import { chatResponseSchema, type ChatResponse } from "@/ai/schema";
 import { createWebLookupTool, WEB_LOOKUP_TOOL_ID } from "@/ai/tools/web";
 import type { ToolResultPart } from "@/types";
 
+const MAX_WEB_LOOKUPS = 5;
+
 export interface GenerateInput {
 	readonly instructions: string;
 	readonly messages: ModelMessage[];
@@ -31,17 +33,21 @@ export const generate = Effect.fn("ChatReply.generate")(function* (
 			const result = await generateText({
 				model,
 				...generationOptions,
+				reasoning: "low",
 				output: Output.object({ schema: chatResponseSchema }),
 				instructions: input.instructions,
 				messages: input.messages,
 				tools,
-				stopWhen: isStepCount(2),
+				stopWhen: isStepCount(MAX_WEB_LOOKUPS + 1),
 				prepareStep: ({ steps }) => {
-					const lookupUsed = steps.some((step) =>
-						step.toolCalls.some((toolCall) => toolCall.toolName === WEB_LOOKUP_TOOL_ID),
+					const lookupCount = steps.reduce(
+						(count, step) =>
+							count +
+							step.toolCalls.filter((toolCall) => toolCall.toolName === WEB_LOOKUP_TOOL_ID).length,
+						0,
 					);
 
-					return lookupUsed ? { activeTools: [] } : undefined;
+					return lookupCount >= MAX_WEB_LOOKUPS ? { activeTools: [] } : undefined;
 				},
 			});
 
