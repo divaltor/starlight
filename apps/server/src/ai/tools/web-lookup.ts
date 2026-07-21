@@ -19,39 +19,23 @@ function looksLikeUrl(value: string): boolean {
 	}
 }
 
-export function createWebLookupTool(
-	messageParts: ToolResultPart[],
-	{ searchEnabled }: { searchEnabled: boolean },
-) {
-	const modes = searchEnabled ? (["url", "search"] as const) : (["url"] as const);
-
-	const description = searchEnabled
-		? 'Access the web. Use mode="url" only to read a web page whose URL is explicitly written in conversation message text or a caption (including follow-ups like "what\'s there?" or "summarize it" about a link sent earlier). Attachment, file, image, video, and other media URLs are not page links and must never be passed to this tool. Use mode="search" only to discover sources or verify current facts when there is no page URL to read. Never search for a URL just to read it, and never do both for the same thing.'
-		: 'Read a web page only when its URL is explicitly written in conversation message text or a caption (including follow-ups like "what\'s there?" or "summarize it" about a link sent earlier). Attachment, file, image, video, and other media URLs are not page links and must never be passed to this tool. Always use mode="url" with the exact page URL from the text.';
+export function createWebLookupTool(messageParts: ToolResultPart[]) {
+	const description =
+		'Access the web. Use mode="url" only to read a web page whose URL is explicitly written in conversation message text or a caption (including follow-ups like "what\'s there?" or "summarize it" about a link sent earlier). Attachment, file, image, video, and other media URLs are not page links and must never be passed to this tool. Use mode="search" only to discover sources or verify current facts when there is no page URL to read. Never search for a URL just to read it, and never do both for the same thing.';
 
 	return tool({
 		description,
 		inputSchema: z.object({
 			mode: z
-				.enum(modes)
+				.enum(["url", "search"])
 				.describe(
-					searchEnabled
-						? 'Use "url" when a page URL is explicitly written in message text or a caption; use "search" only to discover sources when there is no page URL. Never use attachment or media URLs.'
-						: 'Always "url": read the page URL explicitly written in message text or a caption. Never use attachment or media URLs.',
+					'Use "url" when a page URL is explicitly written in message text or a caption; use "search" only to discover sources when there is no page URL. Never use attachment or media URLs.',
 				),
 			url: z
 				.url()
 				.optional()
 				.describe(
 					'Required when mode="url". The exact page URL copied from message text or a caption, never an attachment, file, image, video, or other media URL.',
-				),
-			objective: z
-				.string()
-				.min(3)
-				.max(5000)
-				.optional()
-				.describe(
-					'When mode="url", describe what information to extract from the page. Omit only when the entire page is needed.',
 				),
 			query: z
 				.string()
@@ -60,13 +44,13 @@ export function createWebLookupTool(
 				.optional()
 				.describe('Required when mode="search". A concise, self-contained web search query.'),
 		}),
-		execute: async ({ mode, url, objective, query }) => {
+		execute: async ({ mode, url, query }) => {
 			// Route to fetch when we have a concrete URL — either via mode="url",
 			// or when the model put a URL into the search query by mistake.
 			const fetchTarget = mode === "url" ? url : query && looksLikeUrl(query) ? query : undefined;
 
 			if (fetchTarget) {
-				const page = await extractMarkdown(fetchTarget, objective);
+				const page = await extractMarkdown(fetchTarget);
 
 				if (!page) {
 					return { page: null };
@@ -82,7 +66,7 @@ export function createWebLookupTool(
 					new FetchPageToolResultPart({
 						type: "tool",
 						toolName: "fetch_page",
-						input: { url: fetchTarget, objective },
+						input: { url: fetchTarget },
 						output: { page: compactPage },
 					}),
 				);

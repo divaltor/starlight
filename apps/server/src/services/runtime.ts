@@ -5,7 +5,6 @@ import type { LogLevel } from "effect/LogLevel";
 import { logger } from "@/logger";
 import { ExaExtractor } from "@/services/extractors/exa";
 import { FetchExtractor } from "@/services/extractors/fetch";
-import { ParallelExtractor } from "@/services/extractors/parallel";
 import { WorkersExtractor } from "@/services/extractors/workers";
 import { TwitterApi } from "@/services/twitter-api";
 
@@ -67,7 +66,6 @@ export const runtime = ManagedRuntime.make(
 		FetchExtractor.defaultLayer,
 		ExaExtractor.defaultLayer,
 		WorkersExtractor.defaultLayer,
-		ParallelExtractor.defaultLayer,
 		TwitterApi.defaultLayer,
 		EmbeddingsService.defaultLayer,
 	),

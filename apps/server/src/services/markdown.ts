@@ -10,7 +10,6 @@ import { ExtractionError } from "@/services/extractors/base";
 import { ExaExtractor } from "@/services/extractors/exa";
 import { FetchExtractor } from "@/services/extractors/fetch";
 import { WorkersExtractor } from "@/services/extractors/workers";
-import { ParallelExtractor } from "@/services/extractors/parallel";
 import { runtime } from "@/services/runtime";
 import { TwitterApi } from "@/services/twitter-api";
 import type { ConversationAttachment } from "@/utils/message";
@@ -25,10 +24,7 @@ export interface ExtractedMarkdown {
 const ignoreExtractionError = (error: ExtractionError) =>
 	Effect.logError(`${error.extractor}: ${error.message}`, { error }).pipe(Effect.as(null));
 
-export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (
-	url: string,
-	objective?: string,
-) {
+export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (url: string) {
 	const tweetId = extractTweetId(url);
 	if (tweetId) {
 		const twitterApi = yield* TwitterApi.Service;
@@ -76,7 +72,6 @@ export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (
 	const fetchExtractor = yield* FetchExtractor.Service;
 	const exaExtractor = yield* ExaExtractor.Service;
 	const workersExtractor = yield* WorkersExtractor.Service;
-	const parallelExtractor = yield* ParallelExtractor.Service;
 
 	const fetchResult = yield* fetchExtractor.extract(url).pipe(Effect.catch(ignoreExtractionError));
 	let markdown: string | null = null;
@@ -103,17 +98,6 @@ export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (
 		}
 	}
 
-	if (!markdown && parallelExtractor.isEnabled()) {
-		const parallelResult = yield* parallelExtractor
-			.extract(url, objective)
-			.pipe(Effect.catch(ignoreExtractionError));
-
-		if (parallelResult) {
-			markdown = parallelResult.content;
-			source = "parallel";
-		}
-	}
-
 	if (!markdown && fetchResult?.kind === "html" && workersExtractor.isEnabled()) {
 		const workersResult = yield* workersExtractor
 			.extract({
@@ -134,11 +118,6 @@ export const extractMarkdownEffect = Effect.fn("extractMarkdown")(function* (
 		: null;
 });
 
-export function extractMarkdown(
-	url: string,
-	objective?: string,
-): Promise<ExtractedMarkdown | null> {
-	return runtime.runPromise(
-		extractMarkdownEffect(url, objective).pipe(Effect.provide(FetchHttpClient.layer)),
-	);
+export function extractMarkdown(url: string): Promise<ExtractedMarkdown | null> {
+	return runtime.runPromise(extractMarkdownEffect(url).pipe(Effect.provide(FetchHttpClient.layer)));
 }

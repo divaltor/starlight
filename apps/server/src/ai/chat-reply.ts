@@ -3,7 +3,6 @@ import { Effect } from "effect";
 import * as Llm from "@/ai/llm";
 import { chatResponseSchema, type ChatResponse } from "@/ai/schema";
 import { createWebLookupTool, WEB_LOOKUP_TOOL_ID } from "@/ai/tools/web-lookup";
-import { isSearchEnabled } from "@/services/search";
 import type { ToolResultPart } from "@/types";
 
 export interface GenerateInput {
@@ -22,9 +21,7 @@ export const generate = Effect.fn("ChatReply.generate")(function* (
 ): Effect.fn.Return<GenerateResult, Llm.Error> {
 	const messageParts: ToolResultPart[] = [];
 	const tools: ToolSet = {
-		[WEB_LOOKUP_TOOL_ID]: createWebLookupTool(messageParts, {
-			searchEnabled: isSearchEnabled(),
-		}),
+		[WEB_LOOKUP_TOOL_ID]: createWebLookupTool(messageParts),
 	};
 
 	const output = yield* Llm.invoke(

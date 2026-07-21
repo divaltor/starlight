@@ -20,7 +20,7 @@ export interface SearchInput {
 export interface SearchResult {
 	content: string;
 	publishedDate?: string | null;
-	source: "exa" | "parallel";
+	source: "exa";
 	title?: string | null;
 	url: string;
 }
