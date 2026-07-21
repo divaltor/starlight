@@ -57,7 +57,6 @@ export class SearchToolResultPart extends Schema.Class<SearchToolResultPart>(
 				content: Schema.String,
 				index: Schema.Number,
 				publishedDate: Schema.optional(Schema.String),
-				source: Schema.String,
 				title: Schema.optional(Schema.String),
 				url: Schema.String,
 			}),
@@ -70,7 +69,7 @@ export class SearchToolResultPart extends Schema.Class<SearchToolResultPart>(
 				const title = result.title ?? result.url;
 				const published = result.publishedDate ? `\nPublished: ${result.publishedDate}` : "";
 
-				return `${result.index}. ${title}\nURL: ${result.url}\nSource: ${result.source}${published}\n${result.content}`;
+				return `${result.index}. ${title}\nURL: ${result.url}${published}\n${result.content}`;
 			})
 			.join("\n\n");
 

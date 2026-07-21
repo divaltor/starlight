@@ -83,7 +83,6 @@ export function createWebLookupTool(messageParts: ToolResultPart[]) {
 				content: result.content.slice(0, MAX_SEARCH_CONTENT_LENGTH),
 				index: index + 1,
 				publishedDate: result.publishedDate ?? undefined,
-				source: result.source,
 				title: result.title ?? undefined,
 				url: result.url,
 			}));

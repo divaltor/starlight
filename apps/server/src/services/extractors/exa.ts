@@ -221,7 +221,6 @@ export namespace ExaExtractor {
 					results.push({
 						content,
 						publishedDate: result.publishedDate,
-						source: "exa",
 						title: result.title,
 						url: result.url,
 					});
