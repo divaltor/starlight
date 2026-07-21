@@ -3,6 +3,7 @@ import env from "@starlight/utils/config";
 import { Layer, Logger, ManagedRuntime, References } from "effect";
 import type { LogLevel } from "effect/LogLevel";
 import { logger } from "@/logger";
+import { Exa } from "@/services/exa";
 import { TwitterApi } from "@/services/twitter-api";
 
 const effectLogger = Logger.map(Logger.formatStructured, (output) => {
@@ -58,5 +59,10 @@ const loggingLayer = Layer.mergeAll(
 );
 
 export const runtime = ManagedRuntime.make(
-	Layer.mergeAll(loggingLayer, TwitterApi.defaultLayer, EmbeddingsService.defaultLayer),
+	Layer.mergeAll(
+		loggingLayer,
+		Exa.defaultLayer,
+		TwitterApi.defaultLayer,
+		EmbeddingsService.defaultLayer,
+	),
 );

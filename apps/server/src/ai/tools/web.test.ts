@@ -1,10 +1,11 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { describe, expect, test } from "bun:test";
-import { generateText } from "ai";
-import { createOpenRouterWebTools } from "@/ai/tools/web";
+import { generateText, Output } from "ai";
+import { chatResponseSchema } from "@/ai/schema";
+import { createWebLookupTool, WEB_LOOKUP_TOOL_ID } from "@/ai/tools/web";
 
-describe("createOpenRouterWebTools", () => {
-	test("serializes search and fetch as OpenRouter server tools", async () => {
+describe("createWebLookupTool", () => {
+	test("serializes lookup as an application function tool alongside structured output", async () => {
 		let requestBody: Record<string, unknown> | undefined;
 		const mockFetch: typeof fetch = Object.assign(
 			async (...args: Parameters<typeof fetch>) => {
@@ -20,7 +21,7 @@ describe("createOpenRouterWebTools", () => {
 						choices: [
 							{
 								index: 0,
-								message: { role: "assistant", content: "ok" },
+								message: { role: "assistant", content: '{"replies":[]}' },
 								finish_reason: "stop",
 							},
 						],
@@ -39,23 +40,16 @@ describe("createOpenRouterWebTools", () => {
 		await generateText({
 			model: provider("test/model"),
 			prompt: "test",
-			tools: createOpenRouterWebTools(provider),
+			output: Output.object({ schema: chatResponseSchema }),
+			tools: { [WEB_LOOKUP_TOOL_ID]: createWebLookupTool([]) },
 		});
 
 		expect(requestBody?.tools).toEqual([
-			{
-				type: "openrouter:web_search",
-				engine: "exa",
-				max_results: 3,
-			},
-			{
-				type: "openrouter:web_fetch",
-				parameters: {
-					engine: "exa",
-					max_content_tokens: 6_000,
-					max_uses: 1,
-				},
-			},
+			expect.objectContaining({
+				type: "function",
+				function: expect.objectContaining({ name: WEB_LOOKUP_TOOL_ID }),
+			}),
 		]);
+		expect(requestBody?.response_format).toEqual(expect.objectContaining({ type: "json_schema" }));
 	});
 });
