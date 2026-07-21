@@ -1,9 +1,10 @@
-import { Output, generateText, isStepCount, type ModelMessage, type ToolSet } from "ai";
+import { Output, generateText, isStepCount, type ModelMessage } from "ai";
 import { Effect } from "effect";
 import * as Llm from "@/ai/llm";
 import { chatResponseSchema, type ChatResponse } from "@/ai/schema";
-import { createWebLookupTool, WEB_LOOKUP_TOOL_ID } from "@/ai/tools/web-lookup";
-import type { ToolResultPart } from "@/types";
+import { createOpenRouterWebTools } from "@/ai/tools/web";
+import { OpenRouterWebToolResultPart, type ToolResultPart } from "@/types";
+import { openrouter } from "@/utils/message";
 
 export interface GenerateInput {
 	readonly instructions: string;
@@ -20,9 +21,6 @@ export const generate = Effect.fn("ChatReply.generate")(function* (
 	input: GenerateInput,
 ): Effect.fn.Return<GenerateResult, Llm.Error> {
 	const messageParts: ToolResultPart[] = [];
-	const tools: ToolSet = {
-		[WEB_LOOKUP_TOOL_ID]: createWebLookupTool(messageParts),
-	};
 
 	const output = yield* Llm.invoke(
 		{ ...input.trace, operation: "message-reply" },
@@ -33,16 +31,32 @@ export const generate = Effect.fn("ChatReply.generate")(function* (
 				output: Output.object({ schema: chatResponseSchema }),
 				instructions: input.instructions,
 				messages: input.messages,
-				tools,
+				tools: createOpenRouterWebTools(openrouter!),
 				stopWhen: isStepCount(2),
-				prepareStep: ({ steps }) => {
-					const webLookupUsed = steps.some((step) =>
-						step.toolCalls.some((toolCall) => toolCall.toolName === WEB_LOOKUP_TOOL_ID),
-					);
-
-					return webLookupUsed ? { activeTools: [] } : undefined;
-				},
 			});
+
+			const sources = result.sources
+				.filter((source) => source.sourceType === "url")
+				.map((source) => {
+					const content = source.providerMetadata?.openrouter?.content;
+
+					return {
+						url: source.url,
+						title: source.title || undefined,
+						content: typeof content === "string" && content ? content : undefined,
+					};
+				})
+				.filter((source, index, all) => all.findIndex((item) => item.url === source.url) === index);
+
+			if (sources.length > 0) {
+				messageParts.push(
+					new OpenRouterWebToolResultPart({
+						type: "tool",
+						toolName: "openrouter_web",
+						output: { sources },
+					}),
+				);
+			}
 
 			return result.output;
 		},

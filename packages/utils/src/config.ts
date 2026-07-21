@@ -60,14 +60,9 @@ const env = createEnv({
 		OPENROUTER_API_KEY: z.string().optional(),
 		OPENROUTER_MODEL: z.string().default("google/gemini-3-flash-preview"),
 
-		CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
-		CLOUDFLARE_API_TOKEN: z.string().optional(),
 		CLOUDFLARE_WORKERS_AI_SUMMARY_MODEL: z
 			.string()
 			.default("@cf/meta/llama-3.2-11b-vision-instruct"),
-
-		EXA_API_BASE_URL: z.url().default("https://api.exa.ai"),
-		EXA_API_KEY: z.string(),
 
 		LANGFUSE_PUBLIC_KEY: z.string().optional(),
 		LANGFUSE_SECRET_KEY: z.string().optional(),

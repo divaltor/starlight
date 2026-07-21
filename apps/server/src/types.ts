@@ -106,7 +106,40 @@ export class FetchPageToolResultPart extends Schema.Class<FetchPageToolResultPar
 	}
 }
 
-export const ToolResultPart = Schema.Union([SearchToolResultPart, FetchPageToolResultPart]);
+export class OpenRouterWebToolResultPart extends Schema.Class<OpenRouterWebToolResultPart>(
+	"OpenRouterWebToolResultPart",
+)({
+	...ToolResultPartBase,
+	toolName: Schema.Literal("openrouter_web"),
+	output: Schema.Struct({
+		sources: Schema.Array(
+			Schema.Struct({
+				content: Schema.optional(Schema.String),
+				title: Schema.optional(Schema.String),
+				url: Schema.String,
+			}),
+		),
+	}),
+}) {
+	formatContext(messageId: number): string {
+		const sources = this.output.sources
+			.map((source, index) => {
+				const title = source.title ?? source.url;
+				const content = source.content ? `\n${source.content}` : "";
+
+				return `${index + 1}. ${title}\nURL: ${source.url}${content}`;
+			})
+			.join("\n\n");
+
+		return `Tool context for assistant message #${messageId}\nTool: ${this.toolName}\n${sources}`;
+	}
+}
+
+export const ToolResultPart = Schema.Union([
+	SearchToolResultPart,
+	FetchPageToolResultPart,
+	OpenRouterWebToolResultPart,
+]);
 export type ToolResultPart = typeof ToolResultPart.Type;
 
 export type MessagePartData = typeof ToolResultPart.Encoded;

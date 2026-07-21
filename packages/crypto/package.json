@@ -24,6 +24,6 @@
     "@noble/hashes": "^2.2.0"
   },
   "peerDependencies": {
-    "typescript": "^6"
+    "typescript": "^7.0.2"
   }
 }

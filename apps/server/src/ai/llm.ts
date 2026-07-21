@@ -26,7 +26,7 @@ export class ProviderError extends Schema.TaggedErrorClass<ProviderError>()("Llm
 	message: Schema.String,
 	statusCode: Schema.optional(Schema.Number),
 	isRetryable: Schema.optional(Schema.Boolean),
-	cause: Schema.optional(Schema.Defect),
+	cause: Schema.optional(Schema.Defect()),
 }) {
 	static fromApiCallError(operation: Operation, error: APICallError) {
 		return new ProviderError({
@@ -35,7 +35,7 @@ export class ProviderError extends Schema.TaggedErrorClass<ProviderError>()("Llm
 			message: error.message,
 			statusCode: error.statusCode,
 			isRetryable: error.isRetryable,
-			cause: Schema.Defect.make(error),
+			cause: error,
 		});
 	}
 }
@@ -45,14 +45,14 @@ export class InvocationError extends Schema.TaggedErrorClass<InvocationError>()(
 	{
 		operation: Operation,
 		message: Schema.String,
-		cause: Schema.optional(Schema.Defect),
+		cause: Schema.optional(Schema.Defect()),
 	},
 ) {
 	static fromCause(operation: Operation, cause: unknown) {
 		return new InvocationError({
 			operation,
 			message: cause instanceof Error ? cause.message : "LLM invocation failed",
-			cause: Schema.Defect.make(cause),
+			cause,
 		});
 	}
 }

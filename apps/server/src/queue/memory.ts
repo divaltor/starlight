@@ -174,7 +174,7 @@ function formatWindowMessage(
 
 	if (hasText) {
 		// biome-ignore lint/style/noNonNullAssertion: hasText guarantees rawContent is non-null
-		body = rawContent!.replace(/\s+/g, " ").trim().slice(0, 280);
+		body = rawContent!.replace(/\s+/g, " ").trim();
 	} else if (entry.attachments.length > 0) {
 		const labels = entry.attachments.map((attachment) =>
 			attachmentLabelFromMimeType(attachment.mimeType),

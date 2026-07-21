@@ -9,12 +9,12 @@ import {
 
 export class EmbeddingsError extends Schema.TaggedErrorClass<EmbeddingsError>()("EmbeddingsError", {
 	message: Schema.String,
-	cause: Schema.optional(Schema.Defect),
+	cause: Schema.optional(Schema.Defect()),
 }) {
 	static fromCause(input: { message: string; cause: unknown }) {
 		return new EmbeddingsError({
 			message: input.message,
-			cause: Schema.Defect.make(input.cause),
+			cause: input.cause,
 		});
 	}
 }

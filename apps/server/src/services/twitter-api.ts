@@ -16,12 +16,12 @@ const USER_AGENT = "StarlightBot/1.0 (Telegram Bot)";
 
 export class TwitterApiError extends Schema.TaggedErrorClass<TwitterApiError>()("TwitterApiError", {
 	message: Schema.String,
-	cause: Schema.optional(Schema.Defect),
+	cause: Schema.optional(Schema.Defect()),
 }) {
 	static fromCause(input: { message: string; cause: unknown }) {
 		return new TwitterApiError({
 			message: input.message,
-			cause: Schema.Defect.make(input.cause),
+			cause: input.cause,
 		});
 	}
 }
