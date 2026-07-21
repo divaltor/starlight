@@ -1,10 +1,21 @@
 import logging.config
-from typing import Any
+from typing import Any, override
 
 import structlog
 from opentelemetry import trace
 
 from app.config import config
+
+_SUPPRESSED_TRANSFORMERS_ADVISORIES = (
+    'You seem to be using the pipelines sequentially on GPU',
+    'Using a slow image processor as `use_fast` is unset',
+)
+
+
+class SuppressTransformersAdvisories(logging.Filter):
+    @override
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not record.getMessage().startswith(_SUPPRESSED_TRANSFORMERS_ADVISORIES)
 
 
 def add_open_telemetry_spans(_, __, event_dict: dict[str, Any]) -> dict[str, Any]:  # pyright: ignore[reportUnknownParameterType, reportMissingParameterType]
@@ -51,6 +62,11 @@ logging.config.dictConfig(
     {
         'version': 1,
         'disable_existing_loggers': False,
+        'filters': {
+            'suppress_transformers_advisories': {
+                '()': SuppressTransformersAdvisories,
+            },
+        },
         'formatters': {
             'colored': {
                 '()': structlog.stdlib.ProcessorFormatter,
@@ -67,6 +83,7 @@ logging.config.dictConfig(
                 'level': config.LOG_LEVEL,
                 'class': 'logging.StreamHandler',
                 'formatter': 'colored',
+                'filters': ['suppress_transformers_advisories'],
             },
         },
         'loggers': {
