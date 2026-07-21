@@ -1,5 +1,5 @@
 import type { Message, MessageEntity } from "@grammyjs/types";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { attachmentLabelFromMimeType, env } from "@starlight/utils";
 import type { FilePart, ModelMessage, TextPart } from "ai";
 import { format } from "date-fns";
@@ -94,12 +94,10 @@ interface ConversationTurnEntry {
 }
 
 export const openrouter = env.OPENROUTER_API_KEY
-	? createOpenAICompatible({
+	? createOpenRouter({
 			apiKey: env.OPENROUTER_API_KEY,
-			baseURL: "https://openrouter.ai/api/v1",
-			headers: { "X-OpenRouter-Title": env.APP_NAME },
-			name: "openrouter",
-			supportsStructuredOutputs: true,
+			appName: env.APP_NAME,
+			compatibility: "strict",
 		})
 	: null;
 

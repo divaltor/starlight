@@ -13,7 +13,6 @@
     "queue:embeddings": "bun run src/scripts/embeddings.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai-compatible": "^3.0.5",
     "@ai-sdk/otel": "^1.0.14",
     "@grammyjs/auto-retry": "^2.0.2",
     "@grammyjs/files": "^1.2.0",
@@ -22,6 +21,7 @@
     "@grammyjs/runner": "^2.0.3",
     "@langfuse/otel": "^5.3.0",
     "@napi-rs/canvas": "^1.0.0",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
     "@opentelemetry/instrumentation-pino": "^0.64.0",
     "@opentelemetry/sdk-node": "^0.218.0",
     "@opentelemetry/sdk-trace-base": "^2.7.1",
