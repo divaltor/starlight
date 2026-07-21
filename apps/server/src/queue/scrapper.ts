@@ -113,12 +113,7 @@ scrapperApp.registerTask<ScheduledScrapperJobData>(
 scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data) => {
 	const { userId } = data;
 
-	logger.info(
-		{ userId, jobData: data },
-		"Scraping timeline for user %s, page %s",
-		userId,
-		data.cursor,
-	);
+	logger.info({ userId, cursor: data.cursor, jobData: data }, "Scraping timeline");
 
 	let user: User;
 
@@ -177,8 +172,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 				userId,
 				error: String(error),
 			},
-			"Unable to fetch timeline for user %s",
-			userId,
+			"Unable to fetch timeline",
 		);
 
 		throw error;
@@ -190,9 +184,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 			cursor: data.cursor,
 			tweets: timeline.tweets.length,
 		},
-		"Scraped timeline for user %s, page %s",
-		userId,
-		data.cursor,
+		"Scraped timeline",
 	);
 
 	const CONSECUTIVE_THRESHOLD = 15;
@@ -262,8 +254,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 					newTweetsInBatch,
 					totalProcessed: timeline.tweets.indexOf(tweet) + 1,
 				},
-				"Stopping scrape: found %d consecutive known tweets",
-				consecutiveKnownTweets,
+				"Stopping scrape after consecutive known tweets",
 			);
 			break;
 		}

@@ -92,7 +92,10 @@ export function decodeCookies(value: string | null, cookieNames?: string[]): Coo
 							};
 							cookies.push(cookie);
 						} catch (error) {
-							console.warn("Failed to create cookie from Quick Manager format:", error);
+							console.warn("Failed to create cookie from Quick Manager format", {
+								error,
+								cookieName,
+							});
 						}
 					}
 				}

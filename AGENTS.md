@@ -25,6 +25,7 @@ Bot/Mini App ──> Scraper (Absurd) ──> AI (CLIP/pHash) ──> PostgreSQL
 7. Align on pre-existing types from libraries and generated code; avoid creating redundant helper types or defensive type-safety checks for scenarios that cannot happen in trusted internal code.
 8. In Grammy handlers, `ctx.<obj>` is guaranteed by middleware; use `ctx.<obj>!` instead of defensive existence checks.
 9. When user asks about EffectTS - use EffectTS skill
+10. Use structured logging: keep messages stable and put object IDs and dynamic context in log fields (for example, `logger.info({ photoId }, "Photo embeddings generated")`), never interpolate them into the message.
 
 ## Maintenance & Tasks
 

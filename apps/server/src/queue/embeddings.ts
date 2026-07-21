@@ -36,12 +36,7 @@ embeddingsApp.registerTask<ClassificationJobData>({ name: "embeddings" }, async 
 		return;
 	}
 
-	logger.info(
-		{ photoId, userId, requestId },
-		"Generating embeddings for photo %s for user %s",
-		photoId,
-		userId,
-	);
+	logger.info({ photoId, userId, requestId }, "Generating photo embeddings");
 
 	const photo = await prisma.photo.findUnique({
 		where: {
@@ -55,12 +50,12 @@ embeddingsApp.registerTask<ClassificationJobData>({ name: "embeddings" }, async 
 	});
 
 	if (!photo) {
-		logger.error({ photoId, userId, requestId }, "Photo %s not found for user %s", photoId, userId);
+		logger.error({ photoId, userId, requestId }, "Photo not found");
 		return;
 	}
 
 	if (!photo.s3Url) {
-		logger.warn({ photoId, userId, requestId }, "Photo %s has no s3Url yet", photoId);
+		logger.warn({ photoId, userId, requestId }, "Photo is missing an S3 URL");
 		throw new Error("Photo has no URL for embeddings");
 	}
 
@@ -89,5 +84,5 @@ embeddingsApp.registerTask<ClassificationJobData>({ name: "embeddings" }, async 
 		Prisma.sql`UPDATE photos SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE id = ${photoId} AND user_id = ${userId}`,
 	);
 
-	logger.info({ photoId, userId, requestId }, "Photo %s embeddings generated", photoId);
+	logger.info({ photoId, userId, requestId }, "Photo embeddings generated");
 });

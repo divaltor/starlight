@@ -18,7 +18,7 @@ const rpcHandler = new RPCHandler(appRouter, {
 	],
 	interceptors: [
 		onError((error) => {
-			console.error("Error in RPC handler", error);
+			console.error("RPC handler error", { error });
 		}),
 	],
 });

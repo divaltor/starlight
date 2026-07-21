@@ -135,7 +135,10 @@ async function handleVideoRequest(
 		});
 
 		if (existingVideo) {
-			ctx.logger.info("Found existing video for tweet %s, sending via file_id", tweetId);
+			ctx.logger.info(
+				{ tweetId, videoId: existingVideo.id },
+				"Found existing video; sending via Telegram file ID",
+			);
 
 			try {
 				await sendVideo(existingVideo.telegramFileId, {
@@ -154,7 +157,10 @@ async function handleVideoRequest(
 					message_thread_id: messageThreadId,
 				});
 
-				ctx.logger.info("Existing video sent successfully to %s", ctx.chatId);
+				ctx.logger.info(
+					{ chatId: ctx.chatId, tweetId, videoId: existingVideo.id },
+					"Sent existing video",
+				);
 				return;
 			} catch (error) {
 				ctx.logger.error(
@@ -211,7 +217,7 @@ async function handleVideoRequest(
 				videos = await downloadVideo(link, tempDir.name);
 			}
 		} catch (error) {
-			ctx.logger.error(error, "Error downloading video");
+			ctx.logger.error({ error, link }, "Failed to download video");
 
 			await sendText("Can't download video, sorry.", {
 				message_thread_id: messageThreadId,
@@ -233,7 +239,7 @@ async function handleVideoRequest(
 					});
 					return;
 				} catch (imgError) {
-					ctx.logger.error(imgError, "Error generating tweet image");
+					ctx.logger.error({ error: imgError, tweetId }, "Failed to generate tweet image");
 					await sendText("Can't process this tweet, sorry.", {
 						message_thread_id: messageThreadId,
 					});
@@ -251,7 +257,7 @@ async function handleVideoRequest(
 
 		for (const video of videos) {
 			try {
-				ctx.logger.debug("Sending video %s to %s", video.filePath, ctx.chatId);
+				ctx.logger.debug({ chatId: ctx.chatId, filePath: video.filePath }, "Sending video");
 
 				const videoId = Bun.randomUUIDv7();
 
@@ -281,10 +287,10 @@ async function handleVideoRequest(
 					});
 				}
 
-				ctx.logger.info("Video %s sent successfully to %s", video.filePath, ctx.chatId);
+				ctx.logger.info({ chatId: ctx.chatId, filePath: video.filePath, videoId }, "Sent video");
 			} catch (error) {
 				if (error instanceof GrammyError) {
-					ctx.logger.error(error, "Error sending video");
+					ctx.logger.error({ error, filePath: video.filePath }, "Failed to send video");
 					if (error.error_code === 413) {
 						await sendText("Video is too large, can't be sent.", {
 							message_thread_id: messageThreadId,

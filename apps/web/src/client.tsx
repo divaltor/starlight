@@ -18,7 +18,7 @@ async function initializeClient() {
 			return;
 		}
 
-		console.error("❌ TMA client initialization failed:", error);
+		console.error("TMA client initialization failed", { error });
 	}
 }
 

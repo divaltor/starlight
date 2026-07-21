@@ -21,10 +21,13 @@ initTelemetry();
 const boundary = bot.errorBoundary((error) => {
 	const { ctx } = error;
 
-	ctx.logger.error({
-		err: error.error,
-		message: error.message,
-	});
+	ctx.logger.error(
+		{
+			err: error.error,
+			message: error.message,
+		},
+		"Unhandled bot update error",
+	);
 });
 
 boundary.use(videoHandler);

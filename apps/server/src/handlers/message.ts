@@ -82,8 +82,15 @@ whitelistedGroupChat
 		const botId = ctx.me.id;
 
 		ctx.logger.debug(
-			{ chatId: ctx.chat.id, messageId: triggerMessageId },
-			`Processing for AI (thread: ${messageThreadId}, text: ${!!ctx.message.text}, caption: ${!!ctx.message.caption}, attachments: ${ctx.attachments.length})`,
+			{
+				attachmentCount: ctx.attachments.length,
+				chatId: ctx.chat.id,
+				hasCaption: Boolean(ctx.message.caption),
+				hasText: Boolean(ctx.message.text),
+				messageId: triggerMessageId,
+				messageThreadId,
+			},
+			"Processing AI reply",
 		);
 
 		await ctx.replyWithChatAction("typing");
@@ -91,7 +98,8 @@ whitelistedGroupChat
 		const { messages, directReplyEntry, knownMessageIds } = await History.build(ctx);
 
 		ctx.logger.debug(
-			`Built conversation: ${messages.length} messages, directReply: ${!!directReplyEntry}`,
+			{ hasDirectReply: Boolean(directReplyEntry), messageCount: messages.length },
+			"Built conversation",
 		);
 
 		const memoryContext = await buildChatMemoryPromptContext({
@@ -155,7 +163,10 @@ whitelistedGroupChat
 
 		knownMessageIds.add(triggerMessageId);
 
-		ctx.logger.debug(`Sending ${allMessages.length} messages to AI (memory: ${!!memoryContext})`);
+		ctx.logger.debug(
+			{ hasMemoryContext: Boolean(memoryContext), messageCount: allMessages.length },
+			"Sending messages to AI",
+		);
 
 		const generated = await Effect.runPromise(
 			ChatReply.generate({
@@ -196,7 +207,7 @@ whitelistedGroupChat
 
 		const { output, messageParts } = generated;
 
-		ctx.logger.debug(`Received ${output.replies.length} AI actions`);
+		ctx.logger.debug({ actionCount: output.replies.length }, "Received AI actions");
 
 		let sentTextCount = 0;
 		let savedMessageParts = false;
@@ -272,8 +283,12 @@ whitelistedGroupChat
 				});
 
 				ctx.logger.debug(
-					{ messageId: sentMessage.message_id },
-					`Sent AI reply (replyTo: ${replyToId ?? "none"}, length: ${replyText.length})`,
+					{
+						messageId: sentMessage.message_id,
+						replyLength: replyText.length,
+						replyToMessageId: replyToId,
+					},
+					"Sent AI reply",
 				);
 
 				await saveMessage({ ctx, msg: sentMessage });

@@ -224,7 +224,12 @@ export class Attachment {
 				const prepared = await handler(msg, ctx.api);
 				if (prepared) {
 					logger.debug(
-						`Prepared ${prepared.attachmentType} (${prepared.mimeType}, ${prepared.payload.length} bytes)`,
+						{
+							attachmentType: prepared.attachmentType,
+							mimeType: prepared.mimeType,
+							sizeBytes: prepared.payload.length,
+						},
+						"Prepared attachment",
 					);
 					preparedAttachments.push(prepared);
 				}
@@ -243,7 +248,10 @@ export class Attachment {
 
 				await s3.write(s3Path, attachment.payload, { type: attachment.mimeType });
 
-				logger.debug(`Saved ${attachment.attachmentType} to S3: ${s3Path}`);
+				logger.debug(
+					{ attachmentType: attachment.attachmentType, s3Path },
+					"Saved attachment to S3",
+				);
 
 				return {
 					attachmentType: attachment.attachmentType,
@@ -255,7 +263,7 @@ export class Attachment {
 			}),
 		);
 
-		logger.debug(`Saved ${savedAttachments.length} attachments`);
+		logger.debug({ attachmentCount: savedAttachments.length }, "Saved attachments");
 
 		return savedAttachments;
 	}

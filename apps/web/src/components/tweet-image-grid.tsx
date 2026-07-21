@@ -91,7 +91,7 @@ export function TweetImageGrid({
 					document.body.removeChild(link);
 					window.URL.revokeObjectURL(blobUrl);
 				} catch (error) {
-					console.error("Download failed:", error);
+					console.error("Image download failed", { error, filename, url });
 					window.open(url, "_blank", "noopener,noreferrer");
 				}
 			},

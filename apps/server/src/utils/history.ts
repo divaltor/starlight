@@ -52,8 +52,13 @@ export class History {
 		const repliedMessage = message.reply_to_message;
 
 		logger.debug(
-			{ chatId: ctx.chat!.id, messageId: currentMessageId },
-			`Building message history (thread: ${messageThreadId}, hasReply: ${!!repliedMessage})`,
+			{
+				chatId: ctx.chat!.id,
+				hasReply: Boolean(repliedMessage),
+				messageId: currentMessageId,
+				messageThreadId,
+			},
+			"Building message history",
 		);
 
 		// Fetch recent chat history, excluding the current message (it's appended separately by the caller)
@@ -73,7 +78,7 @@ export class History {
 			take: env.HISTORY_LIMIT,
 		});
 
-		logger.debug(`Fetched ${history.length} messages from history`);
+		logger.debug({ messageCount: history.length }, "Fetched message history");
 
 		const directReplyMessageId = repliedMessage?.message_id ?? null;
 
@@ -97,7 +102,8 @@ export class History {
 				logger.debug({ messageId: referencedMessage.messageId }, "Backfilled direct reply message");
 			} else {
 				logger.debug(
-					`Direct reply message not found in database (replyTo: ${repliedMessage.message_id})`,
+					{ replyToMessageId: repliedMessage.message_id },
+					"Direct reply message not found in database",
 				);
 			}
 		}
@@ -159,7 +165,12 @@ export class History {
 		const knownMessageIds = new Set(orderedHistoryEntries.map((entry) => entry.messageId));
 
 		logger.debug(
-			`Built history: ${messages.length} messages, ${inlineMessageIds.size} inlined, directReply: ${!!directReplyEntry}`,
+			{
+				hasDirectReply: Boolean(directReplyEntry),
+				inlinedMessageCount: inlineMessageIds.size,
+				messageCount: messages.length,
+			},
+			"Built message history",
 		);
 
 		return {

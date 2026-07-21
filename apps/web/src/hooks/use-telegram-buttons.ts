@@ -43,7 +43,7 @@ export function useTelegramButtons(
 						throw new Error(`Invalid action type: ${action.type}`);
 				}
 			} catch (error) {
-				console.error(`Error executing ${buttonType} action:`, error);
+				console.error("Failed to execute Telegram button action", { buttonType, error });
 			}
 		},
 		[router],

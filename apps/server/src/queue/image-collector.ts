@@ -33,7 +33,7 @@ imagesApp.registerTask<ImageCollectorJobData>({ name: "images-collector" }, asyn
 	// Tweet guaranteed to have IDs, fucking types
 	const id = tweet.id!;
 
-	logger.info({ tweetId: tweet.id, userId }, "Processing tweet %s for user %s", tweet.id, userId);
+	logger.info({ tweetId: tweet.id, userId }, "Processing tweet");
 
 	if (tweet.photos.length === 0) {
 		logger.debug({ tweetId: tweet.id, userId }, "Tweet has no photos, skipping job");
@@ -65,10 +65,7 @@ imagesApp.registerTask<ImageCollectorJobData>({ name: "images-collector" }, asyn
 
 	logger.info(
 		{ tweetId: tweet.id, userId, photos: tweetRecord.photos.length },
-		"Tweet %s for user %s upserted with %s photos",
-		tweet.id,
-		userId,
-		tweetRecord.photos.length,
+		"Tweet upserted with photos",
 	);
 
 	const refreshedPhotoIds = new Set<string>();
@@ -82,8 +79,7 @@ imagesApp.registerTask<ImageCollectorJobData>({ name: "images-collector" }, asyn
 					photoId: photo.id,
 					userId,
 				},
-				"Photo %s already downloaded, skipping",
-				photo.id,
+				"Photo already downloaded; skipping",
 			);
 			continue;
 		}
@@ -102,7 +98,7 @@ imagesApp.registerTask<ImageCollectorJobData>({ name: "images-collector" }, asyn
 					status: response.status,
 					userId,
 				},
-				"Failed to fetch photo %s for tweet %s",
+				"Failed to fetch photo",
 			);
 			throw new Error(`Failed to fetch photo ${photo.originalUrl}`);
 		}
@@ -176,9 +172,7 @@ imagesApp.registerTask<ImageCollectorJobData>({ name: "images-collector" }, asyn
 				photoId: photo.id,
 				userId,
 			},
-			"Tweet %s photos are saved to S3 for user %s",
-			tweet.id,
-			userId,
+			"Photo saved to S3",
 		);
 	}
 });

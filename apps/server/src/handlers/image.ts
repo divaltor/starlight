@@ -689,7 +689,7 @@ privateChat.command("scrapper").filter(
 		);
 
 		if (scheduledJob.created) {
-			ctx.logger.debug("Scheduled scrapper for user %s", user.id);
+			ctx.logger.debug({ userId: user.id }, "Scheduled scrapper");
 
 			await scrapperApp.spawn(
 				"feed-scrapper",

@@ -39,12 +39,7 @@ classificationApp.registerTask<ClassificationJobData>(
 			return;
 		}
 
-		logger.info(
-			{ photoId, userId, requestId },
-			"Classifying photo %s for user %s",
-			photoId,
-			userId,
-		);
+		logger.info({ photoId, userId, requestId }, "Classifying photo");
 
 		// Fetch photo record to get URL
 		const photo = await prisma.photo.findUnique({
@@ -59,17 +54,12 @@ classificationApp.registerTask<ClassificationJobData>(
 		});
 
 		if (!photo) {
-			logger.error(
-				{ photoId, userId, requestId },
-				"Photo %s not found for user %s",
-				photoId,
-				userId,
-			);
+			logger.error({ photoId, userId, requestId }, "Photo not found");
 			return;
 		}
 
 		if (!photo.s3Url) {
-			logger.warn({ photoId, userId, requestId }, "Photo %s has no s3Url yet", photoId);
+			logger.warn({ photoId, userId, requestId }, "Photo is missing an S3 URL");
 			throw new Error("Photo has no URL for classification");
 		}
 
@@ -131,6 +121,6 @@ classificationApp.registerTask<ClassificationJobData>(
 			},
 		);
 
-		logger.info({ photoId, userId, requestId }, "Photo %s classified", photoId);
+		logger.info({ photoId, userId, requestId }, "Photo classified");
 	},
 );

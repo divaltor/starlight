@@ -21,14 +21,14 @@ async function createVideoInformation(filePath: string): Promise<VideoInformatio
 
 	const infoJsonPath = path.join(parsedPath.dir, `${parsedPath.name}.info.json`);
 
-	logger.debug("Creating video information for %s", infoJsonPath);
+	logger.debug({ infoJsonPath }, "Creating video information");
 
 	let metadata: VideoMetadata = {};
 
 	try {
 		metadata = (await Bun.file(infoJsonPath).json()) as VideoMetadata;
 	} catch (error) {
-		logger.error(error, "Error creating video information for %s", filePath);
+		logger.error({ error, filePath }, "Failed to create video information");
 	}
 
 	return {
@@ -47,7 +47,7 @@ export async function downloadVideoFromUrl(
 	const uuid = Bun.randomUUIDv7();
 	const filePath = path.join(folder, `${uuid}.mp4`);
 
-	logger.debug("Downloading video directly from URL %s", url);
+	logger.debug({ url }, "Downloading video directly from URL");
 
 	const response = await http(url);
 
@@ -61,7 +61,7 @@ export async function downloadVideoFromUrl(
 }
 
 export async function downloadVideo(url: string, folder: string): Promise<VideoInformation[]> {
-	logger.debug("Downloading video from %s to %s", url, folder);
+	logger.debug({ folder, url }, "Downloading video");
 
 	const uuid = Bun.randomUUIDv7();
 
@@ -78,7 +78,7 @@ export async function downloadVideo(url: string, folder: string): Promise<VideoI
 	});
 
 	if (subprocess.error) {
-		logger.error("Error downloading video from %s", url);
+		logger.error({ url }, "Failed to download video");
 		throw subprocess.error;
 	}
 

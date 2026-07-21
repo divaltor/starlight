@@ -138,7 +138,20 @@ composer.on("inline_query").filter(
 				}),
 			];
 
-			let generatedImagesLog = `Generated images for tweet ${tweetId}: light ${lightResult.width}x${lightResult.height} (${(lightResult.buffer.length / 1024).toFixed(1)}KB), dark ${darkResult.width}x${darkResult.height} (${(darkResult.buffer.length / 1024).toFixed(1)}KB)`;
+			const generatedImages = [
+				{
+					height: lightResult.height,
+					sizeBytes: lightResult.buffer.length,
+					theme: "light",
+					width: lightResult.width,
+				},
+				{
+					height: darkResult.height,
+					sizeBytes: darkResult.buffer.length,
+					theme: "dark",
+					width: darkResult.width,
+				},
+			];
 
 			if (tweetData.replyChain?.length) {
 				const tweetDataWithoutChain = {
@@ -183,10 +196,23 @@ composer.on("inline_query").filter(
 					}),
 				);
 
-				generatedImagesLog += `, light no chain ${lightNoChainResult.width}x${lightNoChainResult.height} (${(lightNoChainResult.buffer.length / 1024).toFixed(1)}KB), dark no chain ${darkNoChainResult.width}x${darkNoChainResult.height} (${(darkNoChainResult.buffer.length / 1024).toFixed(1)}KB)`;
+				generatedImages.push(
+					{
+						height: lightNoChainResult.height,
+						sizeBytes: lightNoChainResult.buffer.length,
+						theme: "light-no-chain",
+						width: lightNoChainResult.width,
+					},
+					{
+						height: darkNoChainResult.height,
+						sizeBytes: darkNoChainResult.buffer.length,
+						theme: "dark-no-chain",
+						width: darkNoChainResult.width,
+					},
+				);
 			}
 
-			ctx.logger.info(generatedImagesLog);
+			ctx.logger.info({ generatedImages, tweetId }, "Generated tweet images");
 
 			await ctx.answerInlineQuery(results);
 
