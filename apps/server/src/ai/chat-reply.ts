@@ -42,7 +42,7 @@ export const generate = Effect.fn("ChatReply.generate")(function* (
 
 					return {
 						url: source.url,
-						title: source.title || undefined,
+						title: source.title,
 						content: typeof content === "string" && content ? content : undefined,
 					};
 				})
