@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { Exa, type ExaPage, type ExaSearchResult } from "@/services/exa";
 import { runtime } from "@/services/runtime";
 
@@ -9,7 +9,10 @@ export const lookupWebPageEffect = Effect.fn("lookupWebPage")(function* (url: st
 		.lookup(url)
 		.pipe(
 			Effect.catch((error) =>
-				Effect.logError("Exa page lookup failed", { error, url }).pipe(Effect.as(null)),
+				Effect.logError("Exa page lookup failed", Cause.fail(error)).pipe(
+					Effect.annotateLogs({ url }),
+					Effect.as(null),
+				),
 			),
 		);
 });
@@ -21,7 +24,10 @@ export const searchWebEffect = Effect.fn("searchWeb")(function* (query: string) 
 		.search(query)
 		.pipe(
 			Effect.catch((error) =>
-				Effect.logError("Exa web search failed", { error, query }).pipe(Effect.as([])),
+				Effect.logError("Exa web search failed", Cause.fail(error)).pipe(
+					Effect.annotateLogs({ query }),
+					Effect.as([]),
+				),
 			),
 		);
 });

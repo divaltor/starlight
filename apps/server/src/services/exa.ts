@@ -53,7 +53,7 @@ export interface ExaSearchResult {
 
 export class ExaError extends Schema.TaggedErrorClass<ExaError>()("ExaError", {
 	message: Schema.String,
-	cause: Schema.optional(Schema.Defect()),
+	cause: Schema.optional(Schema.Defect),
 }) {
 	static fromCause(message: string, cause: unknown) {
 		return new ExaError({ message, cause });
@@ -93,7 +93,18 @@ export namespace Exa {
 					Effect.mapError((error) => ExaError.fromCause("Exa API request failed", error)),
 				);
 				const okResponse = yield* HttpClientResponse.filterStatusOk(response).pipe(
-					Effect.mapError((error) => ExaError.fromCause("Exa API returned an error", error)),
+					Effect.catch(() =>
+						response.text.pipe(
+							Effect.orElseSucceed(() => ""),
+							Effect.flatMap((responseBody) => {
+								const details = responseBody.trim().slice(0, 2_000);
+
+								return new ExaError({
+									message: `Exa API returned HTTP ${response.status}${details ? `: ${details}` : ""}`,
+								});
+							}),
+						),
+					),
 				);
 				const raw = yield* okResponse.json.pipe(
 					Effect.mapError((error) => ExaError.fromCause("Failed to read Exa response", error)),
