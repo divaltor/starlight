@@ -7,7 +7,8 @@ import {
 	HttpClientResponse,
 } from "effect/unstable/http";
 
-const EXA_TIMEOUT_MS = 10_000;
+const EXA_LIVECRAWL_TIMEOUT_MS = 15_000;
+const EXA_REQUEST_TIMEOUT_MS = 30_000;
 
 const ExaContentsResponse = Schema.Struct({
 	results: Schema.Array(
@@ -89,7 +90,7 @@ export namespace Exa {
 					Effect.mapError((error) => ExaError.fromCause("Failed to encode Exa request", error)),
 				);
 				const response = yield* client.execute(request).pipe(
-					Effect.timeout(Duration.millis(EXA_TIMEOUT_MS)),
+					Effect.timeout(Duration.millis(EXA_REQUEST_TIMEOUT_MS)),
 					Effect.mapError((error) => ExaError.fromCause("Exa API request failed", error)),
 				);
 				const okResponse = yield* HttpClientResponse.filterStatusOk(response).pipe(
@@ -121,8 +122,7 @@ export namespace Exa {
 						verbosity: "compact",
 						includeSections: ["body"],
 					},
-					maxAgeHours: 0,
-					livecrawlTimeout: EXA_TIMEOUT_MS,
+					livecrawlTimeout: EXA_LIVECRAWL_TIMEOUT_MS,
 				});
 				const data = yield* Schema.decodeUnknownEffect(ExaContentsResponse)(raw).pipe(
 					Effect.mapError((error) => ExaError.fromCause("Failed to parse Exa response", error)),
@@ -151,7 +151,7 @@ export namespace Exa {
 					contents: {
 						highlights: { query, maxCharacters: 2_000 },
 						text: { maxCharacters: 4_000 },
-						livecrawlTimeout: EXA_TIMEOUT_MS,
+						livecrawlTimeout: EXA_LIVECRAWL_TIMEOUT_MS,
 					},
 				});
 				const data = yield* Schema.decodeUnknownEffect(ExaSearchResponse)(raw).pipe(
