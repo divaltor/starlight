@@ -53,7 +53,7 @@ export interface ExaSearchResult {
 
 export class ExaError extends Schema.TaggedErrorClass<ExaError>()("ExaError", {
 	message: Schema.String,
-	cause: Schema.optional(Schema.Defect),
+	cause: Schema.optional(Schema.Defect()),
 }) {
 	static fromCause(message: string, cause: unknown) {
 		return new ExaError({ message, cause });
