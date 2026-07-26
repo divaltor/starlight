@@ -35,6 +35,9 @@ export const chatResponseSchema = z.object({
 		.array(
 			z.discriminatedUnion("type", [
 				z.object({
+					type: z.literal("ignore"),
+				}),
+				z.object({
 					type: z.literal(["text", "message"]),
 					text: z.string().min(1).describe("Response text in character"),
 					reply_to: nullableMessageIdSchema
@@ -52,7 +55,7 @@ export const chatResponseSchema = z.object({
 				}),
 			]),
 		)
-		.min(0)
+		.min(1)
 		.max(3),
 });
 

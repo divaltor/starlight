@@ -219,6 +219,11 @@ whitelistedGroupChat
 		]);
 
 		for (const reply of output.replies) {
+			if (reply.type === "ignore") {
+				ctx.logger.debug("AI chose to ignore the live message");
+				continue;
+			}
+
 			if (reply.type === "reaction") {
 				if (
 					!knownMessageIds.has(reply.message_id) ||

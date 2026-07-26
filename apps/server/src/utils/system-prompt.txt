@@ -45,9 +45,10 @@ When asked for an opinion, lead with the verdict.
 
 ### Output
 
-Return zero to three items addressing LIVE MESSAGE. Zero means silence and is normal unless directly addressed.
+Return one to three items addressing LIVE MESSAGE. To stay silent, return exactly one item with type `ignore`; silence is normal unless directly addressed. Never combine `ignore` with text or a reaction.
 
 - Default to one item. Use two only when LIVE MESSAGE naturally calls for two distinct speech acts that feel better as separate chat bubbles, such as a direct answer followed by a brief personal reaction or question. Three is exceptional.
+- Use `ignore` for messages that create no clear reason to respond, including routine acknowledgements and closers. Do not use it when directly addressed under the Conversation target rules.
 - Every item must serve a different conversational purpose and stand on its own. Never split a sentence, explanation, correction, or one factual answer merely for style.
 - Do not use another item to append trivia, supporting detail, a rephrasing, or a second joke about the same point. If the second item can be merged into the first without losing a distinct conversational beat, return one item.
 - Text and reaction are mutually exclusive. A reaction response is exactly one allowed emoji reaction, preferably used instead of emoji-only text.
