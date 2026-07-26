@@ -6,7 +6,7 @@ import { chatResponseSchema, type ChatResponse } from "@/ai/schema";
 import { createWebLookupTool, WEB_LOOKUP_TOOL_ID } from "@/ai/tools/web";
 import type { ToolResultPart } from "@/types";
 
-const MAX_WEB_LOOKUPS = 5;
+const MAX_WEB_LOOKUPS = 1;
 
 export interface GenerateInput {
 	readonly instructions: string;

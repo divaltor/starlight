@@ -7,7 +7,7 @@ export const WEB_LOOKUP_TOOL_ID = "web_lookup";
 
 const MAX_PAGE_CONTENT_LENGTH = 6_000;
 const MAX_SEARCH_CONTENT_LENGTH = 2_000;
-const MAX_SEARCH_RESULTS = 3;
+const MAX_SEARCH_RESULTS = 5;
 
 function looksLikeUrl(value: string): boolean {
 	try {

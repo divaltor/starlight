@@ -147,7 +147,7 @@ export namespace Exa {
 			const search = Effect.fn("Exa.search")(function* (query: string) {
 				const raw = yield* executeJson("/search", {
 					query,
-					numResults: 3,
+					numResults: 5,
 					contents: {
 						highlights: { query, maxCharacters: 2_000 },
 						text: { maxCharacters: 4_000 },
