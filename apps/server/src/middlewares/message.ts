@@ -155,7 +155,7 @@ export async function attachMessage(ctx: Context, next: NextFunction) {
 		}
 	}
 
-	ctx.logger.debug({ messageId: msg.message_id, chatId: ctx.chat.id }, "Stored chat message");
+	ctx.logger.trace({ messageId: msg.message_id, chatId: ctx.chat.id }, "Stored chat message");
 
 	await next();
 }

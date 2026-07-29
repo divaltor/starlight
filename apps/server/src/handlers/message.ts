@@ -97,7 +97,7 @@ whitelistedGroupChat
 
 		const { messages, directReplyEntry, knownMessageIds } = await History.build(ctx);
 
-		ctx.logger.debug(
+		ctx.logger.trace(
 			{ hasDirectReply: Boolean(directReplyEntry), messageCount: messages.length },
 			"Built conversation",
 		);

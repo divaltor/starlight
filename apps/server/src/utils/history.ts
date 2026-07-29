@@ -51,7 +51,7 @@ export class History {
 		const currentMessageId = message.message_id;
 		const repliedMessage = message.reply_to_message;
 
-		logger.debug(
+		logger.trace(
 			{
 				chatId: ctx.chat!.id,
 				hasReply: Boolean(repliedMessage),
@@ -78,7 +78,7 @@ export class History {
 			take: env.HISTORY_LIMIT,
 		});
 
-		logger.debug({ messageCount: history.length }, "Fetched message history");
+		logger.trace({ messageCount: history.length }, "Fetched message history");
 
 		const directReplyMessageId = repliedMessage?.message_id ?? null;
 
@@ -164,7 +164,7 @@ export class History {
 
 		const knownMessageIds = new Set(orderedHistoryEntries.map((entry) => entry.messageId));
 
-		logger.debug(
+		logger.trace(
 			{
 				hasDirectReply: Boolean(directReplyEntry),
 				inlinedMessageCount: inlineMessageIds.size,

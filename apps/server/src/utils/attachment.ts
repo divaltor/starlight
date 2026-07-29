@@ -215,7 +215,7 @@ const handlers = [
 
 export class Attachment {
 	static async save(ctx: Context, msg: Message): Promise<SavedAttachment[]> {
-		logger.debug({ messageId: msg.message_id, chatId: ctx.chat!.id }, "Processing attachments");
+		logger.trace({ messageId: msg.message_id, chatId: ctx.chat!.id }, "Processing attachments");
 
 		const preparedAttachments: PreparedAttachment[] = [];
 
@@ -223,7 +223,7 @@ export class Attachment {
 			try {
 				const prepared = await handler(msg, ctx.api);
 				if (prepared) {
-					logger.debug(
+					logger.trace(
 						{
 							attachmentType: prepared.attachmentType,
 							mimeType: prepared.mimeType,
