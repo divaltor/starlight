@@ -10,7 +10,7 @@ import { Effect } from "effect";
 import * as MemorySummarizer from "@/ai/memory-summarizer";
 import { bot } from "@/bot";
 import { logger } from "@/logger";
-import { QUEUES, RETRY } from "@/queue/absurd";
+import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { GLOBAL_MEMORY_WINDOW_SIZE, TOPIC_MEMORY_WINDOW_SIZE } from "@/services/chat-memory";
 import { formatSenderName, openrouter } from "@/utils/message";
 
@@ -154,12 +154,7 @@ type MemoryWindowMessage = Prisma.MessageGetPayload<{
 
 export const memoryApp = new Absurd({
 	db: env.DATABASE_URL,
-	log: {
-		log: logger.debug.bind(logger),
-		info: logger.info.bind(logger),
-		warn: logger.warn.bind(logger),
-		error: logger.error.bind(logger),
-	},
+	log: absurdLogger,
 	queueName: QUEUES.memory,
 });
 

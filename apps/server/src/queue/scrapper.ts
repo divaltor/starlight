@@ -5,7 +5,7 @@ import { env, prisma } from "@starlight/utils";
 import { type QueryTweetsResponse, Scraper, type Tweet } from "@the-convocation/twitter-scraper";
 import { bot } from "@/bot";
 import { logger } from "@/logger";
-import { QUEUES, RETRY } from "@/queue/absurd";
+import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { imagesApp } from "@/queue/image-collector";
 import { Cookies } from "@/storage";
 
@@ -22,12 +22,7 @@ export function getScheduledScrapperGeneration(date = new Date()) {
 
 export const scrapperApp = new Absurd({
 	db: env.DATABASE_URL,
-	log: {
-		log: logger.debug.bind(logger),
-		info: logger.info.bind(logger),
-		warn: logger.warn.bind(logger),
-		error: logger.error.bind(logger),
-	},
+	log: absurdLogger,
 	queueName: QUEUES.scrapper,
 });
 
@@ -124,7 +119,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 			},
 		});
 	} catch (error) {
-		logger.error({ userId, error }, "User not found");
+		logger.error({ err: error, userId }, "User not found");
 		throw error;
 	}
 
@@ -146,7 +141,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 	try {
 		cookiesJson = cookieEncryption.safeDecrypt(userCookies, user.telegramId.toString());
 	} catch (error) {
-		logger.error({ userId, error }, "Failed to decrypt user cookies");
+		logger.error({ err: error, userId }, "Failed to decrypt user cookies");
 		throw new Error("Failed to decrypt user cookies");
 	}
 
@@ -170,7 +165,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 		logger.error(
 			{
 				userId,
-				error: String(error),
+				err: error,
 			},
 			"Unable to fetch timeline",
 		);

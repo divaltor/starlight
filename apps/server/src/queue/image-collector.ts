@@ -4,7 +4,7 @@ import { http } from "@starlight/utils/http";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import UserAgent from "user-agents";
 import { logger } from "@/logger";
-import { QUEUES, RETRY } from "@/queue/absurd";
+import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { classificationApp } from "@/queue/classification";
 import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
 import { calculatePerceptualHash } from "@/services/image";
@@ -12,12 +12,7 @@ import { s3 } from "@/storage";
 
 export const imagesApp = new Absurd({
 	db: env.DATABASE_URL,
-	log: {
-		log: logger.debug.bind(logger),
-		info: logger.info.bind(logger),
-		warn: logger.warn.bind(logger),
-		error: logger.error.bind(logger),
-	},
+	log: absurdLogger,
 	queueName: QUEUES.images,
 });
 
@@ -163,7 +158,10 @@ imagesApp.registerTask<ImageCollectorJobData>({ name: "images-collector" }, asyn
 				},
 			);
 		} catch (error) {
-			logger.error({ error, photoId: photo.id, userId }, "Failed to enqueue classification job");
+			logger.error(
+				{ err: error, photoId: photo.id, userId },
+				"Failed to enqueue classification job",
+			);
 		}
 
 		logger.info(

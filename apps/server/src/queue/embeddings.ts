@@ -2,7 +2,7 @@ import { Absurd } from "absurd-sdk";
 import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { DbNull, env, Prisma, prisma } from "@starlight/utils";
 import { logger } from "@/logger";
-import { QUEUES } from "@/queue/absurd";
+import { absurdLogger, QUEUES } from "@/queue/absurd";
 import { runtime } from "@/services/runtime";
 
 interface ClassificationJobData {
@@ -13,12 +13,7 @@ interface ClassificationJobData {
 
 export const embeddingsApp = new Absurd({
 	db: env.DATABASE_URL,
-	log: {
-		log: logger.debug.bind(logger),
-		info: logger.info.bind(logger),
-		warn: logger.warn.bind(logger),
-		error: logger.error.bind(logger),
-	},
+	log: absurdLogger,
 	queueName: QUEUES.embeddings,
 });
 

@@ -2,7 +2,7 @@ import { Absurd } from "absurd-sdk";
 import { env, prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import { logger } from "@/logger";
-import { QUEUES, RETRY } from "@/queue/absurd";
+import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { embeddingsApp } from "@/queue/embeddings";
 import type { Classification } from "@/types";
 
@@ -14,12 +14,7 @@ interface ClassificationJobData {
 
 export const classificationApp = new Absurd({
 	db: env.DATABASE_URL,
-	log: {
-		log: logger.debug.bind(logger),
-		info: logger.info.bind(logger),
-		warn: logger.warn.bind(logger),
-		error: logger.error.bind(logger),
-	},
+	log: absurdLogger,
 	queueName: QUEUES.classification,
 });
 
@@ -79,7 +74,7 @@ classificationApp.registerTask<ClassificationJobData>(
 			});
 		} catch (error) {
 			logger.error(
-				{ photoId, userId, requestId, error },
+				{ err: error, photoId, userId, requestId },
 				"Failed request to classification service",
 			);
 			throw error;
@@ -100,7 +95,7 @@ classificationApp.registerTask<ClassificationJobData>(
 			data = await response.json();
 		} catch (error) {
 			logger.error(
-				{ photoId, userId, requestId, error },
+				{ err: error, photoId, userId, requestId },
 				"Failed to parse classification response",
 			);
 			throw error;
