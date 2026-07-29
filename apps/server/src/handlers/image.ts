@@ -4,6 +4,7 @@ import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { webAppKeyboard } from "@/bot";
+import type { Logger } from "@/logger";
 import { RETRY } from "@/queue/absurd";
 import { getScheduledScrapperGeneration, scrapperApp } from "@/queue/scrapper";
 import { runtime } from "@/services/runtime";
@@ -24,7 +25,42 @@ type InlineImageSearchResult = {
 	final_score: number;
 };
 
+async function runInlineImageQuery<T>(
+	logger: Logger,
+	fields: Record<string, unknown>,
+	query: () => Promise<T[]>,
+): Promise<T[]> {
+	const startedAt = performance.now();
+
+	try {
+		const results = await query();
+
+		logger.debug(
+			{
+				...fields,
+				durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+				resultCount: results.length,
+			},
+			"Inline image database query completed",
+		);
+
+		return results;
+	} catch (error) {
+		logger.debug(
+			{
+				...fields,
+				durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+				error,
+			},
+			"Inline image database query failed",
+		);
+
+		throw error;
+	}
+}
+
 async function searchInlineImagesWithLegacyQuery(
+	logger: Logger,
 	userId: string,
 	query: string,
 	photoOffset: number,
@@ -55,34 +91,39 @@ async function searchInlineImagesWithLegacyQuery(
 			whereClause.tweetText = { contains: textQuery, mode: "insensitive" };
 		}
 
-		const tweets = await prisma.tweet.findMany({
-			where: {
-				userId,
-				photos: {
-					some: {
-						deletedAt: null,
-						s3Path: { not: null },
-					},
-				},
-				...whereClause,
-			},
-			include: {
-				photos: {
+		const tweets = await runInlineImageQuery(
+			logger,
+			{ searchMode: "legacy", userId, tweetSkip, pageSize: INLINE_QUERY_PAGE_SIZE },
+			() =>
+				prisma.tweet.findMany({
 					where: {
-						deletedAt: null,
-						s3Path: { not: null },
+						userId,
+						photos: {
+							some: {
+								deletedAt: null,
+								s3Path: { not: null },
+							},
+						},
+						...whereClause,
+					},
+					include: {
+						photos: {
+							where: {
+								deletedAt: null,
+								s3Path: { not: null },
+							},
+							orderBy: {
+								createdAt: "desc",
+							},
+						},
 					},
 					orderBy: {
 						createdAt: "desc",
 					},
-				},
-			},
-			orderBy: {
-				createdAt: "desc",
-			},
-			take: INLINE_QUERY_PAGE_SIZE,
-			skip: tweetSkip,
-		});
+					take: INLINE_QUERY_PAGE_SIZE,
+					skip: tweetSkip,
+				}),
+		);
 
 		if (tweets.length === 0) {
 			break;
@@ -318,7 +359,11 @@ composer.on("inline_query").filter(
 							)})`
 						: Prisma.empty;
 
-				rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+				rankedPhotos = await runInlineImageQuery(
+					ctx.logger,
+					{ searchMode: "recency", userId, photoOffset, pageQueryLimit },
+					() =>
+						prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH ranked AS (
 						SELECT
 							p.id AS photo_id,
@@ -352,7 +397,8 @@ composer.on("inline_query").filter(
 					ORDER BY photo_created_at DESC, photo_id DESC
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
-				`);
+					`),
+				);
 			} else {
 				let textEmbedding: number[] | null = null;
 				let shouldUseLegacyQuery = false;
@@ -374,6 +420,7 @@ composer.on("inline_query").filter(
 
 				if (shouldUseLegacyQuery) {
 					rankedPhotos = await searchInlineImagesWithLegacyQuery(
+						ctx.logger,
 						userId,
 						query,
 						photoOffset,
@@ -382,7 +429,11 @@ composer.on("inline_query").filter(
 				} else if (textEmbedding) {
 					const textVector = `[${textEmbedding.join(",")}]`;
 
-					rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+					rankedPhotos = await runInlineImageQuery(
+						ctx.logger,
+						{ searchMode: "semantic", userId, photoOffset, pageQueryLimit, candidateLimit },
+						() =>
+							prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH image_candidates AS (
 						SELECT p.id, p.user_id
 						FROM photos p
@@ -494,11 +545,16 @@ composer.on("inline_query").filter(
 					ORDER BY final_score DESC NULLS LAST, photo_id DESC
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
-				`);
+						`),
+					);
 				} else {
 					const lexicalFilter = hasTextQuery ? Prisma.sql`AND ${lexicalMatch}` : Prisma.empty;
 
-					rankedPhotos = await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+					rankedPhotos = await runInlineImageQuery(
+						ctx.logger,
+						{ searchMode: "lexical", userId, photoOffset, pageQueryLimit },
+						() =>
+							prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH scored AS (
 						SELECT
 							p.id AS photo_id,
@@ -562,7 +618,8 @@ composer.on("inline_query").filter(
 					ORDER BY final_score DESC NULLS LAST, photo_id DESC
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
-				`);
+						`),
+					);
 				}
 			}
 		}
