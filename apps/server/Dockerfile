@@ -1,4 +1,6 @@
-FROM oven/bun:1.3-slim AS base
+# syntax=docker/dockerfile:1
+
+FROM reg.mini.dev/bun:latest-dev AS base
 
 WORKDIR /code
 
@@ -8,11 +10,8 @@ ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=true
 ENV HOME=/root
 ENV PATH="$HOME/.local/bin:$PATH"
 
-# For Prisma
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
-
-COPY --from=linuxserver/ffmpeg /usr/local/bin/ffprobe /usr/bin/ffprobe
-COPY --from=linuxserver/ffmpeg /usr/local/bin/ffmpeg /usr/bin/ffmpeg
+# For Prisma, ffmpeg tooling and the yt-dlp Python runtime
+RUN apk add --no-cache openssl ffmpeg zlib
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
 
@@ -28,5 +27,26 @@ COPY packages/crypto/package.json ./packages/crypto/package.json
 RUN bun install --ignore-scripts
 
 COPY . .
+
+FROM reg.mini.dev/bun:latest AS runtime
+
+WORKDIR /code
+
+ENV NODE_ENV=production
+ENV YOUTUBE_DL_SKIP_DOWNLOAD=true
+ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=true
+ENV HOME=/root
+ENV PATH="$HOME/.local/bin:$PATH"
+
+# Shared libraries for Prisma engines, native modules, ffmpeg and yt-dlp's Python
+COPY --from=base /usr/lib /usr/lib
+
+# fontconfig configuration used by ffmpeg filters
+COPY --from=base /etc/fonts /etc/fonts
+
+COPY --from=base /usr/bin/ffmpeg /usr/bin/ffmpeg
+COPY --from=base /usr/sbin/ffprobe /usr/bin/ffprobe
+COPY --from=base /root/.local /root/.local
+COPY --from=base /code /code
 
 CMD ["bun", "start:server"]

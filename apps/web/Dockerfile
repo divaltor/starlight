@@ -1,11 +1,13 @@
-FROM oven/bun:1.3-slim AS base
+# syntax=docker/dockerfile:1
+
+FROM reg.mini.dev/bun:latest-dev AS base
 
 WORKDIR /code
 
 ENV NODE_ENV=production
 
 # For Prisma and build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache openssl zlib
 
 COPY package.json bun.lock ./
 COPY apps/web/package.json ./apps/web/package.json
@@ -18,5 +20,16 @@ RUN bun install
 COPY . .
 
 RUN bun run build
+
+FROM reg.mini.dev/bun:latest AS runtime
+
+WORKDIR /code
+
+ENV NODE_ENV=production
+
+# Shared libraries for Prisma client and native modules
+COPY --from=base /usr/lib /usr/lib
+
+COPY --from=base /code /code
 
 CMD ["bun", "start:web"]

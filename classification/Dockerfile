@@ -1,14 +1,12 @@
-FROM ubuntu:26.04
+# syntax=docker/dockerfile:1
 
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
-        ca-certificates \
-        libatomic1 \
-        libgomp1 \
-        libnuma1 \
-        python3.14 \
-        python3.14-venv \
-    && rm -rf /var/lib/apt/lists/*
+FROM reg.mini.dev/python:3.14-dev AS build
+
+# Minimus python images default to non-root; apk needs root
+USER root
+
+# PyTorch ROCm runtime dependencies
+RUN apk add --no-cache numactl
 
 ENV UV_NO_CACHE=1
 ENV UV_COMPILE_BYTECODE=1
@@ -37,6 +35,21 @@ RUN uv pip install \
     && uv run --no-sync python -c \
         "import torch, torchvision; assert torch.version.hip; print(torch.__version__, torchvision.__version__, torch.version.hip)"
 
+FROM reg.mini.dev/python:3.14 AS runtime
+
+# Root to match the previous image: deployment mounts /root/.cache/huggingface
+# and maps /dev/kfd + /dev/dri devices.
+USER root
+
+WORKDIR /code
+
+ENV PATH="/code/.venv/bin:$PATH"
+
+# Shared libraries PyTorch ROCm needs at runtime
+COPY --from=build /usr/lib/libgomp.so.1 /usr/lib/libatomic.so.1 /usr/lib/libnuma.so.1 /usr/lib/
+
+COPY --from=build /code /code
+
 COPY . /code
 
-CMD ["uv", "run", "--no-sync", "granian", "--interface", "asgi", "--host", "0.0.0.0", "app.main:app"]
+CMD ["/code/.venv/bin/granian", "--interface", "asgi", "--host", "0.0.0.0", "app.main:app"]
