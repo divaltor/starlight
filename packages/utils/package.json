@@ -25,13 +25,13 @@
     "@t3-oss/env-core": "^0.13.11",
     "dotenv": "^17.4.2",
     "ky": "catalog:",
+    "prisma": "catalog:",
+    "prisma-json-types-generator": "catalog:",
     "sqids": "^0.3.0",
     "uuid": "^14.0.1",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "prisma": "catalog:",
-    "prisma-json-types-generator": "catalog:",
     "tsdown": "catalog:"
   },
   "peerDependencies": {

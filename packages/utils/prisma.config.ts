@@ -10,6 +10,7 @@ dotenv.config({
 export default defineConfig({
 	schema: path.join("prisma", "schema.prisma"),
 	datasource: {
-		url: process.env.DATABASE_URL!,
+		// Fallback keeps generate working in build stages that have no DATABASE_URL
+		url: process.env.DATABASE_URL ?? "postgresql://prisma:prisma@localhost:5432/prisma",
 	},
 });

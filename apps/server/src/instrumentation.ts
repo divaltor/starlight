@@ -1,6 +1,9 @@
+import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import { PinoInstrumentation } from "@opentelemetry/instrumentation-pino";
-import { NodeSDK } from "@opentelemetry/sdk-node";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
+import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 import { PrismaInstrumentation } from "@prisma/instrumentation";
 import { OpenTelemetry } from "@ai-sdk/otel";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
@@ -8,11 +11,11 @@ import env from "@starlight/utils/config";
 import { registerTelemetry } from "ai";
 import { logger } from "@/logger";
 
-let sdk: NodeSDK | undefined;
+let provider: NodeTracerProvider | undefined;
 let shutdownPromise: Promise<void> | undefined;
 
 export function initTelemetry() {
-	if (sdk) {
+	if (provider) {
 		return;
 	}
 
@@ -34,21 +37,27 @@ export function initTelemetry() {
 		}),
 	];
 
-	sdk = new NodeSDK({
-		serviceName: "starlight-backend",
+	provider = new NodeTracerProvider({
+		resource: resourceFromAttributes({
+			[ATTR_SERVICE_NAME]: "starlight-backend",
+		}),
 		spanProcessors,
-		instrumentations: [new PrismaInstrumentation(), new PinoInstrumentation()],
 	});
 
-	sdk.start();
+	provider.register();
+
+	registerInstrumentations({
+		tracerProvider: provider,
+		instrumentations: [new PrismaInstrumentation(), new PinoInstrumentation()],
+	});
 }
 
 export function shutdownTelemetry() {
-	if (!sdk) {
+	if (!provider) {
 		return Promise.resolve();
 	}
 
-	shutdownPromise ??= sdk.shutdown();
+	shutdownPromise ??= provider.shutdown();
 
 	return shutdownPromise;
 }

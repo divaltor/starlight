@@ -242,8 +242,8 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
-.venv
+**/.env
+**/.venv
 env/
 venv/
 ENV/
@@ -386,11 +386,11 @@ web_modules/
 .yarn-integrity
 
 # dotenv environment variable files
-.env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+**/.env
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+**/.env.local
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -578,8 +578,8 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
-.venv
+**/.env
+**/.venv
 env/
 venv/
 ENV/
@@ -634,3 +634,10 @@ generated/
 .beans*
 .cursor*
 AGENTS.md
+
+# Local tooling and unrelated app directories
+**/.git
+**/.opencode
+classification/
+**/.DS_Store
+**/.output
