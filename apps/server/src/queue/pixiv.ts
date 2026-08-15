@@ -36,36 +36,39 @@ pixivApp.registerTask<ScheduledPixivJobData>(
 	{ name: "scheduled-pixiv-bookmarks" },
 	async (data, ctx) => {
 		await ctx.sleepFor("next-run", SCHEDULE_INTERVAL_SECONDS);
-		const credential = await prisma.providerCredential.findUnique({
-			where: { userId_provider: { userId: data.userId, provider: "pixiv" } },
-			select: { credentialType: true },
-		});
-		if (credential?.credentialType === "refresh_token") {
+		try {
+			const credential = await prisma.providerCredential.findUnique({
+				where: { userId_provider: { userId: data.userId, provider: "pixiv" } },
+				select: { credentialType: true },
+			});
+			if (credential?.credentialType === "refresh_token") {
+				await pixivApp.spawn(
+					"pixiv-bookmarks",
+					{
+						count: 0,
+						limit: data.limit,
+						runId: `scheduled-${data.generation}`,
+						userId: data.userId,
+					},
+					{
+						idempotencyKey: `scheduled-pixiv-run-${data.userId}-${data.generation}`,
+						maxAttempts: 3,
+						retryStrategy: RETRY.pixiv,
+					},
+				);
+			}
+		} finally {
+			const nextGeneration = data.generation + 1;
 			await pixivApp.spawn(
-				"pixiv-bookmarks",
+				"scheduled-pixiv-bookmarks",
+				{ ...data, generation: nextGeneration },
 				{
-					count: 0,
-					limit: data.limit,
-					runId: `scheduled-${data.generation}`,
-					userId: data.userId,
-				},
-				{
-					idempotencyKey: `scheduled-pixiv-run-${data.userId}-${data.generation}`,
+					idempotencyKey: `scheduled-pixiv-${data.userId}-${nextGeneration}`,
 					maxAttempts: 3,
 					retryStrategy: RETRY.pixiv,
 				},
 			);
 		}
-		const nextGeneration = data.generation + 1;
-		await pixivApp.spawn(
-			"scheduled-pixiv-bookmarks",
-			{ ...data, generation: nextGeneration },
-			{
-				idempotencyKey: `scheduled-pixiv-${data.userId}-${nextGeneration}`,
-				maxAttempts: 3,
-				retryStrategy: RETRY.pixiv,
-			},
-		);
 	},
 );
 
