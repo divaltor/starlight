@@ -8,12 +8,14 @@ import { runtime } from "../services/runtime";
 import type { SearchResult } from "../types/posts";
 import { Cursor, SearchCursorPayloadSchema, type SearchCursorPayload } from "../utils/cursor";
 import { paginateSearchResults } from "../utils/search-pagination";
-import {
-	galleryDedupePartitionSql,
-	galleryDedupeKeySql,
-	galleryRepresentativeOrderSql,
-} from "../utils/gallery-deduplication";
 import { transformSearchResults } from "../utils/transformations";
+
+const galleryDedupePartitionSql = "user_id, dedupe_key";
+const galleryRepresentativeOrderSql =
+	"final_score DESC NULLS LAST, provider DESC, media_id DESC, user_id DESC, post_created_at DESC, post_id DESC";
+
+const galleryDedupeKeySql = (mediaAlias: string) =>
+	`COALESCE(NULLIF(${mediaAlias}.perceptual_hash, ''), jsonb_build_array(${mediaAlias}.provider, ${mediaAlias}.external_id, ${mediaAlias}.user_id)::text)`;
 
 export const searchImages = maybeAuthProcedure
 	.input(

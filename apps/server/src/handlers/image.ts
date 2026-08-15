@@ -3,17 +3,33 @@ import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { hasTwitterCookies } from "@starlight/api/services/twitter-credential";
 import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
+import { createHash } from "node:crypto";
 import type { Logger } from "@/logger";
 import { runtime } from "@/services/runtime";
 import type { Context } from "@/types";
-import {
-	createInlineImageDedupeKey,
-	createInlineImageResultId,
-} from "@/utils/inline-image-identity";
 
 const INLINE_QUERY_PAGE_SIZE = 50;
 const INLINE_QUERY_CANDIDATE_MULTIPLIER = 8;
 const INLINE_QUERY_AUTHOR_REGEX = /(^|\s)@([A-Za-z0-9_]+)/g;
+
+const createInlineImageResultId = (
+	provider: string,
+	externalMediaId: string,
+	userId: string,
+): string =>
+	`m_${createHash("sha256")
+		.update(JSON.stringify(["v1", provider, externalMediaId, userId]))
+		.digest("base64url")}`;
+
+const createInlineImageDedupeKey = (
+	provider: string,
+	externalMediaId: string,
+	userId: string,
+	perceptualHash: string | null,
+): string =>
+	perceptualHash?.trim()
+		? JSON.stringify(["hash", provider, perceptualHash.trim(), userId])
+		: JSON.stringify(["identity", provider, externalMediaId, userId]);
 
 type InlineImageSearchResult = {
 	photo_id: string;
