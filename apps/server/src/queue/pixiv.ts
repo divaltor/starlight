@@ -131,7 +131,7 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 					externalId: `${artwork.id}:${position}`,
 					url,
 					position,
-					kind: "image",
+					kind: artwork.type === "ugoira" ? "animation-preview" : "image",
 					fetchHeaders: { Referer: "https://www.pixiv.net/" },
 				})),
 			},
