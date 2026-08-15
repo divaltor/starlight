@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 
-FROM reg.mini.dev/bun:latest-dev AS base
+FROM reg.mini.dev/bun:1.3.14-dev AS base
 
 WORKDIR /code
 
 ENV NODE_ENV=production
 
 # For Prisma and build dependencies
-RUN apk add --no-cache openssl zlib
+RUN apk add --no-cache openssl=3.5.7-r0 zlib=1.3.2-r1
 
 COPY package.json bun.lock ./
 COPY apps/web/package.json ./apps/web/package.json
@@ -25,23 +25,11 @@ RUN bun run --cwd packages/utils db:generate && bun run --cwd apps/web build
 # .output is self-contained: strip files that are never loaded under NODE_ENV=production
 RUN find apps/web/.output/server/node_modules -name "*.development.js" -delete
 
-# Drop dev dependencies and build tooling from the runtime image
-RUN rm -rf node_modules && bun install --production --ignore-scripts --filter web \
-	&& rm -rf node_modules/vite node_modules/vitefu node_modules/esbuild node_modules/@esbuild \
-		node_modules/rollup node_modules/postcss node_modules/nanoid node_modules/@babel \
-		node_modules/typescript node_modules/@typescript \
-		node_modules/@tanstack/start-plugin-core node_modules/@tanstack/router-plugin \
-		node_modules/@tanstack/router-utils node_modules/@tanstack/router-generator \
-		node_modules/tinyglobby node_modules/picomatch node_modules/diff \
-		node_modules/xmlbuilder2 node_modules/js-yaml \
-		node_modules/prisma node_modules/@prisma/dev node_modules/@prisma/studio-core \
-		node_modules/@prisma/streams-local node_modules/prisma-json-types-generator \
-		node_modules/@visx node_modules/ajv node_modules/fast-uri \
-		node_modules/find-my-way node_modules/lodash \
-		node_modules/lucide-react \
-		bun.lock
+# The Nitro output bundles and traces everything the server imports,
+# so workspace installs and build caches are dead weight in the runtime image
+RUN rm -rf node_modules bun.lock apps/*/node_modules packages/*/node_modules
 
-FROM reg.mini.dev/bun:latest AS runtime
+FROM reg.mini.dev/bun:1.3.14 AS runtime
 
 WORKDIR /code
 
