@@ -20,7 +20,6 @@ export interface PixivCrawlJobData {
 	limit: number;
 	cursor?: number;
 	visibility?: "public" | "private";
-	force?: boolean;
 }
 
 export interface ScheduledPixivJobData {
@@ -96,7 +95,7 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 					"pixiv-bookmarks",
 					{ ...data, count: 0, cursor: undefined, visibility },
 					{
-						idempotencyKey: `pixiv-${data.userId}-${data.runId}-${visibility}-start-${data.force ? "force" : "normal"}`,
+						idempotencyKey: `pixiv-${data.userId}-${data.runId}-${visibility}-start`,
 						maxAttempts: 3,
 						retryStrategy: RETRY.pixiv,
 					},
@@ -156,17 +155,13 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 			maxAttempts: 3,
 			retryStrategy: RETRY.images,
 		});
-		if (!data.force && consecutiveKnown >= CONSECUTIVE_THRESHOLD) {
+		if (consecutiveKnown >= CONSECUTIVE_THRESHOLD) {
 			break;
 		}
 	}
 
 	const count = data.count + page.artworks.length;
-	if (
-		(!data.force && consecutiveKnown >= CONSECUTIVE_THRESHOLD) ||
-		count >= data.limit ||
-		!page.nextCursor
-	) {
+	if (consecutiveKnown >= CONSECUTIVE_THRESHOLD || count >= data.limit || !page.nextCursor) {
 		return;
 	}
 	await pixivApp.spawn(
