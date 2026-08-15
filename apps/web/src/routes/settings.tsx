@@ -278,7 +278,7 @@ function RouteComponent() {
 						)}
 					</section>
 
-					<section className="space-y-4 border-base-300 border-t pt-5">
+					<section className="space-y-4">
 						<h2 className="font-semibold text-base-content text-sm uppercase tracking-wide">
 							Pixiv
 						</h2>
