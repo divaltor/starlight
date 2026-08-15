@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,7 +34,7 @@ pixivHandler.command("pixiv", async (ctx) => {
 	);
 	await pixivApp.spawn(
 		"pixiv-bookmarks",
-		{ userId: ctx.user.id, count: 0, limit: 300 },
+		{ userId: ctx.user.id, runId: `manual-${randomUUID()}`, count: 0, limit: 300 },
 		{ maxAttempts: 3, retryStrategy: RETRY.pixiv },
 	);
 	await ctx.reply("Starting Pixiv bookmark sync. Check your gallery in a few minutes.");

@@ -15,6 +15,7 @@ export const pixivApp = new Absurd({
 
 export interface PixivCrawlJobData {
 	userId: string;
+	runId: string;
 	count: number;
 	limit: number;
 	cursor?: number;
@@ -42,7 +43,12 @@ pixivApp.registerTask<ScheduledPixivJobData>(
 		if (credential?.credentialType === "refresh_token") {
 			await pixivApp.spawn(
 				"pixiv-bookmarks",
-				{ count: 0, limit: data.limit, userId: data.userId },
+				{
+					count: 0,
+					limit: data.limit,
+					runId: `scheduled-${data.generation}`,
+					userId: data.userId,
+				},
 				{
 					idempotencyKey: `scheduled-pixiv-run-${data.userId}-${data.generation}`,
 					maxAttempts: 3,
@@ -87,7 +93,7 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 					"pixiv-bookmarks",
 					{ ...data, count: 0, cursor: undefined, visibility },
 					{
-						idempotencyKey: `pixiv-${data.userId}-${visibility}-start-${data.force ? "force" : "normal"}`,
+						idempotencyKey: `pixiv-${data.userId}-${data.runId}-${visibility}-start-${data.force ? "force" : "normal"}`,
 						maxAttempts: 3,
 						retryStrategy: RETRY.pixiv,
 					},
@@ -164,7 +170,7 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 		"pixiv-bookmarks",
 		{ ...data, count, cursor: page.nextCursor },
 		{
-			idempotencyKey: `pixiv-${data.userId}-${data.visibility}-${page.nextCursor}`,
+			idempotencyKey: `pixiv-${data.userId}-${data.runId}-${data.visibility}-${page.nextCursor}`,
 			maxAttempts: 3,
 			retryStrategy: RETRY.pixiv,
 		},
