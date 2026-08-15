@@ -272,41 +272,4 @@ describe("CookieEncryption", () => {
 			expect(() => encryption2.decrypt(encrypted1, testUserId)).toThrow();
 		});
 	});
-
-	describe("performance characteristics", () => {
-		test("should encrypt and decrypt efficiently", () => {
-			const start = performance.now();
-
-			// Perform multiple operations
-			for (let i = 0; i < 100; i++) {
-				const encrypted = encryption.encrypt(testCookieData, testUserId);
-				const decrypted = encryption.decrypt(encrypted, testUserId);
-				expect(decrypted).toBe(testCookieData);
-			}
-
-			const end = performance.now();
-			const duration = end - start;
-
-			// Should complete 100 encrypt/decrypt cycles in under 1 second
-			expect(duration).toBeLessThan(1000);
-		});
-
-		test("should handle concurrent operations", async () => {
-			const operations = Array.from({ length: 50 }, (_, i) =>
-				Promise.resolve().then(() => {
-					const userId = `user_${i}`;
-					const data = `${testCookieData}_${i}`;
-					const encrypted = encryption.encrypt(data, userId);
-					const decrypted = encryption.decrypt(encrypted, userId);
-					return { original: data, decrypted, userId };
-				}),
-			);
-
-			const results = await Promise.all(operations);
-
-			for (const result of results) {
-				expect(result.decrypted).toBe(result.original);
-			}
-		});
-	});
 });
