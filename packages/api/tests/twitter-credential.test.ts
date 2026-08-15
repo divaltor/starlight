@@ -11,6 +11,14 @@ const replacementCookies = JSON.stringify([
 	{ domain: ".x.com", key: "auth_token", value: "replacement" },
 	{ domain: ".x.com", key: "twid", value: "u%3D654321" },
 ]);
+const firefoxCookies = JSON.stringify([
+	{ "Host raw": "https://x.com/", "Name raw": "auth_token", "Content raw": "token" },
+	{ "Host raw": "https://x.com/", "Name raw": "twid", "Content raw": "u%3D123456" },
+]);
+const normalizedFirefoxCookies = JSON.stringify([
+	{ domain: "x.com", key: "auth_token", value: "token" },
+	{ domain: "x.com", key: "twid", value: "u%3D123456" },
+]);
 
 describe("Twitter credential service", () => {
 	let credential: {
@@ -92,6 +100,15 @@ describe("Twitter credential service", () => {
 
 		expect(await createService().get(userId)).toBe(cookies);
 		expect(credential?.encryptedSecret).toBe(`scoped:${cookies}`);
+	});
+
+	test("normalizes Firefox plaintext while retaining its original CAS value", async () => {
+		if (credential) {
+			credential.encryptedSecret = firefoxCookies;
+		}
+
+		expect(await createService().get(userId)).toBe(normalizedFirefoxCookies);
+		expect(credential?.encryptedSecret).toBe(`scoped:${normalizedFirefoxCookies}`);
 	});
 
 	test("a concurrent save wins a legacy upgrade race", async () => {

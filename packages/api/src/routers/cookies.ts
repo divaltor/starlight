@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/client";
 import { prisma } from "@starlight/utils";
 import { z } from "zod";
 import { type AuthContext, protectedProcedure } from "../middlewares/auth";
+import { normalizeTwitterCookies } from "../services/twitter-cookies";
 import { encryptTwitterCookies, getTwitterCookies } from "../services/twitter-credential";
 
 const cookiesSchema = z.object({
@@ -18,8 +19,10 @@ export const saveCookies = protectedProcedure
 			});
 		}
 
-		// Attempt to decode cookies; accept any non-empty string
-		if (!input.cookies?.trim()) {
+		let cookies: string;
+		try {
+			cookies = normalizeTwitterCookies(input.cookies);
+		} catch {
 			throw new ORPCError("BAD_REQUEST", {
 				message: "Invalid cookies",
 				status: 400,
@@ -27,7 +30,7 @@ export const saveCookies = protectedProcedure
 		}
 
 		const userId = context.databaseUserId;
-		const encryptedCookies = encryptTwitterCookies(input.cookies, userId);
+		const encryptedCookies = encryptTwitterCookies(cookies, userId);
 
 		await prisma.providerCredential.upsert({
 			where: { userId_provider: { userId, provider: "twitter" } },

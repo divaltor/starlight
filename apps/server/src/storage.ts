@@ -2,14 +2,6 @@ import { getTwitterUserId, parseTwitterCookies } from "@starlight/api/services/t
 import { env } from "@starlight/utils";
 import { Cookie } from "tough-cookie";
 
-export interface RFC6265Cookie {
-	domain: string;
-	key: string;
-	value: string;
-}
-
-const DOMAIN_REGEX = /https?:\/\/(.+?)\//;
-
 export class Cookies {
 	readonly cookies: Cookie[];
 
@@ -41,16 +33,3 @@ export const s3 = new Bun.S3Client({
 	secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
 	endpoint: env.AWS_ENDPOINT,
 });
-
-function extractDomain(hostRaw: string): string {
-	const match = hostRaw.match(DOMAIN_REGEX);
-	return match?.[1] ?? "x.com";
-}
-
-export function mapToRFC6265Cookie(firefoxCookie: any): RFC6265Cookie {
-	return {
-		key: firefoxCookie["Name raw"],
-		value: firefoxCookie["Content raw"],
-		domain: extractDomain(firefoxCookie["Host raw"]),
-	};
-}

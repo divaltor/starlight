@@ -1,4 +1,4 @@
-import { parseTwitterCookies } from "./twitter-cookies";
+import { normalizeTwitterCookies } from "./twitter-cookies";
 
 interface TwitterCredential {
 	credentialType: string;
@@ -34,17 +34,19 @@ export const createTwitterCredentialService = (dependencies: {
 		) {
 			return;
 		}
+		const originalEncryptedSecret = credential.encryptedSecret;
 
 		let decrypted: { data: string; usedLegacyEncryption: boolean };
+		let normalizedCookies: string;
 		try {
 			decrypted = dependencies.decrypt(
-				credential.encryptedSecret,
+				originalEncryptedSecret,
 				userId,
 				credential.user.telegramId.toString(),
 			);
-			parseTwitterCookies(decrypted.data);
+			normalizedCookies = normalizeTwitterCookies(decrypted.data);
 		} catch {
-			const deleted = await dependencies.deleteMatching(userId, credential.encryptedSecret);
+			const deleted = await dependencies.deleteMatching(userId, originalEncryptedSecret);
 			if (deleted.count === 0 && retryOnCasLoss) {
 				return read(userId, false);
 			}
@@ -54,8 +56,8 @@ export const createTwitterCredentialService = (dependencies: {
 		if (decrypted.usedLegacyEncryption) {
 			const updated = await dependencies.updateMatching(
 				userId,
-				credential.encryptedSecret,
-				dependencies.encrypt(decrypted.data, userId),
+				originalEncryptedSecret,
+				dependencies.encrypt(normalizedCookies, userId),
 			);
 			if (updated.count === 0 && retryOnCasLoss) {
 				return read(userId, false);
@@ -65,7 +67,7 @@ export const createTwitterCredentialService = (dependencies: {
 			}
 		}
 
-		return decrypted.data;
+		return normalizedCookies;
 	};
 
 	return {
