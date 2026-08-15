@@ -3,10 +3,12 @@ import { createPixivCredentialService } from "../src/services/pixiv-credential-c
 
 const state = {
 	client: { refreshToken: "rotated-token" },
-	persistToken: () => Promise.resolve<unknown>(undefined),
+	persistToken: () => Promise.resolve({ count: 1 }),
 };
 
-const update = mock((_userId: string, _encryptedSecret: string) => state.persistToken());
+const updateMatching = mock((_userId: string, _encryptedSecret: string, _replacement: string) =>
+	state.persistToken(),
+);
 const withPixivClient = createPixivCredentialService({
 	withLock: <T>(_userId: string, operation: () => Promise<T>) => operation(),
 	find: () =>
@@ -15,32 +17,43 @@ const withPixivClient = createPixivCredentialService({
 	decryptLegacy: (token) => token,
 	connect: () => Promise.resolve(state.client),
 	encrypt: (token) => token,
-	update,
+	updateMatching,
 });
 
 describe("withPixivClient", () => {
-	test("preserves an operation error when persisting its rotated token fails", async () => {
-		const operationError = new Error("bookmark request failed");
-		const persistenceError = new Error("database unavailable");
+	test("persists a rotated token before starting the operation", async () => {
 		state.client.refreshToken = "rotated-token";
-		state.persistToken = () => Promise.reject(persistenceError);
-		update.mockClear();
+		state.persistToken = () => Promise.resolve({ count: 1 });
+		updateMatching.mockClear();
 
-		await expect(withPixivClient("user", () => Promise.reject(operationError))).rejects.toBe(
-			operationError,
-		);
-		expect(update).toHaveBeenCalledTimes(1);
+		const result = await withPixivClient("user", () => {
+			expect(updateMatching).toHaveBeenCalledWith("user", "original-token", "rotated-token");
+			return Promise.resolve("bookmarks");
+		});
+
+		expect(result).toBe("bookmarks");
 	});
 
-	test("rejects with a persistence error after a successful operation", async () => {
+	test("does not start the operation when persistence fails", async () => {
 		const persistenceError = new Error("database unavailable");
 		state.client.refreshToken = "rotated-token";
 		state.persistToken = () => Promise.reject(persistenceError);
-		update.mockClear();
+		updateMatching.mockClear();
+		const operation = mock(() => Promise.resolve("bookmarks"));
 
-		await expect(withPixivClient("user", () => Promise.resolve("bookmarks"))).rejects.toBe(
-			persistenceError,
+		await expect(withPixivClient("user", operation)).rejects.toBe(persistenceError);
+		expect(operation).not.toHaveBeenCalled();
+	});
+
+	test("does not overwrite a concurrently changed credential", async () => {
+		state.client.refreshToken = "rotated-token";
+		state.persistToken = () => Promise.resolve({ count: 0 });
+		updateMatching.mockClear();
+		const operation = mock(() => Promise.resolve("bookmarks"));
+
+		await expect(withPixivClient("user", operation)).rejects.toThrow(
+			"Pixiv credential changed during token rotation",
 		);
-		expect(update).toHaveBeenCalledTimes(1);
+		expect(operation).not.toHaveBeenCalled();
 	});
 });

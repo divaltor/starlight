@@ -8,7 +8,11 @@ export const createPixivCredentialService =
 			credentialType: string;
 			encryptedSecret: string;
 		} | null>;
-		update: (userId: string, encryptedSecret: string) => Promise<unknown>;
+		updateMatching: (
+			userId: string,
+			encryptedSecret: string,
+			replacement: string,
+		) => Promise<{ count: number }>;
 		withLock: <T>(userId: string, operation: () => Promise<T>) => Promise<T>;
 	}) =>
 	async <T>(userId: string, operation: (client: Client) => Promise<T>) =>
@@ -28,24 +32,16 @@ export const createPixivCredentialService =
 			}
 
 			const client = await dependencies.connect(token);
-			const outcome = await operation(client).then(
-				(value) => ({ success: true, value }) as const,
-				(error) => ({ success: false, error }) as const,
-			);
-
 			if (migrated || client.refreshToken !== token) {
-				const persistToken = () =>
-					dependencies.update(userId, dependencies.encrypt(client.refreshToken, userId));
-
-				if (outcome.success) {
-					await persistToken();
-				} else {
-					await persistToken().catch(() => undefined);
+				const updated = await dependencies.updateMatching(
+					userId,
+					credential.encryptedSecret,
+					dependencies.encrypt(client.refreshToken, userId),
+				);
+				if (updated.count === 0) {
+					throw new Error("Pixiv credential changed during token rotation");
 				}
 			}
 
-			if (outcome.success) {
-				return outcome.value;
-			}
-			throw outcome.error;
+			return operation(client);
 		});

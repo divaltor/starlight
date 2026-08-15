@@ -29,9 +29,14 @@ export const withPixivClient = createPixivCredentialService({
 	decryptLegacy: (secret, userId) => encryption.decrypt(secret, userId),
 	connect: PixivAdapter.connect,
 	encrypt: encryptPixivToken,
-	update: (userId, encryptedSecret) =>
-		prisma.providerCredential.update({
-			where: { userId_provider: { userId, provider: "pixiv" } },
-			data: { encryptedSecret },
+	updateMatching: (userId, encryptedSecret, replacement) =>
+		prisma.providerCredential.updateMany({
+			where: {
+				userId,
+				provider: "pixiv",
+				credentialType: "refresh_token",
+				encryptedSecret,
+			},
+			data: { encryptedSecret: replacement },
 		}),
 });
