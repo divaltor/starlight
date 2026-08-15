@@ -13,12 +13,16 @@ services:
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri/renderD128:/dev/dri/renderD128
+    # GPU device nodes are root:render 660 on the host; grant the non-root
+    # container user the host render group (gid 992 here, `getent group render`).
+    group_add:
+      - "992"
     security_opt:
       - seccomp=unconfined
     expose:
       - 8000
     volumes:
-      - classification_models:/root/.cache/huggingface
+      - classification_models:/cache/huggingface
     restart: unless-stopped
 
 volumes:

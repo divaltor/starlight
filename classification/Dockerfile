@@ -8,6 +8,9 @@ USER root
 # PyTorch ROCm runtime dependencies
 RUN apk add --no-cache numactl
 
+# HF cache dir, pre-created so the runtime stage can COPY --chown it
+RUN mkdir -p /cache/huggingface
+
 ENV UV_NO_CACHE=1
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_PYTHON=/usr/bin/python3.14
@@ -37,16 +40,23 @@ RUN uv pip install \
 
 FROM reg.mini.dev/python:3.14 AS runtime
 
-# Root to match the previous image: deployment mounts /root/.cache/huggingface
-# and maps /dev/kfd + /dev/dri devices.
-USER root
+# Minimus images default to non-root (uid 1000, home /home/python).
+# Deployment grants GPU device access via group_add (host render group) and
+# mounts the HF cache volume at /cache/huggingface.
+USER 1000
 
 WORKDIR /code
 
 ENV PATH="/code/.venv/bin:$PATH"
+ENV HF_HOME="/cache/huggingface"
+# /code is root-owned; as uid 1000 the app cannot write __pycache__
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # Shared libraries PyTorch ROCm needs at runtime
 COPY --from=build /usr/lib/libgomp.so.1 /usr/lib/libatomic.so.1 /usr/lib/libnuma.so.1 /usr/lib/
+
+# Pre-owned by uid 1000 so named volumes initialize writable
+COPY --chown=1000:1000 --from=build /cache /cache
 
 COPY --from=build /code /code
 
