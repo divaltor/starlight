@@ -154,7 +154,7 @@ model Post {
   authorUsername   String? @map("author_username")
   title            String?
 
-  tweetData Json @map("provider_payload")
+  providerPayload Json @map("provider_payload")
 
   // Virtual columns, manually generated in SQL migration
   tweetText String? @default(dbgenerated()) @map("text") @db.Text

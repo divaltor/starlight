@@ -55,7 +55,7 @@ imagesApp.registerTask<MediaCollectorJobData>({ name: "images-collector" }, asyn
 			authorName: post.authorName,
 			authorUsername: post.authorUsername,
 			title: post.title,
-			tweetData: { ...post.providerPayload, text: post.text, username: post.authorUsername },
+			providerPayload: { ...post.providerPayload, text: post.text, username: post.authorUsername },
 			photos: {
 				createMany: {
 					data: post.media.map((media) => ({
@@ -75,7 +75,7 @@ imagesApp.registerTask<MediaCollectorJobData>({ name: "images-collector" }, asyn
 			authorName: post.authorName,
 			authorUsername: post.authorUsername,
 			title: post.title,
-			tweetData: { ...post.providerPayload, text: post.text, username: post.authorUsername },
+			providerPayload: { ...post.providerPayload, text: post.text, username: post.authorUsername },
 			photos: {
 				createMany: {
 					data: post.media.map((media) => ({
