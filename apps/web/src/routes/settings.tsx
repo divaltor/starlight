@@ -185,6 +185,12 @@ function RouteComponent() {
 		savePixivMutation.isPending ||
 		deletePixivMutation.isPending ||
 		pixivPrivateMutation.isPending;
+	const twitterError = profile?.hasValidCookies
+		? deleteCookiesMutation.error?.message
+		: displayError;
+	const pixivError = profile?.hasPixivCredential
+		? (deletePixivMutation.error?.message ?? pixivPrivateMutation.error?.message)
+		: savePixivMutation.error?.message;
 
 	return (
 		<main className="container mx-auto max-w-2xl px-4 py-10">
@@ -197,10 +203,10 @@ function RouteComponent() {
 						</h2>
 
 						{/* Cookie Success/Error Messages */}
-						{cookieError && (
+						{(cookieError || twitterError) && (
 							<Alert variant="destructive">
 								<AlertCircle className="h-4 w-4" />
-								<span>{cookieError.message}</span>
+								<span>{cookieError?.message ?? twitterError}</span>
 							</Alert>
 						)}
 						{profile?.hasValidCookies ? (
@@ -249,7 +255,6 @@ function RouteComponent() {
 											placeholder="Paste your Twitter authentication cookies here"
 											value={newCookies}
 										/>
-										{displayError && <p className="text-error text-sm">{displayError}</p>}
 									</div>
 
 									<div className="flex gap-2">
@@ -282,6 +287,12 @@ function RouteComponent() {
 						<h2 className="font-semibold text-base-content text-sm uppercase tracking-wide">
 							Pixiv
 						</h2>
+						{pixivError && (
+							<Alert variant="destructive">
+								<AlertCircle className="h-4 w-4" />
+								<span>{pixivError}</span>
+							</Alert>
+						)}
 						{profile?.hasPixivCredential ? (
 							<>
 								<Alert className="alert-horizontal">
@@ -335,7 +346,13 @@ function RouteComponent() {
 					</section>
 
 					{/* Profile Visibility Section */}
-					<section className="mb-2">
+					<section className="mb-2 space-y-4">
+						{visibilityMutation.error && (
+							<Alert variant="destructive">
+								<AlertCircle className="h-4 w-4" />
+								<span>{visibilityMutation.error.message}</span>
+							</Alert>
+						)}
 						<label className="label cursor-pointer gap-2 text-wrap">
 							<input
 								checked={profile?.user?.isPublic ?? false}
