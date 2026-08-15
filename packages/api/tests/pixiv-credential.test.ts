@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 
 const state = {
 	client: { refreshToken: "rotated-token" },
-	credential: { encryptedSecret: "original-token" },
+	credential: { credentialType: "refresh_token", encryptedSecret: "original-token" },
 	persistToken: () => Promise.resolve(),
 };
 

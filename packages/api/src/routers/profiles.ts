@@ -56,7 +56,7 @@ export const getUserProfile = protectedProcedure
 					updatedAt: true,
 					pixivIncludePrivate: true,
 					providerCredentials: {
-						where: { provider: "pixiv" },
+						where: { provider: "pixiv", credentialType: "refresh_token" },
 						select: { provider: true },
 					},
 				},

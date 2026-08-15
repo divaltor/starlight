@@ -1,6 +1,6 @@
 import { FormattedString } from "@grammyjs/parse-mode";
-import { CookieEncryption } from "@starlight/crypto";
 import { EmbeddingsService } from "@starlight/api/services/embeddings";
+import { getTwitterCookies, hasTwitterCookies } from "@starlight/api/services/twitter-credential";
 import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { webAppKeyboard } from "@/bot";
@@ -199,11 +199,6 @@ async function getInlineQueryEmbedding(query: string) {
 
 	return text;
 }
-
-const cookieEncryption = new CookieEncryption(
-	env.COOKIE_ENCRYPTION_KEY,
-	env.COOKIE_ENCRYPTION_SALT,
-);
 
 const composer = new Composer<Context>();
 
@@ -636,7 +631,7 @@ composer.on("inline_query").filter(
 
 		const photosForThisPage = rankedPhotos.slice(0, INLINE_QUERY_PAGE_SIZE);
 
-		if (photosForThisPage.length === 0 && !ctx.user?.cookies) {
+		if (photosForThisPage.length === 0 && (!ctx.user || !(await hasTwitterCookies(ctx.user.id)))) {
 			// User didn't setup the bot yet
 			await ctx.answerInlineQuery(
 				[
@@ -685,7 +680,7 @@ composer.on("inline_query").filter(
 );
 
 privateChat.command("cookies").filter(
-	async (ctx) => !ctx.user?.cookies,
+	async (ctx) => !ctx.user || !(await hasTwitterCookies(ctx.user.id)),
 	async (ctx) => {
 		const keyboard = new InlineKeyboard().webApp("Set cookies", {
 			url: `${env.BASE_FRONTEND_URL}/settings`,
@@ -698,19 +693,19 @@ privateChat.command("cookies").filter(
 );
 
 privateChat.command("cookies").filter(
-	async (ctx) => Boolean(ctx.user?.cookies),
+	async (ctx) => Boolean(ctx.user && (await hasTwitterCookies(ctx.user.id))),
 	async (ctx) => {
 		try {
-			const userCookies = ctx.user?.cookies;
+			const userCookies = ctx.user
+				? await getTwitterCookies(ctx.user.id, ctx.user.telegramId.toString())
+				: undefined;
 
 			if (!(userCookies && ctx.user)) {
 				await ctx.reply("No cookies found.");
 				return;
 			}
 
-			const cookiesJson = cookieEncryption.safeDecrypt(userCookies, ctx.user.telegramId.toString());
-
-			const cookies = Cookies.fromJSON(cookiesJson);
+			const cookies = Cookies.fromJSON(userCookies);
 			const cookiesString = cookies.toString();
 
 			await ctx.reply(`Your cookies:\n\n${cookiesString}`);
@@ -722,7 +717,7 @@ privateChat.command("cookies").filter(
 );
 
 privateChat.command("scrapper").filter(
-	async (ctx) => !ctx.user?.cookies,
+	async (ctx) => !ctx.user || !(await hasTwitterCookies(ctx.user.id)),
 	async (ctx) => {
 		const keyboard = new InlineKeyboard().webApp("Set cookies", {
 			url: `${env.BASE_FRONTEND_URL}/cookies`,
@@ -736,7 +731,7 @@ privateChat.command("scrapper").filter(
 );
 
 privateChat.command("scrapper").filter(
-	async (ctx) => Boolean(ctx.user?.cookies),
+	async (ctx) => Boolean(ctx.user && (await hasTwitterCookies(ctx.user.id))),
 	async (ctx) => {
 		const user = ctx.user!;
 		const generation = getScheduledScrapperGeneration();

@@ -24,10 +24,12 @@ export const savePixivCredential = protectedProcedure
 				create: {
 					userId,
 					provider: "pixiv",
+					credentialType: "refresh_token",
 					externalUserId: client.externalUserId,
 					encryptedSecret: encryptPixivToken(client.refreshToken, userId),
 				},
 				update: {
+					credentialType: "refresh_token",
 					externalUserId: client.externalUserId,
 					encryptedSecret: encryptPixivToken(client.refreshToken, userId),
 				},

@@ -37,9 +37,9 @@ pixivApp.registerTask<ScheduledPixivJobData>(
 		await ctx.sleepFor("next-run", SCHEDULE_INTERVAL_SECONDS);
 		const credential = await prisma.providerCredential.findUnique({
 			where: { userId_provider: { userId: data.userId, provider: "pixiv" } },
-			select: { provider: true },
+			select: { credentialType: true },
 		});
-		if (credential) {
+		if (credential?.credentialType === "refresh_token") {
 			await pixivApp.spawn(
 				"pixiv-bookmarks",
 				{ count: 0, limit: data.limit, userId: data.userId },
@@ -67,7 +67,12 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 	if (!data.visibility) {
 		const user = await prisma.user.findUnique({
 			where: { id: data.userId },
-			select: { pixivIncludePrivate: true, providerCredentials: { where: { provider: "pixiv" } } },
+			select: {
+				pixivIncludePrivate: true,
+				providerCredentials: {
+					where: { provider: "pixiv", credentialType: "refresh_token" },
+				},
+			},
 		});
 		if (!user?.providerCredentials.length) {
 			return;

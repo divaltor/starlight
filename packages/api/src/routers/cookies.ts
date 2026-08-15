@@ -1,17 +1,12 @@
 import { ORPCError } from "@orpc/client";
-import { CookieEncryption } from "@starlight/crypto";
-import { env, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
 import { z } from "zod";
 import { type AuthContext, protectedProcedure } from "../middlewares/auth";
+import { encryptTwitterCookies, getTwitterCookies } from "../services/twitter-credential";
 
 const cookiesSchema = z.object({
 	cookies: z.string(),
 });
-
-const cookieEncryption = new CookieEncryption(
-	env.COOKIE_ENCRYPTION_KEY,
-	env.COOKIE_ENCRYPTION_SALT,
-);
 
 export const saveCookies = protectedProcedure
 	.input(cookiesSchema)
@@ -31,15 +26,20 @@ export const saveCookies = protectedProcedure
 			});
 		}
 
-		// Encrypt and store under telegramId scoped key
-		const encryptedCookies = cookieEncryption.encrypt(input.cookies, context.user.id.toString());
+		const userId = context.databaseUserId;
+		const encryptedCookies = encryptTwitterCookies(input.cookies, userId);
 
-		await prisma.user.update({
-			where: {
-				id: context.databaseUserId,
+		await prisma.providerCredential.upsert({
+			where: { userId_provider: { userId, provider: "twitter" } },
+			create: {
+				userId,
+				provider: "twitter",
+				credentialType: "cookies",
+				encryptedSecret: encryptedCookies,
 			},
-			data: {
-				cookies: encryptedCookies,
+			update: {
+				credentialType: "cookies",
+				encryptedSecret: encryptedCookies,
 			},
 		});
 	});
@@ -50,32 +50,9 @@ export const verifyCookies = async ({ context }: { context: AuthContext }) => {
 			return { hasValidCookies: false };
 		}
 
-		const user = await prisma.user.findUnique({
-			where: {
-				id: context.databaseUserId,
-			},
-			select: {
-				cookies: true,
-			},
-		});
+		const cookies = await getTwitterCookies(context.databaseUserId, context.user.id.toString());
 
-		const storedCookies = user?.cookies;
-
-		if (!storedCookies) {
-			return { hasValidCookies: false };
-		}
-
-		try {
-			cookieEncryption.safeDecrypt(storedCookies, context.user.id.toString());
-		} catch {
-			await prisma.user.update({
-				where: {
-					id: context.databaseUserId,
-				},
-				data: {
-					cookies: null,
-				},
-			});
+		if (!cookies) {
 			return { hasValidCookies: false };
 		}
 
@@ -95,12 +72,7 @@ export const deleteCookies = protectedProcedure.handler(async ({ context }) => {
 		});
 	}
 
-	await prisma.user.update({
-		where: {
-			id: context.databaseUserId,
-		},
-		data: {
-			cookies: null,
-		},
+	await prisma.providerCredential.deleteMany({
+		where: { userId: context.databaseUserId, provider: "twitter" },
 	});
 });

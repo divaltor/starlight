@@ -195,6 +195,35 @@ describe("CookieEncryption", () => {
 	});
 
 	describe("key derivation", () => {
+		test("decrypts scoped ciphertext without marking it as legacy", () => {
+			const encrypted = encryption.encryptScoped(
+				testCookieData,
+				testUserId,
+				"provider:twitter:cookies:v1",
+			);
+			const decrypted = encryption.decryptScopedOrLegacy(
+				encrypted,
+				testUserId,
+				"provider:twitter:cookies:v1",
+				"legacy-telegram-id",
+			);
+
+			expect(decrypted).toEqual({ data: testCookieData, usedLegacyEncryption: false });
+		});
+
+		test("decrypts legacy user-scoped ciphertext for migration", () => {
+			const legacyTelegramId = "123456";
+			const encrypted = encryption.encrypt(testCookieData, legacyTelegramId);
+			const decrypted = encryption.decryptScopedOrLegacy(
+				encrypted,
+				testUserId,
+				"provider:twitter:cookies:v1",
+				legacyTelegramId,
+			);
+
+			expect(decrypted).toEqual({ data: testCookieData, usedLegacyEncryption: true });
+		});
+
 		test("should produce consistent results for same inputs", () => {
 			const encrypted1 = encryption.encrypt(testCookieData, testUserId);
 			const decrypted1 = encryption.decrypt(encrypted1, testUserId);

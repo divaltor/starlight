@@ -29,6 +29,9 @@ export const withPixivClient = async <T>(
 		if (!credential) {
 			return;
 		}
+		if (credential.credentialType !== "refresh_token") {
+			return;
+		}
 		let token: string;
 		let migrated = false;
 		try {

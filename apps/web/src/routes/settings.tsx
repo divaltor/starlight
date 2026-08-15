@@ -190,10 +190,10 @@ function RouteComponent() {
 		<main className="container mx-auto max-w-2xl px-4 py-10">
 			<Card className="card-border">
 				<CardContent className="mt-4 space-y-6 pt-2 pb-2">
-					{/* Cookie Management Section */}
+					{/* Twitter Cookie Management Section */}
 					<section className="space-y-4">
 						<h2 className="font-semibold text-base-content text-sm uppercase tracking-wide">
-							Authentication Cookies
+							Twitter
 						</h2>
 
 						{/* Cookie Success/Error Messages */}
@@ -206,7 +206,7 @@ function RouteComponent() {
 						{profile?.hasValidCookies ? (
 							<Alert className="alert-horizontal">
 								<Cookie className="h-4 w-4 shrink-0" />
-								<span>Authentication cookies are saved.</span>
+								<span>Twitter is connected.</span>
 								<div>
 									<Button
 										disabled={isSubmitting}
@@ -246,7 +246,7 @@ function RouteComponent() {
 												setNewCookies(value);
 												setDisplayError(null);
 											}}
-											placeholder="Paste your authentication cookies here"
+											placeholder="Paste your Twitter authentication cookies here"
 											value={newCookies}
 										/>
 										{displayError && <p className="text-error text-sm">{displayError}</p>}
@@ -254,7 +254,7 @@ function RouteComponent() {
 
 									<div className="flex gap-2">
 										<Button disabled={isSubmitting} size="sm" type="submit">
-											Save cookies
+											Connect Twitter
 										</Button>
 										{profile?.hasValidCookies && (
 											<Button

@@ -1,5 +1,5 @@
 import { Absurd } from "absurd-sdk";
-import { CookieEncryption } from "@starlight/crypto";
+import { getTwitterCookies, hasTwitterCookies } from "@starlight/api/services/twitter-credential";
 import type { User } from "@starlight/utils";
 import { env, prisma } from "@starlight/utils";
 import { type QueryTweetsResponse, Scraper } from "@the-convocation/twitter-scraper";
@@ -9,11 +9,6 @@ import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { imagesApp } from "@/queue/image-collector";
 import type { MediaCollectorJobData } from "@/queue/image-collector";
 import { Cookies } from "@/storage";
-
-const cookieEncryption = new CookieEncryption(
-	env.COOKIE_ENCRYPTION_KEY,
-	env.COOKIE_ENCRYPTION_SALT,
-);
 
 export const SCHEDULED_SCRAPPER_INTERVAL_SECONDS = 60 * 60 * 6;
 
@@ -65,12 +60,7 @@ scrapperApp.registerTask<ScheduledScrapperJobData>(
 		await ctx.sleepFor("next-run", SCHEDULED_SCRAPPER_INTERVAL_SECONDS);
 
 		try {
-			const user = await prisma.user.findUnique({
-				where: { id: data.userId },
-				select: { cookies: true },
-			});
-
-			if (!user?.cookies) {
+			if (!(await hasTwitterCookies(data.userId))) {
 				logger.info({ userId: data.userId }, "Skipping scheduled scrapper: user has no cookies");
 			} else {
 				await ctx.step("spawn-run", () =>
@@ -112,7 +102,6 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 	logger.info({ userId, cursor: data.cursor, jobData: data }, "Scraping timeline");
 
 	let user: User;
-
 	try {
 		user = await prisma.user.findUniqueOrThrow({
 			where: {
@@ -124,7 +113,13 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 		throw error;
 	}
 
-	const userCookies = user.cookies;
+	let userCookies: string | undefined;
+	try {
+		userCookies = await getTwitterCookies(user.id, user.telegramId.toString());
+	} catch (error) {
+		logger.error({ err: error, userId }, "Failed to decrypt Twitter cookies");
+		throw new Error("Failed to decrypt Twitter cookies");
+	}
 
 	if (!userCookies) {
 		logger.error({ userId }, "User cookies not found");
@@ -137,16 +132,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 		return;
 	}
 
-	// Decrypt cookies with migration support
-	let cookiesJson: string;
-	try {
-		cookiesJson = cookieEncryption.safeDecrypt(userCookies, user.telegramId.toString());
-	} catch (error) {
-		logger.error({ err: error, userId }, "Failed to decrypt user cookies");
-		throw new Error("Failed to decrypt user cookies");
-	}
-
-	const cookies = Cookies.fromJSON(cookiesJson);
+	const cookies = Cookies.fromJSON(userCookies);
 
 	const twid = cookies.userId();
 

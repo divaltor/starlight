@@ -54,6 +54,7 @@ ALTER TABLE "users" ADD COLUMN "pixiv_include_private" BOOLEAN NOT NULL DEFAULT 
 CREATE TABLE "provider_credentials" (
   "user_id" UUID NOT NULL,
   "provider" TEXT NOT NULL,
+  "credential_type" TEXT NOT NULL,
   "encrypted_secret" TEXT NOT NULL,
   "external_user_id" TEXT,
   "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -63,3 +64,28 @@ CREATE TABLE "provider_credentials" (
     FOREIGN KEY ("user_id") REFERENCES "users"("id")
     ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+INSERT INTO "provider_credentials" (
+  "user_id",
+  "provider",
+  "credential_type",
+  "encrypted_secret",
+  "created_at",
+  "updated_at"
+)
+SELECT
+  "id",
+  'twitter',
+  'cookies',
+  "cookies",
+  "created_at",
+  "updated_at"
+FROM "users"
+WHERE "cookies" IS NOT NULL
+ON CONFLICT ("user_id", "provider") DO UPDATE SET
+  "credential_type" = EXCLUDED."credential_type",
+  "encrypted_secret" = EXCLUDED."encrypted_secret",
+  "created_at" = LEAST("provider_credentials"."created_at", EXCLUDED."created_at"),
+  "updated_at" = GREATEST("provider_credentials"."updated_at", EXCLUDED."updated_at");
+
+ALTER TABLE "users" DROP COLUMN "cookies";

@@ -33,9 +33,7 @@ export class CookieEncryption {
 	 */
 	private deriveKey(userId: string, purpose?: string): Uint8Array {
 		const info = utf8ToBytes(
-			purpose
-				? `starlight-secret-v1:${purpose}:${userId}`
-				: `cookie-encryption-${userId}`
+			purpose ? `starlight-secret-v1:${purpose}:${userId}` : `cookie-encryption-${userId}`,
 		);
 		return hkdf(sha256, this.masterKey, this.salt, info, 32);
 	}
@@ -87,6 +85,25 @@ export class CookieEncryption {
 		const key = this.deriveKey(userId, purpose);
 		const cipher = managedNonce(xchacha20poly1305)(key);
 		return bytesToUtf8(cipher.decrypt(hexToBytes(encryptedHex)));
+	}
+
+	decryptScopedOrLegacy(
+		data: string,
+		userId: string,
+		purpose: string,
+		legacyUserId = userId,
+	): { data: string; usedLegacyEncryption: boolean } {
+		try {
+			return {
+				data: this.decryptScoped(data, userId, purpose),
+				usedLegacyEncryption: false,
+			};
+		} catch {
+			return {
+				data: this.safeDecrypt(data, legacyUserId),
+				usedLegacyEncryption: true,
+			};
+		}
 	}
 
 	/**
