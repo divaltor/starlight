@@ -3,7 +3,7 @@ import {
 	createInlineImageDedupeKey,
 	createInlineImageIdentityKey,
 	createInlineImageResultId,
-} from "./inline-image-identity";
+} from "@/utils/inline-image-identity";
 
 describe("inline image identity", () => {
 	test("is stable, compact, and provider/owner-safe", () => {

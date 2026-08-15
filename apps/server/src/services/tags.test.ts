@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeCollectorTags, normalizeTags, normalizeTwitterTags } from "./tags";
+import { normalizeCollectorTags, normalizeTags, normalizeTwitterTags } from "@/services/tags";
 
 describe("normalizeTags", () => {
 	test("trims, drops empty tags, and deterministically deduplicates", () => {
