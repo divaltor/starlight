@@ -1,3 +1,5 @@
+import { parseTwitterCookies } from "./twitter-cookies";
+
 interface TwitterCredential {
 	credentialType: string;
 	encryptedSecret: string;
@@ -40,6 +42,7 @@ export const createTwitterCredentialService = (dependencies: {
 				userId,
 				credential.user.telegramId.toString(),
 			);
+			parseTwitterCookies(decrypted.data);
 		} catch {
 			const deleted = await dependencies.deleteMatching(userId, credential.encryptedSecret);
 			if (deleted.count === 0 && retryOnCasLoss) {

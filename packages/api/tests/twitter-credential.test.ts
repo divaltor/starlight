@@ -3,6 +3,14 @@ import { createTwitterCredentialService } from "../src/services/twitter-credenti
 
 const userId = "user-id";
 const telegramId = 42n;
+const cookies = JSON.stringify([
+	{ domain: ".x.com", key: "auth_token", value: "token" },
+	{ domain: ".x.com", key: "twid", value: "u%3D123456" },
+]);
+const replacementCookies = JSON.stringify([
+	{ domain: ".x.com", key: "auth_token", value: "replacement" },
+	{ domain: ".x.com", key: "twid", value: "u%3D654321" },
+]);
 
 describe("Twitter credential service", () => {
 	let credential: {
@@ -16,7 +24,7 @@ describe("Twitter credential service", () => {
 	beforeEach(() => {
 		credential = {
 			credentialType: "cookies",
-			encryptedSecret: "legacy:secret",
+			encryptedSecret: `legacy:${cookies}`,
 			provider: "twitter",
 			user: { telegramId },
 		};
@@ -32,7 +40,7 @@ describe("Twitter credential service", () => {
 				}
 				return {
 					data: secret.replace(/^(legacy|scoped):/, ""),
-					usedLegacyEncryption: secret.startsWith("legacy:"),
+					usedLegacyEncryption: !secret.startsWith("scoped:"),
 				};
 			},
 			encrypt: (cookies) => `scoped:${cookies}`,
@@ -40,7 +48,7 @@ describe("Twitter credential service", () => {
 				if (concurrentAction === "save") {
 					credential = {
 						credentialType: "cookies",
-						encryptedSecret: "scoped:new-secret",
+						encryptedSecret: `scoped:${replacementCookies}`,
 						provider: "twitter",
 						user: { telegramId },
 					};
@@ -54,6 +62,16 @@ describe("Twitter credential service", () => {
 				return Promise.resolve({ count: 1 });
 			},
 			deleteMatching: (_id, original) => {
+				if (concurrentAction === "save") {
+					credential = {
+						credentialType: "cookies",
+						encryptedSecret: `scoped:${replacementCookies}`,
+						provider: "twitter",
+						user: { telegramId },
+					};
+				} else if (concurrentAction === "delete") {
+					credential = null;
+				}
 				if (!credential || credential.encryptedSecret !== original) {
 					return Promise.resolve({ count: 0 });
 				}
@@ -63,14 +81,23 @@ describe("Twitter credential service", () => {
 		});
 
 	test("upgrades legacy encryption with compare-and-swap", async () => {
-		expect(await createService().get(userId)).toBe("secret");
-		expect(credential?.encryptedSecret).toBe("scoped:secret");
+		expect(await createService().get(userId)).toBe(cookies);
+		expect(credential?.encryptedSecret).toBe(`scoped:${cookies}`);
+	});
+
+	test("preserves valid plaintext legacy cookie JSON", async () => {
+		if (credential) {
+			credential.encryptedSecret = cookies;
+		}
+
+		expect(await createService().get(userId)).toBe(cookies);
+		expect(credential?.encryptedSecret).toBe(`scoped:${cookies}`);
 	});
 
 	test("a concurrent save wins a legacy upgrade race", async () => {
 		concurrentAction = "save";
-		expect(await createService().get(userId)).toBe("new-secret");
-		expect(credential?.encryptedSecret).toBe("scoped:new-secret");
+		expect(await createService().get(userId)).toBe(replacementCookies);
+		expect(credential?.encryptedSecret).toBe(`scoped:${replacementCookies}`);
 	});
 
 	test("a concurrent delete wins a legacy upgrade race", async () => {
@@ -99,5 +126,27 @@ describe("Twitter credential service", () => {
 		}
 		expect(await createService().get(userId)).toBeUndefined();
 		expect(credential).toBeNull();
+	});
+
+	test.each(["not-hex-garbage", "abc123", '[{"domain":".x.com"'])(
+		"removes malformed or truncated cookie data: %s",
+		async (invalid) => {
+			if (credential) {
+				credential.encryptedSecret = invalid;
+			}
+
+			expect(await createService().get(userId)).toBeUndefined();
+			expect(credential).toBeNull();
+		},
+	);
+
+	test("a concurrent valid save wins corruption cleanup and is returned", async () => {
+		if (credential) {
+			credential.encryptedSecret = "not-hex-garbage";
+		}
+		concurrentAction = "save";
+
+		expect(await createService().get(userId)).toBe(replacementCookies);
+		expect(credential?.encryptedSecret).toBe(`scoped:${replacementCookies}`);
 	});
 });

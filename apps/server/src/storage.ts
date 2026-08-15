@@ -1,3 +1,4 @@
+import { getTwitterUserId, parseTwitterCookies } from "@starlight/api/services/twitter-cookies";
 import { env } from "@starlight/utils";
 import { Cookie } from "tough-cookie";
 
@@ -7,7 +8,6 @@ export interface RFC6265Cookie {
 	value: string;
 }
 
-const TWID_REGEX = /u=(\d+)/;
 const DOMAIN_REGEX = /https?:\/\/(.+?)\//;
 
 export class Cookies {
@@ -22,21 +22,17 @@ export class Cookies {
 	}
 
 	static fromJSON(data: string): Cookies {
-		const parsed = JSON.parse(data);
-
-		return new Cookies(parsed.map((cookie: any) => new Cookie(mapToRFC6265Cookie(cookie))));
+		return new Cookies(parseTwitterCookies(data).map((cookie) => new Cookie(cookie)));
 	}
 
 	userId() {
-		const twidValue = this.cookies.find((cookie) => cookie.key === "twid")?.value;
-
-		if (!twidValue) {
-			return;
-		}
-
-		const decoded = decodeURIComponent(twidValue);
-		const match = decoded.match(TWID_REGEX);
-		return match ? match[1] : undefined;
+		return getTwitterUserId(
+			this.cookies.map((cookie) => ({
+				domain: cookie.domain ?? "",
+				key: cookie.key,
+				value: cookie.value,
+			})),
+		);
 	}
 }
 
