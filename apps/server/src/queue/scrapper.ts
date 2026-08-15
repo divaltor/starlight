@@ -115,7 +115,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 
 	let userCookies: string | undefined;
 	try {
-		userCookies = await getTwitterCookies(user.id, user.telegramId.toString());
+		userCookies = await getTwitterCookies(user.id);
 	} catch (error) {
 		logger.error({ err: error, userId }, "Failed to decrypt Twitter cookies");
 		throw new Error("Failed to decrypt Twitter cookies");

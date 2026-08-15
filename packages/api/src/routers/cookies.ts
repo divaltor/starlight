@@ -50,7 +50,7 @@ export const verifyCookies = async ({ context }: { context: AuthContext }) => {
 			return { hasValidCookies: false };
 		}
 
-		const cookies = await getTwitterCookies(context.databaseUserId, context.user.id.toString());
+		const cookies = await getTwitterCookies(context.databaseUserId);
 
 		if (!cookies) {
 			return { hasValidCookies: false };

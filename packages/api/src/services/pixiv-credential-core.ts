@@ -1,0 +1,51 @@
+export const createPixivCredentialService =
+	<Client extends { refreshToken: string }>(dependencies: {
+		connect: (token: string) => Promise<Client>;
+		decryptLegacy: (secret: string, userId: string) => string;
+		decryptScoped: (secret: string, userId: string) => string;
+		encrypt: (token: string, userId: string) => string;
+		find: (userId: string) => Promise<{
+			credentialType: string;
+			encryptedSecret: string;
+		} | null>;
+		update: (userId: string, encryptedSecret: string) => Promise<unknown>;
+		withLock: <T>(userId: string, operation: () => Promise<T>) => Promise<T>;
+	}) =>
+	async <T>(userId: string, operation: (client: Client) => Promise<T>) =>
+		dependencies.withLock(userId, async () => {
+			const credential = await dependencies.find(userId);
+			if (!credential || credential.credentialType !== "refresh_token") {
+				return;
+			}
+
+			let token: string;
+			let migrated = false;
+			try {
+				token = dependencies.decryptScoped(credential.encryptedSecret, userId);
+			} catch {
+				token = dependencies.decryptLegacy(credential.encryptedSecret, userId);
+				migrated = true;
+			}
+
+			const client = await dependencies.connect(token);
+			const outcome = await operation(client).then(
+				(value) => ({ success: true, value }) as const,
+				(error) => ({ success: false, error }) as const,
+			);
+
+			if (migrated || client.refreshToken !== token) {
+				const persistToken = () =>
+					dependencies.update(userId, dependencies.encrypt(client.refreshToken, userId));
+
+				if (outcome.success) {
+					await persistToken();
+				} else {
+					await persistToken().catch(() => undefined);
+				}
+			}
+
+			if (outcome.success) {
+				return outcome.value;
+			}
+			throw outcome.error;
+		});

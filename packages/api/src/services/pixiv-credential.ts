@@ -1,6 +1,7 @@
 import { CookieEncryption } from "@starlight/crypto";
 import { env, prisma } from "@starlight/utils";
 import { PixivAdapter } from "./pixiv";
+import { createPixivCredentialService } from "./pixiv-credential-core";
 
 const PURPOSE = "provider:pixiv:refresh-token";
 const encryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY, env.COOKIE_ENCRYPTION_SALT);
@@ -18,53 +19,19 @@ export const withPixivLock = async <T>(userId: string, operation: () => Promise<
 	);
 };
 
-export const withPixivClient = async <T>(
-	userId: string,
-	operation: (client: PixivAdapter) => Promise<T>,
-) =>
-	withPixivLock(userId, async () => {
-		const credential = await prisma.providerCredential.findUnique({
+export const withPixivClient = createPixivCredentialService({
+	withLock: withPixivLock,
+	find: (userId) =>
+		prisma.providerCredential.findUnique({
 			where: { userId_provider: { userId, provider: "pixiv" } },
-		});
-		if (!credential) {
-			return;
-		}
-		if (credential.credentialType !== "refresh_token") {
-			return;
-		}
-		let token: string;
-		let migrated = false;
-		try {
-			token = encryption.decryptScoped(credential.encryptedSecret, userId, PURPOSE);
-		} catch {
-			token = encryption.decrypt(credential.encryptedSecret, userId);
-			migrated = true;
-		}
-		const client = await PixivAdapter.connect(token);
-		const outcome = await operation(client).then(
-			(value) => ({ success: true, value }) as const,
-			(error) => ({ success: false, error }) as const,
-		);
-
-		if (migrated || client.refreshToken !== token) {
-			const persistToken = async () => {
-				await prisma.providerCredential.update({
-					where: { userId_provider: { userId, provider: "pixiv" } },
-					data: {
-						encryptedSecret: encryptPixivToken(client.refreshToken, userId),
-					},
-				});
-			};
-
-			if (outcome.success) {
-				await persistToken();
-			} else {
-				await persistToken().catch(() => undefined);
-			}
-		}
-
-		if (outcome.success) {
-			return outcome.value;
-		}
-		throw outcome.error;
-	});
+		}),
+	decryptScoped: (secret, userId) => encryption.decryptScoped(secret, userId, PURPOSE),
+	decryptLegacy: (secret, userId) => encryption.decrypt(secret, userId),
+	connect: PixivAdapter.connect,
+	encrypt: encryptPixivToken,
+	update: (userId, encryptedSecret) =>
+		prisma.providerCredential.update({
+			where: { userId_provider: { userId, provider: "pixiv" } },
+			data: { encryptedSecret },
+		}),
+});

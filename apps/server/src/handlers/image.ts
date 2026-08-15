@@ -1,6 +1,6 @@
 import { FormattedString } from "@grammyjs/parse-mode";
 import { EmbeddingsService } from "@starlight/api/services/embeddings";
-import { getTwitterCookies, hasTwitterCookies } from "@starlight/api/services/twitter-credential";
+import { hasTwitterCookies } from "@starlight/api/services/twitter-credential";
 import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { webAppKeyboard } from "@/bot";
@@ -8,7 +8,6 @@ import type { Logger } from "@/logger";
 import { RETRY } from "@/queue/absurd";
 import { getScheduledScrapperGeneration, scrapperApp } from "@/queue/scrapper";
 import { runtime } from "@/services/runtime";
-import { Cookies } from "@/storage";
 import type { Context } from "@/types";
 
 const INLINE_QUERY_PAGE_SIZE = 50;
@@ -679,109 +678,77 @@ composer.on("inline_query").filter(
 	},
 );
 
-privateChat.command("cookies").filter(
-	async (ctx) => !ctx.user || !(await hasTwitterCookies(ctx.user.id)),
-	async (ctx) => {
-		const keyboard = new InlineKeyboard().webApp("Set cookies", {
-			url: `${env.BASE_FRONTEND_URL}/settings`,
-		});
+privateChat.command("cookies", async (ctx) => {
+	const connected = ctx.user ? await hasTwitterCookies(ctx.user.id) : false;
+	const keyboard = new InlineKeyboard().webApp(connected ? "Manage Twitter" : "Set cookies", {
+		url: `${env.BASE_FRONTEND_URL}/settings`,
+	});
+	const message = connected
+		? "Twitter is connected. Use settings to replace or delete your cookies."
+		: "No cookies found. Please set your cookies first.";
+	await ctx.reply(message, { reply_markup: keyboard });
+});
 
-		await ctx.reply("No cookies found. Please set your cookies first.", {
-			reply_markup: keyboard,
-		});
-	},
-);
-
-privateChat.command("cookies").filter(
-	async (ctx) => Boolean(ctx.user && (await hasTwitterCookies(ctx.user.id))),
-	async (ctx) => {
-		try {
-			const userCookies = ctx.user
-				? await getTwitterCookies(ctx.user.id, ctx.user.telegramId.toString())
-				: undefined;
-
-			if (!(userCookies && ctx.user)) {
-				await ctx.reply("No cookies found.");
-				return;
-			}
-
-			const cookies = Cookies.fromJSON(userCookies);
-			const cookiesString = cookies.toString();
-
-			await ctx.reply(`Your cookies:\n\n${cookiesString}`);
-		} catch (error) {
-			ctx.logger.error({ error }, "Failed to decrypt cookies");
-			await ctx.reply("Failed to decrypt cookies. Please try setting them again.");
-		}
-	},
-);
-
-privateChat.command("scrapper").filter(
-	async (ctx) => !ctx.user || !(await hasTwitterCookies(ctx.user.id)),
-	async (ctx) => {
+privateChat.command("scrapper", async (ctx) => {
+	const user = ctx.user;
+	if (!(user && (await hasTwitterCookies(user.id)))) {
 		const keyboard = new InlineKeyboard().webApp("Set cookies", {
 			url: `${env.BASE_FRONTEND_URL}/cookies`,
 		});
-
 		await ctx.reply(
 			"Beep boop, you need to give me your cookies before I can send you daily images.",
 			{ reply_markup: keyboard },
 		);
-	},
-);
+		return;
+	}
 
-privateChat.command("scrapper").filter(
-	async (ctx) => Boolean(ctx.user && (await hasTwitterCookies(ctx.user.id))),
-	async (ctx) => {
-		const user = ctx.user!;
-		const generation = getScheduledScrapperGeneration();
+	const generation = getScheduledScrapperGeneration();
 
-		const scheduledJob = await scrapperApp.spawn(
-			"scheduled-feed-scrapper",
-			{
-				generation,
-				userId: user.id,
-				limit: 300,
-			},
-			{
-				idempotencyKey: `scheduled-scrapper-${user.id}-${generation}`,
-				maxAttempts: 3,
-				retryStrategy: RETRY.scrapper,
-			},
-		);
+	const scheduledJob = await scrapperApp.spawn(
+		"scheduled-feed-scrapper",
+		{
+			generation,
+			userId: user.id,
+			limit: 300,
+		},
+		{
+			idempotencyKey: `scheduled-scrapper-${user.id}-${generation}`,
+			maxAttempts: 3,
+			retryStrategy: RETRY.scrapper,
+		},
+	);
 
-		if (scheduledJob.created) {
-			ctx.logger.debug({ userId: user.id }, "Scheduled scrapper");
-
-			await scrapperApp.spawn(
-				"feed-scrapper",
-				{ userId: user.id, count: 0, limit: 300 },
-				{
-					maxAttempts: 3,
-					retryStrategy: RETRY.scrapper,
-				},
-			);
-
-			await ctx.reply(
-				"You placed in the queue (runs every 6 hours). You can check your images in a few minutes in your gallery.\n\nYou can start the job anytime by sending /scrapper command again.",
-				{
-					reply_markup: webAppKeyboard("app", "View gallery"),
-				},
-			);
-			return;
-		}
+	if (scheduledJob.created) {
+		ctx.logger.debug({ userId: user.id }, "Scheduled scrapper");
 
 		await scrapperApp.spawn(
 			"feed-scrapper",
-			{ userId: user.id, count: 0, limit: 100 },
+			{ userId: user.id, count: 0, limit: 300 },
 			{
 				maxAttempts: 3,
 				retryStrategy: RETRY.scrapper,
 			},
 		);
 
-		await ctx.reply("Starting to collect images, check back in a few minutes.");
-	},
-);
+		await ctx.reply(
+			"You placed in the queue (runs every 6 hours). You can check your images in a few minutes in your gallery.\n\nYou can start the job anytime by sending /scrapper command again.",
+			{
+				reply_markup: webAppKeyboard("app", "View gallery"),
+			},
+		);
+		return;
+	}
+
+	await scrapperApp.spawn(
+		"feed-scrapper",
+		{ userId: user.id, count: 0, limit: 100 },
+		{
+			maxAttempts: 3,
+			retryStrategy: RETRY.scrapper,
+		},
+	);
+
+	await ctx.reply("Starting to collect images, check back in a few minutes.");
+});
 
 export default composer;

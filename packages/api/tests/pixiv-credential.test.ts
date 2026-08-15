@@ -1,43 +1,22 @@
 import { describe, expect, mock, test } from "bun:test";
+import { createPixivCredentialService } from "../src/services/pixiv-credential-core";
 
 const state = {
 	client: { refreshToken: "rotated-token" },
-	credential: { credentialType: "refresh_token", encryptedSecret: "original-token" },
-	persistToken: () => Promise.resolve(),
+	persistToken: () => Promise.resolve<unknown>(undefined),
 };
 
-const update = mock(() => state.persistToken());
-
-mock.module("@starlight/crypto", () => ({
-	CookieEncryption: class {
-		decryptScoped(token: string) {
-			return token;
-		}
-
-		encryptScoped(token: string) {
-			return token;
-		}
-	},
-}));
-
-mock.module("@starlight/utils", () => ({
-	env: { COOKIE_ENCRYPTION_KEY: "key", COOKIE_ENCRYPTION_SALT: "salt" },
-	prisma: {
-		$transaction: async (
-			operation: (transaction: { $executeRaw: () => Promise<void> }) => Promise<unknown>,
-		) => operation({ $executeRaw: () => Promise.resolve() }),
-		providerCredential: {
-			findUnique: () => Promise.resolve(state.credential),
-			update,
-		},
-	},
-}));
-
-mock.module("../src/services/pixiv", () => ({
-	PixivAdapter: { connect: () => Promise.resolve(state.client) },
-}));
-
-const { withPixivClient } = await import("../src/services/pixiv-credential");
+const update = mock((_userId: string, _encryptedSecret: string) => state.persistToken());
+const withPixivClient = createPixivCredentialService({
+	withLock: <T>(_userId: string, operation: () => Promise<T>) => operation(),
+	find: () =>
+		Promise.resolve({ credentialType: "refresh_token", encryptedSecret: "original-token" }),
+	decryptScoped: (token) => token,
+	decryptLegacy: (token) => token,
+	connect: () => Promise.resolve(state.client),
+	encrypt: (token) => token,
+	update,
+});
 
 describe("withPixivClient", () => {
 	test("preserves an operation error when persisting its rotated token fails", async () => {
