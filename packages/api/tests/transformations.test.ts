@@ -158,16 +158,35 @@ describe("transformSearchResults", () => {
 		});
 	});
 
-	test("parses legacy Twitter, Pixiv, and collision media IDs", () => {
+	test("parses legacy Twitter and current media IDs only", () => {
 		expect(parseMediaPublicId("123")).toEqual({ provider: "twitter", externalId: "123" });
-		expect(parseMediaPublicId("pixiv:456")).toEqual({ provider: "pixiv", externalId: "456" });
-		const oldCollision = `~${Buffer.from(
-			JSON.stringify(["media", "twitter", "789", "owner"]),
-		).toString("base64url")}`;
-		expect(parseMediaPublicId(oldCollision)).toEqual({
-			provider: "twitter",
-			externalId: "789",
+		expect(parseMediaPublicId(createPublicId("media", "pixiv", "456", "owner"))).toEqual({
+			provider: "pixiv",
+			externalId: "456",
 			userId: "owner",
 		});
+	});
+
+	test("rejects malformed or non-media public IDs", () => {
+		expect(parseMediaPublicId("")).toBeNull();
+		expect(parseMediaPublicId(" ")).toBeNull();
+		expect(parseMediaPublicId("+1")).toBeNull();
+		expect(parseMediaPublicId("1.0")).toBeNull();
+		expect(parseMediaPublicId("1a")).toBeNull();
+		expect(parseMediaPublicId("pixiv:456")).toBeNull();
+		expect(parseMediaPublicId("~not-base64url")).toBeNull();
+		expect(parseMediaPublicId(createPublicId("post", "twitter", "123", "owner"))).toBeNull();
+		expect(
+			parseMediaPublicId(
+				`~${Buffer.from(JSON.stringify(["v2", "media", "twitter", "123", "owner"])).toString("base64url")}`,
+			),
+		).toBeNull();
+		expect(parseMediaPublicId(createPublicId("media", "twitter", "", "owner"))).toBeNull();
+		expect(parseMediaPublicId(`${createPublicId("media", "twitter", "123", "owner")}=`)).toBeNull();
+		expect(
+			parseMediaPublicId(
+				`~${Buffer.from(JSON.stringify(["media", "twitter", "789", "owner"])).toString("base64url")}`,
+			),
+		).toBeNull();
 	});
 });

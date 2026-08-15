@@ -160,7 +160,14 @@ export const retrieveUserTweets = no
 export const deletePhoto = protectedProcedure
 	.input(z.object({ photoId: z.string() }))
 	.handler(async ({ input, context }) => {
-		const { provider, externalId, userId } = parseMediaPublicId(input.photoId);
+		const mediaId = parseMediaPublicId(input.photoId);
+		if (!mediaId) {
+			throw new ORPCError("BAD_REQUEST", {
+				message: "Invalid photo ID",
+				status: 400,
+			});
+		}
+		const { provider, externalId, userId } = mediaId;
 		if (userId && userId !== context.databaseUserId) {
 			throw new ORPCError("NOT_FOUND", {
 				message: "Photo not found",
