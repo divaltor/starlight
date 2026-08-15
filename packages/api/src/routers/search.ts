@@ -8,6 +8,11 @@ import { runtime } from "../services/runtime";
 import type { SearchResult } from "../types/posts";
 import { Cursor, SearchCursorPayloadSchema, type SearchCursorPayload } from "../utils/cursor";
 import { paginateSearchResults } from "../utils/search-pagination";
+import {
+	galleryDedupePartitionSql,
+	galleryDedupeKeySql,
+	galleryRepresentativeOrderSql,
+} from "../utils/gallery-deduplication";
 import { transformSearchResults } from "../utils/transformations";
 
 export const searchImages = maybeAuthProcedure
@@ -218,7 +223,7 @@ export const searchImages = maybeAuthProcedure
 						p.provider,
 						p.user_id,
 						p.kind,
-						COALESCE(NULLIF(p.perceptual_hash, ''), jsonb_build_array(p.provider, p.external_id, p.user_id)::text) AS dedupe_key,
+						${Prisma.raw(galleryDedupeKeySql("p"))} AS dedupe_key,
 						p.height,
 						p.width,
 						p.original_url,
@@ -332,8 +337,8 @@ export const searchImages = maybeAuthProcedure
 						is_nsfw,
 						final_score,
 						ROW_NUMBER() OVER (
-							PARTITION BY dedupe_key
-							ORDER BY final_score DESC NULLS LAST, provider DESC, media_id DESC, user_id DESC, post_created_at DESC, post_id DESC
+							PARTITION BY ${Prisma.raw(galleryDedupePartitionSql)}
+							ORDER BY ${Prisma.raw(galleryRepresentativeOrderSql)}
 						) AS duplicate_rank
 					FROM fused
 				),
@@ -413,6 +418,7 @@ export const randomImages = publicProcedure.handler(async () => {
 				p.user_id,
                 p.provider,
                 p.kind,
+                ${Prisma.raw(galleryDedupeKeySql("p"))} AS dedupe_key,
                 p.height,
                 p.width,
                 p.s3_path,
@@ -456,6 +462,7 @@ export const randomImages = publicProcedure.handler(async () => {
 				user_id,
                 provider,
                 kind,
+				dedupe_key,
                 height,
                 width,
                 s3_path,
@@ -473,9 +480,17 @@ export const randomImages = publicProcedure.handler(async () => {
 				EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - post_created_at)) / (30.0 * 24 * 3600.0))) AS final_score
             FROM ranked
         ),
+        deduped AS (
+            SELECT *, ROW_NUMBER() OVER (
+                PARTITION BY ${Prisma.raw(galleryDedupePartitionSql)}
+                ORDER BY ${Prisma.raw(galleryRepresentativeOrderSql)}
+            ) AS duplicate_rank
+            FROM fused
+        ),
         top500 AS (
-            SELECT * FROM fused 
-            ORDER BY final_score DESC 
+            SELECT * FROM deduped
+            WHERE duplicate_rank = 1
+            ORDER BY ${Prisma.raw(galleryRepresentativeOrderSql)}
             LIMIT 500
         )
         SELECT

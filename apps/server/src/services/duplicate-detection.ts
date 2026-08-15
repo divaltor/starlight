@@ -7,7 +7,9 @@ interface SimilarPhoto {
 	id: string;
 	originalUrl: string;
 	perceptualHash: string;
-	s3Path?: string;
+	s3Path: string;
+	height: number | null;
+	width: number | null;
 	sourceUrl: string;
 	postId: string;
 	userId: string;
@@ -24,6 +26,7 @@ export async function findSimilarPhotos(
 		{ len: 8, field: "hashBucket8" as const, maxCandidates: 200 },
 		{ len: 4, field: "hashBucket4" as const, maxCandidates: 1000 },
 	];
+	const similarPhotos = new Map<string, SimilarPhoto>();
 
 	for (const { len, field, maxCandidates } of buckets) {
 		const prefix = targetHash.substring(0, len);
@@ -34,6 +37,7 @@ export async function findSimilarPhotos(
 			where: {
 				[field]: prefix,
 				perceptualHash: { not: null },
+				s3Path: { not: null },
 				deletedAt: null,
 				NOT:
 					excludePhotoId && excludeUserId
@@ -49,6 +53,8 @@ export async function findSimilarPhotos(
 				s3Path: true,
 				originalUrl: true,
 				postId: true,
+				height: true,
+				width: true,
 				post: { select: { sourceUrl: true } },
 			},
 			take: maxCandidates,
@@ -58,33 +64,28 @@ export async function findSimilarPhotos(
 			continue;
 		}
 
-		// If we got results and didn't hit the limit, process them
-		if (candidates.length < maxCandidates) {
-			const similarPhotos: SimilarPhoto[] = [];
+		for (const candidate of candidates) {
+			const distance = calculateHashDistance(targetHash, candidate.perceptualHash!);
 
-			for (const candidate of candidates) {
-				const distance = calculateHashDistance(targetHash, candidate.perceptualHash!);
-
-				if (distance <= maxDistance) {
-					similarPhotos.push({
-						id: candidate.id,
-						userId: candidate.userId,
-						perceptualHash: candidate.perceptualHash!,
-						distance,
-						s3Path: candidate.s3Path || undefined,
-						originalUrl: candidate.originalUrl,
-						postId: candidate.postId,
-						sourceUrl: candidate.post.sourceUrl,
-					});
-				}
+			if (distance <= maxDistance) {
+				const similarPhoto = {
+					id: candidate.id,
+					userId: candidate.userId,
+					perceptualHash: candidate.perceptualHash!,
+					distance,
+					s3Path: candidate.s3Path!,
+					originalUrl: candidate.originalUrl,
+					postId: candidate.postId,
+					sourceUrl: candidate.post.sourceUrl,
+					height: candidate.height,
+					width: candidate.width,
+				};
+				similarPhotos.set(`${candidate.id}:${candidate.userId}:${candidate.s3Path}`, similarPhoto);
 			}
-
-			// Sort by distance (most similar first)
-			return similarPhotos.sort((a, b) => a.distance - b.distance);
 		}
 	}
 
-	return [];
+	return [...similarPhotos.values()].sort((a, b) => a.distance - b.distance);
 }
 
 export async function findDuplicatesByImageContent(

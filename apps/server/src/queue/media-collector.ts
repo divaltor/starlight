@@ -4,9 +4,11 @@ import sharp from "sharp";
 import { logger } from "@/logger";
 import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { classificationApp } from "@/queue/classification";
-import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
+import { enqueueClassification } from "@/queue/classification-recovery";
+import { findSimilarPhotos } from "@/services/duplicate-detection";
 import { calculatePerceptualHash } from "@/services/image";
 import { normalizeCollectorTags } from "@/services/tags";
+import { isMediaResolved, resolveMediaFromAsset } from "@/services/media-resolution";
 import {
 	MAX_MEDIA_DOWNLOAD_BYTES,
 	MAX_POST_DOWNLOAD_BYTES,
@@ -104,7 +106,15 @@ mediaCollectorApp.registerTask<MediaCollectorJobData>(
 		});
 
 		for (const media of postRecord.media) {
-			if (media.s3Path && (media.kind !== "image" || media.perceptualHash)) {
+			if (isMediaResolved(media)) {
+				if (media.kind === "image" && media.classification === null) {
+					await enqueueClassification(
+						{ classificationApp, retryStrategy: RETRY.classification, logger },
+						media.id,
+						post.provider,
+						userId,
+					);
+				}
 				continue;
 			}
 			const input = post.media.find((item) => item.externalId === media.id);
@@ -132,17 +142,34 @@ mediaCollectorApp.registerTask<MediaCollectorJobData>(
 				continue;
 			}
 
-			const duplicates = await findDuplicatesByImageContent(bytes);
+			const hash = await calculatePerceptualHash(bytes);
+			const duplicates = await findSimilarPhotos(hash);
 			if (duplicates.length > 0) {
+				const asset = duplicates[0]!;
+				await prisma.media.update({
+					where: { mediaId: { id: media.id, userId, provider: post.provider } },
+					data: resolveMediaFromAsset(asset),
+				});
 				logger.info(
-					{ mediaId: media.id, provider: post.provider, userId },
-					"Duplicate media skipped",
+					{
+						mediaId: media.id,
+						provider: post.provider,
+						userId,
+						assetMediaId: asset.id,
+						assetUserId: asset.userId,
+					},
+					"Duplicate media resolved from existing asset",
+				);
+				await enqueueClassification(
+					{ classificationApp, retryStrategy: RETRY.classification, logger },
+					media.id,
+					post.provider,
+					userId,
 				);
 				continue;
 			}
-			const [, hash, metadata] = await Promise.all([
+			const [, metadata] = await Promise.all([
 				s3.write(mediaPath, bytes),
-				calculatePerceptualHash(bytes),
 				sharp(bytes)
 					.metadata()
 					.catch(() => ({ height: null, width: null })),
@@ -156,14 +183,11 @@ mediaCollectorApp.registerTask<MediaCollectorJobData>(
 					width: metadata.width,
 				},
 			});
-			await classificationApp.spawn(
-				"classification",
-				{ photoId: media.id, provider: post.provider, userId },
-				{
-					idempotencyKey: `classify-${post.provider}-${userId}-${media.id}`,
-					maxAttempts: 5,
-					retryStrategy: RETRY.classification,
-				},
+			await enqueueClassification(
+				{ classificationApp, retryStrategy: RETRY.classification, logger },
+				media.id,
+				post.provider,
+				userId,
 			);
 		}
 	},

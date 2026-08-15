@@ -8,6 +8,7 @@ import { logger } from "@/logger";
 import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { mediaCollectorApp } from "@/queue/media-collector";
 import type { MediaCollectorJobData } from "@/queue/media-collector";
+import { mediaResolvedWhere } from "@/services/media-resolution";
 import { normalizeTwitterTags } from "@/services/tags";
 import { Cookies } from "@/storage";
 
@@ -182,7 +183,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 					userId,
 					provider: "twitter",
 					id: { in: tweetIds },
-					media: { every: { s3Path: { not: null } } },
+					media: { every: mediaResolvedWhere },
 				},
 				select: { id: true, createdAt: true },
 			})

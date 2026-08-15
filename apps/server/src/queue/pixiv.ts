@@ -3,6 +3,7 @@ import { withPixivClient } from "@starlight/api/services/pixiv-credential";
 import { env, prisma } from "@starlight/utils";
 import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { mediaCollectorApp, type MediaCollectorJobData } from "@/queue/media-collector";
+import { mediaResolvedWhere } from "@/services/media-resolution";
 
 const CONSECUTIVE_THRESHOLD = 15;
 const SCHEDULE_INTERVAL_SECONDS = 60 * 60 * 6;
@@ -118,7 +119,7 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 					userId: data.userId,
 					provider: "pixiv",
 					id: { in: page.artworks.map((artwork) => artwork.id) },
-					media: { every: { s3Path: { not: null } } },
+					media: { every: mediaResolvedWhere },
 				},
 				select: { id: true },
 			})
