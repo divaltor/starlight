@@ -9,7 +9,7 @@ import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { mediaCollectorApp } from "@/queue/media-collector";
 import type { MediaCollectorJobData } from "@/queue/media-collector";
 import { mediaResolvedWhere } from "@/services/media-resolution";
-import { normalizeTwitterTags } from "@/services/tags";
+import { normalizeTwitterTags } from "@/services/twitter-tags";
 import { Cookies } from "@/storage";
 
 export const SCHEDULED_SCRAPPER_INTERVAL_SECONDS = 60 * 60 * 6;

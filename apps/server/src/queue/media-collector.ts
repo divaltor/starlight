@@ -7,7 +7,7 @@ import { classificationApp } from "@/queue/classification";
 import { enqueueClassification } from "@/queue/classification-recovery";
 import { findSimilarPhotos } from "@/services/duplicate-detection";
 import { calculatePerceptualHash } from "@/services/image";
-import { normalizeCollectorTags } from "@/services/tags";
+import { normalizeCollectorTags } from "@/services/collector-tags";
 import { isMediaResolved, resolveMediaFromAsset } from "@/services/media-resolution";
 import {
 	MAX_MEDIA_DOWNLOAD_BYTES,
