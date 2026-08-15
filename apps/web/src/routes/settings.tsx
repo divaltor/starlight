@@ -318,6 +318,7 @@ function RouteComponent() {
 							>
 								<TextField
 									id="pixiv-refresh-token"
+									label="Pixiv refresh token"
 									onChange={setPixivToken}
 									placeholder="Pixiv refresh token"
 									value={pixivToken}
