@@ -126,9 +126,10 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 	);
 
 	let consecutiveKnown = 0;
+	const jobs: MediaCollectorJobData[] = [];
 	for (const artwork of page.artworks) {
 		consecutiveKnown = known.has(artwork.id) ? consecutiveKnown + 1 : 0;
-		const job: MediaCollectorJobData = {
+		jobs.push({
 			userId: data.userId,
 			post: {
 				provider: "pixiv",
@@ -149,16 +150,20 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 					fetchHeaders: { Referer: "https://www.pixiv.net/" },
 				})),
 			},
-		};
-		await imagesApp.spawn("images-collector", job, {
-			idempotencyKey: `media-pixiv-${data.userId}-${artwork.id}`,
-			maxAttempts: 3,
-			retryStrategy: RETRY.images,
 		});
 		if (consecutiveKnown >= CONSECUTIVE_THRESHOLD) {
 			break;
 		}
 	}
+	await Promise.all(
+		jobs.map((job) =>
+			imagesApp.spawn("images-collector", job, {
+				idempotencyKey: `media-pixiv-${data.userId}-${job.post.externalId}`,
+				maxAttempts: 3,
+				retryStrategy: RETRY.images,
+			}),
+		),
+	);
 
 	const count = data.count + page.artworks.length;
 	if (consecutiveKnown >= CONSECUTIVE_THRESHOLD || count >= data.limit || !page.nextCursor) {
