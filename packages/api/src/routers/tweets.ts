@@ -114,9 +114,7 @@ export const retrieveUserTweets = no
 				include: {
 					photos: {
 						where: prisma.media.available(),
-						orderBy: {
-							createdAt: "desc",
-						},
+						orderBy: [{ position: "asc" }, { id: "asc" }],
 					},
 				},
 				orderBy: [
