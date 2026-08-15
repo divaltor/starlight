@@ -12,12 +12,26 @@ export type PixivArtwork = {
 	type: "illust" | "manga" | "ugoira";
 	sourceUrl: string;
 	author: { id: string; name: string; username: string };
+	tags: string[];
 	mediaUrls: string[];
 };
 
 export type PixivBookmarkPage = {
 	artworks: PixivArtwork[];
 	nextCursor?: number;
+};
+
+export const normalizePixivTags = (tags: PixivIllustItem["tags"]): string[] => {
+	const normalized: string[] = [];
+	const seen = new Set<string>();
+	for (const tag of tags) {
+		const value = tag.name.trim();
+		if (value && !seen.has(value)) {
+			seen.add(value);
+			normalized.push(value);
+		}
+	}
+	return normalized;
 };
 
 const mapArtwork = (illust: PixivIllustItem): PixivArtwork => ({
@@ -31,6 +45,7 @@ const mapArtwork = (illust: PixivIllustItem): PixivArtwork => ({
 		name: illust.user.name,
 		username: illust.user.account,
 	},
+	tags: normalizePixivTags(illust.tags),
 	mediaUrls:
 		illust.metaPages.length > 0
 			? illust.metaPages.map((page) => page.imageUrls.original)

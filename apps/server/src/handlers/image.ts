@@ -9,6 +9,10 @@ import { RETRY } from "@/queue/absurd";
 import { getScheduledScrapperGeneration, scrapperApp } from "@/queue/scrapper";
 import { runtime } from "@/services/runtime";
 import type { Context } from "@/types";
+import {
+	createInlineImageDedupeKey,
+	createInlineImageResultId,
+} from "@/utils/inline-image-identity";
 
 const INLINE_QUERY_PAGE_SIZE = 50;
 const INLINE_QUERY_CANDIDATE_MULTIPLIER = 8;
@@ -16,6 +20,8 @@ const INLINE_QUERY_AUTHOR_REGEX = /(^|\s)@([A-Za-z0-9_]+)/g;
 
 type InlineImageSearchResult = {
 	photo_id: string;
+	photo_provider: string;
+	photo_user_id: string;
 	s3_path: string;
 	tweet_id: string;
 	source_url: string;
@@ -78,17 +84,27 @@ async function searchInlineImagesWithLegacyQuery(
 			whereClause.AND = [
 				{
 					OR: authors.map((author) => ({
-						username: { contains: author, mode: "insensitive" },
+						authorUsername: { contains: author, mode: "insensitive" },
 					})),
 				},
-				{ tweetText: { contains: textQuery, mode: "insensitive" } },
+				{
+					OR: [
+						{ text: { contains: textQuery, mode: "insensitive" } },
+						{ title: { contains: textQuery, mode: "insensitive" } },
+						{ tags: { has: textQuery } },
+					],
+				},
 			];
 		} else if (authors.length > 0) {
 			whereClause.OR = authors.map((author) => ({
-				username: { contains: author, mode: "insensitive" },
+				authorUsername: { contains: author, mode: "insensitive" },
 			}));
 		} else if (textQuery) {
-			whereClause.tweetText = { contains: textQuery, mode: "insensitive" };
+			whereClause.OR = [
+				{ text: { contains: textQuery, mode: "insensitive" } },
+				{ title: { contains: textQuery, mode: "insensitive" } },
+				{ tags: { has: textQuery } },
+			];
 		}
 
 		const tweets = await runInlineImageQuery(
@@ -101,6 +117,7 @@ async function searchInlineImagesWithLegacyQuery(
 						photos: {
 							some: {
 								deletedAt: null,
+								kind: "image",
 								s3Path: { not: null },
 							},
 						},
@@ -110,16 +127,13 @@ async function searchInlineImagesWithLegacyQuery(
 						photos: {
 							where: {
 								deletedAt: null,
+								kind: "image",
 								s3Path: { not: null },
 							},
-							orderBy: {
-								createdAt: "desc",
-							},
+							orderBy: [{ createdAt: "desc" }, { provider: "desc" }, { id: "desc" }],
 						},
 					},
-					orderBy: {
-						createdAt: "desc",
-					},
+					orderBy: [{ createdAt: "desc" }, { provider: "desc" }, { id: "desc" }],
 					take: INLINE_QUERY_PAGE_SIZE,
 					skip: tweetSkip,
 				}),
@@ -131,7 +145,12 @@ async function searchInlineImagesWithLegacyQuery(
 
 		for (const tweet of tweets) {
 			for (const photo of tweet.photos) {
-				const dedupeKey = photo.perceptualHash?.trim() || photo.id;
+				const dedupeKey = createInlineImageDedupeKey(
+					photo.provider,
+					photo.id,
+					photo.userId,
+					photo.perceptualHash,
+				);
 
 				if (seenPhotoKeys.has(dedupeKey)) {
 					continue;
@@ -140,10 +159,12 @@ async function searchInlineImagesWithLegacyQuery(
 				seenPhotoKeys.add(dedupeKey);
 				allPhotos.push({
 					photo_id: photo.id,
+					photo_provider: photo.provider,
+					photo_user_id: photo.userId,
 					s3_path: photo.s3Path as string,
 					tweet_id: tweet.id,
 					source_url: tweet.sourceUrl,
-					username: tweet.username,
+					username: tweet.authorUsername ?? tweet.username,
 					height: photo.height,
 					width: photo.width,
 					final_score: 0,
@@ -221,13 +242,19 @@ composer.on("inline_query").filter(
 			200,
 		);
 		const queryTime = new Date().toISOString();
-		const photoDedupeKey = Prisma.sql`COALESCE(NULLIF(p.perceptual_hash, ''), p.provider || ':' || p.external_id)`;
+		const photoDedupeKey = Prisma.sql`jsonb_build_array(
+			CASE WHEN NULLIF(p.perceptual_hash, '') IS NULL THEN 'identity' ELSE 'hash' END,
+			p.provider,
+			COALESCE(NULLIF(p.perceptual_hash, ''), p.external_id),
+			p.user_id
+		)::text`;
 
 		const authorFilter =
 			authors.length > 0
 				? Prisma.sql`AND (${Prisma.join(
 						authors.map(
-							(author) => Prisma.sql`strpos(lower(COALESCE(t.username, '')), ${author}) > 0`,
+							(author) =>
+								Prisma.sql`strpos(lower(COALESCE(t.author_username, t.username, '')), ${author}) > 0`,
 						),
 						" OR ",
 					)})`
@@ -239,9 +266,9 @@ composer.on("inline_query").filter(
 						authors.map(
 							(author) =>
 								Prisma.sql`CASE
-									WHEN lower(COALESCE(t.username, '')) = ${author} THEN 1.0
-									WHEN strpos(lower(COALESCE(t.username, '')), ${author}) = 1 THEN 0.88
-									WHEN strpos(lower(COALESCE(t.username, '')), ${author}) > 0 THEN 0.76
+									WHEN lower(COALESCE(t.author_username, t.username, '')) = ${author} THEN 1.0
+									WHEN strpos(lower(COALESCE(t.author_username, t.username, '')), ${author}) = 1 THEN 0.88
+									WHEN strpos(lower(COALESCE(t.author_username, t.username, '')), ${author}) > 0 THEN 0.76
 									ELSE 0.0
 								END`,
 						),
@@ -268,12 +295,15 @@ composer.on("inline_query").filter(
 							OR lower(general_tag.value) LIKE ${queryContains}
 					)
 					OR lower(COALESCE(t.text, '')) LIKE ${queryContains}
+					OR lower(COALESCE(t.title, '')) LIKE ${queryContains}
+					OR lower(COALESCE(t.author_name, '')) LIKE ${queryContains}
+					OR lower(COALESCE(t.author_username, '')) LIKE ${queryContains}
 					OR EXISTS (
 						SELECT 1
-						FROM jsonb_array_elements_text(COALESCE(t.provider_payload->'hashtags', '[]'::jsonb)) AS hashtag(value)
-						WHERE lower(hashtag.value) = ${queryLower}
-							OR lower(hashtag.value) LIKE ${queryStartsWith}
-							OR lower(hashtag.value) LIKE ${queryContains}
+						FROM unnest(t.tags) AS post_tag(value)
+						WHERE lower(post_tag.value) = ${queryLower}
+							OR lower(post_tag.value) LIKE ${queryStartsWith}
+							OR lower(post_tag.value) LIKE ${queryContains}
 					)
 				)
 			`
@@ -318,27 +348,32 @@ composer.on("inline_query").filter(
 			`
 			: Prisma.sql`0.0`;
 
-		const hashtagScore = hasTextQuery
+		const postTagScore = hasTextQuery
 			? Prisma.sql`
 				COALESCE(
 					(
 						SELECT MAX(
 							CASE
-								WHEN lower(hashtag.value) = ${queryLower} THEN 0.76
-								WHEN lower(hashtag.value) LIKE ${queryStartsWith} THEN 0.62
-								WHEN lower(hashtag.value) LIKE ${queryContains} THEN 0.5
+								WHEN lower(post_tag.value) = ${queryLower} THEN 0.76
+								WHEN lower(post_tag.value) LIKE ${queryStartsWith} THEN 0.62
+								WHEN lower(post_tag.value) LIKE ${queryContains} THEN 0.5
 								ELSE 0.0
 							END
 						)
-						FROM jsonb_array_elements_text(COALESCE(t.provider_payload->'hashtags', '[]'::jsonb)) AS hashtag(value)
+						FROM unnest(t.tags) AS post_tag(value)
 					),
 					0.0
 				)
 			`
 			: Prisma.sql`0.0`;
 
-		const tweetTextScore = hasTextQuery
-			? Prisma.sql`CASE WHEN lower(COALESCE(t.text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END`
+		const postTextScore = hasTextQuery
+			? Prisma.sql`GREATEST(
+				CASE WHEN lower(COALESCE(t.text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END,
+				CASE WHEN lower(COALESCE(t.title, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END,
+				CASE WHEN lower(COALESCE(t.author_name, '')) LIKE ${queryContains} THEN 0.3 ELSE 0.0 END,
+				CASE WHEN lower(COALESCE(t.author_username, '')) LIKE ${queryContains} THEN 0.3 ELSE 0.0 END
+			)`
 			: Prisma.sql`0.0`;
 
 		let rankedPhotos: InlineImageSearchResult[] = [];
@@ -349,7 +384,8 @@ composer.on("inline_query").filter(
 					authors.length > 0
 						? Prisma.sql`AND (${Prisma.join(
 								authors.map(
-									(author) => Prisma.sql`strpos(lower(COALESCE(t.username, '')), ${author}) > 0`,
+									(author) =>
+										Prisma.sql`strpos(lower(COALESCE(t.author_username, t.username, '')), ${author}) > 0`,
 								),
 								" OR ",
 							)})`
@@ -363,26 +399,31 @@ composer.on("inline_query").filter(
 					WITH ranked AS (
 						SELECT
 							p.external_id AS photo_id,
+							p.provider AS photo_provider,
+							p.user_id AS photo_user_id,
 							p.s3_path,
 							t.external_id AS tweet_id,
 							t.source_url,
-							t.username,
+							COALESCE(t.author_username, t.username) AS username,
 							p.height,
 							p.width,
 							p.created_at AS photo_created_at,
 							ROW_NUMBER() OVER (
 								PARTITION BY ${photoDedupeKey}
-								ORDER BY p.created_at DESC, p.external_id DESC
+								ORDER BY p.created_at DESC, p.provider DESC, p.external_id DESC, p.user_id DESC
 							) AS duplicate_rank
 						FROM media p
 						JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 						WHERE p.user_id = ${userId}
 							AND p.deleted_at IS NULL
+							AND p.kind = 'image'
 							AND p.s3_path IS NOT NULL
 							${recencyAuthorFilter}
 					)
 					SELECT
 						photo_id,
+						photo_provider,
+						photo_user_id,
 						s3_path,
 						tweet_id,
 						source_url,
@@ -392,7 +433,7 @@ composer.on("inline_query").filter(
 						0.0 AS final_score
 					FROM ranked
 					WHERE duplicate_rank = 1
-					ORDER BY photo_created_at DESC, photo_id DESC
+					ORDER BY photo_created_at DESC, photo_provider DESC, photo_id DESC, photo_user_id DESC
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
 					`),
@@ -438,12 +479,13 @@ composer.on("inline_query").filter(
 						JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 						WHERE p.user_id = ${userId}
 							AND p.deleted_at IS NULL
+							AND p.kind = 'image'
 							AND p.s3_path IS NOT NULL
 							AND p.classification IS NOT NULL
 							AND p.image_vec IS NOT NULL
 							AND p.tag_vec IS NOT NULL
 							${authorFilter}
-						ORDER BY p.image_vec <=> ${textVector}::vector
+						ORDER BY p.image_vec <=> ${textVector}::vector, p.provider DESC, p.external_id DESC, p.user_id DESC
 						LIMIT ${candidateLimit}
 					),
 					tag_candidates AS (
@@ -452,23 +494,45 @@ composer.on("inline_query").filter(
 						JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 						WHERE p.user_id = ${userId}
 							AND p.deleted_at IS NULL
+							AND p.kind = 'image'
 							AND p.s3_path IS NOT NULL
 							AND p.classification IS NOT NULL
 							AND p.image_vec IS NOT NULL
 							AND p.tag_vec IS NOT NULL
 							${authorFilter}
-						ORDER BY p.tag_vec <=> ${textVector}::vector
+						ORDER BY p.tag_vec <=> ${textVector}::vector, p.provider DESC, p.external_id DESC, p.user_id DESC
 						LIMIT ${candidateLimit}
 					),
 					lexical_candidates AS (
 						SELECT p.external_id AS id, p.user_id, p.provider
 						FROM media p
 						JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
+						CROSS JOIN LATERAL (
+							SELECT COALESCE(MAX(
+								CASE
+									WHEN lower(lexical_value.value) = ${queryLower} THEN 3
+									WHEN lower(lexical_value.value) LIKE ${queryStartsWith} THEN 2
+									WHEN lower(lexical_value.value) LIKE ${queryContains} THEN 1
+									ELSE 0
+								END
+							), 0) AS lexical_score
+							FROM jsonb_array_elements_text(
+								COALESCE(p.classification->'characters', '[]'::jsonb)
+								|| COALESCE(p.classification->'tags', '[]'::jsonb)
+								|| to_jsonb(COALESCE(t.tags, ARRAY[]::text[]))
+								|| jsonb_build_array(
+									COALESCE(t.text, ''), COALESCE(t.title, ''),
+									COALESCE(t.author_name, ''), COALESCE(t.author_username, '')
+								)
+							) AS lexical_value(value)
+						) lexical_rank
 						WHERE p.user_id = ${userId}
 							AND p.deleted_at IS NULL
+							AND p.kind = 'image'
 							AND p.s3_path IS NOT NULL
 							AND ${lexicalMatch}
 							${authorFilter}
+						ORDER BY lexical_rank.lexical_score DESC, p.provider DESC, p.external_id DESC, p.user_id DESC
 						LIMIT ${candidateLimit}
 					),
 					candidate_pool AS (
@@ -484,11 +548,13 @@ composer.on("inline_query").filter(
 					scored AS (
 						SELECT
 							p.external_id AS photo_id,
+							p.provider AS photo_provider,
+							p.user_id AS photo_user_id,
 							${photoDedupeKey} AS dedupe_key,
 							p.s3_path,
 							p.height,
 							p.width,
-							t.username,
+							COALESCE(t.author_username, t.username) AS username,
 							t.external_id AS tweet_id,
 							t.source_url,
 							t.created_at AS tweet_created_at,
@@ -496,8 +562,8 @@ composer.on("inline_query").filter(
 							COALESCE(1.0 - (p.tag_vec <=> ${textVector}::vector), 0.0) AS s_tag_semantic,
 							${characterScore} AS s_character,
 							${tagLexicalScore} AS s_tag_lexical,
-							${hashtagScore} AS s_hashtag,
-							${tweetTextScore} AS s_tweet_text,
+							${postTagScore} AS s_post_tag,
+							${postTextScore} AS s_post_text,
 							${authorScore} AS s_author
 						FROM candidate_pool c
 						JOIN media p ON p.external_id = c.id AND p.user_id = c.user_id AND p.provider = c.provider
@@ -506,6 +572,8 @@ composer.on("inline_query").filter(
 					fused AS (
 						SELECT
 							photo_id,
+							photo_provider,
+							photo_user_id,
 							dedupe_key,
 							s3_path,
 							tweet_id,
@@ -517,7 +585,7 @@ composer.on("inline_query").filter(
 							(
 								(s_character * 0.4) +
 								(GREATEST(s_tag_semantic, s_tag_lexical) * 0.24) +
-								(GREATEST(s_hashtag, s_tweet_text) * 0.12) +
+								(GREATEST(s_post_tag, s_post_text) * 0.12) +
 								(s_image * 0.1) +
 								(s_author * 0.08) +
 								(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime}::timestamptz - tweet_created_at)) / (180.0 * 24 * 3600.0))))
@@ -527,6 +595,8 @@ composer.on("inline_query").filter(
 					deduped AS (
 						SELECT
 							photo_id,
+							photo_provider,
+							photo_user_id,
 							s3_path,
 							tweet_id,
 							source_url,
@@ -536,14 +606,14 @@ composer.on("inline_query").filter(
 							final_score,
 							ROW_NUMBER() OVER (
 								PARTITION BY dedupe_key
-								ORDER BY final_score DESC NULLS LAST, tweet_created_at DESC, photo_id DESC
+								ORDER BY final_score DESC NULLS LAST, tweet_created_at DESC, photo_provider DESC, photo_id DESC, photo_user_id DESC
 							) AS duplicate_rank
 						FROM fused
 					)
-					SELECT photo_id, s3_path, tweet_id, source_url, username, height, width, final_score
+					SELECT photo_id, photo_provider, photo_user_id, s3_path, tweet_id, source_url, username, height, width, final_score
 					FROM deduped
 					WHERE duplicate_rank = 1
-					ORDER BY final_score DESC NULLS LAST, photo_id DESC
+					ORDER BY final_score DESC NULLS LAST, photo_provider DESC, photo_id DESC, photo_user_id DESC
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
 						`),
@@ -559,23 +629,26 @@ composer.on("inline_query").filter(
 					WITH scored AS (
 						SELECT
 							p.external_id AS photo_id,
+							p.provider AS photo_provider,
+							p.user_id AS photo_user_id,
 							${photoDedupeKey} AS dedupe_key,
 							p.s3_path,
 							p.height,
 							p.width,
-							t.username,
+							COALESCE(t.author_username, t.username) AS username,
 							t.external_id AS tweet_id,
 							t.source_url,
 							t.created_at AS tweet_created_at,
 							${characterScore} AS s_character,
 							${tagLexicalScore} AS s_tag_lexical,
-							${hashtagScore} AS s_hashtag,
-							${tweetTextScore} AS s_tweet_text,
+							${postTagScore} AS s_post_tag,
+							${postTextScore} AS s_post_text,
 							${authorScore} AS s_author
 						FROM media p
 						JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 						WHERE p.user_id = ${userId}
 							AND p.deleted_at IS NULL
+							AND p.kind = 'image'
 							AND p.s3_path IS NOT NULL
 							${authorFilter}
 							${lexicalFilter}
@@ -583,6 +656,8 @@ composer.on("inline_query").filter(
 					fused AS (
 						SELECT
 							photo_id,
+							photo_provider,
+							photo_user_id,
 							dedupe_key,
 							s3_path,
 							tweet_id,
@@ -595,7 +670,7 @@ composer.on("inline_query").filter(
 								(s_author * 0.56) +
 								(s_character * 0.22) +
 								(s_tag_lexical * 0.12) +
-								(GREATEST(s_hashtag, s_tweet_text) * 0.08) +
+								(GREATEST(s_post_tag, s_post_text) * 0.08) +
 								(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (180.0 * 24 * 3600.0))))
 							) AS final_score
 						FROM scored
@@ -603,6 +678,8 @@ composer.on("inline_query").filter(
 					deduped AS (
 						SELECT
 							photo_id,
+							photo_provider,
+							photo_user_id,
 							s3_path,
 							tweet_id,
 							source_url,
@@ -612,14 +689,14 @@ composer.on("inline_query").filter(
 							final_score,
 							ROW_NUMBER() OVER (
 								PARTITION BY dedupe_key
-								ORDER BY final_score DESC NULLS LAST, tweet_created_at DESC, photo_id DESC
+								ORDER BY final_score DESC NULLS LAST, tweet_created_at DESC, photo_provider DESC, photo_id DESC, photo_user_id DESC
 							) AS duplicate_rank
 						FROM fused
 					)
-					SELECT photo_id, s3_path, tweet_id, source_url, username, height, width, final_score
+					SELECT photo_id, photo_provider, photo_user_id, s3_path, tweet_id, source_url, username, height, width, final_score
 					FROM deduped
 					WHERE duplicate_rank = 1
-					ORDER BY final_score DESC NULLS LAST, photo_id DESC
+					ORDER BY final_score DESC NULLS LAST, photo_provider DESC, photo_id DESC, photo_user_id DESC
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
 						`),
@@ -655,13 +732,17 @@ composer.on("inline_query").filter(
 				? FormattedString.link(`@${photo.username}`, photo.source_url)
 				: new FormattedString(photo.source_url);
 
-			return InlineQueryResultBuilder.photo(photo.photo_id, photoUrl, {
-				caption: caption.caption,
-				caption_entities: caption.caption_entities,
-				thumbnail_url: photoUrl,
-				photo_height: photo.height ?? undefined,
-				photo_width: photo.width ?? undefined,
-			});
+			return InlineQueryResultBuilder.photo(
+				createInlineImageResultId(photo.photo_provider, photo.photo_id, photo.photo_user_id),
+				photoUrl,
+				{
+					caption: caption.caption,
+					caption_entities: caption.caption_entities,
+					thumbnail_url: photoUrl,
+					photo_height: photo.height ?? undefined,
+					photo_width: photo.width ?? undefined,
+				},
+			);
 		});
 
 		// Calculate next offset for pagination

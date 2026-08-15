@@ -4,6 +4,7 @@ import { z } from "zod";
 import { no } from "..";
 import { maybeAuthProcedure, protectedProcedure } from "../middlewares/auth";
 import { Cursor, CursorPayloadSchema, type CursorPayload } from "../utils/cursor";
+import { parseMediaPublicId } from "../utils/public-id";
 import { transformTweets } from "../utils/transformations";
 
 const TweetsQuery = z.object({
@@ -159,9 +160,13 @@ export const retrieveUserTweets = no
 export const deletePhoto = protectedProcedure
 	.input(z.object({ photoId: z.string() }))
 	.handler(async ({ input, context }) => {
-		const separator = input.photoId.indexOf(":");
-		const provider = separator === -1 ? "twitter" : input.photoId.slice(0, separator);
-		const externalId = separator === -1 ? input.photoId : input.photoId.slice(separator + 1);
+		const { provider, externalId, userId } = parseMediaPublicId(input.photoId);
+		if (userId && userId !== context.databaseUserId) {
+			throw new ORPCError("NOT_FOUND", {
+				message: "Photo not found",
+				status: 404,
+			});
+		}
 		const photo = await prisma.media.findFirst({
 			where: {
 				id: externalId,

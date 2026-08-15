@@ -3,13 +3,17 @@ import type { SearchResult } from "../src/types/tweets";
 import { Cursor, SearchCursorPayloadSchema } from "../src/utils/cursor";
 import { paginateSearchResults } from "../src/utils/search-pagination";
 
-const row = (tweetId: string, photoId: string, finalScore: number): SearchResult => ({
-	photo_id: photoId,
-	original_url: `https://example.com/${photoId}.jpg`,
-	s3_path: `photos/${photoId}.jpg`,
+const row = (postId: string, mediaId: string, finalScore: number): SearchResult => ({
+	media_id: mediaId,
+	provider: "twitter",
+	user_id: "user-1",
+	original_url: `https://example.com/${mediaId}.jpg`,
+	s3_path: `photos/${mediaId}.jpg`,
 	username: "artist",
-	tweet_id: tweetId,
-	tweet_created_at: new Date("2026-01-01"),
+	post_id: postId,
+	post_provider: "twitter",
+	source_url: `https://example.com/posts/${postId}`,
+	post_created_at: new Date("2026-01-01"),
 	is_nsfw: false,
 	height: 100,
 	width: 100,
@@ -28,9 +32,9 @@ describe("search post pagination", () => {
 			1,
 		);
 
-		expect(page.rows.map((result) => result.photo_id)).toEqual(["photo-1", "photo-2"]);
+		expect(page.rows.map((result) => result.media_id)).toEqual(["photo-1", "photo-2"]);
 		expect(page.hasNextPage).toBe(true);
-		expect(page.lastPost).toMatchObject({ tweet_id: "post-1", final_score: 0.9 });
+		expect(page.lastPost).toMatchObject({ post_id: "post-1", final_score: 0.9 });
 	});
 
 	test("does not create a cursor when the page contains exactly the limit", () => {

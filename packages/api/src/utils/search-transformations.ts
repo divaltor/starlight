@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import type { SearchResult, TweetData } from "../types/tweets";
+import { createPublicId } from "./public-id";
 
 export const transformSearchResultsPure = (
 	results: SearchResult[],
@@ -10,6 +11,7 @@ export const transformSearchResultsPure = (
 		{
 			id: string;
 			provider: string;
+			userId: string;
 			username: string;
 			sourceUrl: string;
 			createdAt: Date;
@@ -25,21 +27,22 @@ export const transformSearchResultsPure = (
 		}
 	>();
 	for (const result of results) {
-		const key = `${result.post_provider}:${result.tweet_id}`;
+		const key = JSON.stringify([result.post_provider, result.post_id, result.user_id]);
 		let post = grouped.get(key);
 		if (!post) {
 			post = {
-				id: result.tweet_id,
+				id: result.post_id,
 				provider: result.post_provider,
+				userId: result.user_id,
 				username: result.username,
 				sourceUrl: result.source_url,
-				createdAt: result.tweet_created_at,
+				createdAt: result.post_created_at,
 				photos: [],
 			};
 			grouped.set(key, post);
 		}
 		post.photos.push({
-			id: result.photo_id,
+			id: result.media_id,
 			provider: result.provider,
 			originalUrl: result.original_url,
 			s3Url: result.s3_path ? `${baseCdnUrl}/${result.s3_path}` : undefined,
@@ -50,7 +53,7 @@ export const transformSearchResultsPure = (
 	}
 	return Array.from(grouped.values(), (post) => {
 		const photos = post.photos.map((photo) => ({
-			id: photo.provider === "twitter" ? photo.id : `${photo.provider}:${photo.id}`,
+			id: createPublicId("media", photo.provider, photo.id, post.userId),
 			externalId: photo.id,
 			provider: photo.provider,
 			url: photo.s3Url ?? photo.originalUrl,
@@ -60,7 +63,7 @@ export const transformSearchResultsPure = (
 			alt: `${post.username}-${photo.id}.${photo.originalUrl.split(".").pop() ?? "jpg"}`,
 		}));
 		return {
-			id: post.provider === "twitter" ? post.id : `${post.provider}:${post.id}`,
+			id: createPublicId("post", post.provider, post.id, post.userId),
 			externalId: post.id,
 			provider: post.provider,
 			artist: post.username ? `@${post.username}` : "@good_artist",

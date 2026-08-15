@@ -145,20 +145,21 @@ model ChatMember {
 }
 
 model Post {
-  id               String  @map("external_id")
-  userId           String  @map("user_id") @db.Uuid
-  provider         String  @default("twitter")
-  sourceUrl        String  @map("source_url")
-  authorExternalId String? @map("author_external_id")
-  authorName       String? @map("author_name")
-  authorUsername   String? @map("author_username")
+  id               String   @map("external_id")
+  userId           String   @map("user_id") @db.Uuid
+  provider         String   @default("twitter")
+  sourceUrl        String   @map("source_url")
+  authorExternalId String?  @map("author_external_id")
+  authorName       String?  @map("author_name")
+  authorUsername   String?  @map("author_username")
   title            String?
+  text             String?  @db.Text
+  tags             String[] @default([])
 
   providerPayload Json @map("provider_payload")
 
-  // Virtual columns, manually generated in SQL migration
-  tweetText String? @default(dbgenerated()) @map("text") @db.Text
-  username  String? @default(dbgenerated()) @map("username") @db.Text
+  // Kept for compatibility with existing gallery reads.
+  username String? @db.Text
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -174,7 +175,7 @@ model Post {
 }
 
 model Media {
-  id             String
+  id             String  @map("external_id")
   tweetId        String  @map("post_external_id")
   userId         String  @map("user_id") @db.Uuid
   provider       String  @default("twitter")

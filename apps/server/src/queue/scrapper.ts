@@ -8,6 +8,7 @@ import { logger } from "@/logger";
 import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { imagesApp } from "@/queue/image-collector";
 import type { MediaCollectorJobData } from "@/queue/image-collector";
+import { normalizeTwitterTags } from "@/services/tags";
 import { Cookies } from "@/storage";
 
 export const SCHEDULED_SCRAPPER_INTERVAL_SECONDS = 60 * 60 * 6;
@@ -220,6 +221,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 					authorName: tweet.name,
 					authorUsername: tweet.username,
 					text: tweet.text,
+					tags: normalizeTwitterTags(tweet),
 					providerPayload: tweet,
 					media: tweet.photos.map((photo, position) => ({
 						externalId: photo.id,

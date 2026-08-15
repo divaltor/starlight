@@ -1,6 +1,7 @@
-import { env, type Media, type Post } from "@starlight/utils";
+import type { Media, Post } from "@starlight/utils";
 import { format } from "date-fns";
 import type { TweetData } from "../types/tweets";
+import { createPublicId } from "./public-id";
 import { transformSearchResultsPure } from "./search-transformations";
 
 type TransformMedia = Pick<Media, "id" | "kind" | "originalUrl" | "provider"> & {
@@ -12,7 +13,7 @@ type TransformMedia = Pick<Media, "id" | "kind" | "originalUrl" | "provider"> & 
 
 type TransformPost = Pick<
 	Post,
-	"authorUsername" | "createdAt" | "id" | "provider" | "sourceUrl" | "username"
+	"authorUsername" | "createdAt" | "id" | "provider" | "sourceUrl" | "userId" | "username"
 >;
 
 const transformTweetsBase = <T extends TransformPost>(
@@ -22,7 +23,7 @@ const transformTweetsBase = <T extends TransformPost>(
 	posts.map((post) => {
 		const artist = post.authorUsername ?? post.username;
 		const photos = getMedia(post).map((media) => ({
-			id: media.provider === "twitter" ? media.id : `${media.provider}:${media.id}`,
+			id: createPublicId("media", media.provider, media.id, post.userId),
 			externalId: media.id,
 			provider: media.provider,
 			kind: media.kind,
@@ -33,7 +34,7 @@ const transformTweetsBase = <T extends TransformPost>(
 			alt: `${artist ?? "artist"}-${media.id}.${media.originalUrl.split(".").at(-1) ?? "jpg"}`,
 		}));
 		return {
-			id: post.provider === "twitter" ? post.id : `${post.provider}:${post.id}`,
+			id: createPublicId("post", post.provider, post.id, post.userId),
 			externalId: post.id,
 			provider: post.provider,
 			artist: artist ? `@${artist}` : "@good_artist",
@@ -45,8 +46,10 @@ const transformTweetsBase = <T extends TransformPost>(
 	});
 
 export const transformTweets = (
-	posts: Array<Post & { photos: Array<Media & { s3Url?: string }> }>,
+	posts: Array<TransformPost & { photos: Array<TransformMedia & { s3Url?: string }> }>,
 ) => transformTweetsBase(posts, (post) => post.photos);
 
-export const transformSearchResults = (results: import("../types/tweets").SearchResult[]) =>
-	transformSearchResultsPure(results, env.BASE_CDN_URL);
+export const transformSearchResults = (
+	results: import("../types/tweets").SearchResult[],
+	baseCdnUrl: string,
+) => transformSearchResultsPure(results, baseCdnUrl);

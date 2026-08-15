@@ -110,6 +110,7 @@ export const searchImages = maybeAuthProcedure
 		const baseFilter = Prisma.sql`
 			p.deleted_at IS NULL
 			AND p.s3_path IS NOT NULL
+			AND p.kind = 'image'
 			AND p.classification IS NOT NULL
 			AND p.image_vec IS NOT NULL
 			AND p.tag_vec IS NOT NULL
@@ -135,12 +136,15 @@ export const searchImages = maybeAuthProcedure
 							OR lower(general_tag.value) LIKE ${queryContains}
 					)
 					OR lower(COALESCE(t.text, '')) LIKE ${queryContains}
+					OR lower(COALESCE(t.title, '')) LIKE ${queryContains}
+					OR lower(COALESCE(t.author_name, '')) LIKE ${queryContains}
+					OR lower(COALESCE(t.author_username, '')) LIKE ${queryContains}
 					OR EXISTS (
 						SELECT 1
-						FROM jsonb_array_elements_text(COALESCE(t.provider_payload->'hashtags', '[]'::jsonb)) AS hashtag(value)
-						WHERE lower(hashtag.value) = ${queryLower}
-							OR lower(hashtag.value) LIKE ${queryStartsWith}
-							OR lower(hashtag.value) LIKE ${queryContains}
+						FROM unnest(t.tags) AS post_tag(value)
+						WHERE lower(post_tag.value) = ${queryLower}
+							OR lower(post_tag.value) LIKE ${queryStartsWith}
+							OR lower(post_tag.value) LIKE ${queryContains}
 					)
 				)
 			`
@@ -149,7 +153,9 @@ export const searchImages = maybeAuthProcedure
 		const paginationClause = cursorData
 			? Prisma.sql`WHERE (
 				final_score < ${cursorData.lastScore}
-				OR (final_score = ${cursorData.lastScore} AND tweet_id < ${cursorData.lastTweetId})
+				OR (final_score = ${cursorData.lastScore} AND post_provider < ${cursorData.lastProvider})
+				OR (final_score = ${cursorData.lastScore} AND post_provider = ${cursorData.lastProvider} AND post_id < ${cursorData.lastPostId})
+				OR (final_score = ${cursorData.lastScore} AND post_provider = ${cursorData.lastProvider} AND post_id = ${cursorData.lastPostId} AND user_id < ${cursorData.lastUserId})
 			)`
 			: Prisma.empty;
 
@@ -158,22 +164,42 @@ export const searchImages = maybeAuthProcedure
 				SELECT p.external_id AS id, p.user_id, p.provider
 				FROM media p
 				WHERE ${baseFilter}
-				ORDER BY p.image_vec <=> ${textQuery}::vector
+				ORDER BY p.image_vec <=> ${textQuery}::vector, p.provider DESC, p.external_id DESC, p.user_id DESC
 				LIMIT ${candidateLimit}
 			),
 			tag_candidates AS (
 				SELECT p.external_id AS id, p.user_id, p.provider
 				FROM media p
 				WHERE ${baseFilter}
-				ORDER BY p.tag_vec <=> ${textQuery}::vector
+				ORDER BY p.tag_vec <=> ${textQuery}::vector, p.provider DESC, p.external_id DESC, p.user_id DESC
 				LIMIT ${candidateLimit}
 			),
 			lexical_candidates AS (
 				SELECT p.external_id AS id, p.user_id, p.provider
 				FROM media p
 				JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
+				CROSS JOIN LATERAL (
+					SELECT COALESCE(MAX(
+						CASE
+							WHEN lower(lexical_value.value) = ${queryLower} THEN 3
+							WHEN lower(lexical_value.value) LIKE ${queryStartsWith} THEN 2
+							WHEN lower(lexical_value.value) LIKE ${queryContains} THEN 1
+							ELSE 0
+						END
+					), 0) AS lexical_score
+					FROM jsonb_array_elements_text(
+						COALESCE(p.classification->'characters', '[]'::jsonb)
+						|| COALESCE(p.classification->'tags', '[]'::jsonb)
+						|| to_jsonb(COALESCE(t.tags, ARRAY[]::text[]))
+						|| jsonb_build_array(
+							COALESCE(t.text, ''), COALESCE(t.title, ''),
+							COALESCE(t.author_name, ''), COALESCE(t.author_username, '')
+						)
+					) AS lexical_value(value)
+				) lexical_rank
 				WHERE ${baseFilter}
 					AND ${lexicalMatch}
+				ORDER BY lexical_rank.lexical_score DESC, p.provider DESC, p.external_id DESC, p.user_id DESC
 				LIMIT ${candidateLimit}
 			),
 			candidate_pool AS (
@@ -186,20 +212,20 @@ export const searchImages = maybeAuthProcedure
 					SELECT id, user_id, provider FROM lexical_candidates
 				) candidates
 			),
-				scored AS (
+					scored AS (
 					SELECT
-						p.external_id AS photo_id,
-						p.user_id,
+						p.external_id AS media_id,
 						p.provider,
+						p.user_id,
 						p.kind,
-						COALESCE(NULLIF(p.perceptual_hash, ''), p.provider || ':' || p.external_id) AS dedupe_key,
+						COALESCE(NULLIF(p.perceptual_hash, ''), jsonb_build_array(p.provider, p.external_id, p.user_id)::text) AS dedupe_key,
 						p.height,
 						p.width,
 						p.original_url,
 					p.s3_path,
-					t.username,
-					t.created_at AS tweet_created_at,
-					t.external_id AS tweet_id,
+					COALESCE(t.author_username, t.username) AS username,
+					t.created_at AS post_created_at,
+					t.external_id AS post_id,
 					t.provider AS post_provider,
 					t.source_url,
 					COALESCE((p.classification->'nsfw'->>'is_nsfw')::boolean, false) AS is_nsfw,
@@ -241,26 +267,31 @@ export const searchImages = maybeAuthProcedure
 						(
 							SELECT MAX(
 								CASE
-									WHEN lower(hashtag.value) = ${queryLower} THEN 0.76
-									WHEN lower(hashtag.value) LIKE ${queryStartsWith} THEN 0.62
-									WHEN lower(hashtag.value) LIKE ${queryContains} THEN 0.5
+								WHEN lower(post_tag.value) = ${queryLower} THEN 0.76
+								WHEN lower(post_tag.value) LIKE ${queryStartsWith} THEN 0.62
+								WHEN lower(post_tag.value) LIKE ${queryContains} THEN 0.5
 									ELSE 0.0
 								END
 							)
-							FROM jsonb_array_elements_text(COALESCE(t.provider_payload->'hashtags', '[]'::jsonb)) AS hashtag(value)
+							FROM unnest(t.tags) AS post_tag(value)
 						),
 						0.0
-					) AS s_hashtag,
-					CASE WHEN lower(COALESCE(t.text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END AS s_tweet_text
+					) AS s_post_tag,
+					GREATEST(
+						CASE WHEN lower(COALESCE(t.text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END,
+						CASE WHEN lower(COALESCE(t.title, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END,
+						CASE WHEN lower(COALESCE(t.author_name, '')) LIKE ${queryContains} THEN 0.3 ELSE 0.0 END,
+						CASE WHEN lower(COALESCE(t.author_username, '')) LIKE ${queryContains} THEN 0.3 ELSE 0.0 END
+					) AS s_post_text
 				FROM candidate_pool c
 				JOIN media p ON p.external_id = c.id AND p.user_id = c.user_id AND p.provider = c.provider
 				JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 			),
 			fused AS (
 					SELECT
-						photo_id,
-						user_id,
+						media_id,
 						provider,
+						user_id,
 						kind,
 						dedupe_key,
 						height,
@@ -268,99 +299,102 @@ export const searchImages = maybeAuthProcedure
 						original_url,
 					s3_path,
 					username,
-					tweet_created_at,
-					tweet_id,
+					post_created_at,
+					post_id,
 						post_provider,
 						source_url,
 					is_nsfw,
 					(
 						(s_character * 0.44) +
 						(GREATEST(s_tag_semantic, s_tag_lexical) * 0.28) +
-						(GREATEST(s_hashtag, s_tweet_text) * 0.12) +
+						(GREATEST(s_post_tag, s_post_text) * 0.12) +
 						(s_image * 0.1) +
 						LEAST(0.04, GREATEST(0.0, aesthetic * (1.0 - style_real_life) * (0.65 + (style_anime * 0.35))) * 0.04) +
-						(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime}::timestamptz - tweet_created_at)) / (180.0 * 24 * 3600.0))))
+						(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime}::timestamptz - post_created_at)) / (180.0 * 24 * 3600.0))))
 					) AS final_score
 				FROM scored
 				),
 				deduped AS (
 					SELECT
-						photo_id,
-						user_id,
+						media_id,
 						provider,
+						user_id,
 						kind,
 						height,
 						width,
 						original_url,
 						s3_path,
 						username,
-						tweet_created_at,
-						tweet_id,
+						post_created_at,
+						post_id,
 						post_provider,
 						source_url,
 						is_nsfw,
 						final_score,
 						ROW_NUMBER() OVER (
 							PARTITION BY dedupe_key
-							ORDER BY final_score DESC NULLS LAST, tweet_created_at DESC, photo_id DESC, user_id DESC
+							ORDER BY final_score DESC NULLS LAST, provider DESC, media_id DESC, user_id DESC, post_created_at DESC, post_id DESC
 						) AS duplicate_rank
 					FROM fused
 				),
 				post_candidates AS (
 					SELECT
-						tweet_id,
+						post_id,
 						user_id,
 						post_provider,
 						final_score,
 						ROW_NUMBER() OVER (
-							PARTITION BY tweet_id, user_id, post_provider
+							PARTITION BY post_id, user_id, post_provider
 							ORDER BY final_score DESC NULLS LAST
 						) AS post_rank
 					FROM deduped
 					WHERE duplicate_rank = 1
 				),
 				ranked_posts AS (
-					SELECT tweet_id, user_id, post_provider, final_score
+					SELECT post_id, user_id, post_provider, final_score
 					FROM post_candidates
 					WHERE post_rank = 1
 				),
 				paged_posts AS (
-					SELECT tweet_id, user_id, post_provider, final_score
+					SELECT post_id, user_id, post_provider, final_score
 					FROM ranked_posts
 					${paginationClause}
-					ORDER BY final_score DESC NULLS LAST, tweet_id DESC
+					ORDER BY final_score DESC NULLS LAST, post_provider DESC, post_id DESC, user_id DESC
 					LIMIT ${limit + 1}
 				)
 			SELECT
-				p.external_id AS photo_id,
+				p.external_id AS media_id,
 				p.provider,
+				p.user_id,
 				p.kind,
 				p.height,
 				p.width,
 				p.original_url,
 				p.s3_path,
 				t.username,
-				t.created_at AS tweet_created_at,
-				t.external_id AS tweet_id,
+				t.created_at AS post_created_at,
+				t.external_id AS post_id,
 				t.provider AS post_provider,
 				t.source_url,
 				COALESCE((p.classification->'nsfw'->>'is_nsfw')::boolean, false) AS is_nsfw,
 				paged_posts.final_score
 			FROM paged_posts
-			JOIN posts t ON t.external_id = paged_posts.tweet_id AND t.user_id = paged_posts.user_id AND t.provider = paged_posts.post_provider
-			JOIN media p ON p.post_external_id = paged_posts.tweet_id AND p.user_id = paged_posts.user_id AND p.provider = paged_posts.post_provider
+			JOIN posts t ON t.external_id = paged_posts.post_id AND t.user_id = paged_posts.user_id AND t.provider = paged_posts.post_provider
+			JOIN media p ON p.post_external_id = paged_posts.post_id AND p.user_id = paged_posts.user_id AND p.provider = paged_posts.post_provider
 			WHERE p.deleted_at IS NULL AND p.s3_path IS NOT NULL
-			ORDER BY paged_posts.final_score DESC NULLS LAST, paged_posts.tweet_id DESC, p.created_at DESC, p.external_id DESC
+			ORDER BY paged_posts.final_score DESC NULLS LAST, paged_posts.post_provider DESC, paged_posts.post_id DESC, paged_posts.user_id DESC, p.position, p.created_at DESC, p.external_id DESC
 		`);
 
 		const page = paginateSearchResults(images, limit);
-		const transformedResults = transformSearchResults(page.rows);
+		const transformedResults = transformSearchResults(page.rows, env.BASE_CDN_URL);
 
 		let nextCursor: string | null = null;
 		if (page.hasNextPage && page.lastPost) {
 			nextCursor = Cursor.create<SearchCursorPayload>({
 				lastScore: page.lastPost.final_score,
-				lastTweetId: page.lastPost.tweet_id,
+				lastProvider: page.lastPost.post_provider,
+				lastPostId: page.lastPost.post_id,
+				lastUserId: page.lastPost.user_id,
 				queryTime,
 			});
 		}
@@ -376,15 +410,16 @@ export const randomImages = publicProcedure.handler(async () => {
         WITH base AS (
             SELECT
                 p.external_id AS id,
+				p.user_id,
                 p.provider,
                 p.kind,
                 p.height,
                 p.width,
                 p.s3_path,
                 p.original_url,
-                t.username,
-                t.created_at as tweet_created_at,
-                t.external_id as tweet_id,
+				COALESCE(t.author_username, t.username) AS username,
+				t.created_at as post_created_at,
+				t.external_id as post_id,
                 t.provider as post_provider,
                 t.source_url,
                 (p.classification->>'aesthetic')::float AS aesthetic,
@@ -396,6 +431,7 @@ export const randomImages = publicProcedure.handler(async () => {
 			JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 			WHERE p.classification IS NOT NULL 
 			AND p.deleted_at IS NULL
+			AND p.kind = 'image'
 			AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
 			AND NOT (p.classification->'nsfw'->>'is_nsfw')::boolean
         ),
@@ -408,14 +444,16 @@ export const randomImages = publicProcedure.handler(async () => {
                     ORDER BY 
                     aesthetic * style_anime * 
                     (1.0 - style_real_life) * 
-                    (1.0 - style_other) DESC
+					(1.0 - style_other) DESC,
+					provider DESC, id DESC, user_id DESC
                 ) AS rank_style,
-                ROW_NUMBER() OVER (ORDER BY tweet_created_at DESC) AS rank_recency
+				ROW_NUMBER() OVER (ORDER BY post_created_at DESC, provider DESC, id DESC, user_id DESC) AS rank_recency
             FROM base
         ),
         fused AS (
             SELECT
-                id as photo_id,
+				id as media_id,
+				user_id,
                 provider,
                 kind,
                 height,
@@ -423,8 +461,8 @@ export const randomImages = publicProcedure.handler(async () => {
                 s3_path,
                 original_url,
                 username,
-                tweet_created_at,
-                tweet_id,
+				post_created_at,
+				post_id,
                 post_provider,
                 source_url,
                 is_nsfw,
@@ -432,7 +470,7 @@ export const randomImages = publicProcedure.handler(async () => {
                     (1.0 / (rank_style + 60) * 0.9) +
                     (1.0 / (rank_recency + 60) * 0.1)
                 ) * effective * 
-                EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (30.0 * 24 * 3600.0))) AS final_score
+				EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - post_created_at)) / (30.0 * 24 * 3600.0))) AS final_score
             FROM ranked
         ),
         top500 AS (
@@ -441,7 +479,8 @@ export const randomImages = publicProcedure.handler(async () => {
             LIMIT 500
         )
         SELECT
-            photo_id,
+			media_id,
+			user_id,
 			provider,
 			kind,
             original_url,
@@ -449,8 +488,8 @@ export const randomImages = publicProcedure.handler(async () => {
             username,
             height,
             width,
-            tweet_created_at,
-            tweet_id,
+			post_created_at,
+			post_id,
 			post_provider,
 			source_url,
             is_nsfw,
@@ -460,5 +499,5 @@ export const randomImages = publicProcedure.handler(async () => {
         LIMIT 30;
 	`;
 
-	return transformSearchResults(images);
+	return transformSearchResults(images, env.BASE_CDN_URL);
 });

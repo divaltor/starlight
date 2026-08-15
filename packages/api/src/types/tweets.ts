@@ -1,14 +1,15 @@
 export type SearchResult = {
-	photo_id: string;
+	media_id: string;
 	provider: string;
+	user_id: string;
 	kind?: string;
 	original_url: string;
 	s3_path: string;
 	username: string;
-	tweet_id: string;
+	post_id: string;
 	post_provider: string;
 	source_url: string;
-	tweet_created_at: Date;
+	post_created_at: Date;
 	is_nsfw: boolean;
 	height: number;
 	width: number;

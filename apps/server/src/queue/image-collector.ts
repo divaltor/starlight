@@ -6,6 +6,7 @@ import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { classificationApp } from "@/queue/classification";
 import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
 import { calculatePerceptualHash } from "@/services/image";
+import { normalizeCollectorTags } from "@/services/tags";
 import {
 	MAX_MEDIA_DOWNLOAD_BYTES,
 	MAX_POST_DOWNLOAD_BYTES,
@@ -30,6 +31,7 @@ export interface MediaCollectorJobData {
 		authorUsername?: string;
 		title?: string;
 		text?: string;
+		tags?: string[];
 		providerPayload: object;
 		media: Array<{
 			externalId: string;
@@ -43,6 +45,7 @@ export interface MediaCollectorJobData {
 
 imagesApp.registerTask<MediaCollectorJobData>({ name: "images-collector" }, async (data) => {
 	const { post, userId } = data;
+	const tags = normalizeCollectorTags(post.provider, post.tags, post.providerPayload);
 	let downloadedBytes = 0;
 	const postRecord = await prisma.post.upsert({
 		where: { postId: { id: post.externalId, userId, provider: post.provider } },
@@ -55,7 +58,10 @@ imagesApp.registerTask<MediaCollectorJobData>({ name: "images-collector" }, asyn
 			authorName: post.authorName,
 			authorUsername: post.authorUsername,
 			title: post.title,
-			providerPayload: { ...post.providerPayload, text: post.text, username: post.authorUsername },
+			text: post.text,
+			tags,
+			username: post.authorUsername,
+			providerPayload: post.providerPayload,
 			photos: {
 				createMany: {
 					data: post.media.map((media) => ({
@@ -75,7 +81,10 @@ imagesApp.registerTask<MediaCollectorJobData>({ name: "images-collector" }, asyn
 			authorName: post.authorName,
 			authorUsername: post.authorUsername,
 			title: post.title,
-			providerPayload: { ...post.providerPayload, text: post.text, username: post.authorUsername },
+			text: post.text,
+			tags,
+			username: post.authorUsername,
+			providerPayload: post.providerPayload,
 			photos: {
 				createMany: {
 					data: post.media.map((media) => ({

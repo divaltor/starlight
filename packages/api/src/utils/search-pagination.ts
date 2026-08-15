@@ -4,10 +4,12 @@ export const paginateSearchResults = (results: SearchResult[], limit: number) =>
 	const selectedPosts = new Set<string>();
 	const rows: SearchResult[] = [];
 	let hasNextPage = false;
-	let lastPost: Pick<SearchResult, "final_score" | "tweet_id"> | undefined;
+	let lastPost:
+		| Pick<SearchResult, "final_score" | "post_provider" | "post_id" | "user_id">
+		| undefined;
 
 	for (const result of results) {
-		const key = result.tweet_id;
+		const key = `${result.post_provider}:${result.post_id}:${result.user_id}`;
 		if (selectedPosts.has(key)) {
 			rows.push(result);
 			continue;
