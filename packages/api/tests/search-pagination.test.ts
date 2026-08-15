@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SearchResult } from "../src/types/tweets";
+import type { SearchResult } from "../src/types/posts";
 import { Cursor, SearchCursorPayloadSchema } from "../src/utils/cursor";
 import { paginateSearchResults } from "../src/utils/search-pagination";
 

@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { transformSearchResultsPure } from "../src/utils/search-transformations";
 import { createPublicId, parseMediaPublicId } from "../src/utils/public-id";
-import { transformTweets } from "../src/utils/transformations";
+import { transformPosts } from "../src/utils/transformations";
 
 describe("transformSearchResults", () => {
 	test("uses identical public IDs in gallery and global search", () => {
 		const createdAt = new Date("2026-01-01");
-		const galleryPost = transformTweets([
+		const galleryPost = transformPosts([
 			{
 				id: "post:1",
 				provider: "provider:one",
@@ -15,7 +15,7 @@ describe("transformSearchResults", () => {
 				username: "artist",
 				createdAt,
 				sourceUrl: "https://example.com/post/1",
-				photos: [
+				media: [
 					{
 						id: "media:1",
 						provider: "provider:one",
@@ -29,6 +29,7 @@ describe("transformSearchResults", () => {
 			[
 				{
 					media_id: "media:1",
+					kind: "image",
 					provider: "provider:one",
 					user_id: "owner:one",
 					original_url: "https://example.com/1.jpg",
@@ -48,7 +49,7 @@ describe("transformSearchResults", () => {
 		).at(0);
 
 		expect(galleryPost?.id).toBe(searchPost?.id);
-		expect(galleryPost?.photos.at(0)?.id).toBe(searchPost?.photos.at(0)?.id);
+		expect(galleryPost?.media.at(0)?.id).toBe(searchPost?.media.at(0)?.id);
 		expect(galleryPost?.id).not.toBe(createPublicId("post", "provider:two", "post:1", "owner:one"));
 		expect(galleryPost?.id).not.toBe(createPublicId("post", "provider:one", "post:1", "owner:two"));
 	});
@@ -56,6 +57,7 @@ describe("transformSearchResults", () => {
 	test("does not merge colliding provider identifiers", () => {
 		const shared = {
 			media_id: "1",
+			kind: "image",
 			original_url: "https://example.com/1.jpg",
 			s3_path: "media/1.jpg",
 			username: "artist",
@@ -79,18 +81,19 @@ describe("transformSearchResults", () => {
 		expect(posts.at(0)).toMatchObject({
 			id: createPublicId("post", "twitter", "1", "owner"),
 			externalId: "1",
-			photos: [{ id: createPublicId("media", "twitter", "1", "owner"), externalId: "1" }],
+			media: [{ id: createPublicId("media", "twitter", "1", "owner"), externalId: "1" }],
 		});
 		expect(posts.at(1)).toMatchObject({
 			id: createPublicId("post", "pixiv", "1", "owner"),
 			externalId: "1",
-			photos: [{ id: createPublicId("media", "pixiv", "1", "owner"), externalId: "1" }],
+			media: [{ id: createPublicId("media", "pixiv", "1", "owner"), externalId: "1" }],
 		});
 	});
 
 	test("does not merge identifiers shared by different owners", () => {
 		const shared = {
 			media_id: "same-media",
+			kind: "image",
 			provider: "twitter",
 			original_url: "https://example.com/1.jpg",
 			s3_path: "media/1.jpg",
@@ -113,13 +116,13 @@ describe("transformSearchResults", () => {
 		);
 		expect(posts).toHaveLength(2);
 		expect(new Set(posts.map((post) => post.id)).size).toBe(2);
-		expect(new Set(posts.flatMap((post) => post.photos.map((photo) => photo.id))).size).toBe(2);
-		const firstPhotoId = posts.at(0)?.photos.at(0)?.id;
-		expect(firstPhotoId).toBeDefined();
-		if (!firstPhotoId) {
-			throw new Error("Expected a transformed photo");
+		expect(new Set(posts.flatMap((post) => post.media.map((media) => media.id))).size).toBe(2);
+		const firstMediaId = posts.at(0)?.media.at(0)?.id;
+		expect(firstMediaId).toBeDefined();
+		if (!firstMediaId) {
+			throw new Error("Expected a transformed media");
 		}
-		expect(parseMediaPublicId(firstPhotoId)).toEqual({
+		expect(parseMediaPublicId(firstMediaId)).toEqual({
 			provider: "twitter",
 			externalId: "same-media",
 			userId: "owner-a",
@@ -129,6 +132,7 @@ describe("transformSearchResults", () => {
 	test("keeps an identity stable regardless of neighboring collisions", () => {
 		const row = {
 			media_id: "media:with:separators",
+			kind: "image",
 			provider: "provider:with:separators",
 			user_id: "owner-a",
 			original_url: "https://example.com/1.jpg",
@@ -150,8 +154,8 @@ describe("transformSearchResults", () => {
 			"https://cdn.example.com",
 		).at(0);
 		expect(alone?.id).toBe(besideCollision?.id);
-		expect(alone?.photos.at(0)?.id).toBe(besideCollision?.photos.at(0)?.id);
-		expect(parseMediaPublicId(alone?.photos.at(0)?.id ?? "")).toEqual({
+		expect(alone?.media.at(0)?.id).toBe(besideCollision?.media.at(0)?.id);
+		expect(parseMediaPublicId(alone?.media.at(0)?.id ?? "")).toEqual({
 			provider: "provider:with:separators",
 			externalId: "media:with:separators",
 			userId: "owner-a",

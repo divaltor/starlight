@@ -1,12 +1,12 @@
-import type { TweetData } from "@starlight/api/src/types/tweets";
+import type { PostData } from "@starlight/api/src/types/posts";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
-const TweetImageGrid = lazy(() =>
-	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
+const PostMediaGrid = lazy(() =>
+	import("@/components/post-media-grid").then((m) => ({ default: m.PostMediaGrid })),
 );
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,14 +52,14 @@ export default function DiscoverPage() {
 	});
 
 	const randomQuery = useQuery({
-		...orpc.tweets.random.queryOptions({ retry: false }),
-		queryKey: ["tweets-random"],
+		...orpc.posts.random.queryOptions({ retry: false }),
+		queryKey: ["posts-random"],
 		enabled: true,
 		staleTime: Number.POSITIVE_INFINITY,
 		gcTime: Number.POSITIVE_INFINITY,
 	});
 
-	const randomImages: TweetData[] = randomQuery.data || [];
+	const randomPosts: PostData[] = randomQuery.data || [];
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -90,21 +90,21 @@ export default function DiscoverPage() {
 	const renderMasonryItem = useCallback(
 		({ data, width }: { data: any; width: number }) => (
 			<div className="mb-1" style={{ width }}>
-				<TweetImageGrid tweet={data} />
+				<PostMediaGrid post={data} />
 			</div>
 		),
 		[],
 	);
 
-	// Generate non-overlapping positions for random images
+	// Generate non-overlapping positions for random posts
 	const placedData = useMemo(() => {
-		if (randomImages.length === 0 || typeof window === "undefined") {
+		if (randomPosts.length === 0 || typeof window === "undefined") {
 			return [];
 		}
 
 		const layout = new LayoutManager(100, 100);
-		return layout.placeTweets(randomImages);
-	}, [randomImages]);
+		return layout.placePosts(randomPosts);
+	}, [randomPosts]);
 
 	useEffect(() => {
 		if (placedData.length > 0 && randomQuery.isSuccess && !isLoading && results.length === 0) {
@@ -135,7 +135,7 @@ export default function DiscoverPage() {
 							<Masonry
 								columnGutter={16}
 								itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
-								itemKey={(tweet) => tweet.id}
+								itemKey={(post) => post.id}
 								items={results}
 								onRender={infiniteLoader}
 								overscanBy={MASONRY_OVERSCAN_BY}
@@ -144,7 +144,7 @@ export default function DiscoverPage() {
 						</Suspense>
 					</div>
 				) : (
-					// Hero Section with centered search and floating images on large screen
+					// Hero Section with centered search and floating media on large screen
 					<section className="hero hero-center relative w-full max-w-7xl">
 						<div className="hero-content relative z-10 text-center">
 							<div className="max-w-2xl">
@@ -229,7 +229,7 @@ export default function DiscoverPage() {
 					<Suspense fallback={null}>
 						<div className="pointer-events-none absolute inset-0 overflow-hidden">
 							{placedData.map(({ position, index }) => {
-								const tweet = randomImages[index];
+								const post = randomPosts[index];
 								const isVisible = visibleIndices.includes(index);
 								return (
 									<div
@@ -237,7 +237,7 @@ export default function DiscoverPage() {
 											"pointer-events-auto absolute transition-opacity duration-700 ease-in-out",
 											isVisible ? "opacity-85" : "opacity-0",
 										)}
-										key={tweet.id}
+										key={post.id}
 										style={{
 											top: `${position.top}%`,
 											left: `${position.left}%`,
@@ -247,7 +247,7 @@ export default function DiscoverPage() {
 											zIndex: 1,
 										}}
 									>
-										<TweetImageGrid showArtistOnHover tweet={tweet} />
+										<PostMediaGrid showArtistOnHover post={post} />
 									</div>
 								);
 							})}
@@ -292,8 +292,8 @@ export default function DiscoverPage() {
 export const Route = createFileRoute("/")({
 	loader: ({ context: { queryClient } }) => {
 		queryClient.prefetchQuery({
-			...orpc.tweets.random.queryOptions({ retry: false }),
-			queryKey: ["tweets-random"],
+			...orpc.posts.random.queryOptions({ retry: false }),
+			queryKey: ["posts-random"],
 		});
 	},
 	component: DiscoverPage,

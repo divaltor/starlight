@@ -9,7 +9,7 @@ interface SimilarPhoto {
 	perceptualHash: string;
 	s3Path?: string;
 	sourceUrl: string;
-	tweetId: string;
+	postId: string;
 	userId: string;
 }
 
@@ -48,8 +48,8 @@ export async function findSimilarPhotos(
 				perceptualHash: true,
 				s3Path: true,
 				originalUrl: true,
-				tweetId: true,
-				tweet: { select: { sourceUrl: true } },
+				postId: true,
+				post: { select: { sourceUrl: true } },
 			},
 			take: maxCandidates,
 		});
@@ -73,8 +73,8 @@ export async function findSimilarPhotos(
 						distance,
 						s3Path: candidate.s3Path || undefined,
 						originalUrl: candidate.originalUrl,
-						tweetId: candidate.tweetId,
-						sourceUrl: candidate.tweet.sourceUrl,
+						postId: candidate.postId,
+						sourceUrl: candidate.post.sourceUrl,
 					});
 				}
 			}

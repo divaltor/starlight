@@ -1,11 +1,11 @@
 import { format } from "date-fns";
-import type { SearchResult, TweetData } from "../types/tweets";
+import type { PostData, SearchResult } from "../types/posts";
 import { createPublicId } from "./public-id";
 
 export const transformSearchResultsPure = (
 	results: SearchResult[],
 	baseCdnUrl: string,
-): TweetData[] => {
+): PostData[] => {
 	const grouped = new Map<
 		string,
 		{
@@ -15,8 +15,9 @@ export const transformSearchResultsPure = (
 			username: string;
 			sourceUrl: string;
 			createdAt: Date;
-			photos: Array<{
+			media: Array<{
 				id: string;
+				kind: string;
 				provider: string;
 				originalUrl: string;
 				s3Url?: string;
@@ -37,12 +38,13 @@ export const transformSearchResultsPure = (
 				username: result.username,
 				sourceUrl: result.source_url,
 				createdAt: result.post_created_at,
-				photos: [],
+				media: [],
 			};
 			grouped.set(key, post);
 		}
-		post.photos.push({
+		post.media.push({
 			id: result.media_id,
+			kind: result.kind,
 			provider: result.provider,
 			originalUrl: result.original_url,
 			s3Url: result.s3_path ? `${baseCdnUrl}/${result.s3_path}` : undefined,
@@ -52,15 +54,16 @@ export const transformSearchResultsPure = (
 		});
 	}
 	return Array.from(grouped.values(), (post) => {
-		const photos = post.photos.map((photo) => ({
-			id: createPublicId("media", photo.provider, photo.id, post.userId),
-			externalId: photo.id,
-			provider: photo.provider,
-			url: photo.s3Url ?? photo.originalUrl,
-			is_nsfw: photo.isNsfw,
-			height: photo.height,
-			width: photo.width,
-			alt: `${post.username}-${photo.id}.${photo.originalUrl.split(".").pop() ?? "jpg"}`,
+		const media = post.media.map((item) => ({
+			id: createPublicId("media", item.provider, item.id, post.userId),
+			externalId: item.id,
+			kind: item.kind,
+			provider: item.provider,
+			url: item.s3Url ?? item.originalUrl,
+			is_nsfw: item.isNsfw,
+			height: item.height,
+			width: item.width,
+			alt: `${post.username}-${item.id}.${item.originalUrl.split(".").pop() ?? "jpg"}`,
 		}));
 		return {
 			id: createPublicId("post", post.provider, post.id, post.userId),
@@ -68,8 +71,8 @@ export const transformSearchResultsPure = (
 			provider: post.provider,
 			artist: post.username ? `@${post.username}` : "@good_artist",
 			date: format(post.createdAt, "MMM d, yyyy"),
-			photos,
-			hasMultipleImages: photos.length > 1,
+			media,
+			hasMultipleMedia: media.length > 1,
 			sourceUrl: post.sourceUrl,
 		};
 	});

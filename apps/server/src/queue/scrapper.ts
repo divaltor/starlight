@@ -6,8 +6,8 @@ import { type QueryTweetsResponse, Scraper } from "@the-convocation/twitter-scra
 import { bot } from "@/bot";
 import { logger } from "@/logger";
 import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
-import { imagesApp } from "@/queue/image-collector";
-import type { MediaCollectorJobData } from "@/queue/image-collector";
+import { mediaCollectorApp } from "@/queue/media-collector";
+import type { MediaCollectorJobData } from "@/queue/media-collector";
 import { normalizeTwitterTags } from "@/services/tags";
 import { Cookies } from "@/storage";
 
@@ -182,7 +182,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 					userId,
 					provider: "twitter",
 					id: { in: tweetIds },
-					photos: { every: { s3Path: { not: null } } },
+					media: { every: { s3Path: { not: null } } },
 				},
 				select: { id: true, createdAt: true },
 			})
@@ -252,10 +252,10 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 	if (tweetsToQueue.length > 0) {
 		await Promise.all(
 			tweetsToQueue.map((job) =>
-				imagesApp.spawn("images-collector", job, {
+				mediaCollectorApp.spawn("images-collector", job, {
 					idempotencyKey: `media-twitter-${job.userId}-${job.post.externalId}`,
 					maxAttempts: 3,
-					retryStrategy: RETRY.images,
+					retryStrategy: RETRY.media,
 				}),
 			),
 		);

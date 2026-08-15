@@ -152,7 +152,7 @@ export const prisma = new PrismaClient({
 		} satisfies Record<string, (...args: any) => PrismaGenerated.MediaWhereInput>,
 		post: {
 			available: () => ({
-				photos: {
+				media: {
 					some: {
 						deletedAt: null,
 						s3Path: { not: null },

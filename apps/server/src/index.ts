@@ -14,7 +14,7 @@ import { logger } from "@/logger";
 import { QUEUES } from "@/queue/absurd";
 import { classificationApp } from "@/queue/classification";
 import { embeddingsApp } from "@/queue/embeddings";
-import { imagesApp } from "@/queue/image-collector";
+import { mediaCollectorApp } from "@/queue/media-collector";
 import { memoryApp } from "@/queue/memory";
 import { pixivApp } from "@/queue/pixiv";
 import { scrapperApp } from "@/queue/scrapper";
@@ -43,7 +43,7 @@ boundary.use(startHandler);
 boundary.use(chatMemberHandler);
 
 await Promise.all(
-	[imagesApp, classificationApp, embeddingsApp, scrapperApp, memoryApp, pixivApp].map(
+	[mediaCollectorApp, classificationApp, embeddingsApp, scrapperApp, memoryApp, pixivApp].map(
 		async (app) => {
 			await app.createQueue();
 			await app.setQueuePolicy(undefined, {
@@ -54,11 +54,11 @@ await Promise.all(
 	),
 );
 const workers = await Promise.all([
-	imagesApp.startWorker({
+	mediaCollectorApp.startWorker({
 		batchSize: 3,
 		concurrency: 3,
-		onError: (error) => logger.error({ err: error }, "Images worker error"),
-		workerId: QUEUES.images,
+		onError: (error) => logger.error({ err: error }, "Media collector worker error"),
+		workerId: QUEUES.media,
 	}),
 	classificationApp.startWorker({
 		batchSize: 1,
@@ -94,7 +94,14 @@ const workers = await Promise.all([
 		workerId: QUEUES.pixiv,
 	}),
 ]);
-const queueApps = [imagesApp, classificationApp, embeddingsApp, scrapperApp, memoryApp, pixivApp];
+const queueApps = [
+	mediaCollectorApp,
+	classificationApp,
+	embeddingsApp,
+	scrapperApp,
+	memoryApp,
+	pixivApp,
+];
 const runner = run(bot);
 
 logger.info("Bot is running...");

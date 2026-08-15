@@ -5,16 +5,16 @@ import { no } from "..";
 import { maybeAuthProcedure, protectedProcedure } from "../middlewares/auth";
 import { Cursor, CursorPayloadSchema, type CursorPayload } from "../utils/cursor";
 import { parseMediaPublicId } from "../utils/public-id";
-import { transformTweets } from "../utils/transformations";
+import { transformPosts } from "../utils/transformations";
 
-const TweetsQuery = z.object({
+const PostsQuery = z.object({
 	username: z.string().optional(),
 	cursor: z.string().optional(),
 	limit: z.number().min(1).max(100).default(30),
 });
 
-export const listUserTweets = maybeAuthProcedure
-	.input(TweetsQuery)
+export const listUserPosts = maybeAuthProcedure
+	.input(PostsQuery)
 	.handler(async ({ input, context }) => {
 		const { user } = context;
 
@@ -36,13 +36,13 @@ export const listUserTweets = maybeAuthProcedure
 				});
 			}
 		} else if (user) {
-			// Own tweets (authenticated, no username provided)
+			// Own posts (authenticated, no username provided)
 			targetUser = await prisma.user.findUnique({
 				where: { telegramId: user.id },
 				select: { id: true, telegramId: true, username: true, isPublic: true },
 			});
 		} else {
-			// Anonymous cannot request own tweets without specifying a username
+			// Anonymous cannot request own posts without specifying a username
 			throw new ORPCError("UNAUTHORIZED", {
 				message: "Unauthorized",
 				status: 401,
@@ -59,7 +59,7 @@ export const listUserTweets = maybeAuthProcedure
 			});
 		}
 
-		return await retrieveUserTweets({
+		return await retrieveUserPosts({
 			// biome-ignore lint/style/noNonNullAssertion: We know targetUser is not null
 			userId: targetUser!.id,
 			cursor,
@@ -67,9 +67,9 @@ export const listUserTweets = maybeAuthProcedure
 		});
 	});
 
-export const retrieveUserTweets = no
+export const retrieveUserPosts = no
 	.input(
-		TweetsQuery.omit({ username: true }).extend({
+		PostsQuery.omit({ username: true }).extend({
 			userId: z.string(),
 		}),
 	)
@@ -83,7 +83,7 @@ export const retrieveUserTweets = no
 
 				if (!cursorData) {
 					return {
-						tweets: [],
+						posts: [],
 						nextCursor: null,
 					};
 				}
@@ -97,22 +97,22 @@ export const retrieveUserTweets = no
 				const cursorDate = new Date(cursorData.createdAt);
 				whereClause.OR = [
 					{ createdAt: { lt: cursorDate } },
-					{ createdAt: cursorDate, id: { lt: cursorData.lastTweetId } },
+					{ createdAt: cursorDate, id: { lt: cursorData.lastPostId } },
 					{
 						createdAt: cursorDate,
-						id: cursorData.lastTweetId,
+						id: cursorData.lastPostId,
 						provider: { lt: cursorData.provider ?? "twitter" },
 					},
 				];
 			}
 
-			const tweets = await prisma.post.findMany({
+			const posts = await prisma.post.findMany({
 				where: {
 					...whereClause,
 					...prisma.post.available(),
 				},
 				include: {
-					photos: {
+					media: {
 						where: prisma.media.available(),
 						orderBy: [{ position: "asc" }, { id: "asc" }],
 					},
@@ -129,50 +129,50 @@ export const retrieveUserTweets = no
 				take: limit,
 			});
 
-			const transformedTweets = transformTweets(tweets);
+			const transformedPosts = transformPosts(posts);
 
 			let nextCursor: string | null = null;
-			if (tweets.length === limit) {
-				// biome-ignore lint/style/noNonNullAssertion: We know there's at least one tweet
-				const lastTweet = tweets.at(-1)!;
+			if (posts.length === limit) {
+				// biome-ignore lint/style/noNonNullAssertion: We know there's at least one post
+				const lastPost = posts.at(-1)!;
 				nextCursor = Cursor.create({
-					lastTweetId: lastTweet.id,
-					provider: lastTweet.provider,
-					createdAt: lastTweet.createdAt.toISOString(),
+					lastPostId: lastPost.id,
+					provider: lastPost.provider,
+					createdAt: lastPost.createdAt.toISOString(),
 				});
 			}
 
 			return {
-				tweets: transformedTweets,
+				posts: transformedPosts,
 				nextCursor,
 			};
 		} catch {
 			return {
-				tweets: [],
+				posts: [],
 				nextCursor: null,
 			};
 		}
 	})
 	.callable();
 
-export const deletePhoto = protectedProcedure
-	.input(z.object({ photoId: z.string() }))
+export const deleteMedia = protectedProcedure
+	.input(z.object({ mediaId: z.string() }))
 	.handler(async ({ input, context }) => {
-		const mediaId = parseMediaPublicId(input.photoId);
+		const mediaId = parseMediaPublicId(input.mediaId);
 		if (!mediaId) {
 			throw new ORPCError("BAD_REQUEST", {
-				message: "Invalid photo ID",
+				message: "Invalid media ID",
 				status: 400,
 			});
 		}
 		const { provider, externalId, userId } = mediaId;
 		if (userId && userId !== context.databaseUserId) {
 			throw new ORPCError("NOT_FOUND", {
-				message: "Photo not found",
+				message: "Media not found",
 				status: 404,
 			});
 		}
-		const photo = await prisma.media.findFirst({
+		const media = await prisma.media.findFirst({
 			where: {
 				id: externalId,
 				provider,
@@ -181,9 +181,9 @@ export const deletePhoto = protectedProcedure
 			},
 		});
 
-		if (!photo) {
+		if (!media) {
 			throw new ORPCError("NOT_FOUND", {
-				message: "Photo not found",
+				message: "Media not found",
 				status: 404,
 			});
 		}

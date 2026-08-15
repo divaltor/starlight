@@ -3,32 +3,17 @@ ALTER TABLE "tweets" RENAME TO "posts";
 ALTER TABLE "posts" RENAME COLUMN "id" TO "external_id";
 ALTER TABLE "posts" RENAME COLUMN "tweet_data" TO "provider_payload";
 ALTER TABLE "posts" RENAME COLUMN "tweet_text" TO "text";
--- Provider adapters now own canonical text/username fields instead of generated
--- expressions tied to a provider payload shape. Existing generated values remain.
-ALTER TABLE "posts" ALTER COLUMN "text" DROP EXPRESSION;
-ALTER TABLE "posts" ALTER COLUMN "username" DROP EXPRESSION;
 ALTER TABLE "posts" ADD COLUMN "provider" TEXT NOT NULL DEFAULT 'twitter';
 ALTER TABLE "posts" ADD COLUMN "source_url" TEXT;
 ALTER TABLE "posts" ADD COLUMN "author_external_id" TEXT;
 ALTER TABLE "posts" ADD COLUMN "author_name" TEXT;
 ALTER TABLE "posts" ADD COLUMN "author_username" TEXT;
 ALTER TABLE "posts" ADD COLUMN "title" TEXT;
-ALTER TABLE "posts" ADD COLUMN "tags" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 UPDATE "posts" SET
   "source_url" = 'https://x.com/i/status/' || "external_id",
   "author_external_id" = "provider_payload"->>'userId',
   "author_name" = "provider_payload"->>'name',
-  "author_username" = COALESCE("provider_payload"->>'username', "username"),
-  "tags" = CASE
-    WHEN jsonb_typeof("provider_payload"->'hashtags') = 'array' THEN ARRAY(
-      SELECT btrim(value)
-      FROM jsonb_array_elements_text("provider_payload"->'hashtags') WITH ORDINALITY AS hashtag(value, position)
-      WHERE btrim(value) <> ''
-      GROUP BY btrim(value)
-      ORDER BY MIN(position)
-    )
-    ELSE ARRAY[]::TEXT[]
-  END;
+  "author_username" = COALESCE("provider_payload"->>'username', "username");
 ALTER TABLE "posts" ALTER COLUMN "source_url" SET NOT NULL;
 
 ALTER TABLE "photos" RENAME TO "media";
@@ -79,3 +64,28 @@ CREATE TABLE "provider_credentials" (
     FOREIGN KEY ("user_id") REFERENCES "users"("id")
     ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+INSERT INTO "provider_credentials" (
+  "user_id",
+  "provider",
+  "credential_type",
+  "encrypted_secret",
+  "created_at",
+  "updated_at"
+)
+SELECT
+  "id",
+  'twitter',
+  'cookies',
+  "cookies",
+  "created_at",
+  "updated_at"
+FROM "users"
+WHERE "cookies" IS NOT NULL
+ON CONFLICT ("user_id", "provider") DO UPDATE SET
+  "credential_type" = EXCLUDED."credential_type",
+  "encrypted_secret" = EXCLUDED."encrypted_secret",
+  "created_at" = LEAST("provider_credentials"."created_at", EXCLUDED."created_at"),
+  "updated_at" = GREATEST("provider_credentials"."updated_at", EXCLUDED."updated_at");
+
+ALTER TABLE "users" DROP COLUMN "cookies";

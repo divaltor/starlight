@@ -1,40 +1,40 @@
-import type { TweetData, TweetsPageResult } from "@starlight/api/src/types/tweets";
+import type { PostData, PostsPageResult } from "@starlight/api/src/types/posts";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { orpc } from "@/utils/orpc";
 
-const EMPTY_TWEETS: TweetData[] = [];
+const EMPTY_POSTS: PostData[] = [];
 
-interface UseTweetsOptions {
+interface UsePostsOptions {
 	limit?: number;
 	username?: string;
 }
 
-export function useTweets(options: UseTweetsOptions = {}) {
+export function usePosts(options: UsePostsOptions = {}) {
 	const { username, limit = 30 } = options;
 
 	const { data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage, status } =
 		useInfiniteQuery(
-			orpc.tweets.list.infiniteOptions({
+			orpc.posts.list.infiniteOptions({
 				input: (pageParam: string | undefined) => ({
 					username,
 					cursor: pageParam,
 					limit,
 				}),
-				queryKey: ["tweets", { username }],
+				queryKey: ["posts", { username }],
 				initialPageParam: undefined,
-				getNextPageParam: (lastPage: TweetsPageResult) => lastPage.nextCursor ?? undefined,
+				getNextPageParam: (lastPage: PostsPageResult) => lastPage.nextCursor ?? undefined,
 				retry: false,
 				gcTime: 10 * 60 * 1000,
 			}),
 		);
-	const tweets = useMemo(
-		() => data?.pages.flatMap((page) => page.tweets) ?? EMPTY_TWEETS,
+	const posts = useMemo(
+		() => data?.pages.flatMap((page) => page.posts) ?? EMPTY_POSTS,
 		[data?.pages],
 	);
 
 	return {
-		tweets,
+		posts,
 		isLoading: status === "pending",
 		isFetching,
 		isFetchingNextPage,

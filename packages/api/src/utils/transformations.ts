@@ -1,6 +1,6 @@
 import type { Media, Post } from "@starlight/utils";
 import { format } from "date-fns";
-import type { TweetData } from "../types/tweets";
+import type { PostData, SearchResult } from "../types/posts";
 import { createPublicId } from "./public-id";
 import { transformSearchResultsPure } from "./search-transformations";
 
@@ -16,22 +16,22 @@ type TransformPost = Pick<
 	"authorUsername" | "createdAt" | "id" | "provider" | "sourceUrl" | "userId" | "username"
 >;
 
-const transformTweetsBase = <T extends TransformPost>(
+const transformPostsBase = <T extends TransformPost>(
 	posts: T[],
 	getMedia: (post: T) => TransformMedia[],
-): TweetData[] =>
+): PostData[] =>
 	posts.map((post) => {
 		const artist = post.authorUsername ?? post.username;
-		const photos = getMedia(post).map((media) => ({
-			id: createPublicId("media", media.provider, media.id, post.userId),
-			externalId: media.id,
-			provider: media.provider,
-			kind: media.kind,
-			url: media.s3Url ?? media.originalUrl,
-			is_nsfw: media.is_nsfw,
-			height: media.height ?? undefined,
-			width: media.width ?? undefined,
-			alt: `${artist ?? "artist"}-${media.id}.${media.originalUrl.split(".").at(-1) ?? "jpg"}`,
+		const media = getMedia(post).map((item) => ({
+			id: createPublicId("media", item.provider, item.id, post.userId),
+			externalId: item.id,
+			provider: item.provider,
+			kind: item.kind,
+			url: item.s3Url ?? item.originalUrl,
+			is_nsfw: item.is_nsfw,
+			height: item.height ?? undefined,
+			width: item.width ?? undefined,
+			alt: `${artist ?? "artist"}-${item.id}.${item.originalUrl.split(".").at(-1) ?? "jpg"}`,
 		}));
 		return {
 			id: createPublicId("post", post.provider, post.id, post.userId),
@@ -39,17 +39,15 @@ const transformTweetsBase = <T extends TransformPost>(
 			provider: post.provider,
 			artist: artist ? `@${artist}` : "@good_artist",
 			date: format(post.createdAt, "MMM d, yyyy"),
-			photos,
-			hasMultipleImages: photos.length > 1,
+			media,
+			hasMultipleMedia: media.length > 1,
 			sourceUrl: post.sourceUrl,
 		};
 	});
 
-export const transformTweets = (
-	posts: Array<TransformPost & { photos: Array<TransformMedia & { s3Url?: string }> }>,
-) => transformTweetsBase(posts, (post) => post.photos);
+export const transformPosts = (
+	posts: Array<TransformPost & { media: Array<TransformMedia & { s3Url?: string }> }>,
+) => transformPostsBase(posts, (post) => post.media);
 
-export const transformSearchResults = (
-	results: import("../types/tweets").SearchResult[],
-	baseCdnUrl: string,
-) => transformSearchResultsPure(results, baseCdnUrl);
+export const transformSearchResults = (results: SearchResult[], baseCdnUrl: string) =>
+	transformSearchResultsPure(results, baseCdnUrl);

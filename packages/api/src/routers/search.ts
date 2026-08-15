@@ -5,7 +5,7 @@ import { publicProcedure } from "..";
 import { maybeAuthProcedure } from "../middlewares/auth";
 import { EmbeddingsService } from "../services/embeddings";
 import { runtime } from "../services/runtime";
-import type { SearchResult } from "../types/tweets";
+import type { SearchResult } from "../types/posts";
 import { Cursor, SearchCursorPayloadSchema, type SearchCursorPayload } from "../utils/cursor";
 import { paginateSearchResults } from "../utils/search-pagination";
 import { transformSearchResults } from "../utils/transformations";
@@ -36,7 +36,7 @@ export const searchImages = maybeAuthProcedure
 			});
 		}
 
-		// Get database user ID if searching own tweets
+		// Get database user ID if searching the authenticated user's posts
 		let databaseUserId: string | null = null;
 		if (ownOnly && user) {
 			const dbUser = await prisma.user.findUnique({

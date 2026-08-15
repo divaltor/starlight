@@ -3,7 +3,7 @@ import { deleteCookies, saveCookies } from "./cookies";
 import { changeProfileVisibility, getUserProfile } from "./profiles";
 import { deletePixivCredential, savePixivCredential, setPixivPrivateBookmarks } from "./pixiv";
 import { randomImages, searchImages } from "./search";
-import { deletePhoto, listUserTweets } from "./tweets";
+import { deleteMedia, listUserPosts } from "./posts";
 
 export const appRouter = {
 	profiles: {
@@ -19,11 +19,13 @@ export const appRouter = {
 		delete: deletePixivCredential,
 		privateBookmarks: setPixivPrivateBookmarks,
 	},
-	tweets: {
-		list: listUserTweets,
-		delete: deletePhoto,
+	posts: {
+		list: listUserPosts,
 		search: searchImages,
 		random: randomImages,
+	},
+	media: {
+		delete: deleteMedia,
 	},
 };
 export type AppRouter = typeof appRouter;

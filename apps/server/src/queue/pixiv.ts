@@ -2,7 +2,7 @@ import { Absurd } from "absurd-sdk";
 import { withPixivClient } from "@starlight/api/services/pixiv-credential";
 import { env, prisma } from "@starlight/utils";
 import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
-import { imagesApp, type MediaCollectorJobData } from "@/queue/image-collector";
+import { mediaCollectorApp, type MediaCollectorJobData } from "@/queue/media-collector";
 
 const CONSECUTIVE_THRESHOLD = 15;
 const SCHEDULE_INTERVAL_SECONDS = 60 * 60 * 6;
@@ -118,7 +118,7 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 					userId: data.userId,
 					provider: "pixiv",
 					id: { in: page.artworks.map((artwork) => artwork.id) },
-					photos: { every: { s3Path: { not: null } } },
+					media: { every: { s3Path: { not: null } } },
 				},
 				select: { id: true },
 			})
@@ -157,10 +157,10 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 	}
 	await Promise.all(
 		jobs.map((job) =>
-			imagesApp.spawn("images-collector", job, {
+			mediaCollectorApp.spawn("images-collector", job, {
 				idempotencyKey: `media-pixiv-${data.userId}-${job.post.externalId}`,
 				maxAttempts: 3,
-				retryStrategy: RETRY.images,
+				retryStrategy: RETRY.media,
 			}),
 		),
 	);

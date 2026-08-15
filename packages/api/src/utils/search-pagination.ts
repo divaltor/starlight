@@ -1,4 +1,4 @@
-import type { SearchResult } from "../types/tweets";
+import type { SearchResult } from "../types/posts";
 
 export const paginateSearchResults = (results: SearchResult[], limit: number) => {
 	const selectedPosts = new Set<string>();

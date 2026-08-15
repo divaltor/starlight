@@ -2,7 +2,7 @@ export type SearchResult = {
 	media_id: string;
 	provider: string;
 	user_id: string;
-	kind?: string;
+	kind: string;
 	original_url: string;
 	s3_path: string;
 	username: string;
@@ -16,11 +16,11 @@ export type SearchResult = {
 	final_score: number;
 };
 
-export type PhotoData = {
+export type MediaData = {
 	id: string;
 	externalId: string;
 	provider: string;
-	kind?: string;
+	kind: string;
 	url: string;
 	is_nsfw?: boolean;
 	height?: number;
@@ -28,23 +28,23 @@ export type PhotoData = {
 	alt: string;
 };
 
-export type TweetData = {
+export type PostData = {
 	id: string;
 	externalId: string;
 	provider: string;
 	artist: string;
 	date: string;
-	photos: PhotoData[];
-	hasMultipleImages: boolean;
-	sourceUrl?: string;
+	media: MediaData[];
+	hasMultipleMedia: boolean;
+	sourceUrl: string;
 };
 
-export type TweetsPageResult = {
-	tweets: TweetData[];
+export type PostsPageResult = {
+	posts: PostData[];
 	nextCursor: string | null;
 };
 
 export type SearchPageResult = {
-	results: TweetData[];
+	results: PostData[];
 	nextCursor: string | null;
 };

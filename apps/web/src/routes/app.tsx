@@ -1,5 +1,5 @@
 import type { ProfileResult } from "@starlight/api/routers/index";
-import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
+import type { PostData, PostsPageResult } from "@starlight/api/types/posts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle, Search } from "lucide-react";
@@ -7,13 +7,13 @@ import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
 import { useCallback, useEffect, useState, lazy, Suspense } from "react";
 import NotFound from "@/components/not-found";
-const TweetImageGrid = lazy(() =>
-	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
+const PostMediaGrid = lazy(() =>
+	import("@/components/post-media-grid").then((m) => ({ default: m.PostMediaGrid })),
 );
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSearch } from "@/hooks/use-search";
-import { useTweets } from "@/hooks/use-tweets";
+import { usePosts } from "@/hooks/use-posts";
 import { cn } from "@/lib/utils";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { client, orpc } from "@/utils/orpc";
@@ -21,7 +21,7 @@ import { client, orpc } from "@/utils/orpc";
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
 
-function TwitterArtViewer() {
+function MediaGallery() {
 	const { updateButtons, rawInitData } = useTelegramContext();
 	const queryClient = useQueryClient();
 
@@ -63,7 +63,7 @@ function TwitterArtViewer() {
 		};
 	}, [updateButtons, profile]);
 
-	// Search hook - search only own tweets in TMA
+	// Search hook - search only own posts in TMA
 	const {
 		results: searchResults,
 		isLoading: isSearchLoading,
@@ -74,20 +74,20 @@ function TwitterArtViewer() {
 
 	const isSearchActive = urlQuery.trim().length > 0;
 
-	const { tweets, isLoading, isFetchingNextPage, hasNextPage, error, fetchNextPage } = useTweets();
+	const { posts, isLoading, isFetchingNextPage, hasNextPage, error, fetchNextPage } = usePosts();
 
-	const { mutate: deletePhoto } = useMutation({
-		mutationFn: (photoId: string) => client.tweets.delete({ photoId }),
+	const { mutate: deleteMedia } = useMutation({
+		mutationFn: (mediaId: string) => client.media.delete({ mediaId }),
 		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: ["tweets"] });
+			queryClient.invalidateQueries({ queryKey: ["posts"] });
 		},
 	});
 
-	const handleDeleteImage = useCallback(
-		(photoId: string) => {
-			deletePhoto(photoId);
+	const handleDeleteMedia = useCallback(
+		(mediaId: string) => {
+			deleteMedia(mediaId);
 		},
-		[deletePhoto],
+		[deleteMedia],
 	);
 
 	const handleSearch = (e: React.FormEvent) => {
@@ -96,7 +96,7 @@ function TwitterArtViewer() {
 		setUrlQuery(trimmedQuery || null, { history: "push" });
 	};
 
-	// Infinite loader for regular tweets
+	// Infinite loader for regular posts
 	const infiniteLoader = useInfiniteLoader(
 		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
 			if (hasNextPage && !isFetchingNextPage) {
@@ -125,12 +125,12 @@ function TwitterArtViewer() {
 	);
 
 	const renderMasonryItem = useCallback(
-		({ data, width }: { data: TweetData; width: number }) => (
+		({ data, width }: { data: PostData; width: number }) => (
 			<div className="mb-1" style={{ width }}>
-				<TweetImageGrid tweet={data} showActions onDeleteImage={handleDeleteImage} />
+				<PostMediaGrid post={data} showActions onDeleteMedia={handleDeleteMedia} />
 			</div>
 		),
-		[handleDeleteImage],
+		[handleDeleteMedia],
 	);
 
 	// Show error state
@@ -138,16 +138,16 @@ function TwitterArtViewer() {
 		return (
 			<div className="flex min-h-screen items-center justify-center">
 				<NotFound
-					description="An error occurred while loading tweets. Please try again later."
+					description="An error occurred while loading posts. Please try again later."
 					icon={<AlertTriangle className="size-10 text-base-content/20" />}
-					title="Failed to load tweets (｡•́︿•̀｡)"
+					title="Failed to load posts (｡•́︿•̀｡)"
 				/>
 			</div>
 		);
 	}
 
 	// Determine which data to display
-	const displayItems = isSearchActive ? searchResults : tweets;
+	const displayItems = isSearchActive ? searchResults : posts;
 	const displayLoading = isSearchActive ? isSearchLoading : isLoading;
 	const currentInfiniteLoader = isSearchActive ? searchInfiniteLoader : infiniteLoader;
 
@@ -173,7 +173,7 @@ function TwitterArtViewer() {
 								? "No results found for your search. Try different keywords."
 								: "Did you setup cookies? Try again later."
 						}
-						title={isSearchActive ? "No search results" : "No photos found"}
+						title={isSearchActive ? "No search results" : "No media found"}
 					/>
 				</div>
 			)}
@@ -186,7 +186,7 @@ function TwitterArtViewer() {
 							<Masonry
 								columnGutter={16}
 								itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
-								itemKey={(tweet) => tweet.id}
+								itemKey={(post) => post.id}
 								items={displayItems}
 								onRender={currentInfiniteLoader}
 								overscanBy={MASONRY_OVERSCAN_BY}
@@ -247,18 +247,18 @@ export const Route = createFileRoute("/app")({
 		await queryClient.fetchQuery(profileOptions);
 
 		await queryClient.fetchInfiniteQuery(
-			orpc.tweets.list.infiniteOptions({
+			orpc.posts.list.infiniteOptions({
 				input: (pageParam: string | undefined) => ({
 					cursor: pageParam,
 					limit: 30,
 				}),
-				queryKey: ["tweets", { username: undefined }],
+				queryKey: ["posts", { username: undefined }],
 				initialPageParam: undefined,
-				getNextPageParam: (lastPage: TweetsPageResult) => lastPage.nextCursor ?? undefined,
+				getNextPageParam: (lastPage: PostsPageResult) => lastPage.nextCursor ?? undefined,
 				retry: false,
 				gcTime: 10 * 60 * 1000,
 			}),
 		);
 	},
-	component: TwitterArtViewer,
+	component: MediaGallery,
 });

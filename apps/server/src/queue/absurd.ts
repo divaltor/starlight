@@ -40,7 +40,8 @@ export const absurdLogger = {
 export const QUEUES = {
 	classification: "classification",
 	embeddings: "embeddings",
-	images: "images-collector",
+	// Persisted queue/task name; keep stable for jobs created before the provider-neutral rename.
+	media: "images-collector",
 	memory: "chat-memory",
 	pixiv: "pixiv-bookmarks",
 	scrapper: "feed-scrapper",
@@ -49,7 +50,7 @@ export const QUEUES = {
 export const RETRY = {
 	classification: { kind: "exponential", baseSeconds: 30, factor: 2 } satisfies RetryStrategy,
 	embeddings: { kind: "exponential", baseSeconds: 30, factor: 2 } satisfies RetryStrategy,
-	images: { kind: "exponential", baseSeconds: 10, factor: 2 } satisfies RetryStrategy,
+	media: { kind: "exponential", baseSeconds: 10, factor: 2 } satisfies RetryStrategy,
 	memory: { kind: "exponential", baseSeconds: 20, factor: 2 } satisfies RetryStrategy,
 	pixiv: { kind: "exponential", baseSeconds: 150, factor: 2 } satisfies RetryStrategy,
 	scrapper: { kind: "exponential", baseSeconds: 150, factor: 2 } satisfies RetryStrategy,

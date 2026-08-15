@@ -111,7 +111,7 @@ async function searchInlineImagesWithLegacyQuery(
 				prisma.post.findMany({
 					where: {
 						userId,
-						photos: {
+						media: {
 							some: {
 								deletedAt: null,
 								kind: "image",
@@ -121,7 +121,7 @@ async function searchInlineImagesWithLegacyQuery(
 						...whereClause,
 					},
 					include: {
-						photos: {
+						media: {
 							where: {
 								deletedAt: null,
 								kind: "image",
@@ -141,7 +141,7 @@ async function searchInlineImagesWithLegacyQuery(
 		}
 
 		for (const tweet of tweets) {
-			for (const photo of tweet.photos) {
+			for (const photo of tweet.media) {
 				const dedupeKey = createInlineImageDedupeKey(
 					photo.provider,
 					photo.id,

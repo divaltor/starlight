@@ -2,8 +2,8 @@ import { prisma } from "@starlight/utils";
 import { logger } from "@/logger";
 import { s3 } from "@/storage";
 
-// Manual script: update height/width for photos missing dimensions
-// Usage: bun run apps/server/src/scripts/update-photo-dimensions.ts
+// Manual script: update height/width for media missing dimensions
+// Usage: bun run apps/server/src/scripts/update-media-dimensions.ts
 // Optional env vars:
 //   DRY_RUN=1             (only log, do not update)
 //   BATCH_SIZE=100        (batch size for processing, default: 50)
@@ -17,11 +17,11 @@ async function main() {
 			dryRun: DRY_RUN,
 			batchSize: BATCH_SIZE,
 		},
-		"Starting photo dimensions update",
+		"Starting media dimensions update",
 	);
 
-	// Find photos with null height or width that have s3Path
-	const photos = await prisma.media.findMany({
+	// Find media with null height or width that have s3Path
+	const media = await prisma.media.findMany({
 		where: {
 			deletedAt: null,
 			s3Path: { not: null },
@@ -38,10 +38,10 @@ async function main() {
 		orderBy: { createdAt: "asc" },
 	});
 
-	logger.info({ count: photos.length }, "Found photos missing dimensions");
+	logger.info({ count: media.length }, "Found media missing dimensions");
 
-	if (photos.length === 0) {
-		logger.info("No photos need dimension updates");
+	if (media.length === 0) {
+		logger.info("No media need dimension updates");
 		return;
 	}
 
@@ -49,27 +49,27 @@ async function main() {
 	let failed = 0;
 
 	// Process in batches
-	for (let i = 0; i < photos.length; i += BATCH_SIZE) {
-		const batch = photos.slice(i, i + BATCH_SIZE);
+	for (let i = 0; i < media.length; i += BATCH_SIZE) {
+		const batch = media.slice(i, i + BATCH_SIZE);
 
 		logger.info(
 			{
 				batch: Math.floor(i / BATCH_SIZE) + 1,
-				totalBatches: Math.ceil(photos.length / BATCH_SIZE),
+				totalBatches: Math.ceil(media.length / BATCH_SIZE),
 			},
 			"Processing batch",
 		);
 
 		await Promise.allSettled(
-			batch.map(async (photo) => {
+			batch.map(async (mediaItem) => {
 				try {
-					if (!photo.s3Path) {
-						logger.warn({ photoId: photo.id, userId: photo.userId }, "Photo has no s3Path");
+					if (!mediaItem.s3Path) {
+						logger.warn({ mediaId: mediaItem.id, userId: mediaItem.userId }, "Media has no s3Path");
 						return;
 					}
 
 					// Download image from S3
-					const imageBuffer = await s3.file(photo.s3Path).arrayBuffer();
+					const imageBuffer = await s3.file(mediaItem.s3Path).arrayBuffer();
 
 					const metadata = await new Bun.Image(imageBuffer)
 						.metadata()
@@ -77,7 +77,7 @@ async function main() {
 
 					if (!(metadata.height && metadata.width)) {
 						logger.warn(
-							{ photoId: photo.id, userId: photo.userId, metadata },
+							{ mediaId: mediaItem.id, userId: mediaItem.userId, metadata },
 							"Failed to extract dimensions",
 						);
 						failed++;
@@ -85,13 +85,13 @@ async function main() {
 					}
 
 					if (!DRY_RUN) {
-						// Update photo with dimensions
+						// Update media with dimensions
 						await prisma.media.update({
 							where: {
 								mediaId: {
-									id: photo.id,
-									userId: photo.userId,
-									provider: photo.provider,
+									id: mediaItem.id,
+									userId: mediaItem.userId,
+									provider: mediaItem.provider,
 								},
 							},
 							data: {
@@ -103,20 +103,20 @@ async function main() {
 
 					logger.debug(
 						{
-							photoId: photo.id,
-							userId: photo.userId,
+							mediaId: mediaItem.id,
+							userId: mediaItem.userId,
 							height: metadata.height,
 							width: metadata.width,
 							dryRun: DRY_RUN,
 						},
-						"Updated photo dimensions",
+						"Updated media dimensions",
 					);
 
 					updated++;
 				} catch (error) {
 					logger.error(
-						{ error, photoId: photo.id, userId: photo.userId },
-						"Failed to update photo dimensions",
+						{ error, mediaId: mediaItem.id, userId: mediaItem.userId },
+						"Failed to update media dimensions",
 					);
 					failed++;
 				}
@@ -126,19 +126,19 @@ async function main() {
 
 	logger.info(
 		{
-			total: photos.length,
+			total: media.length,
 			updated,
 			failed,
 			dryRun: DRY_RUN,
 			batchSize: BATCH_SIZE,
 		},
-		"Finished photo dimensions update",
+		"Finished media dimensions update",
 	);
 }
 
 main()
 	.catch((error) => {
-		logger.error({ error }, "Photo dimensions update script failed");
+		logger.error({ error }, "Media dimensions update script failed");
 		process.exitCode = 1;
 	})
 	.finally(async () => {

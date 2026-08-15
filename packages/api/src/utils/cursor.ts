@@ -1,7 +1,8 @@
 import z from "zod";
 
 export const CursorPayloadSchema = z.object({
-	lastTweetId: z.string().min(1),
+	lastPostId: z.string().min(1),
+	provider: z.string().optional(),
 	createdAt: z.string().datetime(),
 });
 

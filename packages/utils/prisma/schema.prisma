@@ -147,7 +147,7 @@ model ChatMember {
 model Post {
   id               String   @map("external_id")
   userId           String   @map("user_id") @db.Uuid
-  provider         String   @default("twitter")
+  provider         String
   sourceUrl        String   @map("source_url")
   authorExternalId String?  @map("author_external_id")
   authorName       String?  @map("author_name")
@@ -165,8 +165,8 @@ model Post {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  photos Media[]
-  user   User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  media Media[]
+  user  User    @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@id(name: "postId", [id, userId, provider])
   @@index([userId, createdAt(sort: Desc)])
@@ -176,9 +176,9 @@ model Post {
 
 model Media {
   id             String  @map("external_id")
-  tweetId        String  @map("post_external_id")
+  postId         String  @map("post_external_id")
   userId         String  @map("user_id") @db.Uuid
-  provider       String  @default("twitter")
+  provider       String
   kind           String  @default("image")
   position       Int     @default(0)
   s3Path         String? @map("s3_path")
@@ -204,12 +204,12 @@ model Media {
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  tweet Post @relation(fields: [tweetId, userId, provider], references: [id, userId, provider], onDelete: Restrict)
-  user  User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  post Post @relation(fields: [postId, userId, provider], references: [id, userId, provider], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@id(name: "mediaId", [id, userId, provider])
-  @@unique([tweetId, userId, provider, position])
-  @@index([tweetId])
+  @@unique([postId, userId, provider, position])
+  @@index([postId])
   @@index([perceptualHash])
   @@index([hashBucket4])
   @@index([hashBucket8])
