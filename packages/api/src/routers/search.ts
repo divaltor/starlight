@@ -6,7 +6,7 @@ import { maybeAuthProcedure } from "../middlewares/auth";
 import { EmbeddingsService } from "../services/embeddings";
 import { runtime } from "../services/runtime";
 import type { SearchResult } from "../types/tweets";
-import { Cursor, isSearchCursorPayload, type SearchCursorPayload } from "../utils/cursor";
+import { Cursor, SearchCursorPayloadSchema, type SearchCursorPayload } from "../utils/cursor";
 import { paginateSearchResults } from "../utils/search-pagination";
 import { transformSearchResults } from "../utils/transformations";
 
@@ -82,15 +82,14 @@ export const searchImages = maybeAuthProcedure
 
 		let cursorData: SearchCursorPayload | null = null;
 		if (cursor) {
-			const parsedCursor = Cursor.parse<unknown>(cursor);
+			cursorData = Cursor.parse(cursor, SearchCursorPayloadSchema);
 
-			if (!isSearchCursorPayload(parsedCursor)) {
+			if (!cursorData) {
 				return {
 					results: [],
 					nextCursor: null,
 				};
 			}
-			cursorData = parsedCursor;
 		}
 
 		const queryTime = cursorData?.queryTime ?? new Date().toISOString();
