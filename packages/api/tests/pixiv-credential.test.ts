@@ -3,6 +3,7 @@ import { createPixivCredentialService } from "../src/services/pixiv-credential-c
 
 const state = {
 	client: { refreshToken: "rotated-token" },
+	lockActive: false,
 	persistToken: () => Promise.resolve({ count: 1 }),
 };
 
@@ -10,7 +11,14 @@ const updateMatching = mock((_userId: string, _encryptedSecret: string, _replace
 	state.persistToken(),
 );
 const withPixivClient = createPixivCredentialService({
-	withLock: <T>(_userId: string, operation: () => Promise<T>) => operation(),
+	withLock: async <T>(_userId: string, operation: () => Promise<T>) => {
+		state.lockActive = true;
+		try {
+			return await operation();
+		} finally {
+			state.lockActive = false;
+		}
+	},
 	find: () =>
 		Promise.resolve({ credentialType: "refresh_token", encryptedSecret: "original-token" }),
 	decryptScoped: (token) => token,
@@ -27,6 +35,7 @@ describe("withPixivClient", () => {
 		updateMatching.mockClear();
 
 		const result = await withPixivClient("user", () => {
+			expect(state.lockActive).toBe(false);
 			expect(updateMatching).toHaveBeenCalledWith("user", "original-token", "rotated-token");
 			return Promise.resolve("bookmarks");
 		});

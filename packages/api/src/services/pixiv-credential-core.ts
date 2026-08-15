@@ -15,8 +15,8 @@ export const createPixivCredentialService =
 		) => Promise<{ count: number }>;
 		withLock: <T>(userId: string, operation: () => Promise<T>) => Promise<T>;
 	}) =>
-	async <T>(userId: string, operation: (client: Client) => Promise<T>) =>
-		dependencies.withLock(userId, async () => {
+	async <T>(userId: string, operation: (client: Client) => Promise<T>) => {
+		const client = await dependencies.withLock(userId, async () => {
 			const credential = await dependencies.find(userId);
 			if (!credential || credential.credentialType !== "refresh_token") {
 				return;
@@ -43,5 +43,12 @@ export const createPixivCredentialService =
 				}
 			}
 
-			return operation(client);
+			return client;
 		});
+
+		if (!client) {
+			return;
+		}
+
+		return operation(client);
+	};
