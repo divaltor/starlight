@@ -27,6 +27,8 @@ const UserProfileSchema = z.object({
 		isPublic: z.boolean(),
 	}),
 	hasValidCookies: z.boolean(),
+	hasPixivCredential: z.boolean(),
+	pixivIncludePrivate: z.boolean(),
 	postingChannel: z
 		.object({
 			id: z.bigint(),
@@ -52,6 +54,11 @@ export const getUserProfile = protectedProcedure
 					isPublic: true,
 					createdAt: true,
 					updatedAt: true,
+					pixivIncludePrivate: true,
+					providerCredentials: {
+						where: { provider: "pixiv" },
+						select: { provider: true },
+					},
 				},
 			}),
 			verifyCookies({ context }),
@@ -71,5 +78,7 @@ export const getUserProfile = protectedProcedure
 				isPublic: userProfile.isPublic,
 			},
 			hasValidCookies: hasValidCookies.hasValidCookies,
+			hasPixivCredential: userProfile.providerCredentials.length > 0,
+			pixivIncludePrivate: userProfile.pixivIncludePrivate,
 		};
 	});

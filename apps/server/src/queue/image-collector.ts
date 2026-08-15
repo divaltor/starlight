@@ -1,13 +1,16 @@
 import { Absurd } from "absurd-sdk";
 import { env, prisma } from "@starlight/utils";
-import { http } from "@starlight/utils/http";
-import type { Tweet } from "@the-convocation/twitter-scraper";
-import UserAgent from "user-agents";
+import sharp from "sharp";
 import { logger } from "@/logger";
 import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { classificationApp } from "@/queue/classification";
 import { findDuplicatesByImageContent } from "@/services/duplicate-detection";
 import { calculatePerceptualHash } from "@/services/image";
+import {
+	MAX_MEDIA_DOWNLOAD_BYTES,
+	MAX_POST_DOWNLOAD_BYTES,
+	readResponseBounded,
+} from "@/services/media-download";
 import { s3 } from "@/storage";
 
 export const imagesApp = new Absurd({
@@ -16,161 +19,140 @@ export const imagesApp = new Absurd({
 	queueName: QUEUES.images,
 });
 
-export interface ImageCollectorJobData {
-	tweet: Tweet;
-	// From database
+export interface MediaCollectorJobData {
 	userId: string;
+	post: {
+		provider: string;
+		externalId: string;
+		sourceUrl: string;
+		authorExternalId?: string;
+		authorName?: string;
+		authorUsername?: string;
+		title?: string;
+		text?: string;
+		providerPayload: object;
+		media: Array<{
+			externalId: string;
+			url: string;
+			kind?: string;
+			position: number;
+			fetchHeaders?: Record<string, string>;
+		}>;
+	};
 }
 
-imagesApp.registerTask<ImageCollectorJobData>({ name: "images-collector" }, async (data) => {
-	const { tweet, userId } = data;
-
-	// Tweet guaranteed to have IDs, fucking types
-	const id = tweet.id!;
-
-	logger.info({ tweetId: tweet.id, userId }, "Processing tweet");
-
-	if (tweet.photos.length === 0) {
-		logger.debug({ tweetId: tweet.id, userId }, "Tweet has no photos, skipping job");
-		return;
-	}
-
-	const userAgent = new UserAgent();
-
-	// We can safely update Tweet record here, because we created Tweet object in scrapper queue
-	const tweetRecord = await prisma.tweet.update({
-		where: { tweetId: { userId, id } },
-		data: {
-			tweetData: tweet,
+imagesApp.registerTask<MediaCollectorJobData>({ name: "images-collector" }, async (data) => {
+	const { post, userId } = data;
+	let downloadedBytes = 0;
+	const postRecord = await prisma.post.upsert({
+		where: { postId: { id: post.externalId, userId, provider: post.provider } },
+		create: {
+			id: post.externalId,
+			userId,
+			provider: post.provider,
+			sourceUrl: post.sourceUrl,
+			authorExternalId: post.authorExternalId,
+			authorName: post.authorName,
+			authorUsername: post.authorUsername,
+			title: post.title,
+			tweetData: { ...post.providerPayload, text: post.text, username: post.authorUsername },
 			photos: {
 				createMany: {
-					data: tweet.photos.map((photo) => ({
-						id: photo.id,
-						originalUrl: photo.url,
+					data: post.media.map((media) => ({
+						id: media.externalId,
+						provider: post.provider,
+						position: media.position,
+						kind: media.kind ?? "image",
+						originalUrl: media.url,
 					})),
-					// Guaranteed that if we'll restart a job then we won't have additional photos in Tweet relation
 					skipDuplicates: true,
 				},
 			},
 		},
-		include: {
-			photos: true,
+		update: {
+			sourceUrl: post.sourceUrl,
+			authorExternalId: post.authorExternalId,
+			authorName: post.authorName,
+			authorUsername: post.authorUsername,
+			title: post.title,
+			tweetData: { ...post.providerPayload, text: post.text, username: post.authorUsername },
+			photos: {
+				createMany: {
+					data: post.media.map((media) => ({
+						id: media.externalId,
+						provider: post.provider,
+						position: media.position,
+						kind: media.kind ?? "image",
+						originalUrl: media.url,
+					})),
+					skipDuplicates: true,
+				},
+			},
 		},
+		include: { photos: true },
 	});
 
-	logger.info(
-		{ tweetId: tweet.id, userId, photos: tweetRecord.photos.length },
-		"Tweet upserted with photos",
-	);
+	for (const media of postRecord.photos) {
+		if (media.s3Path && (media.kind !== "image" || media.perceptualHash)) {
+			continue;
+		}
+		const input = post.media.find((item) => item.externalId === media.id);
+		if (!input) {
+			throw new Error(`Media ${media.id} is missing from collector payload`);
+		}
+		const remainingBytes = MAX_POST_DOWNLOAD_BYTES - downloadedBytes;
+		if (remainingBytes <= 0) {
+			throw new Error("Post media is too large");
+		}
+		const bytes = await readResponseBounded(
+			await fetch(media.originalUrl, { headers: input.fetchHeaders }),
+			Math.min(MAX_MEDIA_DOWNLOAD_BYTES, remainingBytes),
+		);
+		downloadedBytes += bytes.byteLength;
+		const extension = new URL(media.originalUrl).pathname.split(".").at(-1) ?? "jpg";
+		const mediaPath = `media/${post.provider}/${userId}/${media.id}.${extension}`;
 
-	const refreshedPhotoIds = new Set<string>();
-	const refreshTimestamp = new Date();
-
-	for (const photo of tweetRecord.photos) {
-		if (photo.s3Path && photo.perceptualHash) {
-			logger.debug(
-				{
-					tweetId: tweet.id,
-					photoId: photo.id,
-					userId,
-				},
-				"Photo already downloaded; skipping",
-			);
+		if (media.kind !== "image") {
+			await s3.write(mediaPath, bytes);
+			await prisma.media.update({
+				where: { mediaId: { id: media.id, userId, provider: post.provider } },
+				data: { s3Path: mediaPath },
+			});
 			continue;
 		}
 
-		const response = await http(photo.originalUrl, {
-			headers: {
-				"User-Agent": userAgent.toString(),
-			},
-		});
-
-		if (!response.ok) {
-			logger.error(
-				{
-					tweetId: tweet.id,
-					photoUrl: photo.originalUrl,
-					status: response.status,
-					userId,
-				},
-				"Failed to fetch photo",
-			);
-			throw new Error(`Failed to fetch photo ${photo.originalUrl}`);
-		}
-
-		const imageBuffer = await response.arrayBuffer();
-
-		const similarPhotos = await findDuplicatesByImageContent(imageBuffer);
-
-		if (similarPhotos.length > 0) {
-			const existingPhoto = similarPhotos.find((similarPhoto) => similarPhoto.userId === userId);
-
-			if (existingPhoto && !refreshedPhotoIds.has(existingPhoto.id)) {
-				await prisma.photo.update({
-					where: { photoId: { id: existingPhoto.id, userId } },
-					data: { updatedAt: refreshTimestamp },
-				});
-				refreshedPhotoIds.add(existingPhoto.id);
-			}
-
+		const duplicates = await findDuplicatesByImageContent(bytes);
+		if (duplicates.length > 0) {
 			logger.info(
-				{
-					tweetId: tweet.id,
-					photoId: photo.id,
-					userId,
-					refreshedPhotoId: existingPhoto?.id,
-					similarPhotos,
-				},
-				"Found similar photos, skipping saving photo",
+				{ mediaId: media.id, provider: post.provider, userId },
+				"Duplicate media skipped",
 			);
 			continue;
 		}
-
-		const extension = photo.originalUrl.split(".").pop() ?? "jpg";
-
-		const photoName = `${photo.externalId}.${extension}`;
-
 		const [, hash, metadata] = await Promise.all([
-			s3.write(`media/${photoName}`, imageBuffer),
-			calculatePerceptualHash(imageBuffer),
-			new Bun.Image(imageBuffer).metadata().catch(() => ({ height: null, width: null })),
+			s3.write(mediaPath, bytes),
+			calculatePerceptualHash(bytes),
+			sharp(bytes)
+				.metadata()
+				.catch(() => ({ height: null, width: null })),
 		]);
-
-		await prisma.photo.update({
-			where: { photoId: { id: photo.id, userId } },
+		await prisma.media.update({
+			where: { mediaId: { id: media.id, userId, provider: post.provider } },
 			data: {
 				perceptualHash: hash,
-				s3Path: `media/${photoName}`,
+				s3Path: mediaPath,
 				height: metadata.height,
 				width: metadata.width,
 			},
 		});
-
-		// Enqueue classification job
-		try {
-			await classificationApp.spawn(
-				"classification",
-				{ photoId: photo.id, userId },
-				{
-					idempotencyKey: `classify-${photo.id}-${userId}`,
-					maxAttempts: 5,
-					retryStrategy: RETRY.classification,
-				},
-			);
-		} catch (error) {
-			logger.error(
-				{ err: error, photoId: photo.id, userId },
-				"Failed to enqueue classification job",
-			);
-		}
-
-		logger.info(
+		await classificationApp.spawn(
+			"classification",
+			{ photoId: media.id, provider: post.provider, userId },
 			{
-				tweetId: tweet.id,
-				photoId: photo.id,
-				userId,
+				idempotencyKey: `classify-${post.provider}-${userId}-${media.id}`,
+				maxAttempts: 5,
+				retryStrategy: RETRY.classification,
 			},
-			"Photo saved to S3",
 		);
 	}
 });

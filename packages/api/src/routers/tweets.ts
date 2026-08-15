@@ -88,7 +88,7 @@ export const retrieveUserTweets = no
 				}
 			}
 
-			const whereClause: Prisma.TweetWhereInput = {
+			const whereClause: Prisma.PostWhereInput = {
 				userId,
 			};
 
@@ -97,17 +97,22 @@ export const retrieveUserTweets = no
 				whereClause.OR = [
 					{ createdAt: { lt: cursorDate } },
 					{ createdAt: cursorDate, id: { lt: cursorData.lastTweetId } },
+					{
+						createdAt: cursorDate,
+						id: cursorData.lastTweetId,
+						provider: { lt: cursorData.provider ?? "twitter" },
+					},
 				];
 			}
 
-			const tweets = await prisma.tweet.findMany({
+			const tweets = await prisma.post.findMany({
 				where: {
 					...whereClause,
-					...prisma.tweet.available(),
+					...prisma.post.available(),
 				},
 				include: {
 					photos: {
-						where: prisma.photo.available(),
+						where: prisma.media.available(),
 						orderBy: {
 							createdAt: "desc",
 						},
@@ -120,6 +125,7 @@ export const retrieveUserTweets = no
 					{
 						id: "desc",
 					},
+					{ provider: "desc" },
 				],
 				take: limit,
 			});
@@ -132,6 +138,7 @@ export const retrieveUserTweets = no
 				const lastTweet = tweets.at(-1)!;
 				nextCursor = Cursor.create({
 					lastTweetId: lastTweet.id,
+					provider: lastTweet.provider,
 					createdAt: lastTweet.createdAt.toISOString(),
 				});
 			}
@@ -152,9 +159,13 @@ export const retrieveUserTweets = no
 export const deletePhoto = protectedProcedure
 	.input(z.object({ photoId: z.string() }))
 	.handler(async ({ input, context }) => {
-		const photo = await prisma.photo.findFirst({
+		const separator = input.photoId.indexOf(":");
+		const provider = separator === -1 ? "twitter" : input.photoId.slice(0, separator);
+		const externalId = separator === -1 ? input.photoId : input.photoId.slice(separator + 1);
+		const photo = await prisma.media.findFirst({
 			where: {
-				id: input.photoId,
+				id: externalId,
+				provider,
 				userId: context.databaseUserId,
 				deletedAt: null,
 			},
@@ -167,10 +178,11 @@ export const deletePhoto = protectedProcedure
 			});
 		}
 
-		await prisma.photo.update({
+		await prisma.media.update({
 			where: {
-				photoId: {
-					id: input.photoId,
+				mediaId: {
+					id: externalId,
+					provider,
 					userId: context.databaseUserId,
 				},
 			},

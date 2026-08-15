@@ -21,7 +21,7 @@ async function main() {
 	);
 
 	// Find photos with null height or width that have s3Path
-	const photos = await prisma.photo.findMany({
+	const photos = await prisma.media.findMany({
 		where: {
 			deletedAt: null,
 			s3Path: { not: null },
@@ -30,6 +30,7 @@ async function main() {
 		select: {
 			id: true,
 			userId: true,
+			provider: true,
 			s3Path: true,
 			height: true,
 			width: true,
@@ -85,8 +86,14 @@ async function main() {
 
 					if (!DRY_RUN) {
 						// Update photo with dimensions
-						await prisma.photo.update({
-							where: { photoId: { id: photo.id, userId: photo.userId } },
+						await prisma.media.update({
+							where: {
+								mediaId: {
+									id: photo.id,
+									userId: photo.userId,
+									provider: photo.provider,
+								},
+							},
 							data: {
 								height: metadata.height,
 								width: metadata.width,

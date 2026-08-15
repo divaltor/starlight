@@ -8,6 +8,7 @@ interface SimilarPhoto {
 	originalUrl: string;
 	perceptualHash: string;
 	s3Path?: string;
+	sourceUrl: string;
 	tweetId: string;
 	userId: string;
 }
@@ -29,7 +30,7 @@ export async function findSimilarPhotos(
 
 		logger.debug({ prefix, field, maxCandidates }, "Searching for similar photos");
 
-		const candidates = await prisma.photo.findMany({
+		const candidates = await prisma.media.findMany({
 			where: {
 				[field]: prefix,
 				perceptualHash: { not: null },
@@ -48,6 +49,7 @@ export async function findSimilarPhotos(
 				s3Path: true,
 				originalUrl: true,
 				tweetId: true,
+				tweet: { select: { sourceUrl: true } },
 			},
 			take: maxCandidates,
 		});
@@ -72,6 +74,7 @@ export async function findSimilarPhotos(
 						s3Path: candidate.s3Path || undefined,
 						originalUrl: candidate.originalUrl,
 						tweetId: candidate.tweetId,
+						sourceUrl: candidate.tweet.sourceUrl,
 					});
 				}
 			}

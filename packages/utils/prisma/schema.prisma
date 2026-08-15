@@ -20,25 +20,41 @@ enum ChatMemoryScope {
 }
 
 model User {
-  id         String  @id @default(uuid(7)) @db.Uuid
-  telegramId BigInt  @unique @map("telegram_id")
-  username   String? @unique
-  firstName  String  @map("first_name")
-  lastName   String? @map("last_name")
-  isBot      Boolean @default(false) @map("is_bot")
-  isPublic   Boolean @default(false) @map("is_public")
-  cookies    String? @db.Text
+  id                  String  @id @default(uuid(7)) @db.Uuid
+  telegramId          BigInt  @unique @map("telegram_id")
+  username            String? @unique
+  firstName           String  @map("first_name")
+  lastName            String? @map("last_name")
+  isBot               Boolean @default(false) @map("is_bot")
+  isPublic            Boolean @default(false) @map("is_public")
+  cookies             String? @db.Text
+  pixivIncludePrivate Boolean @default(false) @map("pixiv_include_private")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  tweets      Tweet[]
-  photos      Photo[]
-  videos      Video[]
-  chatMembers ChatMember[]
+  posts               Post[]
+  media               Media[]
+  videos              Video[]
+  chatMembers         ChatMember[]
+  providerCredentials ProviderCredential[]
 
   @@map("users")
+}
+
+model ProviderCredential {
+  userId          String   @map("user_id") @db.Uuid
+  provider        String
+  encryptedSecret String   @map("encrypted_secret") @db.Text
+  externalUserId  String?  @map("external_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, provider])
+  @@map("provider_credentials")
 }
 
 model Chat {
@@ -47,7 +63,7 @@ model Chat {
   title    String?
   username String?
 
-	settings Json @default("{}")
+  settings Json @default("{}")
 
   photoThumbnail String? @map("photo_thumbnail")
   photoBig       String? @map("photo_big")
@@ -128,35 +144,42 @@ model ChatMember {
   @@map("chat_members")
 }
 
-model Tweet {
-  id     String
-  userId String @map("user_id") @db.Uuid
+model Post {
+  id               String  @map("external_id")
+  userId           String  @map("user_id") @db.Uuid
+  provider         String  @default("twitter")
+  sourceUrl        String  @map("source_url")
+  authorExternalId String? @map("author_external_id")
+  authorName       String? @map("author_name")
+  authorUsername   String? @map("author_username")
+  title            String?
 
-  /// [TweetType]
-  tweetData Json @map("tweet_data")
+  tweetData Json @map("provider_payload")
 
   // Virtual columns, manually generated in SQL migration
-  tweetText String? @default(dbgenerated()) @map("tweet_text") @db.Text
+  tweetText String? @default(dbgenerated()) @map("text") @db.Text
   username  String? @default(dbgenerated()) @map("username") @db.Text
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  photos Photo[]
+  photos Media[]
   user   User    @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  @@id(name: "tweetId", [id, userId])
+  @@id(name: "postId", [id, userId, provider])
   @@index([userId, createdAt(sort: Desc)])
   @@index([username])
-  @@map("tweets")
+  @@map("posts")
 }
 
-model Photo {
-  // Twitter ID
+model Media {
   id             String
-  tweetId        String  @map("tweet_id")
+  tweetId        String  @map("post_external_id")
   userId         String  @map("user_id") @db.Uuid
+  provider       String  @default("twitter")
+  kind           String  @default("image")
+  position       Int     @default(0)
   s3Path         String? @map("s3_path")
   originalUrl    String  @map("original_url")
   perceptualHash String? @map("perceptual_hash")
@@ -180,10 +203,11 @@ model Photo {
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  tweet Tweet @relation(fields: [tweetId, userId], references: [id, userId], onDelete: Restrict)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tweet Post @relation(fields: [tweetId, userId, provider], references: [id, userId, provider], onDelete: Restrict)
+  user  User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  @@id(name: "photoId", [id, userId])
+  @@id(name: "mediaId", [id, userId, provider])
+  @@unique([tweetId, userId, provider, position])
   @@index([tweetId])
   @@index([perceptualHash])
   @@index([hashBucket4])
@@ -192,7 +216,7 @@ model Photo {
   @@index([s3Path])
   @@index([deletedAt])
   @@index([createdAt(sort: Desc)])
-  @@map("photos")
+  @@map("media")
 }
 
 model Video {
@@ -265,7 +289,7 @@ model Message {
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  chat        Chat         @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  chat        Chat          @relation(fields: [chatId], references: [id], onDelete: Cascade)
   attachments Attachment[]
   parts       MessagePart[]
 
@@ -324,8 +348,8 @@ model Attachment {
 }
 
 model EmbeddingCache {
-  query     BigInt                       @id @map("query")
-  embedding Unsupported("vector(1024)")  @map("embedding")
+  query     BigInt                      @id @map("query")
+  embedding Unsupported("vector(1024)") @map("embedding")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

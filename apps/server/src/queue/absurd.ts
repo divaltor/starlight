@@ -42,6 +42,7 @@ export const QUEUES = {
 	embeddings: "embeddings",
 	images: "images-collector",
 	memory: "chat-memory",
+	pixiv: "pixiv-bookmarks",
 	scrapper: "feed-scrapper",
 } as const;
 
@@ -50,5 +51,6 @@ export const RETRY = {
 	embeddings: { kind: "exponential", baseSeconds: 30, factor: 2 } satisfies RetryStrategy,
 	images: { kind: "exponential", baseSeconds: 10, factor: 2 } satisfies RetryStrategy,
 	memory: { kind: "exponential", baseSeconds: 20, factor: 2 } satisfies RetryStrategy,
+	pixiv: { kind: "exponential", baseSeconds: 150, factor: 2 } satisfies RetryStrategy,
 	scrapper: { kind: "exponential", baseSeconds: 150, factor: 2 } satisfies RetryStrategy,
 } as const;

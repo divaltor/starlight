@@ -2,11 +2,12 @@ import { Absurd } from "absurd-sdk";
 import { CookieEncryption } from "@starlight/crypto";
 import type { User } from "@starlight/utils";
 import { env, prisma } from "@starlight/utils";
-import { type QueryTweetsResponse, Scraper, type Tweet } from "@the-convocation/twitter-scraper";
+import { type QueryTweetsResponse, Scraper } from "@the-convocation/twitter-scraper";
 import { bot } from "@/bot";
 import { logger } from "@/logger";
 import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
 import { imagesApp } from "@/queue/image-collector";
+import type { MediaCollectorJobData } from "@/queue/image-collector";
 import { Cookies } from "@/storage";
 
 const cookieEncryption = new CookieEncryption(
@@ -189,9 +190,10 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 
 	const existingTweetMap = new Map(
 		(
-			await prisma.tweet.findMany({
+			await prisma.post.findMany({
 				where: {
 					userId,
+					provider: "twitter",
 					id: { in: tweetIds },
 					photos: { every: { s3Path: { not: null } } },
 				},
@@ -201,13 +203,7 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 	);
 
 	// Step 2: Process tweets and build batch operations
-	const newTweets: Array<{
-		id: string;
-		userId: string;
-		tweetData: Tweet;
-	}> = [];
-	const updatedTweets: Array<{ id: string; tweetData: Tweet }> = [];
-	const tweetsToQueue: Array<{ tweet: Tweet; userId: string }> = [];
+	const tweetsToQueue: MediaCollectorJobData[] = [];
 
 	let consecutiveKnownTweets = 0;
 	let newTweetsInBatch = 0;
@@ -222,22 +218,31 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 		if (isNewTweet) {
 			consecutiveKnownTweets = 0;
 			newTweetsInBatch++;
-			newTweets.push({
-				id: tweet.id,
-				userId,
-				tweetData: tweet,
-			});
 		} else {
 			consecutiveKnownTweets++;
-			updatedTweets.push({
-				id: tweet.id,
-				tweetData: tweet,
-			});
 		}
 
 		// Only queue tweets with photos for image processing
 		if (tweet.photos.length > 0) {
-			tweetsToQueue.push({ tweet, userId });
+			tweetsToQueue.push({
+				userId,
+				post: {
+					provider: "twitter",
+					externalId: tweet.id,
+					sourceUrl: `https://x.com/i/status/${tweet.id}`,
+					authorExternalId: tweet.userId,
+					authorName: tweet.name,
+					authorUsername: tweet.username,
+					text: tweet.text,
+					providerPayload: tweet,
+					media: tweet.photos.map((photo, position) => ({
+						externalId: photo.id,
+						url: photo.url,
+						position,
+						kind: "image",
+					})),
+				},
+			});
 		}
 
 		// Stop if we've seen too many consecutive known tweets (unless force is enabled)
@@ -255,35 +260,12 @@ scrapperApp.registerTask<ScrapperJobData>({ name: "feed-scrapper" }, async (data
 		}
 	}
 
-	// Step 3: Execute batch operations in transaction
-	await prisma.$transaction(async (tx) => {
-		// Batch create new tweets
-		if (newTweets.length > 0) {
-			await tx.tweet.createMany({
-				data: newTweets,
-				skipDuplicates: true,
-			});
-		}
-
-		// Batch update existing tweets
-		if (updatedTweets.length > 0) {
-			await Promise.all(
-				updatedTweets.map((tweet) =>
-					tx.tweet.update({
-						where: { tweetId: { userId, id: tweet.id } },
-						data: { tweetData: tweet.tweetData },
-					}),
-				),
-			);
-		}
-	});
-
 	// Queue image processing jobs for tweets with photos
 	if (tweetsToQueue.length > 0) {
 		await Promise.all(
 			tweetsToQueue.map((job) =>
 				imagesApp.spawn("images-collector", job, {
-					idempotencyKey: `post-${job.tweet.id}-${job.userId}`,
+					idempotencyKey: `media-twitter-${job.userId}-${job.post.externalId}`,
 					maxAttempts: 3,
 					retryStrategy: RETRY.images,
 				}),

@@ -43,16 +43,16 @@ async function main() {
 		logger.info("Embeddings queue dropped and recreated");
 	}
 
-	const photos = await prisma.$queryRaw<{ id: string; userId: string }[]>`
-		SELECT id, user_id as "userId"
-		FROM photos
+	const photos = await prisma.$queryRaw<{ id: string; provider: string; userId: string }[]>`
+		SELECT external_id AS id, provider, user_id as "userId"
+		FROM media
 		WHERE deleted_at IS NULL
 		  AND s3_path IS NOT NULL
 		  AND (
 			image_vec IS NULL
 			OR tag_vec IS NULL
 		  )
-		ORDER BY id ASC
+		ORDER BY external_id ASC
 	`;
 
 	let enqueued = 0;
@@ -60,7 +60,7 @@ async function main() {
 	if (!DRY_RUN && photos.length > 0) {
 		await Promise.all(
 			photos.map((photo) => {
-				const data = { photoId: photo.id, userId: photo.userId };
+				const data = { photoId: photo.id, provider: photo.provider, userId: photo.userId };
 
 				return FORCE
 					? embeddingsApp.spawn("embeddings", data, {
@@ -68,7 +68,7 @@ async function main() {
 							retryStrategy: RETRY.embeddings,
 						})
 					: embeddingsApp.spawn("embeddings", data, {
-							idempotencyKey: `embed-${data.photoId}-${data.userId}`,
+							idempotencyKey: `embed-${data.provider}-${data.photoId}-${data.userId}`,
 							maxAttempts: 5,
 							retryStrategy: RETRY.embeddings,
 						});

@@ -8,6 +8,7 @@ import type { Classification } from "@/types";
 
 interface ClassificationJobData {
 	photoId: string;
+	provider?: string;
 	requestId?: string;
 	userId: string;
 }
@@ -27,6 +28,7 @@ classificationApp.registerTask<ClassificationJobData>(
 		}
 
 		const { photoId, userId, requestId: incomingRequestId } = params;
+		const provider = params.provider ?? "twitter";
 		const requestId = incomingRequestId || Bun.randomUUIDv7();
 
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
@@ -37,8 +39,8 @@ classificationApp.registerTask<ClassificationJobData>(
 		logger.info({ photoId, userId, requestId }, "Classifying photo");
 
 		// Fetch photo record to get URL
-		const photo = await prisma.photo.findUnique({
-			where: { photoId: { id: photoId, userId } },
+		const photo = await prisma.media.findUnique({
+			where: { mediaId: { id: photoId, userId, provider } },
 			select: {
 				id: true,
 				userId: true,
@@ -101,16 +103,16 @@ classificationApp.registerTask<ClassificationJobData>(
 			throw error;
 		}
 
-		await prisma.photo.update({
-			where: { photoId: { id: photoId, userId } },
+		await prisma.media.update({
+			where: { mediaId: { id: photoId, userId, provider } },
 			data: { classification: data },
 		});
 
 		await embeddingsApp.spawn(
 			"embeddings",
-			{ photoId, userId, requestId },
+			{ photoId, provider, userId, requestId },
 			{
-				idempotencyKey: `embed-${photoId}-${userId}`,
+				idempotencyKey: `embed-${provider}-${photoId}-${userId}`,
 				maxAttempts: 5,
 				retryStrategy: RETRY.embeddings,
 			},

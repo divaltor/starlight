@@ -1,92 +1,52 @@
-import { env, type Photo, type Tweet } from "@starlight/utils";
+import { env, type Media, type Post } from "@starlight/utils";
 import { format } from "date-fns";
-import type { SearchResult, TweetData } from "../types/tweets";
+import type { TweetData } from "../types/tweets";
+import { transformSearchResultsPure } from "./search-transformations";
 
-function transformTweetsBase<T extends Pick<Tweet, "id" | "createdAt" | "username">>(
-	tweets: T[],
-	getPhotos: (tweet: T) => Array<
-		Pick<Photo, "id" | "originalUrl"> & {
-			s3Url?: string;
-			is_nsfw?: boolean;
-			height?: number | null;
-			width?: number | null;
-		}
-	>,
-): TweetData[] {
-	return tweets.map((tweet) => {
-		const photos = getPhotos(tweet).map((photo) => {
-			const extension = photo.originalUrl.split(".").pop() ?? "jpg";
+type TransformMedia = Pick<Media, "id" | "kind" | "originalUrl" | "provider"> & {
+	s3Url?: string;
+	is_nsfw?: boolean;
+	height?: number | null;
+	width?: number | null;
+};
 
-			return {
-				id: photo.id,
-				url: photo.s3Url || photo.originalUrl,
-				is_nsfw: photo.is_nsfw,
-				height: photo.height ?? undefined,
-				width: photo.width ?? undefined,
-				alt: `${tweet.username}-${photo.id}.${extension}`,
-			};
-		});
+type TransformPost = Pick<
+	Post,
+	"authorUsername" | "createdAt" | "id" | "provider" | "sourceUrl" | "username"
+>;
 
+const transformTweetsBase = <T extends TransformPost>(
+	posts: T[],
+	getMedia: (post: T) => TransformMedia[],
+): TweetData[] =>
+	posts.map((post) => {
+		const artist = post.authorUsername ?? post.username;
+		const photos = getMedia(post).map((media) => ({
+			id: media.provider === "twitter" ? media.id : `${media.provider}:${media.id}`,
+			externalId: media.id,
+			provider: media.provider,
+			kind: media.kind,
+			url: media.s3Url ?? media.originalUrl,
+			is_nsfw: media.is_nsfw,
+			height: media.height ?? undefined,
+			width: media.width ?? undefined,
+			alt: `${artist ?? "artist"}-${media.id}.${media.originalUrl.split(".").at(-1) ?? "jpg"}`,
+		}));
 		return {
-			id: tweet.id,
-			artist: tweet.username ? `@${tweet.username}` : "@good_artist",
-			date: format(tweet.createdAt, "MMM d, yyyy"),
+			id: post.provider === "twitter" ? post.id : `${post.provider}:${post.id}`,
+			externalId: post.id,
+			provider: post.provider,
+			artist: artist ? `@${artist}` : "@good_artist",
+			date: format(post.createdAt, "MMM d, yyyy"),
 			photos,
 			hasMultipleImages: photos.length > 1,
-			sourceUrl: `https://x.com/i/status/${tweet.id}`,
+			sourceUrl: post.sourceUrl,
 		};
 	});
-}
 
 export const transformTweets = (
-	tweets: (Tweet & {
-		photos: (Photo & {
-			s3Url: string | undefined;
-			height?: number | null;
-			width?: number | null;
-		})[];
-	})[],
-) => transformTweetsBase(tweets, (t) => t.photos);
+	posts: Array<Post & { photos: Array<Media & { s3Url?: string }> }>,
+) => transformTweetsBase(posts, (post) => post.photos);
 
-export const transformSearchResults = (results: SearchResult[]): TweetData[] => {
-	const grouped = results.reduce(
-		(acc, result) => {
-			const tweetId = result.tweet_id;
-			if (!acc[tweetId]) {
-				acc[tweetId] = {
-					id: tweetId,
-					username: result.username,
-					createdAt: result.tweet_created_at,
-					photos: [],
-				};
-			}
-			acc[tweetId].photos.push({
-				id: result.photo_id,
-				originalUrl: result.original_url,
-				s3Url: result.s3_path ? `${env.BASE_CDN_URL}/${result.s3_path}` : undefined,
-				is_nsfw: result.is_nsfw,
-				height: result.height,
-				width: result.width,
-			});
-			return acc;
-		},
-		{} as Record<
-			string,
-			{
-				id: string;
-				username: string;
-				createdAt: Date;
-				photos: Array<{
-					id: string;
-					originalUrl: string;
-					s3Url?: string;
-					is_nsfw?: boolean;
-					height?: number;
-					width?: number;
-				}>;
-			}
-		>,
-	);
-
-	return transformTweetsBase(Object.values(grouped), (tweet) => tweet.photos);
-};
+export const transformSearchResults = (results: import("../types/tweets").SearchResult[]) =>
+	transformSearchResultsPure(results, env.BASE_CDN_URL);

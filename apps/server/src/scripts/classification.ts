@@ -48,14 +48,14 @@ async function main() {
 	}
 
 	const photos = ALL_PICTURES
-		? await prisma.photo.findMany({
+		? await prisma.media.findMany({
 				where: { deletedAt: null, s3Path: { not: null } },
-				select: { id: true, userId: true },
+				select: { id: true, provider: true, userId: true },
 				orderBy: { id: "asc" },
 			})
-		: await prisma.$queryRaw<{ id: string; userId: string }[]>`
-			SELECT id, user_id as "userId"
-			FROM photos
+		: await prisma.$queryRaw<{ id: string; provider: string; userId: string }[]>`
+			SELECT external_id AS id, provider, user_id as "userId"
+			FROM media
 			WHERE deleted_at IS NULL
 			  AND s3_path IS NOT NULL
 			  AND (
@@ -74,7 +74,7 @@ async function main() {
 	if (!DRY_RUN && photos.length > 0) {
 		await Promise.all(
 			photos.map((photo) => {
-				const data = { photoId: photo.id, userId: photo.userId };
+				const data = { photoId: photo.id, provider: photo.provider, userId: photo.userId };
 
 				return FORCE
 					? classificationApp.spawn("classification", data, {
@@ -82,7 +82,7 @@ async function main() {
 							retryStrategy: RETRY.classification,
 						})
 					: classificationApp.spawn("classification", data, {
-							idempotencyKey: `classify-${data.photoId}-${data.userId}`,
+							idempotencyKey: `classify-${data.provider}-${data.photoId}-${data.userId}`,
 							maxAttempts: 5,
 							retryStrategy: RETRY.classification,
 						});

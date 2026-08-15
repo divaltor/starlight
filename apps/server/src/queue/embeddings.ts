@@ -7,6 +7,7 @@ import { runtime } from "@/services/runtime";
 
 interface ClassificationJobData {
 	photoId: string;
+	provider?: string;
 	requestId?: string;
 	userId: string;
 }
@@ -24,6 +25,7 @@ embeddingsApp.registerTask<ClassificationJobData>({ name: "embeddings" }, async 
 	}
 
 	const { photoId, userId, requestId: incomingRequestId } = params;
+	const provider = params.provider ?? "twitter";
 	const requestId = incomingRequestId || Bun.randomUUIDv7();
 
 	if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
@@ -33,9 +35,9 @@ embeddingsApp.registerTask<ClassificationJobData>({ name: "embeddings" }, async 
 
 	logger.info({ photoId, userId, requestId }, "Generating photo embeddings");
 
-	const photo = await prisma.photo.findUnique({
+	const photo = await prisma.media.findUnique({
 		where: {
-			photoId: { id: photoId, userId },
+			mediaId: { id: photoId, userId, provider },
 			classification: { not: DbNull },
 		},
 		select: {
@@ -76,7 +78,7 @@ embeddingsApp.registerTask<ClassificationJobData>({ name: "embeddings" }, async 
 	const imageVecStr = `[${(result.image ?? []).join(",")}]`;
 
 	await prisma.$executeRaw(
-		Prisma.sql`UPDATE photos SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE id = ${photoId} AND user_id = ${userId}`,
+		Prisma.sql`UPDATE media SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE external_id = ${photoId} AND user_id = ${userId} AND provider = ${provider}`,
 	);
 
 	logger.info({ photoId, userId, requestId }, "Photo embeddings generated");

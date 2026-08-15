@@ -19,6 +19,7 @@ type InlineImageSearchResult = {
 	photo_id: string;
 	s3_path: string;
 	tweet_id: string;
+	source_url: string;
 	username: string | null;
 	height: number | null;
 	width: number | null;
@@ -72,7 +73,7 @@ async function searchInlineImagesWithLegacyQuery(
 
 	while (allPhotos.length < photoOffset + pageQueryLimit) {
 		const { authors, textQuery } = parseInlineImageQuery(query);
-		const whereClause: Prisma.TweetWhereInput = {};
+		const whereClause: Prisma.PostWhereInput = {};
 
 		if (authors.length > 0 && textQuery) {
 			whereClause.AND = [
@@ -95,7 +96,7 @@ async function searchInlineImagesWithLegacyQuery(
 			logger,
 			{ searchMode: "legacy", userId, tweetSkip, pageSize: INLINE_QUERY_PAGE_SIZE },
 			() =>
-				prisma.tweet.findMany({
+				prisma.post.findMany({
 					where: {
 						userId,
 						photos: {
@@ -142,6 +143,7 @@ async function searchInlineImagesWithLegacyQuery(
 					photo_id: photo.id,
 					s3_path: photo.s3Path as string,
 					tweet_id: tweet.id,
+					source_url: tweet.sourceUrl,
 					username: tweet.username,
 					height: photo.height,
 					width: photo.width,
@@ -225,7 +227,7 @@ composer.on("inline_query").filter(
 			200,
 		);
 		const queryTime = new Date().toISOString();
-		const photoDedupeKey = Prisma.sql`COALESCE(NULLIF(p.perceptual_hash, ''), p.id)`;
+		const photoDedupeKey = Prisma.sql`COALESCE(NULLIF(p.perceptual_hash, ''), p.provider || ':' || p.external_id)`;
 
 		const authorFilter =
 			authors.length > 0
@@ -271,10 +273,10 @@ composer.on("inline_query").filter(
 							OR lower(general_tag.value) LIKE ${queryStartsWith}
 							OR lower(general_tag.value) LIKE ${queryContains}
 					)
-					OR lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains}
+					OR lower(COALESCE(t.text, '')) LIKE ${queryContains}
 					OR EXISTS (
 						SELECT 1
-						FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
+						FROM jsonb_array_elements_text(COALESCE(t.provider_payload->'hashtags', '[]'::jsonb)) AS hashtag(value)
 						WHERE lower(hashtag.value) = ${queryLower}
 							OR lower(hashtag.value) LIKE ${queryStartsWith}
 							OR lower(hashtag.value) LIKE ${queryContains}
@@ -334,7 +336,7 @@ composer.on("inline_query").filter(
 								ELSE 0.0
 							END
 						)
-						FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
+						FROM jsonb_array_elements_text(COALESCE(t.provider_payload->'hashtags', '[]'::jsonb)) AS hashtag(value)
 					),
 					0.0
 				)
@@ -342,7 +344,7 @@ composer.on("inline_query").filter(
 			: Prisma.sql`0.0`;
 
 		const tweetTextScore = hasTextQuery
-			? Prisma.sql`CASE WHEN lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END`
+			? Prisma.sql`CASE WHEN lower(COALESCE(t.text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END`
 			: Prisma.sql`0.0`;
 
 		let rankedPhotos: InlineImageSearchResult[] = [];
@@ -366,19 +368,20 @@ composer.on("inline_query").filter(
 						prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH ranked AS (
 						SELECT
-							p.id AS photo_id,
+							p.external_id AS photo_id,
 							p.s3_path,
-							t.id AS tweet_id,
+							t.external_id AS tweet_id,
+							t.source_url,
 							t.username,
 							p.height,
 							p.width,
 							p.created_at AS photo_created_at,
 							ROW_NUMBER() OVER (
 								PARTITION BY ${photoDedupeKey}
-								ORDER BY p.created_at DESC, p.id DESC
+								ORDER BY p.created_at DESC, p.external_id DESC
 							) AS duplicate_rank
-						FROM photos p
-						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						FROM media p
+						JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 						WHERE p.user_id = ${userId}
 							AND p.deleted_at IS NULL
 							AND p.s3_path IS NOT NULL
@@ -388,6 +391,7 @@ composer.on("inline_query").filter(
 						photo_id,
 						s3_path,
 						tweet_id,
+						source_url,
 						username,
 						height,
 						width,
@@ -435,9 +439,9 @@ composer.on("inline_query").filter(
 						() =>
 							prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH image_candidates AS (
-						SELECT p.id, p.user_id
-						FROM photos p
-						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						SELECT p.external_id AS id, p.user_id, p.provider
+						FROM media p
+						JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 						WHERE p.user_id = ${userId}
 							AND p.deleted_at IS NULL
 							AND p.s3_path IS NOT NULL
@@ -449,9 +453,9 @@ composer.on("inline_query").filter(
 						LIMIT ${candidateLimit}
 					),
 					tag_candidates AS (
-						SELECT p.id, p.user_id
-						FROM photos p
-						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						SELECT p.external_id AS id, p.user_id, p.provider
+						FROM media p
+						JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 						WHERE p.user_id = ${userId}
 							AND p.deleted_at IS NULL
 							AND p.s3_path IS NOT NULL
@@ -463,9 +467,9 @@ composer.on("inline_query").filter(
 						LIMIT ${candidateLimit}
 					),
 					lexical_candidates AS (
-						SELECT p.id, p.user_id
-						FROM photos p
-						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						SELECT p.external_id AS id, p.user_id, p.provider
+						FROM media p
+						JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 						WHERE p.user_id = ${userId}
 							AND p.deleted_at IS NULL
 							AND p.s3_path IS NOT NULL
@@ -474,24 +478,25 @@ composer.on("inline_query").filter(
 						LIMIT ${candidateLimit}
 					),
 					candidate_pool AS (
-						SELECT DISTINCT id, user_id
+						SELECT DISTINCT id, user_id, provider
 						FROM (
-							SELECT id, user_id FROM image_candidates
+							SELECT id, user_id, provider FROM image_candidates
 							UNION ALL
-							SELECT id, user_id FROM tag_candidates
+							SELECT id, user_id, provider FROM tag_candidates
 							UNION ALL
-							SELECT id, user_id FROM lexical_candidates
+							SELECT id, user_id, provider FROM lexical_candidates
 						) candidates
 					),
 					scored AS (
 						SELECT
-							p.id AS photo_id,
+							p.external_id AS photo_id,
 							${photoDedupeKey} AS dedupe_key,
 							p.s3_path,
 							p.height,
 							p.width,
 							t.username,
-							t.id AS tweet_id,
+							t.external_id AS tweet_id,
+							t.source_url,
 							t.created_at AS tweet_created_at,
 							COALESCE(1.0 - (p.image_vec <=> ${textVector}::vector), 0.0) AS s_image,
 							COALESCE(1.0 - (p.tag_vec <=> ${textVector}::vector), 0.0) AS s_tag_semantic,
@@ -501,8 +506,8 @@ composer.on("inline_query").filter(
 							${tweetTextScore} AS s_tweet_text,
 							${authorScore} AS s_author
 						FROM candidate_pool c
-						JOIN photos p ON p.id = c.id AND p.user_id = c.user_id
-						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						JOIN media p ON p.external_id = c.id AND p.user_id = c.user_id AND p.provider = c.provider
+						JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 					),
 					fused AS (
 						SELECT
@@ -539,7 +544,7 @@ composer.on("inline_query").filter(
 							) AS duplicate_rank
 						FROM fused
 					)
-					SELECT photo_id, s3_path, tweet_id, username, height, width, final_score
+					SELECT photo_id, s3_path, tweet_id, source_url, username, height, width, final_score
 					FROM deduped
 					WHERE duplicate_rank = 1
 					ORDER BY final_score DESC NULLS LAST, photo_id DESC
@@ -557,21 +562,22 @@ composer.on("inline_query").filter(
 							prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH scored AS (
 						SELECT
-							p.id AS photo_id,
+							p.external_id AS photo_id,
 							${photoDedupeKey} AS dedupe_key,
 							p.s3_path,
 							p.height,
 							p.width,
 							t.username,
-							t.id AS tweet_id,
+							t.external_id AS tweet_id,
+							t.source_url,
 							t.created_at AS tweet_created_at,
 							${characterScore} AS s_character,
 							${tagLexicalScore} AS s_tag_lexical,
 							${hashtagScore} AS s_hashtag,
 							${tweetTextScore} AS s_tweet_text,
 							${authorScore} AS s_author
-						FROM photos p
-						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						FROM media p
+						JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 						WHERE p.user_id = ${userId}
 							AND p.deleted_at IS NULL
 							AND p.s3_path IS NOT NULL
@@ -612,7 +618,7 @@ composer.on("inline_query").filter(
 							) AS duplicate_rank
 						FROM fused
 					)
-					SELECT photo_id, s3_path, tweet_id, username, height, width, final_score
+					SELECT photo_id, s3_path, tweet_id, source_url, username, height, width, final_score
 					FROM deduped
 					WHERE duplicate_rank = 1
 					ORDER BY final_score DESC NULLS LAST, photo_id DESC
@@ -648,8 +654,8 @@ composer.on("inline_query").filter(
 		const results = photosForThisPage.map((photo) => {
 			const photoUrl = `${env.BASE_CDN_URL}/${photo.s3_path}`;
 			const caption = photo.username
-				? FormattedString.link(`@${photo.username}`, `https://x.com/i/status/${photo.tweet_id}`)
-				: new FormattedString(`https://x.com/i/status/${photo.tweet_id}`);
+				? FormattedString.link(`@${photo.username}`, photo.source_url)
+				: new FormattedString(photo.source_url);
 
 			return InlineQueryResultBuilder.photo(photo.photo_id, photoUrl, {
 				caption: caption.caption,

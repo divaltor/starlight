@@ -134,10 +134,10 @@ export const searchImages = maybeAuthProcedure
 							OR lower(general_tag.value) LIKE ${queryStartsWith}
 							OR lower(general_tag.value) LIKE ${queryContains}
 					)
-					OR lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains}
+					OR lower(COALESCE(t.text, '')) LIKE ${queryContains}
 					OR EXISTS (
 						SELECT 1
-						FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
+						FROM jsonb_array_elements_text(COALESCE(t.provider_payload->'hashtags', '[]'::jsonb)) AS hashtag(value)
 						WHERE lower(hashtag.value) = ${queryLower}
 							OR lower(hashtag.value) LIKE ${queryStartsWith}
 							OR lower(hashtag.value) LIKE ${queryContains}
@@ -155,49 +155,53 @@ export const searchImages = maybeAuthProcedure
 
 		const images = await prisma.$queryRaw<SearchResult[]>(Prisma.sql`
 			WITH image_candidates AS (
-				SELECT p.id, p.user_id
-				FROM photos p
+				SELECT p.external_id AS id, p.user_id, p.provider
+				FROM media p
 				WHERE ${baseFilter}
 				ORDER BY p.image_vec <=> ${textQuery}::vector
 				LIMIT ${candidateLimit}
 			),
 			tag_candidates AS (
-				SELECT p.id, p.user_id
-				FROM photos p
+				SELECT p.external_id AS id, p.user_id, p.provider
+				FROM media p
 				WHERE ${baseFilter}
 				ORDER BY p.tag_vec <=> ${textQuery}::vector
 				LIMIT ${candidateLimit}
 			),
 			lexical_candidates AS (
-				SELECT p.id, p.user_id
-				FROM photos p
-				JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+				SELECT p.external_id AS id, p.user_id, p.provider
+				FROM media p
+				JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 				WHERE ${baseFilter}
 					AND ${lexicalMatch}
 				LIMIT ${candidateLimit}
 			),
 			candidate_pool AS (
-				SELECT DISTINCT id, user_id
+				SELECT DISTINCT id, user_id, provider
 				FROM (
-					SELECT id, user_id FROM image_candidates
+					SELECT id, user_id, provider FROM image_candidates
 					UNION ALL
-					SELECT id, user_id FROM tag_candidates
+					SELECT id, user_id, provider FROM tag_candidates
 					UNION ALL
-					SELECT id, user_id FROM lexical_candidates
+					SELECT id, user_id, provider FROM lexical_candidates
 				) candidates
 			),
 				scored AS (
 					SELECT
-						p.id AS photo_id,
+						p.external_id AS photo_id,
 						p.user_id,
-						COALESCE(NULLIF(p.perceptual_hash, ''), p.id) AS dedupe_key,
+						p.provider,
+						p.kind,
+						COALESCE(NULLIF(p.perceptual_hash, ''), p.provider || ':' || p.external_id) AS dedupe_key,
 						p.height,
 						p.width,
 						p.original_url,
 					p.s3_path,
 					t.username,
 					t.created_at AS tweet_created_at,
-					t.id AS tweet_id,
+					t.external_id AS tweet_id,
+					t.provider AS post_provider,
+					t.source_url,
 					COALESCE((p.classification->'nsfw'->>'is_nsfw')::boolean, false) AS is_nsfw,
 					COALESCE(1.0 - (p.image_vec <=> ${textQuery}::vector), 0.0) AS s_image,
 					COALESCE(1.0 - (p.tag_vec <=> ${textQuery}::vector), 0.0) AS s_tag_semantic,
@@ -243,19 +247,21 @@ export const searchImages = maybeAuthProcedure
 									ELSE 0.0
 								END
 							)
-							FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
+							FROM jsonb_array_elements_text(COALESCE(t.provider_payload->'hashtags', '[]'::jsonb)) AS hashtag(value)
 						),
 						0.0
 					) AS s_hashtag,
-					CASE WHEN lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END AS s_tweet_text
+					CASE WHEN lower(COALESCE(t.text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END AS s_tweet_text
 				FROM candidate_pool c
-				JOIN photos p ON p.id = c.id AND p.user_id = c.user_id
-				JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+				JOIN media p ON p.external_id = c.id AND p.user_id = c.user_id AND p.provider = c.provider
+				JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 			),
 			fused AS (
 					SELECT
 						photo_id,
 						user_id,
+						provider,
+						kind,
 						dedupe_key,
 						height,
 						width,
@@ -264,6 +270,8 @@ export const searchImages = maybeAuthProcedure
 					username,
 					tweet_created_at,
 					tweet_id,
+						post_provider,
+						source_url,
 					is_nsfw,
 					(
 						(s_character * 0.44) +
@@ -279,6 +287,8 @@ export const searchImages = maybeAuthProcedure
 					SELECT
 						photo_id,
 						user_id,
+						provider,
+						kind,
 						height,
 						width,
 						original_url,
@@ -286,6 +296,8 @@ export const searchImages = maybeAuthProcedure
 						username,
 						tweet_created_at,
 						tweet_id,
+						post_provider,
+						source_url,
 						is_nsfw,
 						final_score,
 						ROW_NUMBER() OVER (
@@ -298,42 +310,47 @@ export const searchImages = maybeAuthProcedure
 					SELECT
 						tweet_id,
 						user_id,
+						post_provider,
 						final_score,
 						ROW_NUMBER() OVER (
-							PARTITION BY tweet_id
-							ORDER BY final_score DESC NULLS LAST, user_id DESC
+							PARTITION BY tweet_id, user_id, post_provider
+							ORDER BY final_score DESC NULLS LAST
 						) AS post_rank
 					FROM deduped
 					WHERE duplicate_rank = 1
 				),
 				ranked_posts AS (
-					SELECT tweet_id, user_id, final_score
+					SELECT tweet_id, user_id, post_provider, final_score
 					FROM post_candidates
 					WHERE post_rank = 1
 				),
 				paged_posts AS (
-					SELECT tweet_id, user_id, final_score
+					SELECT tweet_id, user_id, post_provider, final_score
 					FROM ranked_posts
 					${paginationClause}
 					ORDER BY final_score DESC NULLS LAST, tweet_id DESC
 					LIMIT ${limit + 1}
 				)
 			SELECT
-				p.id AS photo_id,
+				p.external_id AS photo_id,
+				p.provider,
+				p.kind,
 				p.height,
 				p.width,
 				p.original_url,
 				p.s3_path,
 				t.username,
 				t.created_at AS tweet_created_at,
-				t.id AS tweet_id,
+				t.external_id AS tweet_id,
+				t.provider AS post_provider,
+				t.source_url,
 				COALESCE((p.classification->'nsfw'->>'is_nsfw')::boolean, false) AS is_nsfw,
 				paged_posts.final_score
 			FROM paged_posts
-			JOIN tweets t ON t.id = paged_posts.tweet_id AND t.user_id = paged_posts.user_id
-			JOIN photos p ON p.tweet_id = paged_posts.tweet_id AND p.user_id = paged_posts.user_id
+			JOIN posts t ON t.external_id = paged_posts.tweet_id AND t.user_id = paged_posts.user_id AND t.provider = paged_posts.post_provider
+			JOIN media p ON p.post_external_id = paged_posts.tweet_id AND p.user_id = paged_posts.user_id AND p.provider = paged_posts.post_provider
 			WHERE p.deleted_at IS NULL AND p.s3_path IS NOT NULL
-			ORDER BY paged_posts.final_score DESC NULLS LAST, paged_posts.tweet_id DESC, p.created_at DESC, p.id DESC
+			ORDER BY paged_posts.final_score DESC NULLS LAST, paged_posts.tweet_id DESC, p.created_at DESC, p.external_id DESC
 		`);
 
 		const page = paginateSearchResults(images, limit);
@@ -358,21 +375,25 @@ export const randomImages = publicProcedure.handler(async () => {
 	const images = await prisma.$queryRaw<SearchResult[]>`
         WITH base AS (
             SELECT
-                p.id,
+                p.external_id AS id,
+                p.provider,
+                p.kind,
                 p.height,
                 p.width,
                 p.s3_path,
                 p.original_url,
                 t.username,
                 t.created_at as tweet_created_at,
-                t.id as tweet_id,
+                t.external_id as tweet_id,
+                t.provider as post_provider,
+                t.source_url,
                 (p.classification->>'aesthetic')::float AS aesthetic,
                 (p.classification->'style'->>'anime')::float AS style_anime,
                 (p.classification->'style'->>'real_life')::float AS style_real_life,
                 (p.classification->'style'->>'other')::float AS style_other,
                 (p.classification->'nsfw'->>'is_nsfw')::boolean AS is_nsfw
-			FROM photos p
-			JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+			FROM media p
+			JOIN posts t ON t.external_id = p.post_external_id AND t.user_id = p.user_id AND t.provider = p.provider
 			WHERE p.classification IS NOT NULL 
 			AND p.deleted_at IS NULL
 			AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
@@ -395,6 +416,8 @@ export const randomImages = publicProcedure.handler(async () => {
         fused AS (
             SELECT
                 id as photo_id,
+                provider,
+                kind,
                 height,
                 width,
                 s3_path,
@@ -402,6 +425,8 @@ export const randomImages = publicProcedure.handler(async () => {
                 username,
                 tweet_created_at,
                 tweet_id,
+                post_provider,
+                source_url,
                 is_nsfw,
                 (
                     (1.0 / (rank_style + 60) * 0.9) +
@@ -417,6 +442,8 @@ export const randomImages = publicProcedure.handler(async () => {
         )
         SELECT
             photo_id,
+			provider,
+			kind,
             original_url,
             s3_path,
             username,
@@ -424,6 +451,8 @@ export const randomImages = publicProcedure.handler(async () => {
             width,
             tweet_created_at,
             tweet_id,
+			post_provider,
+			source_url,
             is_nsfw,
             final_score
         FROM top500

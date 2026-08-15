@@ -77,13 +77,17 @@ export const prisma = new PrismaClient({
 				},
 			},
 		},
-		photo: {
+		media: {
 			externalId: {
 				needs: {
 					id: true,
+					provider: true,
 					userId: true,
 				},
-				compute(data: { id: string; userId: string }) {
+				compute(data: { id: string; provider: string; userId: string }) {
+					if (data.provider !== "twitter") {
+						return `${data.provider}:${data.id}`;
+					}
 					// Split Twitter ID into 3 parts to handle large numbers that exceed bigint
 					const id = data.id;
 					const chunkSize = Math.ceil(id.length / 3);
@@ -140,18 +144,13 @@ export const prisma = new PrismaClient({
 		},
 	},
 	model: {
-		photo: {
+		media: {
 			available: () => ({
 				deletedAt: null,
 				s3Path: { not: null },
 			}),
-			unpublished: (chatId: number | string | bigint) => ({
-				deletedAt: null,
-				s3Path: { not: null },
-				publishedPhotos: { none: { chatId: Number(chatId) } },
-			}),
-		} satisfies Record<string, (...args: any) => PrismaGenerated.PhotoWhereInput>,
-		tweet: {
+		} satisfies Record<string, (...args: any) => PrismaGenerated.MediaWhereInput>,
+		post: {
 			available: () => ({
 				photos: {
 					some: {
@@ -160,7 +159,7 @@ export const prisma = new PrismaClient({
 					},
 				},
 			}),
-		} satisfies Record<string, (...args: any) => PrismaGenerated.TweetWhereInput>,
+		} satisfies Record<string, (...args: any) => PrismaGenerated.PostWhereInput>,
 		message: {
 			async hasNewerMessages(params: {
 				chatId: bigint | number;
