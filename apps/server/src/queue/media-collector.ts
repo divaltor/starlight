@@ -70,7 +70,6 @@ mediaCollectorApp.registerTask<MediaCollectorJobData>(
 					createMany: {
 						data: post.media.map((media) => ({
 							id: media.externalId,
-							provider: post.provider,
 							position: media.position,
 							kind: media.kind ?? "image",
 							originalUrl: media.url,
@@ -93,7 +92,6 @@ mediaCollectorApp.registerTask<MediaCollectorJobData>(
 					createMany: {
 						data: post.media.map((media) => ({
 							id: media.externalId,
-							provider: post.provider,
 							position: media.position,
 							kind: media.kind ?? "image",
 							originalUrl: media.url,

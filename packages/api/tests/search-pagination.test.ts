@@ -7,6 +7,7 @@ const row = (postId: string, mediaId: string, finalScore: number): SearchResult 
 	media_id: mediaId,
 	provider: "twitter",
 	user_id: "user-1",
+	kind: "image",
 	original_url: `https://example.com/${mediaId}.jpg`,
 	s3_path: `photos/${mediaId}.jpg`,
 	username: "artist",
