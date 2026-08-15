@@ -13,7 +13,6 @@ export type PixivArtwork = {
 	sourceUrl: string;
 	author: { id: string; name: string; username: string };
 	mediaUrls: string[];
-	payload: Record<string, object | string | number | boolean | null>;
 };
 
 export type PixivBookmarkPage = {
@@ -38,7 +37,6 @@ const mapArtwork = (illust: PixivIllustItem): PixivArtwork => ({
 			: [illust.metaSinglePage.originalImageUrl].filter(
 					(url): url is string => typeof url === "string",
 				),
-	payload: illust as unknown as PixivArtwork["payload"],
 });
 
 export class PixivAdapter {

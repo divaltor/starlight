@@ -1,7 +1,6 @@
 import { CookieEncryption } from "@starlight/crypto";
 import { env, prisma } from "@starlight/utils";
 import { PixivAdapter } from "./pixiv";
-import { executePixivOperation } from "./pixiv-credential-operation";
 
 const PURPOSE = "provider:pixiv:refresh-token";
 const encryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY, env.COOKIE_ENCRYPTION_SALT);
@@ -39,18 +38,30 @@ export const withPixivClient = async <T>(
 			migrated = true;
 		}
 		const client = await PixivAdapter.connect(token);
-		return executePixivOperation({
-			client,
-			originalToken: token,
-			migrated,
-			operation,
-			persistToken: async (refreshToken) => {
+		const outcome = await operation(client).then(
+			(value) => ({ success: true, value }) as const,
+			(error) => ({ success: false, error }) as const,
+		);
+
+		if (migrated || client.refreshToken !== token) {
+			const persistToken = async () => {
 				await prisma.providerCredential.update({
 					where: { userId_provider: { userId, provider: "pixiv" } },
 					data: {
-						encryptedSecret: encryptPixivToken(refreshToken, userId),
+						encryptedSecret: encryptPixivToken(client.refreshToken, userId),
 					},
 				});
-			},
-		});
+			};
+
+			if (outcome.success) {
+				await persistToken();
+			} else {
+				await persistToken().catch(() => undefined);
+			}
+		}
+
+		if (outcome.success) {
+			return outcome.value;
+		}
+		throw outcome.error;
 	});

@@ -126,7 +126,7 @@ pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (dat
 				authorUsername: artwork.author.username,
 				title: artwork.title,
 				text: artwork.caption,
-				providerPayload: { ...artwork.payload, starlightMediaType: artwork.type },
+				providerPayload: { starlightMediaType: artwork.type },
 				media: artwork.mediaUrls.map((url, position) => ({
 					externalId: `${artwork.id}:${position}`,
 					url,
