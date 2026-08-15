@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM reg.mini.dev/bun:latest-dev AS base
+FROM reg.mini.dev/bun:1.3.14-dev AS base
 
 WORKDIR /code
 
@@ -9,7 +9,7 @@ ENV YOUTUBE_DL_SKIP_DOWNLOAD=true
 ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=true
 
 # For Prisma, ffmpeg tooling and the standalone yt-dlp download
-RUN apk add --no-cache openssl ffmpeg zlib curl
+RUN apk add --no-cache openssl=3.5.7-r0 ffmpeg=8.1.2-r0 zlib=1.3.2-r1 curl=8.21.0-r1
 
 # yt-dlp ships self-contained binaries, so no Python runtime is needed
 ARG TARGETARCH
@@ -38,7 +38,7 @@ COPY . .
 # Build tooling can leak back via peers; the runtime never uses it
 RUN rm -rf node_modules/typescript node_modules/@typescript node_modules/@babel bun.lock
 
-FROM reg.mini.dev/bun:latest AS runtime
+FROM reg.mini.dev/bun:1.3.14 AS runtime
 
 WORKDIR /code
 
