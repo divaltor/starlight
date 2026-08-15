@@ -1,4 +1,3 @@
-import path from "node:path";
 import { env } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import { create } from "youtube-dl-exec";
@@ -17,9 +16,7 @@ export interface VideoInformation {
 }
 
 async function createVideoInformation(filePath: string): Promise<VideoInformation> {
-	const parsedPath = path.parse(filePath);
-
-	const infoJsonPath = path.join(parsedPath.dir, `${parsedPath.name}.info.json`);
+	const infoJsonPath = filePath.replace(/\.mp4$/, ".info.json");
 
 	logger.debug({ infoJsonPath }, "Creating video information");
 
@@ -45,7 +42,7 @@ export async function downloadVideoFromUrl(
 	metadata: VideoMetadata = {},
 ): Promise<VideoInformation> {
 	const uuid = Bun.randomUUIDv7();
-	const filePath = path.join(folder, `${uuid}.mp4`);
+	const filePath = `${folder}/${uuid}.mp4`;
 
 	logger.debug({ url }, "Downloading video directly from URL");
 
@@ -87,7 +84,7 @@ export async function downloadVideo(url: string, folder: string): Promise<VideoI
 	const videoInformations: VideoInformation[] = [];
 
 	for await (const filePath of mp4Files) {
-		videoInformations.push(await createVideoInformation(path.join(folder, filePath)));
+		videoInformations.push(await createVideoInformation(`${folder}/${filePath}`));
 	}
 
 	return videoInformations;

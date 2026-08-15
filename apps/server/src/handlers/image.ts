@@ -3,7 +3,6 @@ import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { hasTwitterCookies } from "@starlight/api/services/twitter-credential";
 import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
-import { createHash } from "node:crypto";
 import type { Logger } from "@/logger";
 import { runtime } from "@/services/runtime";
 import type { Context } from "@/types";
@@ -16,10 +15,11 @@ const createInlineImageResultId = (
 	provider: string,
 	externalMediaId: string,
 	userId: string,
-): string =>
-	`m_${createHash("sha256")
-		.update(JSON.stringify(["v1", provider, externalMediaId, userId]))
-		.digest("base64url")}`;
+): string => {
+	const hasher = new Bun.CryptoHasher("sha256");
+	hasher.update(JSON.stringify(["v1", provider, externalMediaId, userId]));
+	return `m_${hasher.digest("base64url")}`;
+};
 
 const createInlineImageDedupeKey = (
 	provider: string,

@@ -378,7 +378,7 @@ export const searchImages = maybeAuthProcedure
 				p.width,
 				p.original_url,
 				p.s3_path,
-				t.username,
+				COALESCE(t.author_username, t.username) AS username,
 				t.created_at AS post_created_at,
 				t.external_id AS post_id,
 				t.provider AS post_provider,

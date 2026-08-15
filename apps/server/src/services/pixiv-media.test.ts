@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import JSZip from "jszip";
 import { readResponseBounded } from "@/services/media-download";
 import { buildFfmpegConcat, extractUgoiraZip, parsePixivArtworkUrl } from "@/services/pixiv-media";
@@ -52,9 +50,9 @@ describe("ugoira conversion input", () => {
 	});
 
 	test("bounds cumulative extraction and removes failed temp directories", async () => {
-		const before = new Set(
-			(await readdir(tmpdir())).filter((name) => name.startsWith("starlight-ugoira-")),
-		);
+		const glob = new Bun.Glob("starlight-ugoira-*");
+		const temporaryDirectory = Bun.env.TMPDIR ?? "/tmp";
+		const before = new Set(await Array.fromAsync(glob.scan({ cwd: temporaryDirectory })));
 		const zip = new JSZip();
 		zip.file("a.jpg", new Uint8Array(8));
 		zip.file("b.jpg", new Uint8Array(8));
@@ -69,7 +67,7 @@ describe("ugoira conversion input", () => {
 				{ uncompressed: 10 },
 			),
 		).rejects.toThrow("too large");
-		const after = (await readdir(tmpdir())).filter((name) => name.startsWith("starlight-ugoira-"));
+		const after = await Array.fromAsync(glob.scan({ cwd: temporaryDirectory }));
 		const leakedDirectories: string[] = [];
 		for (const entry of after) {
 			if (!before.has(entry)) {

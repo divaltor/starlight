@@ -1,6 +1,3 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { withPixivClient } from "@starlight/api/services/pixiv-credential";
 import { Composer, InputFile } from "grammy";
 import { readResponseBounded } from "@/services/media-download";
@@ -15,12 +12,29 @@ import type { Context } from "@/types";
 const MAX_MANGA_BYTES = 150_000_000;
 const pixivHandler = new Composer<Context>();
 
+const createTemporaryDirectory = async () => {
+	const directory = `${Bun.env.TMPDIR ?? "/tmp"}/starlight-pixiv-${Bun.randomUUIDv7()}`;
+	const child = Bun.spawn(["mkdir", "-m", "700", directory], {
+		stdout: "ignore",
+		stderr: "ignore",
+	});
+	if ((await child.exited) !== 0) {
+		throw new Error("Failed to create Pixiv temporary directory");
+	}
+	return directory;
+};
+
+const removeTemporaryDirectory = async (directory: string) => {
+	const child = Bun.spawn(["rm", "-rf", directory], { stdout: "ignore", stderr: "ignore" });
+	await child.exited;
+};
+
 pixivHandler.on("message:text").filter(
 	(ctx) => parsePixivArtworkUrl(ctx.message.text.trim()) !== null,
 	async (ctx) => {
 		const id = parsePixivArtworkUrl(ctx.message.text.trim())!;
 		const user = ctx.user!;
-		const directory = await mkdtemp(join(tmpdir(), "starlight-pixiv-"));
+		const directory = await createTemporaryDirectory();
 		try {
 			const handled = await withPixivClient(user.id, async (client) => {
 				const artwork = await client.artwork(id);
@@ -31,13 +45,13 @@ pixivHandler.on("message:text").filter(
 					);
 					const extracted = await extractUgoiraZip(archive, metadata.frames);
 					try {
-						const output = join(extracted.directory, "ugoira.mp4");
+						const output = `${extracted.directory}/ugoira.mp4`;
 						await convertUgoira(extracted.concatPath, output);
 						await ctx.replyWithVideo(new InputFile(output), {
 							caption: artwork.title,
 						});
 					} finally {
-						await rm(extracted.directory, { recursive: true, force: true });
+						await removeTemporaryDirectory(extracted.directory);
 					}
 					return true;
 				}
@@ -51,8 +65,8 @@ pixivHandler.on("message:text").filter(
 					);
 					aggregateBytes += bytes.byteLength;
 					const extension = new URL(url).pathname.split(".").at(-1) ?? "jpg";
-					const path = join(directory, `${position}.${extension}`);
-					await writeFile(path, bytes);
+					const path = `${directory}/${position}.${extension}`;
+					await Bun.write(path, bytes);
 					files.push(new InputFile(path));
 				}
 				for (let offset = 0; offset < files.length; offset += 10) {
@@ -76,7 +90,7 @@ pixivHandler.on("message:text").filter(
 				await ctx.reply("Connect Pixiv in Settings first.");
 			}
 		} finally {
-			await rm(directory, { recursive: true, force: true });
+			await removeTemporaryDirectory(directory);
 		}
 	},
 );
