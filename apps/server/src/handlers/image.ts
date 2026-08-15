@@ -3,10 +3,7 @@ import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { hasTwitterCookies } from "@starlight/api/services/twitter-credential";
 import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
-import { webAppKeyboard } from "@/bot";
 import type { Logger } from "@/logger";
-import { RETRY } from "@/queue/absurd";
-import { getScheduledScrapperGeneration, scrapperApp } from "@/queue/scrapper";
 import { runtime } from "@/services/runtime";
 import type { Context } from "@/types";
 import {
@@ -768,68 +765,6 @@ privateChat.command("cookies", async (ctx) => {
 		? "Twitter is connected. Use settings to replace or delete your cookies."
 		: "No cookies found. Please set your cookies first.";
 	await ctx.reply(message, { reply_markup: keyboard });
-});
-
-privateChat.command("scrapper", async (ctx) => {
-	const user = ctx.user;
-	if (!(user && (await hasTwitterCookies(user.id)))) {
-		const keyboard = new InlineKeyboard().webApp("Set cookies", {
-			url: `${env.BASE_FRONTEND_URL}/cookies`,
-		});
-		await ctx.reply(
-			"Beep boop, you need to give me your cookies before I can send you daily images.",
-			{ reply_markup: keyboard },
-		);
-		return;
-	}
-
-	const generation = getScheduledScrapperGeneration();
-
-	const scheduledJob = await scrapperApp.spawn(
-		"scheduled-feed-scrapper",
-		{
-			generation,
-			userId: user.id,
-			limit: 300,
-		},
-		{
-			idempotencyKey: `scheduled-scrapper-${user.id}-${generation}`,
-			maxAttempts: 3,
-			retryStrategy: RETRY.scrapper,
-		},
-	);
-
-	if (scheduledJob.created) {
-		ctx.logger.debug({ userId: user.id }, "Scheduled scrapper");
-
-		await scrapperApp.spawn(
-			"feed-scrapper",
-			{ userId: user.id, count: 0, limit: 300 },
-			{
-				maxAttempts: 3,
-				retryStrategy: RETRY.scrapper,
-			},
-		);
-
-		await ctx.reply(
-			"You placed in the queue (runs every 6 hours). You can check your images in a few minutes in your gallery.\n\nYou can start the job anytime by sending /scrapper command again.",
-			{
-				reply_markup: webAppKeyboard("app", "View gallery"),
-			},
-		);
-		return;
-	}
-
-	await scrapperApp.spawn(
-		"feed-scrapper",
-		{ userId: user.id, count: 0, limit: 100 },
-		{
-			maxAttempts: 3,
-			retryStrategy: RETRY.scrapper,
-		},
-	);
-
-	await ctx.reply("Starting to collect images, check back in a few minutes.");
 });
 
 export default composer;

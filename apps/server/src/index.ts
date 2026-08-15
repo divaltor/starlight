@@ -6,6 +6,7 @@ import chatMemberHandler from "@/handlers/chat-member";
 import imageHandler from "@/handlers/image";
 import messageHandler from "@/handlers/message";
 import pixivHandler from "@/handlers/pixiv";
+import scrapperHandler from "@/handlers/scrapper";
 import startHandler from "@/handlers/start";
 import tweetImageHandler from "@/handlers/tweet-image";
 import videoHandler from "@/handlers/video";
@@ -35,6 +36,7 @@ const boundary = bot.errorBoundary((error) => {
 boundary.use(videoHandler);
 boundary.use(pixivHandler);
 boundary.use(tweetImageHandler);
+boundary.use(scrapperHandler);
 boundary.use(imageHandler);
 boundary.use(messageHandler);
 boundary.use(startHandler);
