@@ -6,7 +6,8 @@ import { maybeAuthProcedure } from "../middlewares/auth";
 import { EmbeddingsService } from "../services/embeddings";
 import { runtime } from "../services/runtime";
 import type { SearchResult } from "../types/tweets";
-import { Cursor, type SearchCursorPayload } from "../utils/cursor";
+import { Cursor, isSearchCursorPayload, type SearchCursorPayload } from "../utils/cursor";
+import { paginateSearchResults } from "../utils/search-pagination";
 import { transformSearchResults } from "../utils/transformations";
 
 export const searchImages = maybeAuthProcedure
@@ -81,14 +82,15 @@ export const searchImages = maybeAuthProcedure
 
 		let cursorData: SearchCursorPayload | null = null;
 		if (cursor) {
-			cursorData = Cursor.parse<SearchCursorPayload>(cursor);
+			const parsedCursor = Cursor.parse<unknown>(cursor);
 
-			if (!cursorData) {
+			if (!isSearchCursorPayload(parsedCursor)) {
 				return {
 					results: [],
 					nextCursor: null,
 				};
 			}
+			cursorData = parsedCursor;
 		}
 
 		const queryTime = cursorData?.queryTime ?? new Date().toISOString();
@@ -108,6 +110,7 @@ export const searchImages = maybeAuthProcedure
 
 		const baseFilter = Prisma.sql`
 			p.deleted_at IS NULL
+			AND p.s3_path IS NOT NULL
 			AND p.classification IS NOT NULL
 			AND p.image_vec IS NOT NULL
 			AND p.tag_vec IS NOT NULL
@@ -145,7 +148,10 @@ export const searchImages = maybeAuthProcedure
 			: Prisma.sql`FALSE`;
 
 		const paginationClause = cursorData
-			? Prisma.sql`AND (final_score < ${cursorData.lastScore} OR (final_score = ${cursorData.lastScore} AND photo_id < ${cursorData.lastPhotoId}))`
+			? Prisma.sql`WHERE (
+				final_score < ${cursorData.lastScore}
+				OR (final_score = ${cursorData.lastScore} AND tweet_id < ${cursorData.lastTweetId})
+			)`
 			: Prisma.empty;
 
 		const images = await prisma.$queryRaw<SearchResult[]>(Prisma.sql`
@@ -184,6 +190,7 @@ export const searchImages = maybeAuthProcedure
 				scored AS (
 					SELECT
 						p.id AS photo_id,
+						p.user_id,
 						COALESCE(NULLIF(p.perceptual_hash, ''), p.id) AS dedupe_key,
 						p.height,
 						p.width,
@@ -249,6 +256,7 @@ export const searchImages = maybeAuthProcedure
 			fused AS (
 					SELECT
 						photo_id,
+						user_id,
 						dedupe_key,
 						height,
 						width,
@@ -271,6 +279,7 @@ export const searchImages = maybeAuthProcedure
 				deduped AS (
 					SELECT
 						photo_id,
+						user_id,
 						height,
 						width,
 						original_url,
@@ -282,37 +291,60 @@ export const searchImages = maybeAuthProcedure
 						final_score,
 						ROW_NUMBER() OVER (
 							PARTITION BY dedupe_key
-							ORDER BY final_score DESC NULLS LAST, tweet_created_at DESC, photo_id DESC
+							ORDER BY final_score DESC NULLS LAST, tweet_created_at DESC, photo_id DESC, user_id DESC
 						) AS duplicate_rank
 					FROM fused
+				),
+				post_candidates AS (
+					SELECT
+						tweet_id,
+						user_id,
+						final_score,
+						ROW_NUMBER() OVER (
+							PARTITION BY tweet_id
+							ORDER BY final_score DESC NULLS LAST, user_id DESC
+						) AS post_rank
+					FROM deduped
+					WHERE duplicate_rank = 1
+				),
+				ranked_posts AS (
+					SELECT tweet_id, user_id, final_score
+					FROM post_candidates
+					WHERE post_rank = 1
+				),
+				paged_posts AS (
+					SELECT tweet_id, user_id, final_score
+					FROM ranked_posts
+					${paginationClause}
+					ORDER BY final_score DESC NULLS LAST, tweet_id DESC
+					LIMIT ${limit + 1}
 				)
 			SELECT
-				photo_id,
-				height,
-				width,
-				original_url,
-				s3_path,
-				username,
-				tweet_created_at,
-				tweet_id,
-				is_nsfw,
-				final_score
-			FROM deduped
-			WHERE duplicate_rank = 1
-			${paginationClause}
-			ORDER BY final_score DESC NULLS LAST, photo_id DESC
-			LIMIT ${limit}
+				p.id AS photo_id,
+				p.height,
+				p.width,
+				p.original_url,
+				p.s3_path,
+				t.username,
+				t.created_at AS tweet_created_at,
+				t.id AS tweet_id,
+				COALESCE((p.classification->'nsfw'->>'is_nsfw')::boolean, false) AS is_nsfw,
+				paged_posts.final_score
+			FROM paged_posts
+			JOIN tweets t ON t.id = paged_posts.tweet_id AND t.user_id = paged_posts.user_id
+			JOIN photos p ON p.tweet_id = paged_posts.tweet_id AND p.user_id = paged_posts.user_id
+			WHERE p.deleted_at IS NULL AND p.s3_path IS NOT NULL
+			ORDER BY paged_posts.final_score DESC NULLS LAST, paged_posts.tweet_id DESC, p.created_at DESC, p.id DESC
 		`);
 
-		const transformedResults = transformSearchResults(images);
+		const page = paginateSearchResults(images, limit);
+		const transformedResults = transformSearchResults(page.rows);
 
 		let nextCursor: string | null = null;
-		if (images.length === limit) {
-			// biome-ignore lint/style/noNonNullAssertion: We know there's at least one image
-			const lastImage = images.at(-1)!;
+		if (page.hasNextPage && page.lastPost) {
 			nextCursor = Cursor.create<SearchCursorPayload>({
-				lastScore: lastImage.final_score,
-				lastPhotoId: lastImage.photo_id,
+				lastScore: page.lastPost.final_score,
+				lastTweetId: page.lastPost.tweet_id,
 				queryTime,
 			});
 		}

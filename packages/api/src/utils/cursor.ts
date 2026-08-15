@@ -5,8 +5,23 @@ export type CursorPayload = {
 
 export type SearchCursorPayload = {
 	lastScore: number;
-	lastPhotoId: string;
+	lastTweetId: string;
 	queryTime: string;
+};
+
+export const isSearchCursorPayload = (value: unknown): value is SearchCursorPayload => {
+	if (!value || typeof value !== "object") {
+		return false;
+	}
+	const payload = value as Record<string, unknown>;
+	return (
+		typeof payload.lastScore === "number" &&
+		Number.isFinite(payload.lastScore) &&
+		typeof payload.lastTweetId === "string" &&
+		payload.lastTweetId.length > 0 &&
+		typeof payload.queryTime === "string" &&
+		Number.isFinite(Date.parse(payload.queryTime))
+	);
 };
 
 export const Cursor = {
