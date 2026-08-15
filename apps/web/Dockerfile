@@ -22,6 +22,9 @@ COPY . .
 
 RUN bun run --cwd packages/utils db:generate && bun run --cwd apps/web build
 
+# .output is self-contained: strip files that are never loaded under NODE_ENV=production
+RUN find apps/web/.output/server/node_modules -name "*.development.js" -delete
+
 # Drop dev dependencies and build tooling from the runtime image
 RUN rm -rf node_modules && bun install --production --ignore-scripts --filter web \
 	&& rm -rf node_modules/vite node_modules/vitefu node_modules/esbuild node_modules/@esbuild \
@@ -35,6 +38,7 @@ RUN rm -rf node_modules && bun install --production --ignore-scripts --filter we
 		node_modules/@prisma/streams-local node_modules/prisma-json-types-generator \
 		node_modules/@visx node_modules/ajv node_modules/fast-uri \
 		node_modules/find-my-way node_modules/lodash \
+		node_modules/lucide-react \
 		bun.lock
 
 FROM reg.mini.dev/bun:latest AS runtime

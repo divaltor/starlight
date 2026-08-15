@@ -150,11 +150,11 @@ export default function DiscoverPage() {
 							<div className="max-w-2xl">
 								{isLoading && urlQuery ? (
 									<div className="flex justify-center py-6">
-										{/** biome-ignore lint/correctness/useImageSize: animated loader GIF uses CSS sizing intentionally */}
+										{/** biome-ignore lint/correctness/useImageSize: animated loader uses CSS sizing intentionally */}
 										<img
 											alt="Searching for cute anime girls..."
 											className="mx-auto h-auto w-64"
-											src="/suisei-hq.gif"
+											src="/suisei-hq.webp"
 										/>
 									</div>
 								) : (

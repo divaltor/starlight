@@ -36,7 +36,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 			},
 			{
 				property: "og:image",
-				content: "/og.png",
+				content: "/og.webp",
 			},
 			{
 				property: "twitter:card",
@@ -52,7 +52,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 			},
 			{
 				name: "twitter:image",
-				content: "/og.png",
+				content: "/og.webp",
 			},
 		],
 		links: [
@@ -85,8 +85,12 @@ function RootDocument() {
 						</NuqsAdapter>
 					</StrictMode>
 				</TelegramButtonsProvider>
-				<TanStackRouterDevtools position="bottom-left" />
-				<ReactQueryDevtools buttonPosition="bottom-right" position="bottom" />
+				{import.meta.env.DEV && (
+					<>
+						<TanStackRouterDevtools position="bottom-left" />
+						<ReactQueryDevtools buttonPosition="bottom-right" position="bottom" />
+					</>
+				)}
 				<Scripts />
 			</body>
 		</html>

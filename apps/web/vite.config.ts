@@ -10,12 +10,17 @@ export default defineConfig({
 			compatibilityDate: "2025-10-17",
 			preset: "bun",
 			minify: true,
-			sourceMap: true,
+			sourceMap: false,
 		}),
 		tailwindcss(),
 		tanstackStart(),
 		viteReact(),
 	],
+	ssr: {
+		// Bundle lucide-react into the server build so only used icons ship,
+		// instead of the whole CJS package being copied verbatim.
+		noExternal: ["lucide-react"],
+	},
 	resolve: { tsconfigPaths: true },
 	server: { allowedHosts: true },
 	build: {
@@ -24,6 +29,12 @@ export default defineConfig({
 				manualChunks(id) {
 					if (id.includes("@telegram-apps/")) return "telegram-sdk";
 					if (id.includes("valibot")) return "telegram-sdk";
+					if (
+						id.includes("node_modules/react/") ||
+						id.includes("node_modules/react-dom/") ||
+						id.includes("node_modules/scheduler")
+					)
+						return "react-vendor";
 				},
 			},
 		},
