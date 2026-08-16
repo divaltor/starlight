@@ -22,50 +22,43 @@ type ScrapperConnections = {
 
 const composer = new Composer<Context>();
 const privateChat = composer.chatType("private");
-const scrapperConnections = new WeakMap<Context, Promise<ScrapperConnections>>();
 
-function getScrapperConnections(ctx: Context) {
-	let connections = scrapperConnections.get(ctx);
-	if (!connections) {
-		const user = ctx.user!;
-		connections = Promise.allSettled([
-			hasTwitterCookies(user.id),
-			prisma.providerCredential.findUnique({
-				where: { userId_provider: { userId: user.id, provider: "pixiv" } },
-				select: { credentialType: true },
-			}),
-		]).then(([twitter, pixivCredential]) => {
-			if (twitter.status === "rejected") {
-				ctx.logger.warn(
-					{ error: twitter.reason, userId: user.id, provider: "twitter" },
-					"Failed to check provider connection",
-				);
-			}
-			if (pixivCredential.status === "rejected") {
-				ctx.logger.warn(
-					{ error: pixivCredential.reason, userId: user.id, provider: "pixiv" },
-					"Failed to check provider connection",
-				);
-			}
-
-			return {
-				twitter:
-					twitter.status === "rejected"
-						? "lookup-failed"
-						: twitter.value
-							? "connected"
-							: "disconnected",
-				pixiv:
-					pixivCredential.status === "rejected"
-						? "lookup-failed"
-						: pixivCredential.value?.credentialType === "refresh_token"
-							? "connected"
-							: "disconnected",
-			};
-		});
-		scrapperConnections.set(ctx, connections);
+async function getScrapperConnections(ctx: Context): Promise<ScrapperConnections> {
+	const user = ctx.user!;
+	const [twitter, pixivCredential] = await Promise.allSettled([
+		hasTwitterCookies(user.id),
+		prisma.providerCredential.findUnique({
+			where: { userId_provider: { userId: user.id, provider: "pixiv" } },
+			select: { credentialType: true },
+		}),
+	]);
+	if (twitter.status === "rejected") {
+		ctx.logger.warn(
+			{ error: twitter.reason, userId: user.id, provider: "twitter" },
+			"Failed to check provider connection",
+		);
 	}
-	return connections;
+	if (pixivCredential.status === "rejected") {
+		ctx.logger.warn(
+			{ error: pixivCredential.reason, userId: user.id, provider: "pixiv" },
+			"Failed to check provider connection",
+		);
+	}
+
+	return {
+		twitter:
+			twitter.status === "rejected"
+				? "lookup-failed"
+				: twitter.value
+					? "connected"
+					: "disconnected",
+		pixiv:
+			pixivCredential.status === "rejected"
+				? "lookup-failed"
+				: pixivCredential.value?.credentialType === "refresh_token"
+					? "connected"
+					: "disconnected",
+	};
 }
 
 async function startTwitterCollection(
@@ -162,13 +155,13 @@ async function startPixivCollection(
 	};
 }
 
-privateChat.command("scrapper").filter(
-	async (ctx) => {
-		const connections = await getScrapperConnections(ctx);
-		return connections.twitter !== "connected" && connections.pixiv !== "connected";
-	},
-	async (ctx) => {
-		const connections = await getScrapperConnections(ctx);
+privateChat.command("scrapper", async (ctx) => {
+	const user = ctx.user!;
+	const connections = await getScrapperConnections(ctx);
+	const hasConnectedProvider =
+		connections.twitter === "connected" || connections.pixiv === "connected";
+
+	if (!hasConnectedProvider) {
 		const lookupFailures = [
 			connections.twitter === "lookup-failed" && "• Twitter: connection check failed.",
 			connections.pixiv === "lookup-failed" && "• Pixiv: connection check failed.",
@@ -186,17 +179,7 @@ privateChat.command("scrapper").filter(
 				: "Connect Twitter or Pixiv in Settings before starting collection.",
 			{ reply_markup: keyboard },
 		);
-	},
-);
-
-privateChat.command("scrapper").filter(
-	async (ctx) => {
-		const connections = await getScrapperConnections(ctx);
-		return connections.twitter === "connected" || connections.pixiv === "connected";
-	},
-	async (ctx) => {
-		const user = ctx.user!;
-		const connections = await getScrapperConnections(ctx);
+	} else {
 		const [twitter, pixiv] = await Promise.all([
 			connections.twitter === "connected"
 				? startTwitterCollection(user.id, ctx.update.update_id, ctx.logger)
@@ -234,7 +217,7 @@ privateChat.command("scrapper").filter(
 			].join("\n"),
 			{ reply_markup: webAppKeyboard("app", "View gallery") },
 		);
-	},
-);
+	}
+});
 
 export default composer;
