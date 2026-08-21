@@ -1,5 +1,6 @@
 import { FormattedString } from "@grammyjs/parse-mode";
 import { CookieEncryption } from "@starlight/crypto";
+import { resolveQueryEmbedding } from "@starlight/api/services/embedding-cache";
 import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
@@ -186,35 +187,15 @@ function parseInlineImageQuery(query: string) {
 	};
 }
 
-async function getInlineQueryEmbedding(query: string) {
+function getInlineQueryEmbedding(query: string) {
 	if (!(env.ENABLE_EMBEDDINGS && env.ML_BASE_URL && env.ML_API_TOKEN)) {
-		return null;
+		return Promise.resolve<number[] | null>(null);
 	}
 
-	const queryHash = BigInt.asIntN(64, BigInt(Bun.hash.xxHash3(query)));
-
-	const [cached] = await prisma.$queryRaw<{ embedding: string }[]>(
-		Prisma.sql`SELECT embedding FROM embedding_cache WHERE query = ${queryHash}`,
+	return resolveQueryEmbedding(
+		() => runtime.runPromise(EmbeddingsService.Service.use((s) => s.generateText(query))),
+		query,
 	);
-
-	if (cached) {
-		return JSON.parse(cached.embedding) as number[];
-	}
-
-	const text = await runtime.runPromise(
-		EmbeddingsService.Service.use((s) => s.generateText(query)),
-	);
-
-	if (!text) {
-		throw new Error("Inline image search embeddings failed");
-	}
-
-	const vecStr = `[${text.join(",")}]`;
-	await prisma.$executeRaw(
-		Prisma.sql`INSERT INTO embedding_cache (query, embedding, updated_at) VALUES (${queryHash}, ${vecStr}::vector, NOW()) ON CONFLICT (query) DO UPDATE SET embedding = EXCLUDED.embedding, updated_at = NOW()`,
-	);
-
-	return text;
 }
 
 interface InlineLexicalFragmentInputs {

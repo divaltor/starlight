@@ -3,6 +3,7 @@ import { env, Prisma, prisma } from "@starlight/utils";
 import { z } from "zod";
 import { publicProcedure } from "..";
 import { maybeAuthProcedure } from "../middlewares/auth";
+import { resolveQueryEmbedding } from "../services/embedding-cache";
 import { EmbeddingsService } from "../services/embeddings";
 import { runtime } from "../services/runtime";
 import type { SearchResult } from "../types/tweets";
@@ -10,37 +11,6 @@ import { Cursor, SearchCursorPayloadSchema } from "../utils/cursor";
 import type { SearchCursorPayload } from "../utils/cursor";
 import { paginateSearchResults } from "../utils/search-pagination";
 import { transformSearchResults } from "../utils/transformations";
-
-// Returns the embedding for a query, using the database cache and falling back
-// to the embeddings service (the result of which is written back to the cache).
-async function resolveQueryEmbedding(requestId: string, query: string): Promise<number[]> {
-	const hashedQuery = BigInt.asIntN(64, BigInt(Bun.hash.xxHash3(query)));
-
-	const [cached] = await prisma.$queryRaw<{ embedding: string }[]>(
-		Prisma.sql`SELECT embedding FROM embedding_cache WHERE query = ${hashedQuery}`,
-	);
-
-	if (cached) {
-		return JSON.parse(cached.embedding) as number[];
-	}
-
-	const result = await runtime.runPromise(
-		EmbeddingsService.Service.use((s) => s.generateText(query, requestId)),
-	);
-
-	if (!result) {
-		throw new ORPCError("Failed to search images", {
-			status: 500,
-		});
-	}
-
-	const vecStr = `[${result.join(",")}]`;
-	await prisma.$executeRaw(
-		Prisma.sql`INSERT INTO embedding_cache (query, embedding, updated_at) VALUES (${hashedQuery}, ${vecStr}::vector, NOW()) ON CONFLICT (query) DO UPDATE SET embedding = EXCLUDED.embedding, updated_at = NOW()`,
-	);
-
-	return result;
-}
 
 export const searchImages = maybeAuthProcedure
 	.input(
@@ -60,7 +30,6 @@ export const searchImages = maybeAuthProcedure
 		const query = input.query.trim();
 		const { cursor, limit, ownOnly } = input;
 
-		// If ownOnly is true, require authentication
 		if (ownOnly && !user) {
 			throw new ORPCError("UNAUTHORIZED", {
 				message: "Authentication required for personal search",
@@ -68,7 +37,6 @@ export const searchImages = maybeAuthProcedure
 			});
 		}
 
-		// Get database user ID if searching own tweets
 		let databaseUserId: string | null = null;
 		if (ownOnly && user) {
 			const dbUser = await prisma.user.findUnique({
@@ -84,7 +52,18 @@ export const searchImages = maybeAuthProcedure
 			databaseUserId = dbUser.id;
 		}
 
-		const text = await resolveQueryEmbedding(context.requestId, query);
+		const { requestId } = context;
+		const text = await resolveQueryEmbedding(
+			() =>
+				runtime.runPromise(EmbeddingsService.Service.use((s) => s.generateText(query, requestId))),
+			query,
+		);
+
+		if (!text) {
+			throw new ORPCError("Failed to search images", {
+				status: 500,
+			});
+		}
 
 		let cursorData: SearchCursorPayload | null = null;
 		if (cursor) {
@@ -107,7 +86,6 @@ export const searchImages = maybeAuthProcedure
 		const candidateLimit = Math.max(limit * 8, 200);
 		const hasLexicalQuery = queryLower.length > 0;
 
-		// Build user filter based on ownOnly flag
 		const userFilter =
 			ownOnly && databaseUserId
 				? Prisma.sql`p.user_id = ${databaseUserId}`
