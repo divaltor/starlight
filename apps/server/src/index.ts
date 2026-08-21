@@ -9,12 +9,12 @@ import startHandler from "@/handlers/start";
 import tweetImageHandler from "@/handlers/tweet-image";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
-import { QUEUES } from "@/queue/absurd";
-import { classificationApp } from "@/queue/classification";
-import { embeddingsApp } from "@/queue/embeddings";
-import { imagesApp } from "@/queue/image-collector";
-import { memoryApp } from "@/queue/memory";
-import { scrapperApp } from "@/queue/scrapper";
+import { classificationQueue, classificationWorker } from "@/queue/classification";
+import { embeddingsQueue, embeddingsWorker } from "@/queue/embeddings";
+import { imagesQueue, imagesWorker } from "@/queue/image-collector";
+import { memoryQueue, memoryWorker } from "@/queue/memory";
+import { scrapperQueue, scrapperWorker } from "@/queue/scrapper";
+import { redis } from "@/storage";
 
 initTelemetry();
 
@@ -37,71 +37,32 @@ boundary.use(messageHandler);
 boundary.use(startHandler);
 boundary.use(chatMemberHandler);
 
-await Promise.all(
-	[imagesApp, classificationApp, embeddingsApp, scrapperApp, memoryApp].map(async (app) => {
-		await app.createQueue();
-		await app.setQueuePolicy(undefined, {
-			cleanupLimit: 2000,
-			cleanupTtl: "1 day",
-		});
-	}),
-);
-const workers = await Promise.all([
-	imagesApp.startWorker({
-		batchSize: 3,
-		concurrency: 3,
-		onError: (error) => logger.error({ err: error }, "Images worker error"),
-		workerId: QUEUES.images,
-	}),
-	classificationApp.startWorker({
-		batchSize: 1,
-		claimTimeout: 60 * 5,
-		concurrency: 1,
-		onError: (error) => logger.error({ err: error }, "Classification worker error"),
-		workerId: QUEUES.classification,
-	}),
-	embeddingsApp.startWorker({
-		batchSize: 1,
-		claimTimeout: 60 * 5,
-		concurrency: 1,
-		onError: (error) => logger.error({ err: error }, "Embeddings worker error"),
-		workerId: QUEUES.embeddings,
-	}),
-	scrapperApp.startWorker({
-		batchSize: 1,
-		concurrency: 1,
-		onError: (error) => logger.error({ err: error }, "Scrapper worker error"),
-		workerId: QUEUES.scrapper,
-	}),
-	memoryApp.startWorker({
-		batchSize: 2,
-		claimTimeout: 60 * 5,
-		concurrency: 2,
-		onError: (error) => logger.error({ err: error }, "Memory worker error"),
-		workerId: QUEUES.memory,
-	}),
-]);
-const queueApps = [imagesApp, classificationApp, embeddingsApp, scrapperApp, memoryApp];
+const workers = [
+	imagesWorker,
+	classificationWorker,
+	embeddingsWorker,
+	scrapperWorker,
+	memoryWorker,
+];
+const queues = [imagesQueue, classificationQueue, embeddingsQueue, scrapperQueue, memoryQueue];
 const runner = run(bot);
+
+for (const worker of workers) {
+	worker.run().catch((error) => logger.error({ err: error }, "Queue worker stopped"));
+}
 
 logger.info("Bot is running...");
 
-process.once("SIGINT", async () => {
+async function shutdown() {
 	logger.info("Stopping bot...");
 	if (runner.isRunning()) {
 		await runner.stop();
 	}
 	await Promise.all(workers.map((worker) => worker.close()));
-	await Promise.all(queueApps.map((app) => app.close()));
+	await Promise.all(queues.map((queue) => queue.close()));
+	await redis.quit();
 	await shutdownTelemetry();
-});
+}
 
-process.once("SIGTERM", async () => {
-	logger.info("Stopping bot...");
-	if (runner.isRunning()) {
-		await runner.stop();
-	}
-	await Promise.all(workers.map((worker) => worker.close()));
-	await Promise.all(queueApps.map((app) => app.close()));
-	await shutdownTelemetry();
-});
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);

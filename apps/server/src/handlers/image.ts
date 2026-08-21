@@ -5,8 +5,7 @@ import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { webAppKeyboard } from "@/bot";
 import type { Logger } from "@/logger";
-import { RETRY } from "@/queue/absurd";
-import { getScheduledScrapperGeneration, scrapperApp } from "@/queue/scrapper";
+import { scrapperQueue } from "@/queue/scrapper";
 import { runtime } from "@/services/runtime";
 import { Cookies } from "@/storage";
 import type { Context } from "@/types";
@@ -729,31 +728,20 @@ privateChat.command("scrapper").filter(
 	async (ctx) => Boolean(ctx.user?.cookies),
 	async (ctx) => {
 		const user = ctx.user!;
-		const generation = getScheduledScrapperGeneration();
+		const schedulerId = `scrapper-${user.id}`;
+		const scheduledJob = await scrapperQueue.getJobScheduler(schedulerId);
 
-		const scheduledJob = await scrapperApp.spawn(
-			"scheduled-feed-scrapper",
-			{
-				generation,
-				userId: user.id,
-				limit: 300,
-			},
-			{
-				idempotencyKey: `scheduled-scrapper-${user.id}-${generation}`,
-				maxAttempts: 3,
-				retryStrategy: RETRY.scrapper,
-			},
-		);
-
-		if (scheduledJob.created) {
+		if (!scheduledJob) {
 			ctx.logger.debug({ userId: user.id }, "Scheduled scrapper");
 
-			await scrapperApp.spawn(
-				"feed-scrapper",
-				{ userId: user.id, count: 0, limit: 300 },
+			await scrapperQueue.upsertJobScheduler(
+				schedulerId,
 				{
-					maxAttempts: 3,
-					retryStrategy: RETRY.scrapper,
+					every: 1000 * 60 * 60 * 6,
+				},
+				{
+					data: { userId: user.id, count: 0, limit: 300 },
+					name: schedulerId,
 				},
 			);
 
@@ -763,19 +751,15 @@ privateChat.command("scrapper").filter(
 					reply_markup: webAppKeyboard("app", "View gallery"),
 				},
 			);
-			return;
+		} else {
+			await scrapperQueue.add(
+				"scrapper",
+				{ userId: user.id, count: 0, limit: 100 },
+				{ deduplication: { id: schedulerId } },
+			);
+
+			await ctx.reply("Starting to collect images, check back in a few minutes.");
 		}
-
-		await scrapperApp.spawn(
-			"feed-scrapper",
-			{ userId: user.id, count: 0, limit: 100 },
-			{
-				maxAttempts: 3,
-				retryStrategy: RETRY.scrapper,
-			},
-		);
-
-		await ctx.reply("Starting to collect images, check back in a few minutes.");
 	},
 );
 

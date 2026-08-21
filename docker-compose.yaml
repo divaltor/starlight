@@ -1,4 +1,13 @@
 services:
+  valkey:
+    image: reg.mini.dev/valkey-bundle:v9.1.1
+    ports:
+      - 6379:6379
+    volumes:
+      - valkey_data:/data
+    networks:
+      - starlight
+
   postgresql:
     image: pgvector/pgvector:pg17-trixie
     environment:
@@ -19,6 +28,7 @@ services:
     env_file:
       - apps/server/.env
     depends_on:
+      - valkey
       - postgresql
     networks:
       - starlight
@@ -48,6 +58,7 @@ services:
       - starlight
 
 volumes:
+  valkey_data:
   postgresql_data:
 
 networks:

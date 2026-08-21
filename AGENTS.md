@@ -1,14 +1,14 @@
 ## Architecture & Data Flow
 
 ```
-Bot/Mini App ──> Scraper (Absurd) ──> AI (CLIP/pHash) ──> PostgreSQL (pgvector) <── API (oRPC)
+Bot/Mini App ──> Scraper (BullMQ/Valkey) ──> AI (CLIP/pHash) ──> PostgreSQL (pgvector) <── API (oRPC)
 ```
 
 ## Project Structure
 
 | Path              | Purpose                                                             |
 | ----------------- | ------------------------------------------------------------------- |
-| `apps/server`     | Grammy Telegram bot, and Absurd worker implementations.             |
+| `apps/server`     | Grammy Telegram bot and BullMQ worker implementations.              |
 | `apps/web`        | React 19 Telegram Mini App dashboard (Uber-style aesthetics).       |
 | `packages/api`    | API Layer: oRPC router definitions and shared contract types.       |
 | `packages/utils`  | Infrastructure: Prisma schema, database client, and business logic. |

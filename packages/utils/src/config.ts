@@ -39,6 +39,7 @@ const env = createEnv({
 			),
 
 		DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
+		REDIS_URL: z.url({ protocol: /^rediss?$/ }),
 
 		CORS_ORIGIN: z.string().default("http://localhost:3001"),
 
