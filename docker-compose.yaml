@@ -1,6 +1,6 @@
 services:
   valkey:
-    image: reg.mini.dev/valkey-bundle:v9.1.1
+    image: reg.mini.dev/valkey:v9.1.1
     ports:
       - 6379:6379
     volumes:
