@@ -42,3 +42,15 @@
 html {
 	scrollbar-gutter: stable;
 }
+
+@theme {
+	--animate-fade-in: fade-in 0.7s ease-in-out both;
+
+	/* Opacity only: must not animate transform, it would fight the inline
+	   translate(-50%, -50%) used to center the floating photos. */
+	@keyframes fade-in {
+		from {
+			opacity: 0;
+		}
+	}
+}

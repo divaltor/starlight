@@ -33,7 +33,6 @@ export default function DiscoverPage() {
 	const [urlQuery, setUrlQuery] = useQueryState("q", parseAsString.withDefault(""));
 	const [inputValue, setInputValue] = useState(urlQuery);
 	const [isLargeScreen, setIsLargeScreen] = useState(false);
-	const [visibleIndices, setVisibleIndices] = useState<number[]>([]);
 
 	const inputPosition: "initial" | "bottom" = urlQuery ? "bottom" : "initial";
 	const showExamples = !urlQuery;
@@ -105,24 +104,6 @@ export default function DiscoverPage() {
 		const layout = new LayoutManager(100, 100);
 		return layout.placeTweets(randomImages);
 	}, [randomImages]);
-
-	useEffect(() => {
-		if (placedData.length > 0 && randomQuery.isSuccess && !isLoading && results.length === 0) {
-			const timeouts: NodeJS.Timeout[] = [];
-			for (let i = 0; i < placedData.length; i++) {
-				const item = placedData[i];
-				const timer = setTimeout(() => {
-					setVisibleIndices((prev) => [...prev, item.index]);
-				}, i * 500);
-				timeouts.push(timer);
-			}
-			return () => {
-				for (const timeout of timeouts) {
-					clearTimeout(timeout);
-				}
-			};
-		}
-	}, [placedData, randomQuery.isSuccess, isLoading, results.length]);
 
 	return (
 		<div className="flex min-h-screen flex-col bg-base-100">
@@ -228,17 +209,14 @@ export default function DiscoverPage() {
 				results.length === 0 && (
 					<Suspense fallback={null}>
 						<div className="pointer-events-none absolute inset-0 overflow-hidden">
-							{placedData.map(({ position, index }) => {
+							{placedData.map(({ position, index }, i) => {
 								const tweet = randomImages[index];
-								const isVisible = visibleIndices.includes(index);
 								return (
 									<div
-										className={cn(
-											"pointer-events-auto absolute transition-opacity duration-700 ease-in-out",
-											isVisible ? "opacity-85" : "opacity-0",
-										)}
+										className="pointer-events-auto absolute animate-fade-in opacity-85"
 										key={tweet.id}
 										style={{
+											animationDelay: `${i * 500}ms`,
 											top: `${position.top}%`,
 											left: `${position.left}%`,
 											width: "250px",
