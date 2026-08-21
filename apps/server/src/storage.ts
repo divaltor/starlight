@@ -1,12 +1,9 @@
+import { RedisClient } from "bun";
 import { env } from "@starlight/utils";
-import Redis from "ioredis";
+import { createBunRedisClient } from "bullmq";
 import { Cookie } from "tough-cookie";
 
-export const redis = new Redis(env.REDIS_URL, {
-	connectTimeout: 3000,
-	enableReadyCheck: true,
-	maxRetriesPerRequest: null,
-});
+export const redis = createBunRedisClient(new RedisClient(env.REDIS_URL));
 
 export interface RFC6265Cookie {
 	domain: string;
