@@ -1,8 +1,10 @@
 import env from "@starlight/utils/config";
-import { Output, generateText, isStepCount, type ModelMessage, type ToolSet } from "ai";
+import { Output, generateText, isStepCount } from "ai";
+import type { ModelMessage, ToolSet } from "ai";
 import { Effect } from "effect";
 import * as Llm from "@/ai/llm";
-import { chatResponseSchema, type ChatResponse } from "@/ai/schema";
+import { chatResponseSchema } from "@/ai/schema";
+import type { ChatResponse } from "@/ai/schema";
 import { createWebLookupTool, WEB_LOOKUP_TOOL_ID } from "@/ai/tools/web";
 import type { ToolResultPart } from "@/types";
 
@@ -19,7 +21,7 @@ export interface GenerateResult {
 	readonly messageParts: ToolResultPart[];
 }
 
-export const generate = Effect.fn("ChatReply.generate")(function* (
+export const generate = Effect.fn("ChatReply.generate")(function* generate(
 	input: GenerateInput,
 ): Effect.fn.Return<GenerateResult, Llm.Error> {
 	const messageParts: ToolResultPart[] = [];

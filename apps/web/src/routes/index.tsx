@@ -5,6 +5,7 @@ import { Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
+
 const TweetImageGrid = lazy(() =>
 	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
 );

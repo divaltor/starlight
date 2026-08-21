@@ -14,7 +14,7 @@ const INLINE_QUERY_PAGE_SIZE = 50;
 const INLINE_QUERY_CANDIDATE_MULTIPLIER = 8;
 const INLINE_QUERY_AUTHOR_REGEX = /(^|\s)@([A-Za-z0-9_]+)/g;
 
-type InlineImageSearchResult = {
+interface InlineImageSearchResult {
 	photo_id: string;
 	s3_path: string;
 	tweet_id: string;
@@ -22,7 +22,7 @@ type InlineImageSearchResult = {
 	height: number | null;
 	width: number | null;
 	final_score: number;
-};
+}
 
 async function runInlineImageQuery<T>(
 	logger: Logger,
@@ -162,7 +162,7 @@ function parseInlineImageQuery(query: string) {
 
 	return {
 		authors: [...new Set(authors)],
-		textQuery: query.replace(INLINE_QUERY_AUTHOR_REGEX, " ").replace(/\s+/g, " ").trim(),
+		textQuery: query.replace(INLINE_QUERY_AUTHOR_REGEX, " ").replaceAll(/\s+/g, " ").trim(),
 	};
 }
 
@@ -173,7 +173,7 @@ async function getInlineQueryEmbedding(query: string) {
 
 	const queryHash = BigInt.asIntN(64, BigInt(Bun.hash.xxHash3(query)));
 
-	const [cached] = await prisma.$queryRaw<Array<{ embedding: string }>>(
+	const [cached] = await prisma.$queryRaw<{ embedding: string }[]>(
 		Prisma.sql`SELECT embedding FROM embedding_cache WHERE query = ${queryHash}`,
 	);
 
@@ -347,58 +347,7 @@ composer.on("inline_query").filter(
 		let rankedPhotos: InlineImageSearchResult[] = [];
 
 		if (userId) {
-			if (!hasTextQuery) {
-				const recencyAuthorFilter =
-					authors.length > 0
-						? Prisma.sql`AND (${Prisma.join(
-								authors.map(
-									(author) => Prisma.sql`strpos(lower(COALESCE(t.username, '')), ${author}) > 0`,
-								),
-								" OR ",
-							)})`
-						: Prisma.empty;
-
-				rankedPhotos = await runInlineImageQuery(
-					ctx.logger,
-					{ searchMode: "recency", userId, photoOffset, pageQueryLimit },
-					() =>
-						prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
-					WITH ranked AS (
-						SELECT
-							p.id AS photo_id,
-							p.s3_path,
-							t.id AS tweet_id,
-							t.username,
-							p.height,
-							p.width,
-							p.created_at AS photo_created_at,
-							ROW_NUMBER() OVER (
-								PARTITION BY ${photoDedupeKey}
-								ORDER BY p.created_at DESC, p.id DESC
-							) AS duplicate_rank
-						FROM photos p
-						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
-						WHERE p.user_id = ${userId}
-							AND p.deleted_at IS NULL
-							AND p.s3_path IS NOT NULL
-							${recencyAuthorFilter}
-					)
-					SELECT
-						photo_id,
-						s3_path,
-						tweet_id,
-						username,
-						height,
-						width,
-						0.0 AS final_score
-					FROM ranked
-					WHERE duplicate_rank = 1
-					ORDER BY photo_created_at DESC, photo_id DESC
-					OFFSET ${photoOffset}
-					LIMIT ${pageQueryLimit}
-					`),
-				);
-			} else {
+			if (hasTextQuery) {
 				let textEmbedding: number[] | null = null;
 				let shouldUseLegacyQuery = false;
 
@@ -620,6 +569,57 @@ composer.on("inline_query").filter(
 						`),
 					);
 				}
+			} else {
+				const recencyAuthorFilter =
+					authors.length > 0
+						? Prisma.sql`AND (${Prisma.join(
+								authors.map(
+									(author) => Prisma.sql`strpos(lower(COALESCE(t.username, '')), ${author}) > 0`,
+								),
+								" OR ",
+							)})`
+						: Prisma.empty;
+
+				rankedPhotos = await runInlineImageQuery(
+					ctx.logger,
+					{ searchMode: "recency", userId, photoOffset, pageQueryLimit },
+					() =>
+						prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+					WITH ranked AS (
+						SELECT
+							p.id AS photo_id,
+							p.s3_path,
+							t.id AS tweet_id,
+							t.username,
+							p.height,
+							p.width,
+							p.created_at AS photo_created_at,
+							ROW_NUMBER() OVER (
+								PARTITION BY ${photoDedupeKey}
+								ORDER BY p.created_at DESC, p.id DESC
+							) AS duplicate_rank
+						FROM photos p
+						JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
+						WHERE p.user_id = ${userId}
+							AND p.deleted_at IS NULL
+							AND p.s3_path IS NOT NULL
+							${recencyAuthorFilter}
+					)
+					SELECT
+						photo_id,
+						s3_path,
+						tweet_id,
+						username,
+						height,
+						width,
+						0.0 AS final_score
+					FROM ranked
+					WHERE duplicate_rank = 1
+					ORDER BY photo_created_at DESC, photo_id DESC
+					OFFSET ${photoOffset}
+					LIMIT ${pageQueryLimit}
+					`),
+				);
 			}
 		}
 
@@ -731,7 +731,15 @@ privateChat.command("scrapper").filter(
 		const schedulerId = `scrapper-${user.id}`;
 		const scheduledJob = await scrapperQueue.getJobScheduler(schedulerId);
 
-		if (!scheduledJob) {
+		if (scheduledJob) {
+			await scrapperQueue.add(
+				"scrapper",
+				{ userId: user.id, count: 0, limit: 100 },
+				{ deduplication: { id: schedulerId } },
+			);
+
+			await ctx.reply("Starting to collect images, check back in a few minutes.");
+		} else {
 			ctx.logger.debug({ userId: user.id }, "Scheduled scrapper");
 
 			await scrapperQueue.upsertJobScheduler(
@@ -751,14 +759,6 @@ privateChat.command("scrapper").filter(
 					reply_markup: webAppKeyboard("app", "View gallery"),
 				},
 			);
-		} else {
-			await scrapperQueue.add(
-				"scrapper",
-				{ userId: user.id, count: 0, limit: 100 },
-				{ deduplication: { id: schedulerId } },
-			);
-
-			await ctx.reply("Starting to collect images, check back in a few minutes.");
 		}
 	},
 );

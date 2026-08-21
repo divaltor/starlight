@@ -1,7 +1,8 @@
 import { CookieEncryption } from "@starlight/crypto";
 import type { User } from "@starlight/utils";
 import { env, prisma } from "@starlight/utils";
-import { type QueryTweetsResponse, Scraper, type Tweet } from "@the-convocation/twitter-scraper";
+import { Scraper } from "@the-convocation/twitter-scraper";
+import type { QueryTweetsResponse, Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, Worker } from "bullmq";
 import { bot } from "@/bot";
 import { logger } from "@/logger";
@@ -34,7 +35,7 @@ export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
 export const scrapperWorker = new Worker<ScrapperJobData>(
 	"feed-scrapper",
 	async (job) => {
-		const data = job.data;
+		const { data } = job;
 		const { userId } = data;
 
 		logger.info({ userId, cursor: data.cursor, jobData: data }, "Scraping timeline");
@@ -72,7 +73,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			cookiesJson = cookieEncryption.safeDecrypt(userCookies, user.telegramId.toString());
 		} catch (error) {
 			logger.error({ err: error, userId }, "Failed to decrypt user cookies");
-			throw new Error("Failed to decrypt user cookies");
+			throw new Error("Failed to decrypt user cookies", { cause: error });
 		}
 
 		const cookies = Cookies.fromJSON(cookiesJson);
@@ -131,13 +132,13 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		);
 
 		// Step 2: Process tweets and build batch operations
-		const newTweets: Array<{
+		const newTweets: {
 			id: string;
 			userId: string;
 			tweetData: Tweet;
-		}> = [];
-		const updatedTweets: Array<{ id: string; tweetData: Tweet }> = [];
-		const tweetsToQueue: Array<{ tweet: Tweet; userId: string }> = [];
+		}[] = [];
+		const updatedTweets: { id: string; tweetData: Tweet }[] = [];
+		const tweetsToQueue: { tweet: Tweet; userId: string }[] = [];
 
 		let consecutiveKnownTweets = 0;
 		let newTweetsInBatch = 0;

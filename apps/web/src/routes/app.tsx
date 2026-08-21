@@ -7,6 +7,7 @@ import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
 import { useCallback, useEffect, useState, lazy, Suspense } from "react";
 import NotFound from "@/components/not-found";
+
 const TweetImageGrid = lazy(() =>
 	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
 );

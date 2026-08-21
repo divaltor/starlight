@@ -17,7 +17,7 @@ export class EmptyOutputError extends Schema.TaggedErrorClass<EmptyOutputError>(
 	},
 ) {}
 
-export const summarize = Effect.fn("MemorySummarizer.summarize")(function* (
+export const summarize = Effect.fn("MemorySummarizer.summarize")(function* summarize(
 	input: SummarizeInput,
 ): Effect.fn.Return<string, EmptyOutputError | Llm.Error> {
 	const text = yield* Llm.invoke(

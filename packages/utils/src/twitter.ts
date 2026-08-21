@@ -18,9 +18,9 @@ export function cleanupTweetText(text: string | undefined): string | undefined {
 	return (
 		text
 			// Remove all hashtags
-			.replace(/#[\p{L}0-9_]+/gu, "")
+			.replaceAll(/#[\p{L}0-9_]+/gu, "")
 			// Remove all URLs
-			.replace(/https?:\/\/\S+/g, "")
+			.replaceAll(/https?:\/\/\S+/g, "")
 			.trim()
 	);
 }

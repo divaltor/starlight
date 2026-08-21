@@ -3,7 +3,8 @@ import type { NextFunction } from "grammy";
 import type { Message } from "grammy/types";
 import { scheduleChatMemorySummaries } from "@/queue/memory";
 import type { Context } from "@/types";
-import { Attachment, type SavedAttachment } from "@/utils/attachment";
+import { Attachment } from "@/utils/attachment";
+import type { SavedAttachment } from "@/utils/attachment";
 
 function detectMediaType(msg: Message): string | null {
 	if (msg.photo) return "photo";

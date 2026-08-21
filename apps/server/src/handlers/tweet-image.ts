@@ -1,11 +1,8 @@
 import { env, extractTweetId, isTwitterUrl } from "@starlight/utils";
 import { Composer, GrammyError, InlineKeyboard, InlineQueryResultBuilder, InputFile } from "grammy";
 import { renderTweetImage } from "@/services/render";
-import {
-	generateTweetImage,
-	prepareTweetData,
-	type Theme,
-} from "@/services/tweet/tweet-image.service";
+import { generateTweetImage, prepareTweetData } from "@/services/tweet/tweet-image.service";
+import type { Theme } from "@/services/tweet/tweet-image.service";
 import { runtime } from "@/services/runtime";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";

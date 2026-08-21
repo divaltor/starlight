@@ -31,8 +31,8 @@ export function TelegramButtonsProvider({ children }: { children: React.ReactNod
 	const canGoBack = useCanGoBack();
 
 	// Simple configuration using TanStack Router's built-in navigation state
-	const currentConfig = useMemo(() => {
-		return {
+	const currentConfig = useMemo(
+		() => ({
 			// Settings button always visible
 			settingsButton: {
 				state: "visible" as const,
@@ -54,8 +54,9 @@ export function TelegramButtonsProvider({ children }: { children: React.ReactNod
 						},
 					}
 				: undefined,
-		};
-	}, [canGoBack, router]);
+		}),
+		[canGoBack, router],
+	);
 
 	const buttonManager = useTelegramButtons(currentConfig, {
 		autoCleanup: true,

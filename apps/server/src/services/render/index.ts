@@ -1,4 +1,5 @@
-import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
+import { createCanvas } from "@napi-rs/canvas";
+import type { SKRSContext2D } from "@napi-rs/canvas";
 import { format } from "date-fns";
 import { logger } from "@/logger";
 import {
@@ -13,7 +14,8 @@ import {
 } from "./draw";
 import { getFontFamily, registerFonts } from "./fonts";
 import { LAYOUT } from "./layout";
-import { type Theme, type ThemeColors, themes } from "./themes";
+import { themes } from "./themes";
+import type { Theme, ThemeColors } from "./themes";
 
 export type { Theme } from "./themes";
 
@@ -47,13 +49,13 @@ export interface TweetData {
 			url: string;
 			width: number;
 		};
-		photos?: Array<{ url: string; width: number; height: number }>;
-		videos?: Array<{
+		photos?: { url: string; width: number; height: number }[];
+		videos?: {
 			thumbnailUrl: string;
 			width: number;
 			height: number;
 			type: "video" | "gif";
-		}>;
+		}[];
 	} | null;
 	quote?: TweetData | null;
 	replies?: number | null;
@@ -248,7 +250,7 @@ function calculateArticleLayout(
 	);
 
 	const height = Math.floor(
-		(coverMediaHeight > 0 ? coverMediaHeight : 0) +
+		Math.max(coverMediaHeight, 0) +
 			ARTICLE_PADDING * 2 +
 			titleHeight +
 			LAYOUT.TEXT_GAP +
@@ -553,7 +555,7 @@ async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
 			inline: true,
 		});
 
-		let replyTextStartY = yOffset + REPLY_FONT_SIZE_NAME + LAYOUT.TEXT_GAP;
+		const replyTextStartY = yOffset + REPLY_FONT_SIZE_NAME + LAYOUT.TEXT_GAP;
 
 		const replyTextY = drawTextLines({
 			ctx,
@@ -750,7 +752,7 @@ async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
 		inline: true,
 	});
 
-	let quoteTextStartY = quoteY + QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP;
+	const quoteTextStartY = quoteY + QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP;
 
 	quoteY = drawTextLines({
 		ctx,

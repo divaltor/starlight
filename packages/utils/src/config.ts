@@ -19,7 +19,7 @@ function parseTelegramIdList(
 
 		const numericId = Number(id);
 		if (!Number.isSafeInteger(numericId)) {
-			throw new Error(`${envKey} contains unsafe integer ID: ${id}`);
+			throw new TypeError(`${envKey} contains unsafe integer ID: ${id}`);
 		}
 
 		return numericId;

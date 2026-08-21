@@ -1,4 +1,5 @@
-import { Scraper, type Tweet } from "@the-convocation/twitter-scraper";
+import { Scraper } from "@the-convocation/twitter-scraper";
+import type { Tweet } from "@the-convocation/twitter-scraper";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
 import {
 	FetchHttpClient,
@@ -6,7 +7,7 @@ import {
 	HttpClientRequest,
 	HttpClientResponse,
 } from "effect/unstable/http";
-import { Cookies } from "@/storage";
+import type { Cookies } from "@/storage";
 import { FxEmbedResponseSchema } from "@/services/fxembed/types";
 import type { FxEmbedTweet } from "@/services/fxembed/types";
 
@@ -40,7 +41,10 @@ export namespace TwitterApi {
 
 	export class Service extends Context.Service<Service, Interface>()("starlight/TwitterApi") {}
 
-	const getTweet = Effect.fn("TwitterApi.getTweet")(function* (tweetId: string, cookies: Cookies) {
+	const getTweet = Effect.fn("TwitterApi.getTweet")(function* getTweet(
+		tweetId: string,
+		cookies: Cookies,
+	) {
 		return yield* Effect.tryPromise({
 			try: async () => {
 				const scraper = new Scraper({ experimental: { xClientTransactionId: false, xpff: false } });
@@ -56,7 +60,7 @@ export namespace TwitterApi {
 		});
 	});
 
-	export const getFxTweet = Effect.fn("TwitterApi.getFxTweet")(function* (
+	export const getFxTweet = Effect.fn("TwitterApi.getFxTweet")(function* getFxTweet(
 		tweetId: string,
 		translateTo?: string,
 	) {
@@ -66,10 +70,10 @@ export namespace TwitterApi {
 
 	export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
 		Service,
-		Effect.gen(function* () {
+		Effect.gen(function* layer() {
 			const client = yield* HttpClient.HttpClient;
 
-			const getFxTweet = Effect.fn("TwitterApi.getFxTweet")(function* (
+			const getFxTweet = Effect.fn("TwitterApi.getFxTweet")(function* getFxTweet(
 				tweetId: string,
 				translateTo?: string,
 			) {

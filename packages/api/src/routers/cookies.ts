@@ -2,7 +2,8 @@ import { ORPCError } from "@orpc/client";
 import { CookieEncryption } from "@starlight/crypto";
 import { env, prisma } from "@starlight/utils";
 import { z } from "zod";
-import { type AuthContext, protectedProcedure } from "../middlewares/auth";
+import { protectedProcedure } from "../middlewares/auth";
+import type { AuthContext } from "../middlewares/auth";
 
 const cookiesSchema = z.object({
 	cookies: z.string(),

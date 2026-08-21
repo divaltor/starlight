@@ -1,9 +1,11 @@
 import { ORPCError } from "@orpc/client";
-import { type Prisma, prisma, type User } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
+import type { Prisma, User } from "@starlight/utils";
 import { z } from "zod";
 import { no } from "..";
 import { maybeAuthProcedure, protectedProcedure } from "../middlewares/auth";
-import { Cursor, CursorPayloadSchema, type CursorPayload } from "../utils/cursor";
+import { Cursor, CursorPayloadSchema } from "../utils/cursor";
+import type { CursorPayload } from "../utils/cursor";
 import { transformTweets } from "../utils/transformations";
 
 const TweetsQuery = z.object({

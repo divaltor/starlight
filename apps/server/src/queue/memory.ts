@@ -1,9 +1,5 @@
-import {
-	ChatMemoryScope,
-	attachmentLabelFromMimeType,
-	type Prisma,
-	prisma,
-} from "@starlight/utils";
+import { ChatMemoryScope, attachmentLabelFromMimeType, prisma } from "@starlight/utils";
+import type { Prisma } from "@starlight/utils";
 import { Effect } from "effect";
 import { Queue, Worker } from "bullmq";
 import * as MemorySummarizer from "@/ai/memory-summarizer";
@@ -166,7 +162,7 @@ function formatWindowMessage(
 
 	if (hasText) {
 		// biome-ignore lint/style/noNonNullAssertion: hasText guarantees rawContent is non-null
-		body = rawContent!.replace(/\s+/g, " ").trim();
+		body = rawContent!.replaceAll(/\s+/g, " ").trim();
 	} else if (entry.attachments.length > 0) {
 		const labels = entry.attachments.map((attachment) =>
 			attachmentLabelFromMimeType(attachment.mimeType),

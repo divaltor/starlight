@@ -2,7 +2,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import Sqids from "sqids";
 import { parse as uuidParse } from "uuid";
 import env from "./config";
-import { PrismaClient, type Prisma as PrismaGenerated } from "./generated/prisma/client";
+import { PrismaClient } from "./generated/prisma/client";
+import type { Prisma as PrismaGenerated } from "./generated/prisma/client";
 
 const sqids = new Sqids({
 	minLength: 12,
@@ -34,18 +35,15 @@ const onlyNotDeletedMessages = <
 	return args;
 };
 
-const isMessageReadOperation = (operation: string) => {
-	return (
-		operation === "findUnique" ||
-		operation === "findUniqueOrThrow" ||
-		operation === "findMany" ||
-		operation === "findFirst" ||
-		operation === "findFirstOrThrow" ||
-		operation === "count" ||
-		operation === "aggregate" ||
-		operation === "groupBy"
-	);
-};
+const isMessageReadOperation = (operation: string) =>
+	operation === "findUnique" ||
+	operation === "findUniqueOrThrow" ||
+	operation === "findMany" ||
+	operation === "findFirst" ||
+	operation === "findFirstOrThrow" ||
+	operation === "count" ||
+	operation === "aggregate" ||
+	operation === "groupBy";
 
 export const prisma = new PrismaClient({
 	log: env.NODE_ENV === "production" ? ["warn", "error"] : ["info", "warn", "error"],
@@ -85,7 +83,7 @@ export const prisma = new PrismaClient({
 				},
 				compute(data: { id: string; userId: string }) {
 					// Split Twitter ID into 3 parts to handle large numbers that exceed bigint
-					const id = data.id;
+					const { id } = data;
 					const chunkSize = Math.ceil(id.length / 3);
 
 					const parts = [

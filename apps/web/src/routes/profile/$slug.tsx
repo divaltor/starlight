@@ -3,6 +3,7 @@ import { createFileRoute, useParams } from "@tanstack/react-router";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback, lazy, Suspense } from "react";
 import { NotFound } from "@/components/not-found";
+
 const TweetImageGrid = lazy(() => import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })));
 import { useTweets } from "@/hooks/use-tweets";
 import { orpc } from "@/utils/orpc";

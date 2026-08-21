@@ -1,4 +1,4 @@
-export type SearchResult = {
+export interface SearchResult {
 	photo_id: string;
 	original_url: string;
 	s3_path: string;
@@ -9,32 +9,32 @@ export type SearchResult = {
 	height: number;
 	width: number;
 	final_score: number;
-};
+}
 
-export type PhotoData = {
+export interface PhotoData {
 	id: string;
 	url: string;
 	is_nsfw?: boolean;
 	height?: number;
 	width?: number;
 	alt: string;
-};
+}
 
-export type TweetData = {
+export interface TweetData {
 	id: string;
 	artist: string;
 	date: string;
 	photos: PhotoData[];
 	hasMultipleImages: boolean;
 	sourceUrl?: string;
-};
+}
 
-export type TweetsPageResult = {
+export interface TweetsPageResult {
 	tweets: TweetData[];
 	nextCursor: string | null;
-};
+}
 
-export type SearchPageResult = {
+export interface SearchPageResult {
 	results: TweetData[];
 	nextCursor: string | null;
-};
+}

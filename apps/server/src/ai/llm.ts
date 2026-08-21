@@ -1,5 +1,6 @@
 import env from "@starlight/utils/config";
-import { APICallError, type LanguageModel } from "ai";
+import { APICallError } from "ai";
+import type { LanguageModel } from "ai";
 import { Effect, Schema } from "effect";
 import { getLangfuseTelemetry } from "@/otel";
 import { openrouter } from "@/utils/message";

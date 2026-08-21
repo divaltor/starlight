@@ -6,7 +6,8 @@ import { maybeAuthProcedure } from "../middlewares/auth";
 import { EmbeddingsService } from "../services/embeddings";
 import { runtime } from "../services/runtime";
 import type { SearchResult } from "../types/tweets";
-import { Cursor, SearchCursorPayloadSchema, type SearchCursorPayload } from "../utils/cursor";
+import { Cursor, SearchCursorPayloadSchema } from "../utils/cursor";
+import type { SearchCursorPayload } from "../utils/cursor";
 import { paginateSearchResults } from "../utils/search-pagination";
 import { transformSearchResults } from "../utils/transformations";
 
@@ -55,7 +56,7 @@ export const searchImages = maybeAuthProcedure
 		const hashedQuery = BigInt.asIntN(64, BigInt(Bun.hash.xxHash3(query)));
 		let text: number[];
 
-		const [cached] = await prisma.$queryRaw<Array<{ embedding: string }>>(
+		const [cached] = await prisma.$queryRaw<{ embedding: string }[]>(
 			Prisma.sql`SELECT embedding FROM embedding_cache WHERE query = ${hashedQuery}`,
 		);
 

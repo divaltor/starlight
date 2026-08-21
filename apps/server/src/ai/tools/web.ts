@@ -1,12 +1,13 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { lookupWebPage, searchWeb } from "@/services/web";
-import { FetchPageToolResultPart, SearchToolResultPart, type ToolResultPart } from "@/types";
+import { FetchPageToolResultPart, SearchToolResultPart } from "@/types";
+import type { ToolResultPart } from "@/types";
 
 export const WEB_LOOKUP_TOOL_ID = "web_lookup";
 
-const MAX_PAGE_CONTENT_LENGTH = 6_000;
-const MAX_SEARCH_CONTENT_LENGTH = 2_000;
+const MAX_PAGE_CONTENT_LENGTH = 6000;
+const MAX_SEARCH_CONTENT_LENGTH = 2000;
 const MAX_SEARCH_RESULTS = 5;
 
 function looksLikeUrl(value: string): boolean {
@@ -28,7 +29,7 @@ export function createWebLookupTool(messageParts: ToolResultPart[]) {
 			query: z.string().min(3).max(300).optional().describe('Required when mode="search".'),
 		}),
 		execute: async ({ mode, url, query }) => {
-			const lookupTarget = mode === "url" ? url : query && looksLikeUrl(query) ? query : undefined;
+			const lookupTarget = mode === "url" ? url : (query && looksLikeUrl(query) ? query : undefined);
 
 			if (lookupTarget) {
 				const page = await lookupWebPage(lookupTarget);

@@ -13,10 +13,10 @@ import {
 	restoreInitData,
 	retrieveLaunchParams,
 	setDebug,
-	type ThemeParams,
 	themeParamsState,
 	viewport,
 } from "@telegram-apps/sdk-react";
+import type { ThemeParams } from "@telegram-apps/sdk-react";
 
 export interface InitOptions {
 	debug?: boolean;

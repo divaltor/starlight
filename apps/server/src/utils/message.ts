@@ -181,7 +181,7 @@ function hasBotAliasMention(msg: Message, botAliases: readonly string[]): boolea
 	return botAliases.some((alias) => {
 		const normalizedAlias = alias.trim().toLowerCase();
 
-		const escapedAlias = normalizedAlias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		const escapedAlias = normalizedAlias.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 		const aliasPattern = new RegExp(
 			`(?:^|[^\\p{L}\\p{N}_@])${escapedAlias}(?:$|[^\\p{L}\\p{N}_])`,
@@ -223,7 +223,7 @@ function isLowSignalMessageText(text: string): boolean {
 
 	const tokens = normalized
 		.split(/\s+/)
-		.map((token) => token.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ""))
+		.map((token) => token.toLowerCase().replaceAll(/[^\p{L}\p{N}]+/gu, ""))
 		.filter(Boolean);
 
 	if (tokens.length === 0 || tokens.length > 4) {
@@ -422,7 +422,7 @@ export function toModelMessage(
 	}
 
 	const includeAttachmentData = options.includeAttachmentData ?? turn.includeAttachmentData;
-	const parts: Array<TextPart | FilePart> = [];
+	const parts: (TextPart | FilePart)[] = [];
 	const messageLabel = `${options.isLiveTurn ? "LIVE MESSAGE" : "Message"} #${turn.messageId} from ${turn.senderName}`;
 
 	parts.push({ type: "text", text: messageLabel });

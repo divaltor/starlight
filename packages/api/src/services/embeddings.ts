@@ -51,10 +51,10 @@ export namespace EmbeddingsService {
 
 	export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
 		Service,
-		Effect.gen(function* () {
+		Effect.gen(function* layer() {
 			const client = yield* HttpClient.HttpClient;
 
-			const generate = Effect.fn("EmbeddingsService.generate")(function* (
+			const generate = Effect.fn("EmbeddingsService.generate")(function* generate(
 				image: string,
 				tags: string[],
 				requestId?: string,
@@ -109,12 +109,12 @@ export namespace EmbeddingsService {
 
 				yield* Effect.logInfo(`EmbeddingsService: Successfully generated embeddings for ${image}`);
 				return {
-					image: data.image ? Array.from(data.image) : null,
-					text: Array.from(data.text),
+					image: data.image ? [...data.image] : null,
+					text: [...data.text],
 				};
 			});
 
-			const generateText = Effect.fn("EmbeddingsService.generateText")(function* (
+			const generateText = Effect.fn("EmbeddingsService.generateText")(function* generateText(
 				query: string,
 				requestId?: string,
 			) {
@@ -169,7 +169,7 @@ export namespace EmbeddingsService {
 				);
 
 				yield* Effect.logInfo("EmbeddingsService: Successfully generated text embeddings");
-				return Array.from(data.text);
+				return [...data.text];
 			});
 
 			return Service.of({

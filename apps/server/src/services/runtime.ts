@@ -17,37 +17,48 @@ const effectLogger = Logger.map(Logger.formatStructured, (output) => {
 
 	switch (output.level) {
 		case "FATAL":
-		case "ERROR":
+		case "ERROR": {
 			logger.error(metadata, text);
 			break;
-		case "WARN":
+		}
+		case "WARN": {
 			logger.warn(metadata, text);
 			break;
-		case "DEBUG":
+		}
+		case "DEBUG": {
 			logger.debug(metadata, text);
 			break;
-		case "TRACE":
+		}
+		case "TRACE": {
 			logger.trace(metadata, text);
 			break;
-		default:
+		}
+		default: {
 			logger.info(metadata, text);
+		}
 	}
 });
 
 const getEffectLogLevel = (): LogLevel => {
 	switch ((env.LOG_LEVEL || (env.NODE_ENV === "development" ? "debug" : "info")).toLowerCase()) {
-		case "trace":
+		case "trace": {
 			return "Trace";
-		case "debug":
+		}
+		case "debug": {
 			return "Debug";
-		case "warn":
+		}
+		case "warn": {
 			return "Warn";
-		case "error":
+		}
+		case "error": {
 			return "Error";
-		case "fatal":
+		}
+		case "fatal": {
 			return "Fatal";
-		default:
+		}
+		default: {
 			return "Info";
+		}
 	}
 };
 

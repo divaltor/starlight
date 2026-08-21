@@ -2,7 +2,8 @@ import { env, prisma } from "@starlight/utils";
 import { Effect, Schema } from "effect";
 import { Composer, GrammyError } from "grammy";
 import * as ChatReply from "@/ai/chat-reply";
-import { bot, type Context } from "@/bot";
+import { bot } from "@/bot";
+import type { Context } from "@/bot";
 import { saveMessage } from "@/middlewares/message";
 import { buildChatMemoryPromptContext } from "@/services/chat-memory";
 import { buildRecentToolContextByMessageId } from "@/services/message-parts";
@@ -276,7 +277,7 @@ whitelistedGroupChat
 			// Between burst messages, show typing and use a short human-like pause
 			if (sentTextCount > 0) {
 				await ctx.replyWithChatAction("typing").catch(() => {});
-				await sleep(1_500, { minMs: 1_200, maxMs: 3_500 });
+				await sleep(1500, { minMs: 1200, maxMs: 3500 });
 			}
 
 			try {

@@ -1,17 +1,16 @@
-import { env, type Photo, type Tweet } from "@starlight/utils";
+import { env } from "@starlight/utils";
+import type { Photo, Tweet } from "@starlight/utils";
 import { format } from "date-fns";
 import type { SearchResult, TweetData } from "../types/tweets";
 
 function transformTweetsBase<T extends Pick<Tweet, "id" | "createdAt" | "username">>(
 	tweets: T[],
-	getPhotos: (tweet: T) => Array<
-		Pick<Photo, "id" | "originalUrl"> & {
-			s3Url?: string;
-			is_nsfw?: boolean;
-			height?: number | null;
-			width?: number | null;
-		}
-	>,
+	getPhotos: (tweet: T) => (Pick<Photo, "id" | "originalUrl"> & {
+		s3Url?: string;
+		is_nsfw?: boolean;
+		height?: number | null;
+		width?: number | null;
+	})[],
 ): TweetData[] {
 	return tweets.map((tweet) => {
 		const photos = getPhotos(tweet).map((photo) => {
@@ -76,14 +75,14 @@ export const transformSearchResults = (results: SearchResult[]): TweetData[] => 
 				id: string;
 				username: string;
 				createdAt: Date;
-				photos: Array<{
+				photos: {
 					id: string;
 					originalUrl: string;
 					s3Url?: string;
 					is_nsfw?: boolean;
 					height?: number;
 					width?: number;
-				}>;
+				}[];
 			}
 		>,
 	);

@@ -28,19 +28,23 @@ export function useTelegramButtons(
 		(action: ButtonAction, buttonType: string) => {
 			try {
 				switch (action.type) {
-					case "navigate":
+					case "navigate": {
 						router.navigate({ to: action.payload as string });
 						break;
-					case "callback":
+					}
+					case "callback": {
 						if (typeof action.payload === "function") {
 							(action.payload as () => void | Promise<void>)();
 						}
 						break;
-					case "external":
+					}
+					case "external": {
 						window.open(action.payload as string, "_blank");
 						break;
-					default:
+					}
+					default: {
 						throw new Error(`Invalid action type: ${action.type}`);
+					}
 				}
 			} catch (error) {
 				console.error("Failed to execute Telegram button action", { buttonType, error });

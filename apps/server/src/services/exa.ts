@@ -71,7 +71,7 @@ export namespace Exa {
 
 	export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
 		Service,
-		Effect.gen(function* () {
+		Effect.gen(function* layer() {
 			const client = yield* HttpClient.HttpClient;
 			const apiKey = env.EXA_API_KEY;
 
@@ -82,7 +82,10 @@ export namespace Exa {
 				});
 			}
 
-			const executeJson = Effect.fn("Exa.executeJson")(function* (path: string, body: unknown) {
+			const executeJson = Effect.fn("Exa.executeJson")(function* executeJson(
+				path: string,
+				body: unknown,
+			) {
 				const request = yield* HttpClientRequest.post(`${env.EXA_API_BASE_URL}${path}`).pipe(
 					HttpClientRequest.acceptJson,
 					HttpClientRequest.setHeaders({ "x-api-key": apiKey }),
@@ -98,7 +101,7 @@ export namespace Exa {
 						response.text.pipe(
 							Effect.orElseSucceed(() => ""),
 							Effect.flatMap((responseBody) => {
-								const details = responseBody.trim().slice(0, 2_000);
+								const details = responseBody.trim().slice(0, 2000);
 
 								return new ExaError({
 									message: `Exa API returned HTTP ${response.status}${details ? `: ${details}` : ""}`,
@@ -114,11 +117,11 @@ export namespace Exa {
 				return raw;
 			});
 
-			const lookup = Effect.fn("Exa.lookup")(function* (url: string) {
+			const lookup = Effect.fn("Exa.lookup")(function* lookup(url: string) {
 				const raw = yield* executeJson("/contents", {
 					urls: [url],
 					text: {
-						maxCharacters: 6_000,
+						maxCharacters: 6000,
 						verbosity: "compact",
 						includeSections: ["body"],
 					},
@@ -144,13 +147,13 @@ export namespace Exa {
 				} satisfies ExaPage;
 			});
 
-			const search = Effect.fn("Exa.search")(function* (query: string) {
+			const search = Effect.fn("Exa.search")(function* search(query: string) {
 				const raw = yield* executeJson("/search", {
 					query,
 					numResults: 5,
 					contents: {
-						highlights: { query, maxCharacters: 2_000 },
-						text: { maxCharacters: 4_000 },
+						highlights: { query, maxCharacters: 2000 },
+						text: { maxCharacters: 4000 },
 						livecrawlTimeout: EXA_LIVECRAWL_TIMEOUT_MS,
 					},
 				});
