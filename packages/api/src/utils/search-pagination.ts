@@ -7,18 +7,18 @@ export const paginateSearchResults = (results: SearchResult[], limit: number) =>
 	let lastPost: Pick<SearchResult, "final_score" | "tweet_id"> | undefined;
 
 	for (const result of results) {
-		const key = result.tweet_id;
-		if (selectedPosts.has(key)) {
+		const isDuplicate = selectedPosts.has(result.tweet_id);
+		const hasReachedLimit = selectedPosts.size >= limit;
+
+		if (isDuplicate) {
 			rows.push(result);
-			continue;
-		}
-		if (selectedPosts.size >= limit) {
+		} else if (hasReachedLimit) {
 			hasNextPage = true;
-			continue;
+		} else {
+			selectedPosts.add(result.tweet_id);
+			rows.push(result);
+			lastPost = result;
 		}
-		selectedPosts.add(key);
-		rows.push(result);
-		lastPost = result;
 	}
 
 	return { hasNextPage, lastPost, rows };

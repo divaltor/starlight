@@ -22,28 +22,28 @@ const onlyNotDeletedMessages = <
 >(
 	args: T,
 ): T => {
-	const where = args.where as Record<string, unknown> | undefined;
-	if (where?.deletedAt !== undefined) {
+	if (args.where?.deletedAt !== undefined) {
 		return args;
 	}
 
 	args.where = {
 		...args.where,
 		deletedAt: null,
-	} as PrismaGenerated.MessageWhereInput;
+	};
 
 	return args;
 };
 
-const isMessageReadOperation = (operation: string) =>
-	operation === "findUnique" ||
-	operation === "findUniqueOrThrow" ||
-	operation === "findMany" ||
-	operation === "findFirst" ||
-	operation === "findFirstOrThrow" ||
-	operation === "count" ||
-	operation === "aggregate" ||
-	operation === "groupBy";
+const MESSAGE_READ_OPERATIONS = new Set([
+	"findUnique",
+	"findUniqueOrThrow",
+	"findMany",
+	"findFirst",
+	"findFirstOrThrow",
+	"count",
+	"aggregate",
+	"groupBy",
+]);
 
 export const prisma = new PrismaClient({
 	log: env.NODE_ENV === "production" ? ["warn", "error"] : ["info", "warn", "error"],
@@ -52,7 +52,7 @@ export const prisma = new PrismaClient({
 	query: {
 		message: {
 			$allOperations({ operation, args, query }) {
-				if (isMessageReadOperation(operation)) {
+				if (MESSAGE_READ_OPERATIONS.has(operation)) {
 					return query(
 						onlyNotDeletedMessages(
 							args as {
@@ -90,7 +90,7 @@ export const prisma = new PrismaClient({
 						id.slice(0, chunkSize),
 						id.slice(chunkSize, chunkSize * 2),
 						id.slice(chunkSize * 2),
-					].map((part) => Number.parseInt(part || "0", 10));
+					].map((part) => Math.trunc(Number(part || "0")));
 
 					const userId = uuidParse(data.userId);
 
@@ -139,18 +139,13 @@ export const prisma = new PrismaClient({
 	},
 	model: {
 		photo: {
-			available: () => ({
+			available: (): PrismaGenerated.PhotoWhereInput => ({
 				deletedAt: null,
 				s3Path: { not: null },
 			}),
-			unpublished: (chatId: number | string | bigint) => ({
-				deletedAt: null,
-				s3Path: { not: null },
-				publishedPhotos: { none: { chatId: Number(chatId) } },
-			}),
-		} satisfies Record<string, (...args: any) => PrismaGenerated.PhotoWhereInput>,
+		},
 		tweet: {
-			available: () => ({
+			available: (): PrismaGenerated.TweetWhereInput => ({
 				photos: {
 					some: {
 						deletedAt: null,
@@ -158,7 +153,7 @@ export const prisma = new PrismaClient({
 					},
 				},
 			}),
-		} satisfies Record<string, (...args: any) => PrismaGenerated.TweetWhereInput>,
+		},
 		message: {
 			async hasNewerMessages(params: {
 				chatId: bigint | number;

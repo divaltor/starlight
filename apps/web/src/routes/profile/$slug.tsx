@@ -3,10 +3,12 @@ import { createFileRoute, useParams } from "@tanstack/react-router";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { useCallback, lazy, Suspense } from "react";
 import { NotFound } from "@/components/not-found";
-
-const TweetImageGrid = lazy(() => import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })));
 import { useTweets } from "@/hooks/use-tweets";
 import { orpc } from "@/utils/orpc";
+
+const TweetImageGrid = lazy(() =>
+	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
+);
 
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
@@ -19,7 +21,7 @@ function SharedProfileViewer() {
 	});
 
 	const infiniteLoader = useInfiniteLoader(
-		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
+		async (_startIndex, _stopIndex, _items) => {
 			if (hasNextPage && !isFetchingNextPage) {
 				await fetchNextPage();
 			}
@@ -71,17 +73,17 @@ function SharedProfileViewer() {
 			{tweets.length > 0 && (
 				<div className="flex-1">
 					<div className="mx-auto max-w-7xl">
-					<Suspense fallback={null}>
-						<Masonry
-							columnGutter={16}
-							itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
-							itemKey={(tweet) => tweet.id}
-							items={tweets}
-							onRender={infiniteLoader}
-							overscanBy={MASONRY_OVERSCAN_BY}
-							render={renderMasonryItem}
-						/>
-					</Suspense>
+						<Suspense fallback={null}>
+							<Masonry
+								columnGutter={16}
+								itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
+								itemKey={(tweet) => tweet.id}
+								items={tweets}
+								onRender={infiniteLoader}
+								overscanBy={MASONRY_OVERSCAN_BY}
+								render={renderMasonryItem}
+							/>
+						</Suspense>
 					</div>
 				</div>
 			)}
@@ -98,12 +100,12 @@ export const Route = createFileRoute("/profile/$slug")({
 
 		await queryClient.fetchInfiniteQuery(
 			orpc.tweets.list.infiniteOptions({
-				input: (pageParam: string | undefined) => ({
-					cursor: pageParam,
+				input: (pageParam: string | null | undefined) => ({
+					cursor: pageParam ?? undefined,
 					limit: 30,
 				}),
 				queryKey: ["tweets", { username: slug }],
-				initialPageParam: undefined,
+				initialPageParam: null,
 				getNextPageParam: (lastPage: TweetsPageResult) => lastPage.nextCursor ?? undefined,
 				retry: false,
 				gcTime: 10 * 60 * 1000,

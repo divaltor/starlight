@@ -45,13 +45,6 @@ export function TweetImageGrid({
 		window.open(tweet.sourceUrl, "_blank", "noopener,noreferrer");
 	};
 
-	const handleGalleryOpenKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-		if (event.key === "Enter" || event.key === " ") {
-			event.preventDefault();
-			event.currentTarget.click();
-		}
-	};
-
 	const uiElements: UIElementData[] = [
 		{
 			name: "download-button",
@@ -88,7 +81,7 @@ export function TweetImageGrid({
 					link.download = filename;
 					document.body.append(link);
 					link.click();
-					document.body.removeChild(link);
+					link.remove();
 					window.URL.revokeObjectURL(blobUrl);
 				} catch (error) {
 					console.error("Image download failed", { error, filename, url });
@@ -99,7 +92,7 @@ export function TweetImageGrid({
 	];
 
 	if (tweet.photos.length === 1) {
-		const photo = tweet.photos[0];
+		const [photo] = tweet.photos;
 
 		return (
 			<Gallery
@@ -117,15 +110,14 @@ export function TweetImageGrid({
 					width={photo.width}
 				>
 					{({ ref, open }) => (
-						// biome-ignore lint/a11y/useSemanticElements: wrapper must stay a non-button container because it contains nested interactive controls
-						<div
-							className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md"
-							onClick={open}
-							onKeyDown={handleGalleryOpenKeyDown}
-							ref={ref}
-							role="button"
-							tabIndex={0}
-						>
+						<div className="group relative overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md">
+							<button
+								aria-label="Open artwork"
+								className="absolute inset-0 cursor-pointer"
+								onClick={open}
+								ref={ref}
+								type="button"
+							/>
 							{isImageLoading[photo.id] && (
 								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
 									<div className="loading loading-spinner loading-sm" />
@@ -134,7 +126,7 @@ export function TweetImageGrid({
 							{/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
 							<img
 								alt={photo.alt}
-								className={`${
+								className={`pointer-events-none ${
 									photo.is_nsfw ? "blur-sm" : ""
 								} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
 								height={photo.height || 400}
@@ -143,15 +135,15 @@ export function TweetImageGrid({
 								src={photo.url}
 								width={photo.width || 400}
 							/>
-							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
+							<div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+							<div className="pointer-events-none absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
 								<div className="w-full p-3 text-white">
 									<div className="flex items-center justify-between">
 										<div
 											className={
 												showArtistOnHover
 													? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
-													: ""
+													: "pointer-events-auto"
 											}
 										>
 											<button
@@ -164,7 +156,7 @@ export function TweetImageGrid({
 										</div>
 										{showActions && onDeleteImage && (
 											<Button
-												className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+												className="pointer-events-auto flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
 												onClick={(e) => {
 													e.stopPropagation();
 													setDeleteConfirm(photo.id);
@@ -221,15 +213,14 @@ export function TweetImageGrid({
 						width={item.width || 400}
 					>
 						{({ ref, open }) => (
-							// biome-ignore lint/a11y/useSemanticElements: wrapper must stay a non-button container because it contains nested interactive controls
-							<div
-								className="group relative h-full w-full cursor-pointer overflow-hidden rounded-box transition-all duration-300 hover:z-10"
-								onClick={open}
-								onKeyDown={handleGalleryOpenKeyDown}
-								ref={ref}
-								role="button"
-								tabIndex={0}
-							>
+							<div className="group relative h-full w-full overflow-hidden rounded-box hover:z-10">
+								<button
+									aria-label="Open artwork"
+									className="absolute inset-0 cursor-pointer"
+									onClick={open}
+									ref={ref}
+									type="button"
+								/>
 								{isImageLoading[item.id || ""] && (
 									<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100/80">
 										<div className="loading loading-spinner loading-sm" />
@@ -238,7 +229,7 @@ export function TweetImageGrid({
 								{/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
 								<img
 									alt={item.alt}
-									className={`${
+									className={`pointer-events-none ${
 										item.is_nsfw ? "blur-sm" : ""
 									} block h-full w-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
 									height={item.height || 400}
@@ -247,15 +238,15 @@ export function TweetImageGrid({
 									src={item.src}
 									width={item.width || 400}
 								/>
-								<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-								<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
+								<div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+								<div className="pointer-events-none absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
 									<div className="w-full p-3 text-white">
 										<div className="flex items-center justify-between">
 											<div
 												className={
 													showArtistOnHover
 														? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
-														: ""
+														: "pointer-events-auto"
 												}
 											>
 												<button
@@ -268,7 +259,7 @@ export function TweetImageGrid({
 											</div>
 											{showActions && onDeleteImage && (
 												<Button
-													className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+													className="pointer-events-auto flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
 													onClick={(e) => {
 														e.stopPropagation();
 														setDeleteConfirm(item.id || "");

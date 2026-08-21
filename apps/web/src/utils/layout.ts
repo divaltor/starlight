@@ -25,7 +25,7 @@ export class LayoutManager {
 		};
 	}
 
-	overlaps(
+	static overlaps(
 		r1: { x: number; y: number; width: number; height: number },
 		r2: { x: number; y: number; width: number; height: number },
 	) {
@@ -38,12 +38,12 @@ export class LayoutManager {
 	}
 
 	isValidPosition(rect: { x: number; y: number; width: number; height: number }) {
-		if (this.overlaps(rect, this.centerZone)) {
+		if (LayoutManager.overlaps(rect, this.centerZone)) {
 			return false;
 		}
 
 		for (const placedRect of this.placedRects) {
-			if (this.overlaps(rect, placedRect)) {
+			if (LayoutManager.overlaps(rect, placedRect)) {
 				return false;
 			}
 		}
@@ -76,7 +76,7 @@ export class LayoutManager {
 				height,
 			};
 
-			if (this.overlaps(rect, this.centerZone)) {
+			if (LayoutManager.overlaps(rect, this.centerZone)) {
 				continue;
 			}
 
@@ -95,7 +95,7 @@ export class LayoutManager {
 					width: placedRect.width + 2 * padding,
 					height: placedRect.height + 2 * padding,
 				};
-				if (this.overlaps(paddedNew, paddedPlaced)) {
+				if (LayoutManager.overlaps(paddedNew, paddedPlaced)) {
 					valid = false;
 					break;
 				}
@@ -123,7 +123,7 @@ export class LayoutManager {
 				continue;
 			}
 
-			const firstPhoto = tweet.photos[0];
+			const [firstPhoto] = tweet.photos;
 			let aspect = 0.8;
 			if (firstPhoto.width && firstPhoto.height && firstPhoto.width > 0) {
 				aspect = firstPhoto.height / firstPhoto.width;

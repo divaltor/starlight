@@ -120,6 +120,7 @@ export async function saveMessage({
 				chatId: parsedChatId,
 				messageId: msg.message_id,
 				messageThreadId: msg.message_thread_id ?? null,
+				botUsername: ctx.me.username!,
 			});
 		} catch (error) {
 			ctx.logger.warn(

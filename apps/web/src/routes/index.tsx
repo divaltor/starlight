@@ -5,16 +5,16 @@ import { Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
-
-const TweetImageGrid = lazy(() =>
-	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
-);
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSearch } from "@/hooks/use-search";
 import { cn } from "@/lib/utils";
 import { LayoutManager } from "@/utils/layout";
 import { orpc } from "@/utils/orpc";
+
+const TweetImageGrid = lazy(() =>
+	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
+);
 
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
@@ -39,12 +39,11 @@ export default function DiscoverPage() {
 	const showExamples = !urlQuery;
 
 	useEffect(() => {
-		const updateScreen = () => {
+		const observer = new ResizeObserver(() => {
 			setIsLargeScreen(window.innerWidth > 1024);
-		};
-		updateScreen();
-		window.addEventListener("resize", updateScreen);
-		return () => window.removeEventListener("resize", updateScreen);
+		});
+		observer.observe(document.documentElement);
+		return () => observer.disconnect();
 	}, []);
 
 	const { results, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useSearch({
@@ -58,8 +57,6 @@ export default function DiscoverPage() {
 		staleTime: Number.POSITIVE_INFINITY,
 		gcTime: Number.POSITIVE_INFINITY,
 	});
-
-	const randomImages: TweetData[] = randomQuery.data || [];
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -75,7 +72,7 @@ export default function DiscoverPage() {
 	};
 
 	const infiniteLoader = useInfiniteLoader(
-		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
+		async (_startIndex, _stopIndex, _items) => {
 			if (hasNextPage && !isFetchingNextPage) {
 				await fetchNextPage();
 			}
@@ -88,13 +85,16 @@ export default function DiscoverPage() {
 	);
 
 	const renderMasonryItem = useCallback(
-		({ data, width }: { data: any; width: number }) => (
+		({ data, width }: { data: TweetData; width: number }) => (
 			<div className="mb-1" style={{ width }}>
 				<TweetImageGrid tweet={data} />
 			</div>
 		),
 		[],
 	);
+
+	// Stable identity so the layout memo below doesn't re-run every render
+	const randomImages = useMemo<TweetData[]>(() => randomQuery.data || [], [randomQuery.data]);
 
 	// Generate non-overlapping positions for random images
 	const placedData = useMemo(() => {
@@ -105,6 +105,10 @@ export default function DiscoverPage() {
 		const layout = new LayoutManager(100, 100);
 		return layout.placeTweets(randomImages);
 	}, [randomImages]);
+
+	const isHomeIdle = !isLoading && results.length === 0;
+	const showHeroCollage =
+		isLargeScreen && randomQuery.isSuccess && placedData.length > 0 && isHomeIdle;
 
 	return (
 		<div className="flex min-h-screen flex-col bg-base-100">
@@ -203,36 +207,32 @@ export default function DiscoverPage() {
 					</section>
 				)}
 			</div>
-			{isLargeScreen &&
-				randomQuery.isSuccess &&
-				placedData.length > 0 &&
-				!isLoading &&
-				results.length === 0 && (
-					<Suspense fallback={null}>
-						<div className="pointer-events-none absolute inset-0 overflow-hidden">
-							{placedData.map(({ position, index }, i) => {
-								const tweet = randomImages[index];
-								return (
-									<div
-										className="pointer-events-auto absolute animate-fade-in opacity-85"
-										key={tweet.id}
-										style={{
-											animationDelay: `${i * 500}ms`,
-											top: `${position.top}%`,
-											left: `${position.left}%`,
-											width: "250px",
-											height: "auto",
-											transform: "translate(-50%, -50%)",
-											zIndex: 1,
-										}}
-									>
-										<TweetImageGrid showArtistOnHover tweet={tweet} />
-									</div>
-								);
-							})}
-						</div>
-					</Suspense>
-				)}
+			{showHeroCollage && (
+				<Suspense fallback={null}>
+					<div className="pointer-events-none absolute inset-0 overflow-hidden">
+						{placedData.map(({ position, index }, i) => {
+							const tweet = randomImages[index];
+							return (
+								<div
+									className="pointer-events-auto absolute animate-fade-in opacity-85"
+									key={tweet.id}
+									style={{
+										animationDelay: `${i * 500}ms`,
+										top: `${position.top}%`,
+										left: `${position.left}%`,
+										width: "250px",
+										height: "auto",
+										transform: "translate(-50%, -50%)",
+										zIndex: 1,
+									}}
+								>
+									<TweetImageGrid showArtistOnHover tweet={tweet} />
+								</div>
+							);
+						})}
+					</div>
+				</Suspense>
+			)}
 
 			{/* Sticky Search Bar - only when results */}
 			{results.length > 0 && (

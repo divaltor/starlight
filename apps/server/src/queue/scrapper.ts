@@ -22,7 +22,9 @@ export interface ScrapperJobData {
 	userId: string;
 }
 
-export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
+export const FEED_SCRAPPER_QUEUE = "feed-scrapper";
+
+export const scrapperQueue = new Queue<ScrapperJobData>(FEED_SCRAPPER_QUEUE, {
 	connection: redis,
 	defaultJobOptions: {
 		attempts: 3,
@@ -32,8 +34,80 @@ export const scrapperQueue = new Queue<ScrapperJobData>("feed-scrapper", {
 	},
 });
 
+const CONSECUTIVE_THRESHOLD = 15;
+
+interface ScrapeBatchResult {
+	consecutiveKnownTweets: number;
+	newTweets: {
+		id: string;
+		userId: string;
+		tweetData: Tweet;
+	}[];
+	newTweetsInBatch: number;
+	tweetsToQueue: { tweet: Tweet; userId: string }[];
+	updatedTweets: { id: string; tweetData: Tweet }[];
+}
+
+function collectTimelineTweets(
+	tweets: Tweet[],
+	existingTweetMap: Map<string, Date>,
+	userId: string,
+	force = false,
+): ScrapeBatchResult {
+	const result: ScrapeBatchResult = {
+		consecutiveKnownTweets: 0,
+		newTweets: [],
+		newTweetsInBatch: 0,
+		tweetsToQueue: [],
+		updatedTweets: [],
+	};
+
+	for (const [index, tweet] of tweets.entries()) {
+		if (tweet.id) {
+			const isNewTweet = !existingTweetMap.has(tweet.id);
+
+			if (isNewTweet) {
+				result.consecutiveKnownTweets = 0;
+				result.newTweetsInBatch++;
+				result.newTweets.push({
+					id: tweet.id,
+					userId,
+					tweetData: tweet,
+				});
+			} else {
+				result.consecutiveKnownTweets++;
+				result.updatedTweets.push({
+					id: tweet.id,
+					tweetData: tweet,
+				});
+			}
+
+			// Only queue tweets with photos for image processing
+			if (tweet.photos.length > 0) {
+				result.tweetsToQueue.push({ tweet, userId });
+			}
+
+			// Stop if we've seen too many consecutive known tweets (unless force is enabled)
+			if (!force && result.consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) {
+				logger.info(
+					{
+						userId,
+						consecutiveKnownTweets: result.consecutiveKnownTweets,
+						newTweetsInBatch: result.newTweetsInBatch,
+						totalProcessed: index + 1,
+					},
+					"Stopping scrape after consecutive known tweets",
+				);
+				break;
+			}
+		}
+	}
+
+	return result;
+}
+
 export const scrapperWorker = new Worker<ScrapperJobData>(
-	"feed-scrapper",
+	FEED_SCRAPPER_QUEUE,
 	async (job) => {
 		const { data } = job;
 		const { userId } = data;
@@ -113,78 +187,22 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 			"Scraped timeline",
 		);
 
-		const CONSECUTIVE_THRESHOLD = 15;
-
 		// Step 1: Batch check existing tweets
 		const tweetIds = timeline.tweets.map((tweet) => tweet.id).filter((id) => id !== undefined);
 
-		const existingTweetMap = new Map(
-			(
-				await prisma.tweet.findMany({
-					where: {
-						userId,
-						id: { in: tweetIds },
-						photos: { every: { s3Path: { not: null } } },
-					},
-					select: { id: true, createdAt: true },
-				})
-			).map((tweet) => [tweet.id, tweet.createdAt]),
-		);
+		const existingTweets = await prisma.tweet.findMany({
+			where: {
+				userId,
+				id: { in: tweetIds },
+				photos: { every: { s3Path: { not: null } } },
+			},
+			select: { id: true, createdAt: true },
+		});
+		const existingTweetMap = new Map(existingTweets.map((tweet) => [tweet.id, tweet.createdAt]));
 
 		// Step 2: Process tweets and build batch operations
-		const newTweets: {
-			id: string;
-			userId: string;
-			tweetData: Tweet;
-		}[] = [];
-		const updatedTweets: { id: string; tweetData: Tweet }[] = [];
-		const tweetsToQueue: { tweet: Tweet; userId: string }[] = [];
-
-		let consecutiveKnownTweets = 0;
-		let newTweetsInBatch = 0;
-
-		for (const tweet of timeline.tweets) {
-			if (!tweet.id) {
-				continue;
-			}
-
-			const isNewTweet = !existingTweetMap.has(tweet.id);
-
-			if (isNewTweet) {
-				consecutiveKnownTweets = 0;
-				newTweetsInBatch++;
-				newTweets.push({
-					id: tweet.id,
-					userId,
-					tweetData: tweet,
-				});
-			} else {
-				consecutiveKnownTweets++;
-				updatedTweets.push({
-					id: tweet.id,
-					tweetData: tweet,
-				});
-			}
-
-			// Only queue tweets with photos for image processing
-			if (tweet.photos.length > 0) {
-				tweetsToQueue.push({ tweet, userId });
-			}
-
-			// Stop if we've seen too many consecutive known tweets (unless force is enabled)
-			if (!data.force && consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) {
-				logger.info(
-					{
-						userId,
-						consecutiveKnownTweets,
-						newTweetsInBatch,
-						totalProcessed: timeline.tweets.indexOf(tweet) + 1,
-					},
-					"Stopping scrape after consecutive known tweets",
-				);
-				break;
-			}
-		}
+		const { newTweets, updatedTweets, tweetsToQueue, consecutiveKnownTweets, newTweetsInBatch } =
+			collectTimelineTweets(timeline.tweets, existingTweetMap, userId, data.force);
 
 		// Step 3: Execute batch operations in transaction
 		await prisma.$transaction(async (tx) => {
@@ -256,7 +274,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 		}
 
 		await scrapperQueue.add(
-			"feed-scrapper",
+			FEED_SCRAPPER_QUEUE,
 			{
 				userId,
 				count: data.count,

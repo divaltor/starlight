@@ -9,7 +9,67 @@ import { s3 } from "@/storage";
 //   BATCH_SIZE=100        (batch size for processing, default: 50)
 
 const DRY_RUN = process.env.DRY_RUN === "1";
-const BATCH_SIZE = Number.parseInt(process.env.BATCH_SIZE || "25", 10);
+const BATCH_SIZE = Math.trunc(Number(process.env.BATCH_SIZE || "25"));
+
+type DimensionUpdateResult = "updated" | "failed" | "skipped";
+
+async function updatePhotoDimension(photo: {
+	id: string;
+	userId: string;
+	s3Path: string | null;
+}): Promise<DimensionUpdateResult> {
+	try {
+		if (!photo.s3Path) {
+			logger.warn({ photoId: photo.id, userId: photo.userId }, "Photo has no s3Path");
+			return "skipped";
+		}
+
+		// Download image from S3
+		const imageBuffer = await s3.file(photo.s3Path).arrayBuffer();
+
+		const metadata = await new Bun.Image(imageBuffer)
+			.metadata()
+			.catch(() => ({ height: null, width: null }));
+
+		if (!(metadata.height && metadata.width)) {
+			logger.warn(
+				{ photoId: photo.id, userId: photo.userId, metadata },
+				"Failed to extract dimensions",
+			);
+			return "failed";
+		}
+
+		if (!DRY_RUN) {
+			// Update photo with dimensions
+			await prisma.photo.update({
+				where: { photoId: { id: photo.id, userId: photo.userId } },
+				data: {
+					height: metadata.height,
+					width: metadata.width,
+				},
+			});
+		}
+
+		logger.debug(
+			{
+				photoId: photo.id,
+				userId: photo.userId,
+				height: metadata.height,
+				width: metadata.width,
+				dryRun: DRY_RUN,
+			},
+			"Updated photo dimensions",
+		);
+
+		return "updated";
+	} catch (error) {
+		logger.error(
+			{ error, photoId: photo.id, userId: photo.userId },
+			"Failed to update photo dimensions",
+		);
+		return "failed";
+	}
+}
 
 async function main() {
 	logger.info(
@@ -59,62 +119,15 @@ async function main() {
 			"Processing batch",
 		);
 
-		await Promise.allSettled(
-			batch.map(async (photo) => {
-				try {
-					if (!photo.s3Path) {
-						logger.warn({ photoId: photo.id, userId: photo.userId }, "Photo has no s3Path");
-						return;
-					}
+		const results = await Promise.all(batch.map((photo) => updatePhotoDimension(photo)));
 
-					// Download image from S3
-					const imageBuffer = await s3.file(photo.s3Path).arrayBuffer();
-
-					const metadata = await new Bun.Image(imageBuffer)
-						.metadata()
-						.catch(() => ({ height: null, width: null }));
-
-					if (!(metadata.height && metadata.width)) {
-						logger.warn(
-							{ photoId: photo.id, userId: photo.userId, metadata },
-							"Failed to extract dimensions",
-						);
-						failed++;
-						return;
-					}
-
-					if (!DRY_RUN) {
-						// Update photo with dimensions
-						await prisma.photo.update({
-							where: { photoId: { id: photo.id, userId: photo.userId } },
-							data: {
-								height: metadata.height,
-								width: metadata.width,
-							},
-						});
-					}
-
-					logger.debug(
-						{
-							photoId: photo.id,
-							userId: photo.userId,
-							height: metadata.height,
-							width: metadata.width,
-							dryRun: DRY_RUN,
-						},
-						"Updated photo dimensions",
-					);
-
-					updated++;
-				} catch (error) {
-					logger.error(
-						{ error, photoId: photo.id, userId: photo.userId },
-						"Failed to update photo dimensions",
-					);
-					failed++;
-				}
-			}),
-		);
+		for (const result of results) {
+			if (result === "updated") {
+				updated++;
+			} else if (result === "failed") {
+				failed++;
+			}
+		}
 	}
 
 	logger.info(

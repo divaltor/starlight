@@ -17,14 +17,14 @@ export function useSearch(options: UseSearchOptions) {
 	const { data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage, status } =
 		useInfiniteQuery(
 			orpc.tweets.search.infiniteOptions({
-				input: (pageParam: string | undefined) => ({
+				input: (pageParam: string | null | undefined) => ({
 					query,
-					cursor: pageParam,
+					cursor: pageParam ?? undefined,
 					limit,
 					ownOnly,
 				}),
 				queryKey: ["search", { query, ownOnly }],
-				initialPageParam: undefined,
+				initialPageParam: null,
 				getNextPageParam: (lastPage: SearchPageResult) => lastPage.nextCursor ?? undefined,
 				retry: false,
 				gcTime: 10 * 60 * 1000,

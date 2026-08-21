@@ -25,7 +25,7 @@ export async function findSimilarPhotos(
 	];
 
 	for (const { len, field, maxCandidates } of buckets) {
-		const prefix = targetHash.substring(0, len);
+		const prefix = targetHash.slice(0, len);
 
 		logger.debug({ prefix, field, maxCandidates }, "Searching for similar photos");
 
@@ -77,7 +77,7 @@ export async function findSimilarPhotos(
 			}
 
 			// Sort by distance (most similar first)
-			return similarPhotos.sort((a, b) => a.distance - b.distance);
+			return similarPhotos.toSorted((a, b) => a.distance - b.distance);
 		}
 	}
 

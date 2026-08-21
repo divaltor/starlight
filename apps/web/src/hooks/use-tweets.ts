@@ -16,13 +16,13 @@ export function useTweets(options: UseTweetsOptions = {}) {
 	const { data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage, status } =
 		useInfiniteQuery(
 			orpc.tweets.list.infiniteOptions({
-				input: (pageParam: string | undefined) => ({
+				input: (pageParam: string | null | undefined) => ({
 					username,
-					cursor: pageParam,
+					cursor: pageParam ?? undefined,
 					limit,
 				}),
 				queryKey: ["tweets", { username }],
-				initialPageParam: undefined,
+				initialPageParam: null,
 				getNextPageParam: (lastPage: TweetsPageResult) => lastPage.nextCursor ?? undefined,
 				retry: false,
 				gcTime: 10 * 60 * 1000,

@@ -1,17 +1,17 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { LazyMotion } from "motion/react";
 // biome-ignore lint/performance/noNamespaceImport: motion/react-m is designed for namespace component access like m.div
 import * as m from "motion/react-m";
-
-const loadDomAnimation = () => import("motion/react").then((m) => m.domAnimation);
 import { EffectCards } from "swiper/modules";
 import { Swiper, SwiperSlide } from "swiper/react";
 import "swiper/css/effect-cards";
 import "swiper/css";
 
-import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+
+const loadDomAnimation = () => import("motion/react").then((features) => features.domAnimation);
 
 const Carousel = ({
 	images,
@@ -62,6 +62,8 @@ const Carousel = ({
 			>
 				{images.map((image, index) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: images may not have stable ids
+					// Static slide list, order-stable
+					// oxlint-disable-next-line react-doctor/no-array-index-as-key
 					<SwiperSlide key={index}>{renderSlide(image, index)}</SwiperSlide>
 				))}
 			</Swiper>

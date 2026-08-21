@@ -126,54 +126,53 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 					},
 					"Found similar photos, skipping saving photo",
 				);
-				continue;
-			}
+			} else {
+				const extension = photo.originalUrl.split(".").pop() ?? "jpg";
 
-			const extension = photo.originalUrl.split(".").pop() ?? "jpg";
+				const photoName = `${photo.externalId}.${extension}`;
 
-			const photoName = `${photo.externalId}.${extension}`;
+				const [, hash, metadata] = await Promise.all([
+					s3.write(`media/${photoName}`, imageBuffer),
+					calculatePerceptualHash(imageBuffer),
+					new Bun.Image(imageBuffer).metadata().catch(() => ({ height: null, width: null })),
+				]);
 
-			const [, hash, metadata] = await Promise.all([
-				s3.write(`media/${photoName}`, imageBuffer),
-				calculatePerceptualHash(imageBuffer),
-				new Bun.Image(imageBuffer).metadata().catch(() => ({ height: null, width: null })),
-			]);
-
-			await prisma.photo.update({
-				where: { photoId: { id: photo.id, userId } },
-				data: {
-					perceptualHash: hash,
-					s3Path: `media/${photoName}`,
-					height: metadata.height,
-					width: metadata.width,
-				},
-			});
-
-			// Enqueue classification job
-			try {
-				await classificationQueue.add(
-					`classify-${photo.id}`,
-					{ photoId: photo.id, userId },
-					{
-						jobId: `classify-${photo.id}-${userId}`,
-						deduplication: { id: `classify-${photo.id}-${userId}` },
+				await prisma.photo.update({
+					where: { photoId: { id: photo.id, userId } },
+					data: {
+						perceptualHash: hash,
+						s3Path: `media/${photoName}`,
+						height: metadata.height,
+						width: metadata.width,
 					},
-				);
-			} catch (error) {
-				logger.error(
-					{ err: error, photoId: photo.id, userId },
-					"Failed to enqueue classification job",
+				});
+
+				// Enqueue classification job
+				try {
+					await classificationQueue.add(
+						`classify-${photo.id}`,
+						{ photoId: photo.id, userId },
+						{
+							jobId: `classify-${photo.id}-${userId}`,
+							deduplication: { id: `classify-${photo.id}-${userId}` },
+						},
+					);
+				} catch (error) {
+					logger.error(
+						{ err: error, photoId: photo.id, userId },
+						"Failed to enqueue classification job",
+					);
+				}
+
+				logger.info(
+					{
+						tweetId: tweet.id,
+						photoId: photo.id,
+						userId,
+					},
+					"Photo saved to S3",
 				);
 			}
-
-			logger.info(
-				{
-					tweetId: tweet.id,
-					photoId: photo.id,
-					userId,
-				},
-				"Photo saved to S3",
-			);
 		}
 	},
 	{

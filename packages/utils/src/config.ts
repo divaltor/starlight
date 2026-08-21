@@ -10,7 +10,7 @@ function parseTelegramIdList(
 		return [];
 	}
 
-	const idPattern = allowNegative ? /^-?\d+$/ : /^\d+$/;
+	const idPattern = allowNegative ? /^-?\d+$/u : /^\d+$/u;
 
 	return [...new Set(value.split(",").map((id) => id.trim()))].filter(Boolean).map((id) => {
 		if (!idPattern.test(id)) {
@@ -38,8 +38,8 @@ const env = createEnv({
 				[...new Set(value.split(",").map((alias) => alias.trim().toLowerCase()))].filter(Boolean),
 			),
 
-		DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
-		REDIS_URL: z.url({ protocol: /^rediss?$/ }),
+		DATABASE_URL: z.url({ protocol: /^postgresql$/u }),
+		REDIS_URL: z.url({ protocol: /^rediss?$/u }),
 
 		CORS_ORIGIN: z.string().default("http://localhost:3001"),
 

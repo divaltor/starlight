@@ -84,6 +84,8 @@ export namespace Exa {
 
 			const executeJson = Effect.fn("Exa.executeJson")(function* executeJson(
 				path: string,
+				// Outbound payload assembled internally from trusted literals, not untrusted input
+				// oxlint-disable-next-line anti-slop/no-unknown-parameters
 				body: unknown,
 			) {
 				const request = yield* HttpClientRequest.post(`${env.EXA_API_BASE_URL}${path}`).pipe(
@@ -102,9 +104,10 @@ export namespace Exa {
 							Effect.orElseSucceed(() => ""),
 							Effect.flatMap((responseBody) => {
 								const details = responseBody.trim().slice(0, 2000);
+								const statusSuffix = details ? `: ${details}` : "";
 
 								return new ExaError({
-									message: `Exa API returned HTTP ${response.status}${details ? `: ${details}` : ""}`,
+									message: `Exa API returned HTTP ${response.status}${statusSuffix}`,
 								});
 							}),
 						),

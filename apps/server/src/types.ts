@@ -142,8 +142,6 @@ export const ToolResultPart = Schema.Union([
 ]);
 export type ToolResultPart = typeof ToolResultPart.Type;
 
-export type MessagePartData = typeof ToolResultPart.Encoded;
-
 export type Context = FileFlavor<HydrateFlavor<BaseContext & ExtendedContext>>;
 
 declare global {
@@ -154,6 +152,6 @@ declare global {
 		type MessageEntitiesType = MessageEntity[];
 		type ForwardOriginType = MessageOrigin;
 		type TelegramMessageType = Message;
-		type MessagePartDataType = MessagePartData;
+		type MessagePartDataType = typeof ToolResultPart.Encoded;
 	}
 }

@@ -3,7 +3,6 @@ import type { Prisma } from "@starlight/utils";
 import { Effect } from "effect";
 import { Queue, Worker } from "bullmq";
 import * as MemorySummarizer from "@/ai/memory-summarizer";
-import { bot } from "@/bot";
 import { logger } from "@/logger";
 import { GLOBAL_MEMORY_WINDOW_SIZE, TOPIC_MEMORY_WINDOW_SIZE } from "@/services/chat-memory";
 import { formatSenderName, openrouter } from "@/utils/message";
@@ -114,6 +113,8 @@ interface ChatMemoryJobData {
 	threadKey: number;
 	triggerMessageId: number;
 	forceRebuild?: boolean;
+	// Injected by the caller so this module does not depend on the bot instance
+	botUsername: string;
 }
 
 type ChatMemoryScopeValue = (typeof ChatMemoryScope)[keyof typeof ChatMemoryScope];
@@ -161,8 +162,7 @@ function formatWindowMessage(
 	let body = "";
 
 	if (hasText) {
-		// biome-ignore lint/style/noNonNullAssertion: hasText guarantees rawContent is non-null
-		body = rawContent!.replaceAll(/\s+/g, " ").trim();
+		body = rawContent!.replaceAll(/\s+/gu, " ").trim();
 	} else if (entry.attachments.length > 0) {
 		const labels = entry.attachments.map((attachment) =>
 			attachmentLabelFromMimeType(attachment.mimeType),
@@ -209,6 +209,7 @@ export async function scheduleChatMemorySummaries(params: {
 	messageId: number;
 	messageThreadId: number | null;
 	forceRebuild?: boolean;
+	botUsername: string;
 }) {
 	const chatId = params.chatId.toString();
 	const threadKey = params.messageThreadId ?? 0;
@@ -222,6 +223,7 @@ export async function scheduleChatMemorySummaries(params: {
 				threadKey,
 				triggerMessageId: params.messageId,
 				forceRebuild: params.forceRebuild,
+				botUsername: params.botUsername,
 			},
 			params.forceRebuild ? undefined : { jobId: `memory-topic-${chatId}-${threadKey}` },
 		),
@@ -233,6 +235,7 @@ export async function scheduleChatMemorySummaries(params: {
 				threadKey: 0,
 				triggerMessageId: params.messageId,
 				forceRebuild: params.forceRebuild,
+				botUsername: params.botUsername,
 			},
 			params.forceRebuild ? undefined : { jobId: `memory-global-${chatId}` },
 		),
@@ -247,6 +250,7 @@ async function summarizeWindow(params: {
 	scope: ChatMemoryScopeValue;
 	startMessageId: number;
 	threadKey: number;
+	botUsername: string;
 }): Promise<string> {
 	if (!openrouter) {
 		throw new Error("OPENROUTER_API_KEY is not set");
@@ -264,20 +268,18 @@ async function summarizeWindow(params: {
 		`Window: #${params.startMessageId}..#${params.endMessageId} (${params.messages.length} messages)`,
 		"",
 		"Previous note:",
-		params.previousSummary ? params.previousSummary : "none",
+		params.previousSummary ?? "none",
 		"",
 		"Messages:",
 		transcript,
 	].join("\n");
 
-	const botUsername = bot.botInfo.username;
-
-	return Effect.runPromise(
+	return await Effect.runPromise(
 		MemorySummarizer.summarize({
 			instructions:
 				params.scope === ChatMemoryScope.topic
-					? buildTopicMemorySystemPrompt(botUsername)
-					: buildGlobalMemorySystemPrompt(botUsername),
+					? buildTopicMemorySystemPrompt(params.botUsername)
+					: buildGlobalMemorySystemPrompt(params.botUsername),
 			prompt: userPrompt,
 			trace: {
 				sessionId: `${params.chatId}:${params.threadKey === 0 ? "main" : params.threadKey}`,
@@ -298,6 +300,7 @@ async function processWindow(params: {
 	scope: ChatMemoryScopeValue;
 	threadKey: number;
 	forceRebuild?: boolean;
+	botUsername: string;
 }): Promise<boolean> {
 	let cursorLastMessageId = 0;
 
@@ -352,17 +355,19 @@ async function processWindow(params: {
 	const windowSize =
 		params.scope === ChatMemoryScope.topic ? TOPIC_MEMORY_WINDOW_SIZE : GLOBAL_MEMORY_WINDOW_SIZE;
 
+	// Topic windows only see their own thread; global memory spans all topics
+	const topicThreadFilter =
+		params.scope === ChatMemoryScope.topic
+			? { messageThreadId: params.threadKey === 0 ? null : params.threadKey }
+			: {};
+
 	const messages = await prisma.message.findMany({
 		where: {
 			chatId: params.chatId,
 			messageId: {
 				gt: cursorLastMessageId,
 			},
-			...(params.scope === ChatMemoryScope.topic
-				? {
-						messageThreadId: params.threadKey === 0 ? null : params.threadKey,
-					}
-				: {}),
+			...topicThreadFilter,
 			OR: [{ text: { not: null } }, { caption: { not: null } }, { attachments: { some: {} } }],
 		},
 		select: memoryMessageSelect,
@@ -376,9 +381,7 @@ async function processWindow(params: {
 		return false;
 	}
 
-	// biome-ignore lint/style/noNonNullAssertion: messages.length >= windowSize (>= 1) guarantees elements exist
 	const startMessageId = messages[0]!.messageId;
-	// biome-ignore lint/style/noNonNullAssertion: messages.length >= windowSize (>= 1) guarantees elements exist
 	const endMessageId = messages.at(-1)!.messageId;
 
 	const previousMemory = await prisma.chatMemoryNote.findFirst({
@@ -406,6 +409,7 @@ async function processWindow(params: {
 		scope: params.scope,
 		startMessageId,
 		threadKey: params.threadKey,
+		botUsername: params.botUsername,
 	});
 
 	await prisma.$transaction(async (tx) => {
@@ -496,6 +500,7 @@ async function processMemoryJob(jobName: string, data: ChatMemoryJobData) {
 				scope: data.scope,
 				threadKey,
 				forceRebuild: index === 0 ? data.forceRebuild : false,
+				botUsername: data.botUsername,
 			});
 
 			if (!processed) {

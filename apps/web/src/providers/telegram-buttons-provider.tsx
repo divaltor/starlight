@@ -1,12 +1,12 @@
 import { useCanGoBack, useRouter } from "@tanstack/react-router";
 import { retrieveRawInitData } from "@telegram-apps/sdk-react";
-import { createContext, useContext, useEffect, useMemo } from "react";
+import { useCallback, createContext, useContext, useEffect, useMemo } from "react";
 import { useTelegramButtons } from "@/hooks/use-telegram-buttons";
 import type { ButtonState, RouteButtonConfig } from "@/types/telegram-buttons";
 
 interface TelegramButtonsContextValue {
 	getButtonState: (buttonType: keyof RouteButtonConfig) => ButtonState;
-	rawInitData: string | undefined;
+	rawInitData: string | null;
 	resetButtons: () => void;
 	setMainButton: (text: string, visible?: boolean, action?: () => void) => void;
 	updateButtons: (config: Partial<RouteButtonConfig>) => void;
@@ -68,37 +68,43 @@ export function TelegramButtonsProvider({ children }: { children: React.ReactNod
 		buttonManager.updateConfig(currentConfig);
 	}, [currentConfig, buttonManager]);
 
-	let rawInitData: string | undefined;
+	let rawInitData: string | null;
 
 	try {
-		rawInitData = retrieveRawInitData() ?? undefined;
+		rawInitData = retrieveRawInitData() ?? null;
 	} catch {
-		rawInitData = undefined;
+		rawInitData = null;
 	}
 
 	// Helper function for main button
-	const setMainButton = (text: string, visible = true, action?: () => void) => {
-		buttonManager.updateConfig({
-			mainButton: {
-				state: visible ? "visible" : "hidden",
-				text,
-				action: action
-					? {
-							type: "callback",
-							payload: action,
-						}
-					: undefined,
-			},
-		});
-	};
+	const setMainButton = useCallback(
+		(text: string, visible = true, action?: () => void) => {
+			buttonManager.updateConfig({
+				mainButton: {
+					state: visible ? "visible" : "hidden",
+					text,
+					action: action
+						? {
+								type: "callback",
+								payload: action,
+							}
+						: undefined,
+				},
+			});
+		},
+		[buttonManager],
+	);
 
-	const contextValue: TelegramButtonsContextValue = {
-		updateButtons: buttonManager.updateConfig,
-		resetButtons: buttonManager.resetToDefaults,
-		getButtonState: buttonManager.getButtonState,
-		setMainButton,
-		rawInitData,
-	};
+	const contextValue = useMemo<TelegramButtonsContextValue>(
+		() => ({
+			updateButtons: buttonManager.updateConfig,
+			resetButtons: buttonManager.resetToDefaults,
+			getButtonState: buttonManager.getButtonState,
+			setMainButton,
+			rawInitData,
+		}),
+		[buttonManager, rawInitData, setMainButton],
+	);
 
 	return (
 		<TelegramButtonsContext.Provider value={contextValue}>

@@ -1,7 +1,7 @@
 import { http } from "@starlight/utils/http";
 import { Effect } from "effect";
-import { renderTweetImage } from '@/services/render';
-import type { TweetData, RenderResult } from '@/services/render';
+import { renderTweetImage } from "@/services/render";
+import type { TweetData, RenderResult } from "@/services/render";
 import type { FxEmbedTweet, FxEmbedMosaicPhoto } from "@/services/fxembed/types";
 import type { TwitterApiError } from "@/services/twitter-api";
 import { TwitterApi } from "@/services/twitter-api";
@@ -14,7 +14,7 @@ const MOSAIC_METADATA_TIMEOUT_MS = 5000;
 
 const getMosaicDimensions = Effect.fn("getMosaicDimensions")(
 	(mosaic: FxEmbedMosaicPhoto): Effect.Effect<{ width: number; height: number }, never, never> =>
-		Effect.gen(function* getMosaicDimensions() {
+		Effect.gen(function* () {
 			if (mosaic.width && mosaic.height) {
 				return { width: mosaic.width, height: mosaic.height };
 			}
@@ -49,7 +49,7 @@ const getMosaicDimensions = Effect.fn("getMosaicDimensions")(
 
 const mapMediaData = Effect.fn("mapMediaData")(
 	(media: FxEmbedTweet["media"]): Effect.Effect<TweetData["media"], never, never> =>
-		Effect.gen(function* mapMediaData() {
+		Effect.gen(function* () {
 			if (!media) {
 				return null;
 			}
@@ -154,7 +154,7 @@ function fetchReplyChain(
 
 export const prepareTweetData = Effect.fn("prepareTweetData")(
 	(tweetId: string): Effect.Effect<TweetData, TwitterApiError | Error, TwitterApi.Service> =>
-		Effect.gen(function* prepareTweetData() {
+		Effect.gen(function* () {
 			const twitterApi = yield* TwitterApi.Service;
 			const tweet = yield* twitterApi.getFxTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE);
 
@@ -194,7 +194,7 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
 		tweetId: string,
 		theme: Theme = "light",
 	): Effect.Effect<RenderResult, TwitterApiError | Error, TwitterApi.Service> =>
-		Effect.gen(function* generateTweetImage() {
+		Effect.gen(function* () {
 			const s3Path = `tweets/${tweetId}/${theme}.jpg`;
 			const s3File = s3.file(s3Path);
 

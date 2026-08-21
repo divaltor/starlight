@@ -119,7 +119,7 @@ export interface TextLine {
 }
 
 function isHashtagLine(text: string): boolean {
-	const words = text.trim().split(/\s+/);
+	const words = text.trim().split(/\s+/u);
 	return words.length > 0 && words.every((word) => word.startsWith("#"));
 }
 
@@ -145,79 +145,66 @@ function breakLongWord(ctx: SKRSContext2D, word: string, maxWidth: number): stri
 }
 
 function stripLeadingMentions(text: string): string {
-	return text.replace(/^(@\w+\s*)+/, "").trimStart();
+	return text.replace(/^(?<mention>@\w+\s*)+/u, "").trimStart();
 }
 
-export function wrapText(ctx: SKRSContext2D, text: string, maxWidth: number): TextLine[] {
-	const cleanedText = stripLeadingMentions(text);
-	const normalizedText = cleanedText.replace(/\n(#\S+(\s+#\S+)*\s*)$/, "\n\n$1");
-	const paragraphs = normalizedText.split(/\n\n+/);
-	const lines: TextLine[] = [];
+const HASHTAG_BLOCK_RE = /\n(?<hashtagBlock>#\S+(?:\s+#\S+)*\s*)$/u;
 
-	for (let pIndex = 0; pIndex < paragraphs.length; pIndex++) {
-		const rawParagraph = paragraphs[pIndex];
-		if (!rawParagraph) {
+interface WrapWordResult {
+	carriedText: string;
+	completedLines: string[];
+}
+
+// Splits an over-wide word into chunks, flushing every chunk except the last as a complete line.
+function flushLongWordChunks(
+	ctx: SKRSContext2D,
+	word: string,
+	maxWidth: number,
+	completedLines: string[],
+): string {
+	const chunks = breakLongWord(ctx, word, maxWidth);
+
+	for (let index = 0; index < chunks.length - 1; index++) {
+		completedLines.push(chunks[index]!);
+	}
+
+	return chunks.at(-1) ?? "";
+}
+
+function wrapExplicitLine(
+	ctx: SKRSContext2D,
+	explicitLine: string,
+	maxWidth: number,
+): WrapWordResult {
+	const words = explicitLine.split(/\s+/u);
+	let currentLine = "";
+	const completedLines: string[] = [];
+
+	for (const word of words) {
+		if (ctx.measureText(word).width > maxWidth) {
+			if (currentLine) {
+				completedLines.push(currentLine);
+			}
+
+			currentLine = flushLongWordChunks(ctx, word, maxWidth, completedLines);
 			continue;
 		}
 
-		const explicitLines = rawParagraph.split(/\n/);
+		const testLine = currentLine ? `${currentLine} ${word}` : word;
+		const fitsOnCurrentLine = !(ctx.measureText(testLine).width > maxWidth && currentLine);
 
-		for (let lineIndex = 0; lineIndex < explicitLines.length; lineIndex++) {
-			const explicitLine = explicitLines[lineIndex]?.trim();
-			if (!explicitLine) {
-				continue;
-			}
-
-			const words = explicitLine.split(/\s+/);
-			let currentLine = "";
-
-			for (const word of words) {
-				const wordWidth = ctx.measureText(word).width;
-
-				if (wordWidth > maxWidth) {
-					if (currentLine) {
-						lines.push({ text: currentLine, isParagraphEnd: false });
-						currentLine = "";
-					}
-
-					const chunks = breakLongWord(ctx, word, maxWidth);
-					for (let i = 0; i < chunks.length; i++) {
-						const chunk = chunks[i];
-						if (!chunk) {
-							continue;
-						}
-
-						if (i < chunks.length - 1) {
-							lines.push({ text: chunk, isParagraphEnd: false });
-						} else {
-							currentLine = chunk;
-						}
-					}
-					continue;
-				}
-
-				const testLine = currentLine ? `${currentLine} ${word}` : word;
-				const metrics = ctx.measureText(testLine);
-
-				if (metrics.width > maxWidth && currentLine) {
-					lines.push({ text: currentLine, isParagraphEnd: false });
-					currentLine = word;
-				} else {
-					currentLine = testLine;
-				}
-			}
-
-			if (currentLine) {
-				const isLastParagraph = pIndex === paragraphs.length - 1;
-				const isLastLineInParagraph = lineIndex === explicitLines.length - 1;
-				lines.push({
-					text: currentLine,
-					isParagraphEnd: isLastLineInParagraph && !isLastParagraph,
-				});
-			}
+		if (fitsOnCurrentLine) {
+			currentLine = testLine;
+		} else {
+			completedLines.push(currentLine);
+			currentLine = word;
 		}
 	}
 
+	return { carriedText: currentLine, completedLines };
+}
+
+function markParagraphEndBeforeFirstHashtag(lines: TextLine[]): void {
 	let firstHashtagLineIndex = -1;
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
@@ -233,6 +220,45 @@ export function wrapText(ctx: SKRSContext2D, text: string, maxWidth: number): Te
 			prevLine.isParagraphEnd = true;
 		}
 	}
+}
+
+export function wrapText(ctx: SKRSContext2D, text: string, maxWidth: number): TextLine[] {
+	const cleanedText = stripLeadingMentions(text);
+	const normalizedText = cleanedText.replace(HASHTAG_BLOCK_RE, "\n\n$<hashtagBlock>");
+	const paragraphs = normalizedText.split(/\n\n+/u);
+	const lines: TextLine[] = [];
+
+	for (const [pIndex, rawParagraph] of paragraphs.entries()) {
+		if (!rawParagraph) {
+			continue;
+		}
+
+		const explicitLines = rawParagraph.split(/\n/u);
+
+		for (const [lineIndex, explicitLineRaw] of explicitLines.entries()) {
+			const explicitLine = explicitLineRaw?.trim();
+			if (!explicitLine) {
+				continue;
+			}
+
+			const { carriedText, completedLines } = wrapExplicitLine(ctx, explicitLine, maxWidth);
+
+			for (const lineText of completedLines) {
+				lines.push({ text: lineText, isParagraphEnd: false });
+			}
+
+			if (carriedText) {
+				const isLastParagraph = pIndex === paragraphs.length - 1;
+				const isLastLineInParagraph = lineIndex === explicitLines.length - 1;
+				lines.push({
+					text: carriedText,
+					isParagraphEnd: isLastLineInParagraph && !isLastParagraph,
+				});
+			}
+		}
+	}
+
+	markParagraphEndBeforeFirstHashtag(lines);
 
 	return lines;
 }
@@ -260,6 +286,10 @@ interface DrawPlayButtonParams {
 	size?: number;
 }
 
+function lerp(a: number, b: number, t: number): number {
+	return a + (b - a) * t;
+}
+
 export function drawPlayButton(params: DrawPlayButtonParams): void {
 	const { ctx, centerX, centerY, size = 48 } = params;
 
@@ -280,7 +310,6 @@ export function drawPlayButton(params: DrawPlayButtonParams): void {
 	ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
 	ctx.beginPath();
 
-	const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 	const t = cornerRadius / Math.hypot(x2 - x1, y2 - y1);
 
 	ctx.moveTo(lerp(x1, x2, t), lerp(y1, y2, t));

@@ -32,8 +32,9 @@ export interface SavedAttachment extends Pick<
 	PrismaAttachment,
 	"attachmentType" | "mimeType" | "s3Path"
 > {
+	// Summary is null because we generate it on demand via queue and it's not ready yet usually on immediate acces
 	base64Data: string;
-	summary: null; // Summary is null because we generate it on demand via queue and it's not ready yet usually on immediate acces
+	summary: null;
 }
 
 function extensionFromMimeType(mimeType: string, fallback: string): string {
@@ -71,7 +72,6 @@ async function preparePhotoAttachment(
 		return null;
 	}
 
-	// biome-ignore lint/style/noNonNullAssertion: photo.length > 0 guarantees .at(-1) is defined
 	const largestPhoto = msg.photo.at(-1)!;
 	const payload = await downloadFilePayload(api, largestPhoto.file_id);
 	const converted = await convertImage(payload, "jpeg", 90);
@@ -217,29 +217,35 @@ export class Attachment {
 	static async save(ctx: Context, msg: Message): Promise<SavedAttachment[]> {
 		logger.trace({ messageId: msg.message_id, chatId: ctx.chat!.id }, "Processing attachments");
 
-		const preparedAttachments: PreparedAttachment[] = [];
-
-		for (const handler of handlers) {
-			try {
-				const prepared = await handler(msg, ctx.api);
-				if (prepared) {
-					logger.trace(
-						{
-							attachmentType: prepared.attachmentType,
-							mimeType: prepared.mimeType,
-							sizeBytes: prepared.payload.length,
-						},
-						"Prepared attachment",
+		// Run every handler even if some throw; results keep handler order so S3 paths stay stable.
+		const preparedResults = await Promise.all(
+			handlers.map(async (handler) => {
+				try {
+					const prepared = await handler(msg, ctx.api);
+					if (prepared) {
+						logger.trace(
+							{
+								attachmentType: prepared.attachmentType,
+								mimeType: prepared.mimeType,
+								sizeBytes: prepared.payload.length,
+							},
+							"Prepared attachment",
+						);
+					}
+					return prepared;
+				} catch (error) {
+					ctx.logger.warn(
+						{ error, messageId: msg.message_id, chatId: ctx.chat!.id },
+						"Failed to prepare message attachment",
 					);
-					preparedAttachments.push(prepared);
+					return null;
 				}
-			} catch (error) {
-				ctx.logger.warn(
-					{ error, messageId: msg.message_id, chatId: ctx.chat!.id },
-					"Failed to prepare message attachment",
-				);
-			}
-		}
+			}),
+		);
+
+		const preparedAttachments = preparedResults.filter(
+			(prepared): prepared is PreparedAttachment => prepared !== null,
+		);
 
 		const savedAttachments = await Promise.all(
 			preparedAttachments.map(async (attachment, index) => {

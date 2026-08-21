@@ -11,8 +11,15 @@ export interface RFC6265Cookie {
 	value: string;
 }
 
-const TWID_REGEX = /u=(\d+)/;
-const DOMAIN_REGEX = /https?:\/\/(.+?)\//;
+// External Firefox cookie-store export shape.
+interface FirefoxCookieRecord {
+	"Content raw": string;
+	"Host raw": string;
+	"Name raw": string;
+}
+
+const TWID_REGEX = /u=(?<twidValue>\d+)/u;
+const DOMAIN_REGEX = /https?:\/\/(?<domain>.+?)\//u;
 
 export class Cookies {
 	readonly cookies: Cookie[];
@@ -26,9 +33,10 @@ export class Cookies {
 	}
 
 	static fromJSON(data: string): Cookies {
-		const parsed = JSON.parse(data);
+		// Firefox cookie-store export is external input; parse and narrow once at this boundary.
+		const parsed = JSON.parse(data) as FirefoxCookieRecord[];
 
-		return new Cookies(parsed.map((cookie: any) => new Cookie(mapToRFC6265Cookie(cookie))));
+		return new Cookies(parsed.map((cookie) => new Cookie(mapToRFC6265Cookie(cookie))));
 	}
 
 	userId() {
@@ -40,7 +48,7 @@ export class Cookies {
 
 		const decoded = decodeURIComponent(twidValue);
 		const match = decoded.match(TWID_REGEX);
-		return match ? match[1] : undefined;
+		return match?.groups?.twidValue;
 	}
 }
 
@@ -52,10 +60,10 @@ export const s3 = new Bun.S3Client({
 
 function extractDomain(hostRaw: string): string {
 	const match = hostRaw.match(DOMAIN_REGEX);
-	return match?.[1] ?? "x.com";
+	return match?.groups?.domain ?? "x.com";
 }
 
-export function mapToRFC6265Cookie(firefoxCookie: any): RFC6265Cookie {
+export function mapToRFC6265Cookie(firefoxCookie: FirefoxCookieRecord): RFC6265Cookie {
 	return {
 		key: firefoxCookie["Name raw"],
 		value: firefoxCookie["Content raw"],

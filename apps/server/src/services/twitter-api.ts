@@ -73,11 +73,12 @@ export namespace TwitterApi {
 		Effect.gen(function* layer() {
 			const client = yield* HttpClient.HttpClient;
 
-			const getFxTweet = Effect.fn("TwitterApi.getFxTweet")(function* getFxTweet(
+			const fetchFxTweet = Effect.fn("TwitterApi.getFxTweet")(function* fetchFxTweet(
 				tweetId: string,
 				translateTo?: string,
 			) {
-				const url = `${FXEMBED_BASE_URL}/status/${tweetId}${translateTo ? `/${translateTo}` : ""}`;
+				const translatePath = translateTo ? `/${translateTo}` : "";
+				const url = `${FXEMBED_BASE_URL}/status/${tweetId}${translatePath}`;
 
 				const response = yield* client
 					.execute(
@@ -146,7 +147,7 @@ export namespace TwitterApi {
 				return data.tweet;
 			});
 
-			return Service.of({ getTweet, getFxTweet });
+			return Service.of({ getTweet, getFxTweet: fetchFxTweet });
 		}),
 	);
 

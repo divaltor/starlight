@@ -7,7 +7,8 @@ export interface ButtonAction {
 
 export interface BaseButtonConfig {
 	action?: ButtonAction;
-	condition?: () => boolean; // Dynamic visibility condition
+	// Dynamic visibility condition
+	condition?: () => boolean;
 	state: ButtonState;
 }
 
@@ -20,17 +21,14 @@ export interface MainButtonConfig extends BaseButtonConfig {
 	textColor?: `#${string}`;
 }
 
-export interface SettingsButtonConfig extends BaseButtonConfig {
-	// Settings button has fixed appearance
-}
+/** Settings button has fixed appearance */
+export type SettingsButtonConfig = BaseButtonConfig;
 
-export interface BackButtonConfig extends BaseButtonConfig {
-	// Back button has fixed appearance
-}
+/** Back button has fixed appearance */
+export type BackButtonConfig = BaseButtonConfig;
 
-export interface SecondaryButtonConfig extends MainButtonConfig {
-	// Secondary button has fixed appearance
-}
+/** Secondary button has fixed appearance */
+export type SecondaryButtonConfig = MainButtonConfig;
 
 export interface RouteButtonConfig {
 	backButton?: BackButtonConfig;

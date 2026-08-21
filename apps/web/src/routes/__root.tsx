@@ -13,6 +13,8 @@ export interface RouterAppContext {
 	queryClient: QueryClient;
 }
 
+const APP_TITLE = "Starlight Gallery";
+
 export const Route = createRootRouteWithContext<RouterAppContext>()({
 	head: () => ({
 		meta: [
@@ -24,11 +26,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "Starlight Gallery",
+				title: APP_TITLE,
 			},
 			{
 				property: "og:title",
-				content: "Starlight Gallery",
+				content: APP_TITLE,
 			},
 			{
 				property: "og:description",
@@ -44,7 +46,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 			},
 			{
 				name: "twitter:title",
-				content: "Starlight Gallery",
+				content: APP_TITLE,
 			},
 			{
 				name: "twitter:description",

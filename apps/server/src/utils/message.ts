@@ -108,14 +108,11 @@ export function getMessageContent(msg: Pick<Message, "text" | "caption">): strin
 export function hasMessageAttachments(
 	msg: Pick<Message, "photo" | "sticker" | "video" | "animation" | "video_note" | "voice">,
 ): boolean {
-	return Boolean(
-		(msg.photo && msg.photo.length > 0) ||
-		msg.sticker ||
-		msg.video ||
-		msg.animation ||
-		msg.video_note ||
-		msg.voice,
-	);
+	const hasPhoto = Boolean(msg.photo && msg.photo.length > 0);
+	const hasRichMedia = Boolean(msg.sticker || msg.video || msg.animation);
+	const hasVoiceMedia = Boolean(msg.video_note || msg.voice);
+
+	return hasPhoto || hasRichMedia || hasVoiceMedia;
 }
 
 function getTextWithEntities(msg: Message): {
@@ -181,7 +178,7 @@ function hasBotAliasMention(msg: Message, botAliases: readonly string[]): boolea
 	return botAliases.some((alias) => {
 		const normalizedAlias = alias.trim().toLowerCase();
 
-		const escapedAlias = normalizedAlias.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		const escapedAlias = normalizedAlias.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
 		const aliasPattern = new RegExp(
 			`(?:^|[^\\p{L}\\p{N}_@])${escapedAlias}(?:$|[^\\p{L}\\p{N}_])`,
@@ -222,7 +219,7 @@ function isLowSignalMessageText(text: string): boolean {
 	}
 
 	const tokens = normalized
-		.split(/\s+/)
+		.split(/\s+/u)
 		.map((token) => token.toLowerCase().replaceAll(/[^\p{L}\p{N}]+/gu, ""))
 		.filter(Boolean);
 
@@ -305,9 +302,9 @@ export function formatSenderName(data: {
 	return "unknown";
 }
 
-const BOT_ANNOTATION_RE = /\n?\[(?:reply to [^\]]*|attachment)\]/g;
+const BOT_ANNOTATION_RE = /\n?\[(?:reply to [^\]]*|attachment)\]/gu;
 
-const BOT_USERNAME_PREFIX_RE = /^@\w+:?\s*/;
+const BOT_USERNAME_PREFIX_RE = /^@\w+:?\s*/u;
 
 export function stripBotAnnotations(text: string): string {
 	return text.replace(BOT_ANNOTATION_RE, "").trim().replace(BOT_USERNAME_PREFIX_RE, "");
@@ -318,11 +315,51 @@ function toAttachmentUrl(s3Path: string): URL | null {
 		return null;
 	}
 
-	const baseUrl = env.BASE_CDN_URL.replace(/\/+$/, "");
-	const normalizedPath = s3Path.replace(/^\/+/, "");
+	const baseUrl = env.BASE_CDN_URL.replace(/\/+$/u, "");
+	const normalizedPath = s3Path.replace(/^\/+/u, "");
 	const fullUrl = `${baseUrl}/${normalizedPath}`;
 
 	return new URL(fullUrl);
+}
+
+function buildConversationContext(
+	attachments: ConversationAttachment[],
+	replyToMessageId: number | null,
+	supplementalContent: string[],
+): string[] {
+	const context: string[] = [];
+
+	if (replyToMessageId !== null) {
+		context.push(`Replying to message #${replyToMessageId}`);
+	}
+
+	if (attachments.length > 0) {
+		const attachmentLabels = attachments.map((attachment) =>
+			attachmentLabelFromMimeType(attachment.mimeType),
+		);
+		context.push(`Sent attachments: ${attachmentLabels.join(", ")}`);
+	}
+
+	const attachmentSummaries: string[] = [];
+	for (const attachment of attachments) {
+		const summary = (attachment.summary ?? "").trim();
+		if (summary.length > 0) {
+			attachmentSummaries.push(summary);
+		}
+	}
+
+	if (attachmentSummaries.length > 0) {
+		const numberedSummaries = attachmentSummaries
+			.map((summary, index) => `${index + 1}. ${summary}`)
+			.join("\n");
+		context.push(`Attachment context:\n${numberedSummaries}`);
+	}
+
+	for (const [index, block] of supplementalContent.entries()) {
+		context.push(`Linked context #${index + 1}:\n${block}`);
+	}
+
+	return context;
 }
 
 export function toConversationTurn(
@@ -337,7 +374,6 @@ export function toConversationTurn(
 	const content = entry.text?.trim() ?? entry.caption?.trim() ?? null;
 	const attachments = [...entry.attachments, ...supplementalAttachments];
 	const replyToMessageId = entry.replyToMessageId ?? null;
-	const messageThreadId = entry.messageThreadId ?? null;
 
 	if (entry.fromId != null && Number(entry.fromId) === botId) {
 		return {
@@ -351,51 +387,21 @@ export function toConversationTurn(
 		};
 	}
 
-	const sender = formatSenderName(entry);
-
-	const attachmentLabels =
-		attachments.length > 0
-			? attachments.map((attachment) => attachmentLabelFromMimeType(attachment.mimeType))
-			: [];
-
 	// If we send message to a topic - Telelegram set `reply_to_message` as first system message from that topic. Insane
 	const isTopicRootReply =
-		replyToMessageId !== null && messageThreadId !== null && replyToMessageId === messageThreadId;
-
+		replyToMessageId !== null &&
+		entry.messageThreadId !== null &&
+		replyToMessageId === entry.messageThreadId;
 	const normalizedReplyToMessageId = isTopicRootReply ? null : replyToMessageId;
-
-	const context: string[] = [];
-
-	if (normalizedReplyToMessageId !== null) {
-		context.push(`Replying to message #${normalizedReplyToMessageId}`);
-	}
-
-	if (attachmentLabels.length > 0) {
-		context.push(`Sent attachments: ${attachmentLabels.join(", ")}`);
-	}
-
-	const attachmentSummaries = attachments
-		.map((attachment) => (attachment.summary ?? "").trim())
-		.filter((summary) => summary.length > 0);
-
-	if (attachmentSummaries.length > 0) {
-		context.push(
-			`Attachment context:\n${attachmentSummaries.map((summary, index) => `${index + 1}. ${summary}`).join("\n")}`,
-		);
-	}
-
-	for (const [index, block] of supplementalContent.entries()) {
-		context.push(`Linked context #${index + 1}:\n${block}`);
-	}
 
 	return {
 		attachments,
-		context,
+		context: buildConversationContext(attachments, normalizedReplyToMessageId, supplementalContent),
 		includeAttachmentData,
 		messageId: entry.messageId,
 		replyToMessageId: normalizedReplyToMessageId,
 		role: "user",
-		senderName: sender,
+		senderName: formatSenderName(entry),
 		text: content,
 	};
 }
@@ -449,15 +455,6 @@ export function toModelMessage(
 			continue;
 		}
 
-		if (attachment.mimeType.startsWith("image/")) {
-			parts.push({
-				type: "file",
-				data: attachmentData,
-				mediaType: attachment.mimeType,
-			});
-			continue;
-		}
-
 		parts.push({
 			type: "file",
 			data: attachmentData,
@@ -471,34 +468,19 @@ export function toModelMessage(
 	};
 }
 
-export function withOpenRouterGeminiCacheControl(
-	messages: ModelMessage[],
-	model: string,
-): ModelMessage[] {
-	if (!model.startsWith(OPENROUTER_GEMINI_3_FLASH_MODEL_PREFIX)) {
-		return messages;
+function markCacheControl(message: ModelMessage, matchText: string): boolean {
+	if (!Array.isArray(message.content)) {
+		return false;
 	}
 
-	const markCacheControl = (message: ModelMessage, matchText: string): boolean => {
-		if (!Array.isArray(message.content)) {
-			return false;
-		}
+	if (!message.content.every((part) => part.type === "text")) {
+		return false;
+	}
 
-		if (!message.content.every((part) => part.type === "text")) {
-			return false;
-		}
+	for (let partIndex = message.content.length - 1; partIndex >= 0; partIndex -= 1) {
+		const part = message.content[partIndex];
 
-		for (let partIndex = message.content.length - 1; partIndex >= 0; partIndex -= 1) {
-			const part = message.content[partIndex];
-
-			if (!part || part.type !== "text") {
-				continue;
-			}
-
-			if (!part.text.includes(matchText)) {
-				continue;
-			}
-
+		if (part?.type === "text" && part.text.includes(matchText)) {
 			message.content[partIndex] = {
 				...part,
 				providerOptions: {
@@ -510,9 +492,18 @@ export function withOpenRouterGeminiCacheControl(
 
 			return true;
 		}
+	}
 
-		return false;
-	};
+	return false;
+}
+
+export function withOpenRouterGeminiCacheControl(
+	messages: ModelMessage[],
+	model: string,
+): ModelMessage[] {
+	if (!model.startsWith(OPENROUTER_GEMINI_3_FLASH_MODEL_PREFIX)) {
+		return messages;
+	}
 
 	// OpenRouter/Gemini uses only the last cache_control breakpoint as the cached prefix.
 	//
@@ -530,11 +521,8 @@ export function withOpenRouterGeminiCacheControl(
 					cache_control: { type: "ephemeral" },
 				},
 			};
-			continue;
-		}
-
-		if (message.role === "user" && markCacheControl(message, "### MEMORY CONTEXT")) {
-			continue;
+		} else if (message.role === "user") {
+			markCacheControl(message, "### MEMORY CONTEXT");
 		}
 	}
 

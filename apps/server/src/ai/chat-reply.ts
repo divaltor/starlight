@@ -1,6 +1,6 @@
 import env from "@starlight/utils/config";
 import { Output, generateText, isStepCount } from "ai";
-import type { ModelMessage, ToolSet } from "ai";
+import type { ModelMessage, StepResult, ToolSet } from "ai";
 import { Effect } from "effect";
 import * as Llm from "@/ai/llm";
 import { chatResponseSchema } from "@/ai/schema";
@@ -9,6 +9,16 @@ import { createWebLookupTool, WEB_LOOKUP_TOOL_ID } from "@/ai/tools/web";
 import type { ToolResultPart } from "@/types";
 
 const MAX_WEB_LOOKUPS = 1;
+
+function limitWebLookups(steps: StepResult<ToolSet>[]) {
+	const lookupCount = steps.reduce(
+		(count, step) =>
+			count + step.toolCalls.filter((call) => call.toolName === WEB_LOOKUP_TOOL_ID).length,
+		0,
+	);
+
+	return lookupCount >= MAX_WEB_LOOKUPS ? { activeTools: [] } : undefined;
+}
 
 export interface GenerateInput {
 	readonly instructions: string;
@@ -41,16 +51,7 @@ export const generate = Effect.fn("ChatReply.generate")(function* generate(
 				messages: input.messages,
 				tools,
 				stopWhen: isStepCount(MAX_WEB_LOOKUPS + 1),
-				prepareStep: ({ steps }) => {
-					const lookupCount = steps.reduce(
-						(count, step) =>
-							count +
-							step.toolCalls.filter((toolCall) => toolCall.toolName === WEB_LOOKUP_TOOL_ID).length,
-						0,
-					);
-
-					return lookupCount >= MAX_WEB_LOOKUPS ? { activeTools: [] } : undefined;
-				},
+				prepareStep: (stepParams) => limitWebLookups(stepParams.steps),
 			});
 
 			return result.output;

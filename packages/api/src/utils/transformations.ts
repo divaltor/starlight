@@ -48,44 +48,45 @@ export const transformTweets = (
 ) => transformTweetsBase(tweets, (t) => t.photos);
 
 export const transformSearchResults = (results: SearchResult[]): TweetData[] => {
-	const grouped = results.reduce(
-		(acc, result) => {
-			const tweetId = result.tweet_id;
-			if (!acc[tweetId]) {
-				acc[tweetId] = {
-					id: tweetId,
-					username: result.username,
-					createdAt: result.tweet_created_at,
-					photos: [],
-				};
-			}
-			acc[tweetId].photos.push({
-				id: result.photo_id,
-				originalUrl: result.original_url,
-				s3Url: result.s3_path ? `${env.BASE_CDN_URL}/${result.s3_path}` : undefined,
-				is_nsfw: result.is_nsfw,
-				height: result.height,
-				width: result.width,
-			});
-			return acc;
-		},
-		{} as Record<
-			string,
-			{
+	const grouped: Record<
+		string,
+		{
+			id: string;
+			username: string;
+			createdAt: Date;
+			photos: {
 				id: string;
-				username: string;
-				createdAt: Date;
-				photos: {
-					id: string;
-					originalUrl: string;
-					s3Url?: string;
-					is_nsfw?: boolean;
-					height?: number;
-					width?: number;
-				}[];
-			}
-		>,
-	);
+				originalUrl: string;
+				s3Url?: string;
+				is_nsfw?: boolean;
+				height?: number;
+				width?: number;
+			}[];
+		}
+	> = {};
+
+	for (const result of results) {
+		let tweet = grouped[result.tweet_id];
+
+		if (!tweet) {
+			tweet = {
+				id: result.tweet_id,
+				username: result.username,
+				createdAt: result.tweet_created_at,
+				photos: [],
+			};
+			grouped[result.tweet_id] = tweet;
+		}
+
+		tweet.photos.push({
+			id: result.photo_id,
+			originalUrl: result.original_url,
+			s3Url: result.s3_path ? `${env.BASE_CDN_URL}/${result.s3_path}` : undefined,
+			is_nsfw: result.is_nsfw,
+			height: result.height,
+			width: result.width,
+		});
+	}
 
 	return transformTweetsBase(Object.values(grouped), (tweet) => tweet.photos);
 };

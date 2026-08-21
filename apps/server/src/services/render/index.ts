@@ -282,6 +282,104 @@ function getTranslationLanguage(tweet: Pick<TweetData, "translation">): string |
 	}
 }
 
+function measureQuoteLayout(
+	measureCtx: SKRSContext2D,
+	quote: TweetData,
+	contentWidth: number,
+	fontFamily: string,
+): NonNullable<TweetLayout["quote"]> {
+	measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
+	const textWidth = contentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
+	const textLines = wrapText(measureCtx, quote.text, textWidth);
+	const textHeight = calculateTextHeight(
+		textLines,
+		QUOTE_FONT_SIZE_TEXT,
+		LAYOUT.LINE_HEIGHT,
+		LAYOUT.PARAGRAPH_GAP,
+	);
+
+	const media = getFirstMedia(quote.media);
+	const { height: mediaHeight, isVideo } = calculateMediaHeight(media, contentWidth);
+	const articleLayout = calculateArticleLayout(measureCtx, quote.article, contentWidth, fontFamily);
+
+	const height = Math.floor(
+		QUOTE_PADDING * 2 +
+			Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + textHeight) +
+			(mediaHeight > 0 ? LAYOUT.AVATAR_GAP + mediaHeight : 0) +
+			(articleLayout ? LAYOUT.AVATAR_GAP + articleLayout.height : 0),
+	);
+
+	return {
+		textLines,
+		textHeight,
+		mediaHeight,
+		isVideo,
+		height,
+		contentWidth,
+		articleLayout,
+	};
+}
+
+function measureReplyChainLayout(
+	measureCtx: SKRSContext2D,
+	tweet: TweetData,
+	replyToTextWidth: number,
+	fontFamily: string,
+): { items: ReplyChainItem[]; totalHeight: number } {
+	const items: ReplyChainItem[] = [];
+	let totalHeight = 0;
+
+	if (!tweet.replyChain || tweet.replyChain.length === 0) {
+		return { items, totalHeight };
+	}
+
+	if (tweet.hasMoreInChain) {
+		totalHeight += DOTS_INDICATOR_HEIGHT;
+	}
+
+	const quoteContentWidth = replyToTextWidth - QUOTE_PADDING * 2;
+
+	for (const chainTweet of tweet.replyChain) {
+		measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
+		const textLines = wrapText(measureCtx, chainTweet.text, replyToTextWidth);
+		const textHeight = calculateTextHeight(
+			textLines,
+			REPLY_FONT_SIZE_TEXT,
+			LAYOUT.LINE_HEIGHT,
+			LAYOUT.PARAGRAPH_GAP,
+		);
+
+		const media = getFirstMedia(chainTweet.media);
+		const { height: mediaHeight, isVideo } = calculateMediaHeight(media, replyToTextWidth);
+
+		const quoteLayout = chainTweet.quote
+			? measureQuoteLayout(measureCtx, chainTweet.quote, quoteContentWidth, fontFamily)
+			: null;
+
+		const gapBeforeQuote = mediaHeight > 0 ? 0 : LAYOUT.AVATAR_GAP;
+		const itemHeight = Math.floor(
+			REPLY_AVATAR_SIZE +
+				LAYOUT.AVATAR_GAP +
+				Math.max(0, textHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + LAYOUT.TEXT_GAP) +
+				(mediaHeight > 0 ? LAYOUT.AVATAR_GAP + mediaHeight + LAYOUT.MEDIA_GAP : 0) +
+				(quoteLayout ? gapBeforeQuote + quoteLayout.height : 0) +
+				LAYOUT.AVATAR_GAP,
+		);
+
+		items.push({
+			tweet: chainTweet,
+			textLines,
+			height: itemHeight,
+			mediaHeight,
+			isVideo,
+			quoteLayout,
+		});
+		totalHeight += itemHeight;
+	}
+
+	return { items, totalHeight };
+}
+
 function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 	const contentWidth = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
 	const textX = LAYOUT.PADDING + LAYOUT.AVATAR_SIZE + LAYOUT.AVATAR_GAP;
@@ -313,150 +411,17 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 		fontFamily,
 	);
 
-	let quoteLayout: TweetLayout["quote"] = null;
 	const quoteContentWidth = contentWidth - QUOTE_PADDING * 2;
+	const quoteLayout = tweet.quote
+		? measureQuoteLayout(measureCtx, tweet.quote, quoteContentWidth, fontFamily)
+		: null;
 
-	if (tweet.quote) {
-		measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
-		const quoteTextWidth = quoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
-		const quoteTextLines = wrapText(measureCtx, tweet.quote.text, quoteTextWidth);
-		const quoteTextHeight = calculateTextHeight(
-			quoteTextLines,
-			QUOTE_FONT_SIZE_TEXT,
-			LAYOUT.LINE_HEIGHT,
-			LAYOUT.PARAGRAPH_GAP,
-		);
-
-		const quoteMedia = getFirstMedia(tweet.quote.media);
-		const { height: quoteMediaHeight, isVideo: quoteMediaIsVideo } = calculateMediaHeight(
-			quoteMedia,
-			quoteContentWidth,
-		);
-
-		const quoteArticleLayout = calculateArticleLayout(
-			measureCtx,
-			tweet.quote.article,
-			quoteContentWidth,
-			fontFamily,
-		);
-
-		const quoteHeight = Math.floor(
-			QUOTE_PADDING * 2 +
-				Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + quoteTextHeight) +
-				(quoteMediaHeight > 0 ? LAYOUT.AVATAR_GAP + quoteMediaHeight : 0) +
-				(quoteArticleLayout ? LAYOUT.AVATAR_GAP + quoteArticleLayout.height : 0),
-		);
-
-		quoteLayout = {
-			textLines: quoteTextLines,
-			textHeight: quoteTextHeight,
-			mediaHeight: quoteMediaHeight,
-			isVideo: quoteMediaIsVideo,
-			height: quoteHeight,
-			contentWidth: quoteContentWidth,
-			articleLayout: quoteArticleLayout,
-		};
-	}
-
-	const replyChainItems: ReplyChainItem[] = [];
-	let totalReplyChainHeight = 0;
-
-	if (tweet.replyChain && tweet.replyChain.length > 0) {
-		if (tweet.hasMoreInChain) {
-			totalReplyChainHeight += DOTS_INDICATOR_HEIGHT;
-		}
-
-		const chainQuoteContentWidth = replyToTextWidth - QUOTE_PADDING * 2;
-
-		for (const chainTweet of tweet.replyChain) {
-			measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
-			const chainTextLines = wrapText(measureCtx, chainTweet.text, replyToTextWidth);
-			const chainTextHeight = calculateTextHeight(
-				chainTextLines,
-				REPLY_FONT_SIZE_TEXT,
-				LAYOUT.LINE_HEIGHT,
-				LAYOUT.PARAGRAPH_GAP,
-			);
-
-			const chainMedia = getFirstMedia(chainTweet.media);
-			const { height: chainMediaHeight, isVideo: chainMediaIsVideo } = calculateMediaHeight(
-				chainMedia,
-				replyToTextWidth,
-			);
-
-			let chainQuoteLayout: TweetLayout["quote"] = null;
-			if (chainTweet.quote) {
-				measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
-				const chainQuoteTextWidth = chainQuoteContentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
-				const chainQuoteTextLines = wrapText(
-					measureCtx,
-					chainTweet.quote.text,
-					chainQuoteTextWidth,
-				);
-				const chainQuoteTextHeight = calculateTextHeight(
-					chainQuoteTextLines,
-					QUOTE_FONT_SIZE_TEXT,
-					LAYOUT.LINE_HEIGHT,
-					LAYOUT.PARAGRAPH_GAP,
-				);
-
-				const chainQuoteMedia = getFirstMedia(chainTweet.quote.media);
-				const { height: chainQuoteMediaHeight, isVideo: chainQuoteMediaIsVideo } =
-					calculateMediaHeight(chainQuoteMedia, chainQuoteContentWidth);
-
-				const chainQuoteArticleLayout = calculateArticleLayout(
-					measureCtx,
-					chainTweet.quote.article,
-					chainQuoteContentWidth,
-					fontFamily,
-				);
-
-				const chainQuoteHeight = Math.floor(
-					QUOTE_PADDING * 2 +
-						Math.max(
-							QUOTE_AVATAR_SIZE,
-							QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + chainQuoteTextHeight,
-						) +
-						(chainQuoteMediaHeight > 0 ? LAYOUT.AVATAR_GAP + chainQuoteMediaHeight : 0) +
-						(chainQuoteArticleLayout ? LAYOUT.AVATAR_GAP + chainQuoteArticleLayout.height : 0),
-				);
-
-				chainQuoteLayout = {
-					textLines: chainQuoteTextLines,
-					textHeight: chainQuoteTextHeight,
-					mediaHeight: chainQuoteMediaHeight,
-					isVideo: chainQuoteMediaIsVideo,
-					height: chainQuoteHeight,
-					contentWidth: chainQuoteContentWidth,
-					articleLayout: chainQuoteArticleLayout,
-				};
-			}
-
-			const itemHeight = Math.floor(
-				REPLY_AVATAR_SIZE +
-					LAYOUT.AVATAR_GAP +
-					Math.max(
-						0,
-						chainTextHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + LAYOUT.TEXT_GAP,
-					) +
-					(chainMediaHeight > 0 ? LAYOUT.AVATAR_GAP + chainMediaHeight + LAYOUT.MEDIA_GAP : 0) +
-					(chainQuoteLayout
-						? (chainMediaHeight > 0 ? 0 : LAYOUT.AVATAR_GAP) + chainQuoteLayout.height
-						: 0) +
-					LAYOUT.AVATAR_GAP,
-			);
-
-			replyChainItems.push({
-				tweet: chainTweet,
-				textLines: chainTextLines,
-				height: itemHeight,
-				mediaHeight: chainMediaHeight,
-				isVideo: chainMediaIsVideo,
-				quoteLayout: chainQuoteLayout,
-			});
-			totalReplyChainHeight += itemHeight;
-		}
-	}
+	const { items: replyChainItems, totalHeight: totalReplyChainHeight } = measureReplyChainLayout(
+		measureCtx,
+		tweet,
+		replyToTextWidth,
+		fontFamily,
+	);
 
 	const headerHeight = LAYOUT.AVATAR_SIZE;
 	const statsHeight = LAYOUT.STATS_HEIGHT;
@@ -464,15 +429,23 @@ function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
 
 	const hasMainMediaOrArticle = mainMediaHeight > 0 || mainArticleLayout;
 
+	const mediaBlockHeight =
+		mainMediaHeight > 0 ? LAYOUT.AVATAR_GAP + mainMediaHeight + mediaGapAfter : 0;
+	const articleBlockHeight = mainArticleLayout
+		? LAYOUT.AVATAR_GAP + mainArticleLayout.height + mediaGapAfter
+		: 0;
+	const gapBeforeQuote = hasMainMediaOrArticle ? 0 : LAYOUT.AVATAR_GAP;
+	const quoteBlockHeight = quoteLayout ? gapBeforeQuote + quoteLayout.height : 0;
+
 	const totalHeight =
 		LAYOUT.PADDING +
 		totalReplyChainHeight +
 		headerHeight +
 		LAYOUT.AVATAR_GAP +
 		mainTextHeight +
-		(mainMediaHeight > 0 ? LAYOUT.AVATAR_GAP + mainMediaHeight + mediaGapAfter : 0) +
-		(mainArticleLayout ? LAYOUT.AVATAR_GAP + mainArticleLayout.height + mediaGapAfter : 0) +
-		(quoteLayout ? (hasMainMediaOrArticle ? 0 : LAYOUT.AVATAR_GAP) + quoteLayout.height : 0) +
+		mediaBlockHeight +
+		articleBlockHeight +
+		quoteBlockHeight +
 		LAYOUT.AVATAR_GAP +
 		statsHeight +
 		LAYOUT.PADDING;

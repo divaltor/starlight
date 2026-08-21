@@ -6,11 +6,7 @@ import { AlertTriangle, Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
 import { useCallback, useEffect, useState, lazy, Suspense } from "react";
-import NotFound from "@/components/not-found";
-
-const TweetImageGrid = lazy(() =>
-	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
-);
+import { NotFound } from "@/components/not-found";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSearch } from "@/hooks/use-search";
@@ -18,6 +14,10 @@ import { useTweets } from "@/hooks/use-tweets";
 import { cn } from "@/lib/utils";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { client, orpc } from "@/utils/orpc";
+
+const TweetImageGrid = lazy(() =>
+	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
+);
 
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
@@ -99,7 +99,7 @@ function TwitterArtViewer() {
 
 	// Infinite loader for regular tweets
 	const infiniteLoader = useInfiniteLoader(
-		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
+		async (_startIndex, _stopIndex, _items) => {
 			if (hasNextPage && !isFetchingNextPage) {
 				await fetchNextPage();
 			}
@@ -113,7 +113,7 @@ function TwitterArtViewer() {
 
 	// Infinite loader for search results
 	const searchInfiniteLoader = useInfiniteLoader(
-		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
+		async (_startIndex, _stopIndex, _items) => {
 			if (hasSearchNextPage && !isSearchFetchingNextPage) {
 				await fetchSearchNextPage();
 			}
@@ -245,21 +245,22 @@ export const Route = createFileRoute("/app")({
 			retry: 1,
 		});
 
-		await queryClient.fetchQuery(profileOptions);
-
-		await queryClient.fetchInfiniteQuery(
-			orpc.tweets.list.infiniteOptions({
-				input: (pageParam: string | undefined) => ({
-					cursor: pageParam,
-					limit: 30,
+		await Promise.all([
+			queryClient.fetchQuery(profileOptions),
+			queryClient.fetchInfiniteQuery(
+				orpc.tweets.list.infiniteOptions({
+					input: (pageParam: string | null | undefined) => ({
+						cursor: pageParam ?? undefined,
+						limit: 30,
+					}),
+					queryKey: ["tweets", { username: null }],
+					initialPageParam: null,
+					getNextPageParam: (lastPage: TweetsPageResult) => lastPage.nextCursor ?? undefined,
+					retry: false,
+					gcTime: 10 * 60 * 1000,
 				}),
-				queryKey: ["tweets", { username: undefined }],
-				initialPageParam: undefined,
-				getNextPageParam: (lastPage: TweetsPageResult) => lastPage.nextCursor ?? undefined,
-				retry: false,
-				gcTime: 10 * 60 * 1000,
-			}),
-		);
+			),
+		]);
 	},
 	component: TwitterArtViewer,
 });

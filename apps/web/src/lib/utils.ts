@@ -16,22 +16,106 @@ const CookieQuickManagerSchema = z.array(
 	}),
 );
 
-const Base64StringSchema = z.string().refine(
-	(val) => {
-		try {
-			atob(val);
-			return true;
-		} catch {
-			return false;
-		}
-	},
-	{ message: "Invalid base64 string" },
-);
+/** Decode base64 text, returning null when the input is not valid base64. */
+function tryBase64Decode(value: string): string | null {
+	try {
+		return atob(value);
+	} catch {
+		return null;
+	}
+}
 
 interface Cookie {
 	domain: string;
 	key: string;
 	value: string;
+}
+
+const DEFAULT_COOKIE_NAMES = ["auth_token", "ct0", "kdt", "twid"];
+
+/** Outcome of trying to read a Cookie Quick Manager export out of decoded text. */
+type QuickManagerRead =
+	| { cookies: Cookie[]; state: "matched" }
+	| { state: "json-other" }
+	| { state: "not-json" };
+
+/**
+ * Interpret `text` (raw or base64-decoded) as JSON and, when it is a Cookie
+ * Quick Manager export array, collect its target cookies.
+ */
+function readQuickManagerExport(text: string, targetNames: ReadonlySet<string>): QuickManagerRead {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(text);
+	} catch {
+		return { state: "not-json" };
+	}
+
+	const result = CookieQuickManagerSchema.safeParse(parsed);
+	if (!result.success) {
+		return { state: "json-other" };
+	}
+
+	const cookies: Cookie[] = [];
+	for (const item of result.data) {
+		const name = item["Name raw"];
+		if (!targetNames.has(name)) {
+			continue;
+		}
+
+		cookies.push({
+			key: name,
+			value: item["Content raw"],
+			domain: item["Host raw"],
+		});
+	}
+	return { cookies, state: "matched" };
+}
+
+/** Resolve a Quick Manager read attempt to final cookies or an RFC 6265 retry. */
+function resolveCookieAttempt(
+	text: string,
+	attempt: QuickManagerRead,
+	targetNames: ReadonlySet<string>,
+): Cookie[] | null {
+	switch (attempt.state) {
+		case "matched": {
+			return attempt.cookies.length > 0 ? attempt.cookies : null;
+		}
+		case "not-json": {
+			// Not JSON, might be RFC 6265 format
+			return parseRfc6265Cookies(text, targetNames);
+		}
+		default: {
+			// Valid JSON of an unexpected shape
+			return null;
+		}
+	}
+}
+
+/** Parse a single "name=value" segment, or undefined when it is not a target cookie. */
+function parseCookieSegment(segment: string, targetNames: ReadonlySet<string>): Cookie | undefined {
+	const trimmedPart = segment.trim();
+	const segments = trimmedPart.split("=");
+
+	if (trimmedPart.length === 0 || segments.length !== 2 || !targetNames.has(segments[0])) {
+		return undefined;
+	}
+
+	return { key: segments[0], value: segments[1], domain: "" };
+}
+
+/** Parse an RFC 6265 cookie string (semicolon-separated pairs). */
+function parseRfc6265Cookies(cookieString: string, targetNames: ReadonlySet<string>): Cookie[] {
+	const cookies: Cookie[] = [];
+
+	for (const part of cookieString.split(";")) {
+		const cookie = parseCookieSegment(part, targetNames);
+		if (cookie) {
+			cookies.push(cookie);
+		}
+	}
+	return cookies;
 }
 
 /**
@@ -46,89 +130,22 @@ export function decodeCookies(value: string | null, cookieNames?: string[]): Coo
 		return null;
 	}
 
-	// Default cookie names if not specified
-	const targetCookieNames = cookieNames ?? ["auth_token", "ct0", "kdt", "twid"];
-	const cookies: Cookie[] = [];
+	const targetNames = new Set(cookieNames ?? DEFAULT_COOKIE_NAMES);
 
 	try {
-		let decoded: unknown;
+		// Try to parse as base64 first; valid base64 input is interpreted via its decoded text.
+		const decodedText = tryBase64Decode(value);
 
-		// Try to parse as base64 first
-		const base64Result = Base64StringSchema.safeParse(value);
-		if (base64Result.success) {
-			try {
-				const base64Decoded = atob(value);
-				try {
-					decoded = JSON.parse(base64Decoded);
-				} catch {
-					decoded = base64Decoded;
-				}
-			} catch {
-				// If base64 decode fails, fall through to other parsing methods
-				decoded = null;
-			}
-		} else {
-			// Try parsing directly as JSON
-			try {
-				decoded = JSON.parse(value);
-			} catch {
-				// Not JSON, might be RFC 6265 format
-				decoded = null;
-			}
+		if (decodedText !== null) {
+			return resolveCookieAttempt(
+				decodedText,
+				readQuickManagerExport(decodedText, targetNames),
+				targetNames,
+			);
 		}
 
-		// Try Cookie Quick Manager format first
-		if (decoded) {
-			const quickManagerResult = CookieQuickManagerSchema.safeParse(decoded);
-			if (quickManagerResult.success) {
-				for (const item of quickManagerResult.data) {
-					const cookieName = item["Name raw"];
-					// Filter by cookie names
-					if (targetCookieNames.includes(cookieName)) {
-						try {
-							const cookie = {
-								key: cookieName,
-								value: item["Content raw"],
-								domain: item["Host raw"],
-							};
-							cookies.push(cookie);
-						} catch (error) {
-							console.warn("Failed to create cookie from Quick Manager format", {
-								error,
-								cookieName,
-							});
-						}
-					}
-				}
-				return cookies.length > 0 ? cookies : null;
-			}
-		}
-
-		const cookiesToParse = (decoded as string | undefined) || value;
-
-		// Try RFC 6265 format (semicolon-separated cookie string)
-		// Split by semicolon and parse each cookie
-		const cookieStrings = cookiesToParse
-			.split(";")
-			.map((s) => s.trim())
-			.filter((s) => s.length > 0);
-
-		for (const cookieString of cookieStrings) {
-			try {
-				const cookie = cookieString.split("=");
-				if (cookie.length !== 2) {
-					continue;
-				}
-
-				const [key, valueCookie] = cookie;
-				if (targetCookieNames.includes(key)) {
-					cookies.push({ key, value: valueCookie, domain: "" });
-				}
-			} catch {
-				// Ignore invalid cookie strings
-			}
-		}
-		return cookies.length > 0 ? cookies : null;
+		// Not base64: interpret the raw value itself.
+		return resolveCookieAttempt(value, readQuickManagerExport(value, targetNames), targetNames);
 	} catch {
 		return null;
 	}
