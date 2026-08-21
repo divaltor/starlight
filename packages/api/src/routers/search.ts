@@ -355,80 +355,62 @@ export const searchImages = maybeAuthProcedure
 	});
 
 export const randomImages = publicProcedure.handler(async () => {
+	// Rank on narrow tuples so window sorts stay in memory; display columns are
+	// joined back only for the surviving top500. Decay math must stay float8 —
+	// EXTRACT() yields numeric and EXP/LN on numeric is ~100ms slower at this scale.
 	const images = await prisma.$queryRaw<SearchResult[]>`
-        WITH base AS (
-            SELECT
-                p.id,
-                p.height,
-                p.width,
-                p.s3_path,
-                p.original_url,
-                t.username,
-                t.created_at as tweet_created_at,
-                t.id as tweet_id,
-                (p.classification->>'aesthetic')::float AS aesthetic,
-                (p.classification->'style'->>'anime')::float AS style_anime,
-                (p.classification->'style'->>'real_life')::float AS style_real_life,
-                (p.classification->'style'->>'other')::float AS style_other,
-                (p.classification->'nsfw'->>'is_nsfw')::boolean AS is_nsfw
+		WITH core AS (
+			SELECT
+				p.id AS photo_id,
+				p.user_id,
+				t.id AS tweet_id,
+				t.created_at AS ts,
+				(p.classification->>'aesthetic')::float AS aesthetic,
+				(p.classification->'style'->>'anime')::float AS style_anime,
+				(p.classification->'style'->>'real_life')::float AS style_real_life,
+				(p.classification->'style'->>'other')::float AS style_other
 			FROM photos p
 			JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
-			WHERE p.classification IS NOT NULL 
-			AND p.deleted_at IS NULL
+			WHERE p.deleted_at IS NULL
+			AND p.classification IS NOT NULL
 			AND p.user_id IN (SELECT id FROM users WHERE is_public = true)
 			AND NOT (p.classification->'nsfw'->>'is_nsfw')::boolean
-        ),
-        ranked AS (
-            SELECT *,
-                aesthetic * style_anime * 
-                (1.0 - style_real_life) * 
-                (1.0 - style_other) AS effective,
-                ROW_NUMBER() OVER (
-                    ORDER BY 
-                    aesthetic * style_anime * 
-                    (1.0 - style_real_life) * 
-                    (1.0 - style_other) DESC
-                ) AS rank_style,
-                ROW_NUMBER() OVER (ORDER BY tweet_created_at DESC) AS rank_recency
-            FROM base
-        ),
-        fused AS (
-            SELECT
-                id as photo_id,
-                height,
-                width,
-                s3_path,
-                original_url,
-                username,
-                tweet_created_at,
-                tweet_id,
-                is_nsfw,
-                (
-                    (1.0 / (rank_style + 60) * 0.9) +
-                    (1.0 / (rank_recency + 60) * 0.1)
-                ) * effective * 
-                EXP(LN(0.5) * (EXTRACT(EPOCH FROM (NOW() - tweet_created_at)) / (30.0 * 24 * 3600.0))) AS final_score
-            FROM ranked
-        ),
-        top500 AS (
-            SELECT * FROM fused 
-            ORDER BY final_score DESC 
-            LIMIT 500
-        )
-        SELECT
-            photo_id,
-            original_url,
-            s3_path,
-            username,
-            height,
-            width,
-            tweet_created_at,
-            tweet_id,
-            is_nsfw,
-            final_score
-        FROM top500
-        ORDER BY RANDOM()
-        LIMIT 30;
+		),
+		scored AS (
+			SELECT *, aesthetic * style_anime * (1.0 - style_real_life) * (1.0 - style_other) AS effective
+			FROM core
+		),
+		ranked AS (
+			SELECT *,
+				ROW_NUMBER() OVER (ORDER BY effective DESC) AS rank_style,
+				ROW_NUMBER() OVER (ORDER BY ts DESC) AS rank_recency
+			FROM scored
+		),
+		fused AS (
+			SELECT photo_id, user_id, tweet_id, ts,
+				((1.0 / (rank_style + 60) * 0.9) + (1.0 / (rank_recency + 60) * 0.1)) * effective *
+				EXP(LN(0.5::float8) * (EXTRACT(EPOCH FROM (NOW() - ts))::float8 / 2592000.0)) AS final_score
+			FROM ranked
+		),
+		top500 AS (
+			SELECT * FROM fused ORDER BY final_score DESC LIMIT 500
+		)
+		SELECT
+			z.photo_id,
+			p.height,
+			p.width,
+			p.s3_path,
+			p.original_url,
+			t.username,
+			t.created_at AS tweet_created_at,
+			z.tweet_id,
+			COALESCE((p.classification->'nsfw'->>'is_nsfw')::boolean, false) AS is_nsfw,
+			z.final_score
+		FROM top500 z
+		JOIN tweets t ON t.id = z.tweet_id AND t.user_id = z.user_id
+		JOIN photos p ON p.id = z.photo_id AND p.user_id = z.user_id
+		ORDER BY RANDOM()
+		LIMIT 30
 	`;
 
 	return transformSearchResults(images);
