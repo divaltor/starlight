@@ -122,7 +122,6 @@ export function TweetImageGrid({
 								aria-label="Open artwork"
 								className="absolute inset-0 cursor-pointer"
 								onClick={open}
-								ref={ref}
 								type="button"
 							/>
 							{isImageLoading[photo.id] && (
@@ -139,6 +138,7 @@ export function TweetImageGrid({
 								height={photo.height || 400}
 								onLoad={() => handleImageLoad(photo.id, false)}
 								onLoadStart={() => handleImageLoad(photo.id, true)}
+								ref={ref}
 								src={photo.url}
 								width={photo.width || 400}
 							/>
@@ -225,7 +225,6 @@ export function TweetImageGrid({
 									aria-label="Open artwork"
 									className="absolute inset-0 cursor-pointer"
 									onClick={open}
-									ref={ref}
 									type="button"
 								/>
 								{isImageLoading[item.id || ""] && (
@@ -242,6 +241,7 @@ export function TweetImageGrid({
 									height={item.height || 400}
 									onLoad={() => handleImageLoad(item.id || "", false)}
 									onLoadStart={() => handleImageLoad(item.id || "", true)}
+									ref={ref}
 									src={item.src}
 									width={item.width || 400}
 								/>
