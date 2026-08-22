@@ -74,7 +74,7 @@ export const defaultLayer = layer.pipe(Layer.provide(FetchHttpClient.layer));
 - Name workflows `Effect.fn("Module.method")`.
 - Model expected failures as `Schema.TaggedError` with a `static fromCause(...)` helper.
 - One assembled `ManagedRuntime` per process in `services/runtime.ts`.
-- Enforcement: `bun run lint:effect-patterns`, `bun run lint:effect-simplifications`.
+- Enforcement: `bun run lint`.
 
 ## Maintenance & Tasks
 

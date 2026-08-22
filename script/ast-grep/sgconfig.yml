@@ -1,6 +1,8 @@
 ruleDirs:
   - rules
+  - effect-simplifications/rules
 testConfigs:
   - testDir: rule-tests
+  - testDir: effect-simplifications/rule-tests
 ignorePaths:
   - packages/utils/src/generated/**

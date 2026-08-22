@@ -60,10 +60,11 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(Layer.provide(Fetch
 
 ## Enforcement
 
-- `bun run lint:effect-patterns` — structural rules in `script/ast-grep/rules`: no import aliases, no `JSON.parse(x) as T`, bind services before calling their methods, `Effect.die` only with `new Error(...)`.
-- `bun run lint:effect-simplifications` — rewrite rules in `script/ast-grep/effect-simplifications`: `Effect.orElseSucceed` over catch + succeed, effect-form `andThen` over flatMap + suspend, `Effect.as(undefined)` over andThen + succeed(undefined).
+- `bun run lint` runs ast-grep over both rule sets alongside oxlint and typechecks.
+- Structural rules in `script/ast-grep/rules`: no import aliases, no `JSON.parse(x) as T`, bind services before calling their methods, `Effect.die` only with `new Error(...)`.
+- Rewrite rules in `script/ast-grep/effect-simplifications`: `Effect.orElseSucceed` over catch + succeed, effect-form `andThen` over flatMap + suspend, `Effect.as(undefined)` over andThen + succeed(undefined).
 - Edit rules together with their tests under `rule-tests/`; verify with `bun run test:ast-grep-rules`.
-- Both scans also run automatically in the lefthook pre-commit hook on staged TypeScript files.
+- The scan also runs automatically in the lefthook pre-commit hook on staged TypeScript files.
 
 ## Testing
 

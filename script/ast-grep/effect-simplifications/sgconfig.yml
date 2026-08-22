@@ -1,6 +1,0 @@
-ruleDirs:
-  - rules
-testConfigs:
-  - testDir: rule-tests
-ignorePaths:
-  - packages/utils/src/generated/**

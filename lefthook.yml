@@ -10,6 +10,3 @@ pre-commit:
     ast-grep:
       glob: "*.{ts,tsx}"
       run: ast-grep scan -c script/ast-grep/sgconfig.yml "{staged_files}"
-    ast-grep-simplifications:
-      glob: "*.{ts,tsx}"
-      run: ast-grep scan -c script/ast-grep/effect-simplifications/sgconfig.yml --off=unused-suppression "{staged_files}"

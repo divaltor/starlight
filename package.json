@@ -22,10 +22,8 @@
     }
   },
   "scripts": {
-    "lint": "oxlint --fix && turbo lint",
-    "lint:effect-patterns": "ast-grep scan -c script/ast-grep/sgconfig.yml apps/server/src packages/api/src",
-    "lint:effect-simplifications": "ast-grep scan -c script/ast-grep/effect-simplifications/sgconfig.yml --off=unused-suppression apps/server/src packages/api/src",
-    "test:ast-grep-rules": "ast-grep test -c script/ast-grep/sgconfig.yml; ast-grep test -c script/ast-grep/effect-simplifications/sgconfig.yml",
+    "lint": "oxlint --fix && ast-grep scan -c script/ast-grep/sgconfig.yml apps/server/src packages/api/src && turbo lint",
+    "test:ast-grep-rules": "ast-grep test -c script/ast-grep/sgconfig.yml",
     "format": "turbo format",
     "build": "turbo build",
     "dev": "turbo dev",
