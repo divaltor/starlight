@@ -87,7 +87,7 @@ function DropdownMenuCheckboxItem({
 			data-slot="dropdown-menu-checkbox-item"
 			{...props}
 		>
-			<span className="pointer-events-none absolute left-2 flex h-4 w-4 items-center justify-center">
+			<span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">
 				{checked && <CheckIcon className="size-4" />}
 			</span>
 			{children}
@@ -122,7 +122,7 @@ function DropdownMenuRadioItem({
 			onAction={() => setSelected(true)}
 			{...props}
 		>
-			<span className="pointer-events-none absolute left-2 flex h-4 w-4 items-center justify-center">
+			<span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">
 				{selected && <CircleIcon className="size-3 fill-current" />}
 			</span>
 			{children}

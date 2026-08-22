@@ -115,7 +115,7 @@ export function useTelegramButtons(
 					break;
 				}
 				case "external": {
-					window.open(action.payload as string, "_blank");
+					window.open(action.payload as string, "_blank", "noopener");
 					break;
 				}
 				default: {

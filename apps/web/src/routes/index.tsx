@@ -107,7 +107,7 @@ export default function DiscoverPage() {
 		isLargeScreen && randomQuery.isSuccess && placedData.length > 0 && isHomeIdle;
 
 	return (
-		<div className="flex min-h-screen flex-col bg-base-100">
+		<div className="flex min-h-dvh flex-col bg-base-100">
 			{/* Main Content */}
 			<div className="flex flex-1 flex-col items-center justify-center p-4">
 				{results.length > 0 ? (
@@ -134,7 +134,7 @@ export default function DiscoverPage() {
 									<div className="flex justify-center py-6">
 										{/** biome-ignore lint/correctness/useImageSize: animated loader uses CSS sizing intentionally */}
 										<img
-											alt="Searching for cute anime girls..."
+											alt="Searching for cute anime girls…"
 											className="mx-auto h-auto w-64"
 											src="/suisei-hq.webp"
 										/>
@@ -158,7 +158,7 @@ export default function DiscoverPage() {
 												<Input
 													className="input input-bordered join-item flex-1"
 													onChange={(e) => setInputValue(e.target.value)}
-													placeholder="Search for images..."
+													placeholder="Search for images…"
 													type="text"
 													value={inputValue}
 												/>
@@ -168,9 +168,9 @@ export default function DiscoverPage() {
 													type="submit"
 												>
 													{isLoading ? (
-														<span className="loading loading-spinner h-4 w-4" />
+														<span className="loading loading-spinner size-4" />
 													) : (
-														<Search className="h-4 w-4" />
+														<Search className="size-4" />
 													)}
 													<span className="hidden sm:inline">Search</span>
 												</Button>
@@ -210,7 +210,7 @@ export default function DiscoverPage() {
 							const tweet = randomImages[index];
 							return (
 								<div
-									className="pointer-events-auto absolute animate-fade-in opacity-85"
+									className="pointer-events-auto absolute motion-safe:animate-fade-in opacity-85"
 									key={tweet.id}
 									style={{
 										animationDelay: `${i * 500}ms`,
@@ -239,7 +239,7 @@ export default function DiscoverPage() {
 								<Input
 									className="input input-bordered join-item flex-1"
 									onChange={(e) => setInputValue(e.target.value)}
-									placeholder="Search for images..."
+									placeholder="Search for images…"
 									type="text"
 									value={inputValue}
 								/>
@@ -249,9 +249,9 @@ export default function DiscoverPage() {
 									type="submit"
 								>
 									{isLoading ? (
-										<span className="loading loading-spinner h-4 w-4" />
+										<span className="loading loading-spinner size-4" />
 									) : (
-										<Search className="h-4 w-4" />
+										<Search className="size-4" />
 									)}
 									<span className="hidden sm:inline">Search</span>
 								</Button>

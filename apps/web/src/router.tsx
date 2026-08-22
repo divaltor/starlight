@@ -11,7 +11,7 @@ export const getRouter = () => {
 		defaultPreloadStaleTime: 0,
 		context: { queryClient, orpc },
 		defaultNotFoundComponent: () => (
-			<div className="h-screen bg-base-100 p-4">
+			<div className="h-dvh bg-base-100 p-4">
 				<NotFound />
 			</div>
 		),

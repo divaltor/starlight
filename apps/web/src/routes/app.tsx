@@ -131,7 +131,7 @@ function TwitterArtViewer() {
 	// Show error state
 	if (error) {
 		return (
-			<div className="flex min-h-screen items-center justify-center">
+			<div className="flex min-h-dvh items-center justify-center">
 				<NotFound
 					description="An error occurred while loading tweets. Please try again later."
 					icon={<AlertTriangle className="size-10 text-base-content/20" />}
@@ -147,13 +147,13 @@ function TwitterArtViewer() {
 	const currentInfiniteLoader = isSearchActive ? searchInfiniteLoader : infiniteLoader;
 
 	return (
-		<div className="flex min-h-screen flex-col p-4">
+		<div className="flex min-h-dvh flex-col p-4">
 			{/* Loading State */}
 			{displayLoading && (
 				<div className="flex flex-1 items-center justify-center">
 					{/** biome-ignore lint/correctness/useImageSize: animated loader uses CSS sizing intentionally */}
 					<img
-						alt="Searching for cute anime girls..."
+						alt="Searching for cute anime girls…"
 						className="mx-auto h-auto w-64"
 						src="/suisei-hq.webp"
 					/>
@@ -200,7 +200,7 @@ function TwitterArtViewer() {
 							<Input
 								className="input input-bordered join-item flex-1"
 								onChange={(e) => setInputValue(e.target.value)}
-								placeholder="Search for images..."
+								placeholder="Search for images…"
 								type="text"
 								value={inputValue}
 							/>
@@ -210,9 +210,9 @@ function TwitterArtViewer() {
 								type="submit"
 							>
 								{displayLoading ? (
-									<span className="loading loading-spinner h-4 w-4" />
+									<span className="loading loading-spinner size-4" />
 								) : (
-									<Search className="h-4 w-4" />
+									<Search className="size-4" />
 								)}
 								<span className="hidden sm:inline">Search</span>
 							</Button>

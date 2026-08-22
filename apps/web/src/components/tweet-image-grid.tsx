@@ -143,7 +143,7 @@ export function TweetImageGrid({
 								width={photo.width || 400}
 							/>
 							<div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							<div className="pointer-events-none absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
+							<div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
 								<div className="w-full p-3 text-white">
 									<div className="flex items-center justify-between">
 										<div
@@ -163,7 +163,7 @@ export function TweetImageGrid({
 										</div>
 										{showActions && onDeleteImage && (
 											<Button
-												className="pointer-events-auto flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+												className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
 												onClick={(e) => {
 													e.stopPropagation();
 													setDeleteConfirm(photo.id);
@@ -171,7 +171,7 @@ export function TweetImageGrid({
 												size="sm"
 												variant="ghost"
 											>
-												<X className="h-3 w-3" />
+												<X className="size-3" />
 											</Button>
 										)}
 									</div>
@@ -246,7 +246,7 @@ export function TweetImageGrid({
 									width={item.width || 400}
 								/>
 								<div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-								<div className="pointer-events-none absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
+								<div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
 									<div className="w-full p-3 text-white">
 										<div className="flex items-center justify-between">
 											<div
@@ -266,7 +266,7 @@ export function TweetImageGrid({
 											</div>
 											{showActions && onDeleteImage && (
 												<Button
-													className="pointer-events-auto flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+													className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
 													onClick={(e) => {
 														e.stopPropagation();
 														setDeleteConfirm(item.id || "");
@@ -274,7 +274,7 @@ export function TweetImageGrid({
 													size="sm"
 													variant="ghost"
 												>
-													<X className="h-3 w-3" />
+													<X className="size-3" />
 												</Button>
 											)}
 										</div>

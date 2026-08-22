@@ -2,7 +2,7 @@ import type { ProfileResult } from "@starlight/api/routers/index";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertCircle, Cookie, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -180,7 +180,7 @@ function SettingsLoadError({ onRetry }: { onRetry: () => void }) {
 			<Card>
 				<CardContent className="py-8">
 					<Alert variant="destructive">
-						<AlertCircle className="h-4 w-4" />
+						<AlertCircle className="size-4" />
 						<AlertTitle>Failed to load settings</AlertTitle>
 						<div className="mt-2">
 							<Button onClick={onRetry} size="sm" variant="outline">
@@ -226,13 +226,13 @@ function CookiesSection({
 			{/* Cookie Success/Error Messages */}
 			{cookieError && (
 				<Alert variant="destructive">
-					<AlertCircle className="h-4 w-4" />
+					<AlertCircle className="size-4" />
 					<span>{cookieError.message}</span>
 				</Alert>
 			)}
 			{profile?.hasValidCookies ? (
 				<Alert className="alert-horizontal">
-					<Cookie className="h-4 w-4 shrink-0" />
+					<Cookie className="size-4 shrink-0" />
 					<span>Authentication cookies are saved.</span>
 					<div>
 						<Button
@@ -242,7 +242,7 @@ function CookiesSection({
 							size="sm"
 							variant="destructive"
 						>
-							<Trash2 className="h-4 w-4" /> Remove
+							<Trash2 className="size-4" /> Remove
 						</Button>
 					</div>
 				</Alert>
@@ -250,7 +250,7 @@ function CookiesSection({
 				<div className="space-y-4">
 					{!profile?.hasValidCookies && (
 						<Alert variant="default">
-							<AlertCircle className="h-4 w-4" />
+							<AlertCircle className="size-4" />
 							<AlertDescription>
 								Connect your Twitter account by adding authentication cookies
 							</AlertDescription>
@@ -326,14 +326,30 @@ function VisibilitySection({
 	);
 }
 
+// The origin cannot change during a page's lifetime, so subscribing would be
+// a no-op; only the snapshots matter to useSyncExternalStore.
+function subscribeToOrigin() {
+	return () => {
+		// Nothing to clean up.
+	};
+}
+
 function ProfileLinkBlock({ username }: { username: string }) {
+	// window is unavailable during SSR; useSyncExternalStore renders the
+	// path-only form on the server and upgrades to the absolute URL on mount.
+	const origin = useSyncExternalStore(
+		subscribeToOrigin,
+		() => window.location.origin,
+		() => "",
+	);
+
 	return (
 		<div className="w-full bg-base-200 p-4">
 			<div className="flex items-center">
 				<p className="text-base-content/70 text-sm">
 					Link to your profile:{" "}
 					<Link className="link text-sm" params={{ slug: username }} to="/profile/$slug">
-						{`${window.location.origin}/profile/${username}`}
+						{`${origin}/profile/${username}`}
 					</Link>
 				</p>
 			</div>

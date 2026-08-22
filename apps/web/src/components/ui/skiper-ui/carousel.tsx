@@ -43,7 +43,7 @@ const Carousel = ({
 }) => (
 	<LazyMotion features={loadDomAnimation}>
 		<m.div
-			animate={{ opacity: 1, translateY: 0 }}
+			animate={{ opacity: 1, transform: "translateY(0)" }}
 			className={cn("relative w-full max-w-3xl", className)}
 			transition={{
 				duration: 0.3,

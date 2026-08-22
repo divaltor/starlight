@@ -79,7 +79,7 @@ function RootDocument() {
 			<head>
 				<HeadContent />
 			</head>
-			<body className="min-h-screen bg-base-100">
+			<body className="min-h-dvh bg-base-100">
 				<TelegramButtonsProvider>
 					<StrictMode>
 						<NuqsAdapter>
