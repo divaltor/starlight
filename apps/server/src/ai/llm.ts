@@ -14,14 +14,14 @@ export interface TraceContext {
 	readonly attributes: Readonly<Record<string, string>>;
 }
 
-export class UnavailableError extends Schema.TaggedErrorClass<UnavailableError>()(
+export class UnavailableError extends Schema.TaggedError<UnavailableError>()(
 	"LlmUnavailableError",
 	{
 		message: Schema.String,
 	},
 ) {}
 
-export class ProviderError extends Schema.TaggedErrorClass<ProviderError>()("LlmProviderError", {
+export class ProviderError extends Schema.TaggedError<ProviderError>()("LlmProviderError", {
 	operation: Operation,
 	providerErrorName: Schema.String,
 	message: Schema.String,
@@ -41,14 +41,11 @@ export class ProviderError extends Schema.TaggedErrorClass<ProviderError>()("Llm
 	}
 }
 
-export class InvocationError extends Schema.TaggedErrorClass<InvocationError>()(
-	"LlmInvocationError",
-	{
-		operation: Operation,
-		message: Schema.String,
-		cause: Schema.optional(Schema.Defect()),
-	},
-) {
+export class InvocationError extends Schema.TaggedError<InvocationError>()("LlmInvocationError", {
+	operation: Operation,
+	message: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {
 	static fromCause(operation: Operation, cause: unknown) {
 		return new InvocationError({
 			operation,

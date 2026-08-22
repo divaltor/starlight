@@ -4,7 +4,7 @@ import { z } from "zod";
 import { publicProcedure } from "..";
 import { maybeAuthProcedure } from "../middlewares/auth";
 import { resolveQueryEmbedding } from "../services/embedding-cache";
-import { EmbeddingsService } from "../services/embeddings";
+import * as EmbeddingsService from "../services/embeddings";
 import { runtime } from "../services/runtime";
 import type { SearchResult } from "../types/tweets";
 import { Cursor, SearchCursorPayloadSchema } from "../utils/cursor";

@@ -1,23 +1,18 @@
-import { createCanvas } from "@napi-rs/canvas";
-import type { SKRSContext2D } from "@napi-rs/canvas";
-import { format } from "date-fns";
 import { logger } from "@/logger";
+import { http } from "@starlight/utils/http";
+import path from "node:path";
+import type { Node } from "takumi-js";
+import { Renderer } from "takumi-js/node";
+import { extractEmojis } from "takumi-js/helpers/emoji";
 import {
-	drawAuthorInfo,
-	drawAvatarWithFallback,
-	drawMediaBlock,
-	drawTextLines,
-	drawTranslationSource,
-	formatNumber,
-	roundedRect,
-	wrapText,
-} from "./draw";
-import { getFontFamily, registerFonts } from "./fonts";
+	buildTweetCard,
+	collectRemoteImageSrcs,
+	collectTweetImageUrls,
+	stripUnavailableImages,
+} from "./card";
 import { LAYOUT } from "./layout";
 import { themes } from "./themes";
-import type { Theme, ThemeColors } from "./themes";
-
-export type { Theme } from "./themes";
+import type { Theme } from "./themes";
 
 export interface ArticleCoverMedia {
 	height: number;
@@ -73,914 +68,127 @@ export interface RenderResult {
 	width: number;
 }
 
-const QUOTE_AVATAR_SIZE = 24;
-const QUOTE_FONT_SIZE_NAME = 13;
-const QUOTE_FONT_SIZE_TEXT = 14;
-const QUOTE_PADDING = 12;
-const QUOTE_BORDER_WIDTH = 1;
+export type { Theme } from "./themes";
 
-const REPLY_AVATAR_SIZE = LAYOUT.AVATAR_SIZE;
-const REPLY_FONT_SIZE_NAME = 13;
-const REPLY_FONT_SIZE_TEXT = 14;
-const REPLY_LINE_WIDTH = 2;
-const DOTS_INDICATOR_HEIGHT = 32;
-const DOT_SIZE = 4;
-const DOT_GAP = 6;
+const FONT_FAMILIES = ["Inter", "Noto Sans", "Noto Sans CJK", "Noto Sans Math"];
+const IMAGE_FETCH_TIMEOUT_MS = 5000;
+// The napi build ignores `devicePixelRatio` when both width and height are
+// given, so the 2x output scale is applied to the tree itself instead.
+const SCALE_FACTOR = 2;
 
-const ARTICLE_PADDING = 12;
-const ARTICLE_BORDER_WIDTH = 1;
-const ARTICLE_TITLE_FONT_SIZE = 15;
-const ARTICLE_PREVIEW_FONT_SIZE = 14;
-
-interface ReplyChainItem {
-	height: number;
-	isVideo: boolean;
-	mediaHeight: number;
-	quoteLayout: TweetLayout["quote"];
-	textLines: ReturnType<typeof wrapText>;
-	tweet: TweetData;
+function scaleNode(node: Node, factor: number): Node {
+	if (node.style) {
+		scaleStyle(node.style, factor);
+	}
+	if (node.type === "container") {
+		node.children = (node.children ?? []).map((child) => scaleNode(child, factor));
+	}
+	return node;
 }
 
-type MediaItem =
-	| {
-			formats: { jpeg: string; webp: string };
-			height: number;
-			type: "mosaic_photo";
-			url: string;
-			width: number;
-	  }
-	| { type: "photo"; url: string; width: number; height: number }
-	| {
-			type: "video" | "gif";
-			thumbnailUrl: string;
-			width: number;
-			height: number;
-	  };
-
-interface ArticleLayout {
-	contentWidth: number;
-	coverMedia: ArticleCoverMedia | null;
-	coverMediaHeight: number;
-	height: number;
-	previewLines: ReturnType<typeof wrapText>;
-	titleLines: ReturnType<typeof wrapText>;
-}
-
-interface TweetLayout {
-	contentWidth: number;
-	hasMoreInChain: boolean;
-
-	mainTweet: {
-		textLines: ReturnType<typeof wrapText>;
-		textHeight: number;
-		mediaHeight: number;
-		isVideo: boolean;
-		articleLayout: ArticleLayout | null;
-	};
-
-	quote: {
-		textLines: ReturnType<typeof wrapText>;
-		textHeight: number;
-		mediaHeight: number;
-		isVideo: boolean;
-		height: number;
-		contentWidth: number;
-		articleLayout: ArticleLayout | null;
-	} | null;
-
-	replyChain: ReplyChainItem[];
-	textWidth: number;
-	textX: number;
-	totalHeight: number;
-	totalReplyChainHeight: number;
-}
-
-function getFirstMedia(media: TweetData["media"]): MediaItem | null {
-	if (!media) {
-		return null;
-	}
-
-	if (media.mosaic) {
-		return { type: "mosaic_photo", ...media.mosaic };
-	}
-
-	const firstPhoto = media.photos?.at(0);
-	if (firstPhoto) {
-		return { type: "photo", ...firstPhoto };
-	}
-
-	const firstVideo = media.videos?.at(0);
-	if (firstVideo) {
-		return firstVideo;
-	}
-
-	return null;
-}
-
-function getMediaImageUrl(media: MediaItem): string {
-	if (media.type === "mosaic_photo") {
-		return media.formats.jpeg;
-	}
-
-	if (media.type === "photo") {
-		return media.url;
-	}
-
-	return media.thumbnailUrl;
-}
-
-function calculateTextHeight(
-	lines: { isParagraphEnd: boolean }[],
-	fontSize: number,
-	lineHeight: number,
-	paragraphGap: number,
-): number {
-	const paragraphCount = lines.filter((line) => line.isParagraphEnd).length;
-	return Math.floor(lines.length * fontSize * lineHeight + paragraphCount * paragraphGap);
-}
-
-function calculateMediaHeight(
-	media: MediaItem | null,
-	containerWidth: number,
-): { height: number; isVideo: boolean } {
-	if (!media) {
-		return { height: 0, isVideo: false };
-	}
-	const aspectRatio = media.width / media.height;
-	const height = Math.floor(containerWidth / aspectRatio);
-	const isVideo = media.type === "video" || media.type === "gif";
-	return { height, isVideo };
-}
-
-function calculateArticleLayout(
-	ctx: SKRSContext2D,
-	article: ArticleData | null | undefined,
-	containerWidth: number,
-	fontFamily: string,
-): ArticleLayout | null {
-	if (!article) {
-		return null;
-	}
-
-	const articleContentWidth = containerWidth - ARTICLE_PADDING * 2;
-
-	let coverMediaHeight = 0;
-	const coverMedia = article.coverMedia ?? null;
-	if (coverMedia) {
-		const aspectRatio = coverMedia.width / coverMedia.height;
-		coverMediaHeight = Math.floor(containerWidth / aspectRatio);
-	}
-
-	ctx.font = `bold ${ARTICLE_TITLE_FONT_SIZE}px ${fontFamily}`;
-	const titleLines = wrapText(ctx, article.title, articleContentWidth);
-	const titleHeight = calculateTextHeight(
-		titleLines,
-		ARTICLE_TITLE_FONT_SIZE,
-		LAYOUT.LINE_HEIGHT,
-		0,
-	);
-
-	ctx.font = `${ARTICLE_PREVIEW_FONT_SIZE}px ${fontFamily}`;
-	const previewLines = wrapText(ctx, article.previewText, articleContentWidth);
-	const previewHeight = calculateTextHeight(
-		previewLines,
-		ARTICLE_PREVIEW_FONT_SIZE,
-		LAYOUT.LINE_HEIGHT,
-		0,
-	);
-
-	const height = Math.floor(
-		Math.max(coverMediaHeight, 0) +
-			ARTICLE_PADDING * 2 +
-			titleHeight +
-			LAYOUT.TEXT_GAP +
-			previewHeight,
-	);
-
-	return {
-		titleLines,
-		previewLines,
-		height,
-		contentWidth: articleContentWidth,
-		coverMedia,
-		coverMediaHeight,
-	};
-}
-
-const languageDisplayNames = new Intl.DisplayNames(["en"], { type: "language" });
-
-function getTranslationLanguage(tweet: Pick<TweetData, "translation">): string | null {
-	const sourceLanguage = tweet.translation?.sourceLanguage;
-	if (!sourceLanguage) {
-		return null;
-	}
-
-	try {
-		return languageDisplayNames.of(sourceLanguage.replace("_", "-")) ?? sourceLanguage;
-	} catch {
-		return sourceLanguage;
+function scaleStyle(style: NonNullable<Node["style"]>, factor: number): void {
+	for (const [prop, value] of Object.entries(style)) {
+		if (typeof value === "number") {
+			// Style objects come from our own literals, so a numeric index view is safe here.
+			(style as Record<string, number>)[prop] = value * factor;
+		}
 	}
 }
 
-function measureQuoteLayout(
-	measureCtx: SKRSContext2D,
-	quote: TweetData,
-	contentWidth: number,
-	fontFamily: string,
-): NonNullable<TweetLayout["quote"]> {
-	measureCtx.font = `${QUOTE_FONT_SIZE_TEXT}px ${fontFamily}`;
-	const textWidth = contentWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
-	const textLines = wrapText(measureCtx, quote.text, textWidth);
-	const textHeight = calculateTextHeight(
-		textLines,
-		QUOTE_FONT_SIZE_TEXT,
-		LAYOUT.LINE_HEIGHT,
-		LAYOUT.PARAGRAPH_GAP,
-	);
+// Fonts live next to the process working directory (see apps/server README);
+// Takumi never reads system fonts, so every family below ships in the repo.
+function fontAssets(): { file: string; name: string; weight?: number }[] {
+	const fontPath = path.join(process.cwd(), "assets", "fonts");
 
-	const media = getFirstMedia(quote.media);
-	const { height: mediaHeight, isVideo } = calculateMediaHeight(media, contentWidth);
-	const articleLayout = calculateArticleLayout(measureCtx, quote.article, contentWidth, fontFamily);
-
-	const height = Math.floor(
-		QUOTE_PADDING * 2 +
-			Math.max(QUOTE_AVATAR_SIZE, QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP + textHeight) +
-			(mediaHeight > 0 ? LAYOUT.AVATAR_GAP + mediaHeight : 0) +
-			(articleLayout ? LAYOUT.AVATAR_GAP + articleLayout.height : 0),
-	);
-
-	return {
-		textLines,
-		textHeight,
-		mediaHeight,
-		isVideo,
-		height,
-		contentWidth,
-		articleLayout,
-	};
+	return [
+		{ name: "Inter", weight: 400, file: "Inter-Regular.ttf" },
+		{ name: "Inter", weight: 700, file: "Inter-Bold.ttf" },
+		{ name: "Noto Sans", file: "NotoSans-Regular.ttf" },
+		{ name: "Noto Sans CJK", file: "NotoSansCJKsc-Regular.otf" },
+		{ name: "Noto Sans Math", file: "NotoSansMath-Regular.ttf" },
+	].map((font) => ({ ...font, file: path.join(fontPath, font.file) }));
 }
 
-function measureReplyChainLayout(
-	measureCtx: SKRSContext2D,
-	tweet: TweetData,
-	replyToTextWidth: number,
-	fontFamily: string,
-): { items: ReplyChainItem[]; totalHeight: number } {
-	const items: ReplyChainItem[] = [];
-	let totalHeight = 0;
+let rendererPromise: Promise<Renderer> | null = null;
 
-	if (!tweet.replyChain || tweet.replyChain.length === 0) {
-		return { items, totalHeight };
-	}
-
-	if (tweet.hasMoreInChain) {
-		totalHeight += DOTS_INDICATOR_HEIGHT;
-	}
-
-	const quoteContentWidth = replyToTextWidth - QUOTE_PADDING * 2;
-
-	for (const chainTweet of tweet.replyChain) {
-		measureCtx.font = `${REPLY_FONT_SIZE_TEXT}px ${fontFamily}`;
-		const textLines = wrapText(measureCtx, chainTweet.text, replyToTextWidth);
-		const textHeight = calculateTextHeight(
-			textLines,
-			REPLY_FONT_SIZE_TEXT,
-			LAYOUT.LINE_HEIGHT,
-			LAYOUT.PARAGRAPH_GAP,
+function getRenderer(): Promise<Renderer> {
+	rendererPromise ??= (async () => {
+		const renderer = new Renderer();
+		await Promise.all(
+			fontAssets().map(async (font) => {
+				try {
+					const data = await Bun.file(font.file).arrayBuffer();
+					await renderer.registerFont({ name: font.name, weight: font.weight, data });
+				} catch (error) {
+					logger.warn({ error, name: font.name }, "Failed to register font");
+				}
+			}),
 		);
-
-		const media = getFirstMedia(chainTweet.media);
-		const { height: mediaHeight, isVideo } = calculateMediaHeight(media, replyToTextWidth);
-
-		const quoteLayout = chainTweet.quote
-			? measureQuoteLayout(measureCtx, chainTweet.quote, quoteContentWidth, fontFamily)
-			: null;
-
-		const gapBeforeQuote = mediaHeight > 0 ? 0 : LAYOUT.AVATAR_GAP;
-		const itemHeight = Math.floor(
-			REPLY_AVATAR_SIZE +
-				LAYOUT.AVATAR_GAP +
-				Math.max(0, textHeight - REPLY_AVATAR_SIZE + REPLY_FONT_SIZE_NAME + LAYOUT.TEXT_GAP) +
-				(mediaHeight > 0 ? LAYOUT.AVATAR_GAP + mediaHeight + LAYOUT.MEDIA_GAP : 0) +
-				(quoteLayout ? gapBeforeQuote + quoteLayout.height : 0) +
-				LAYOUT.AVATAR_GAP,
-		);
-
-		items.push({
-			tweet: chainTweet,
-			textLines,
-			height: itemHeight,
-			mediaHeight,
-			isVideo,
-			quoteLayout,
-		});
-		totalHeight += itemHeight;
-	}
-
-	return { items, totalHeight };
+		return renderer;
+	})();
+	return rendererPromise;
 }
 
-function measureTweetLayout(tweet: TweetData, fontFamily: string): TweetLayout {
-	const contentWidth = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
-	const textX = LAYOUT.PADDING + LAYOUT.AVATAR_SIZE + LAYOUT.AVATAR_GAP;
-	const textWidth = contentWidth - LAYOUT.AVATAR_SIZE - LAYOUT.AVATAR_GAP;
-	const replyToTextWidth = contentWidth - REPLY_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
-
-	const measureCanvas = createCanvas(LAYOUT.WIDTH, 100);
-	const measureCtx = measureCanvas.getContext("2d");
-
-	measureCtx.font = `${LAYOUT.FONT_SIZE_TEXT}px ${fontFamily}`;
-	const mainTextLines = wrapText(measureCtx, tweet.text, textWidth);
-	const mainTextHeight = calculateTextHeight(
-		mainTextLines,
-		LAYOUT.FONT_SIZE_TEXT,
-		LAYOUT.LINE_HEIGHT,
-		LAYOUT.PARAGRAPH_GAP,
+async function prefetchImages(urls: Iterable<string>): Promise<Map<string, Uint8Array>> {
+	const entries = await Promise.all(
+		[...urls].map(async (url) => {
+			try {
+				const response = await http(url, { timeout: IMAGE_FETCH_TIMEOUT_MS });
+				if (!response.ok) {
+					throw new Error(`HTTP ${response.status}`);
+				}
+				return [url, new Uint8Array(await response.arrayBuffer())] as const;
+			} catch (error) {
+				logger.warn({ error, url }, "Failed to load image for tweet card");
+				return null;
+			}
+		}),
 	);
 
-	const mainMedia = getFirstMedia(tweet.media);
-	const { height: mainMediaHeight, isVideo: mainMediaIsVideo } = calculateMediaHeight(
-		mainMedia,
-		contentWidth,
-	);
-
-	const mainArticleLayout = calculateArticleLayout(
-		measureCtx,
-		tweet.article,
-		contentWidth,
-		fontFamily,
-	);
-
-	const quoteContentWidth = contentWidth - QUOTE_PADDING * 2;
-	const quoteLayout = tweet.quote
-		? measureQuoteLayout(measureCtx, tweet.quote, quoteContentWidth, fontFamily)
-		: null;
-
-	const { items: replyChainItems, totalHeight: totalReplyChainHeight } = measureReplyChainLayout(
-		measureCtx,
-		tweet,
-		replyToTextWidth,
-		fontFamily,
-	);
-
-	const headerHeight = LAYOUT.AVATAR_SIZE;
-	const statsHeight = LAYOUT.STATS_HEIGHT;
-	const mediaGapAfter = LAYOUT.MEDIA_GAP_BOTTOM;
-
-	const hasMainMediaOrArticle = mainMediaHeight > 0 || mainArticleLayout;
-
-	const mediaBlockHeight =
-		mainMediaHeight > 0 ? LAYOUT.AVATAR_GAP + mainMediaHeight + mediaGapAfter : 0;
-	const articleBlockHeight = mainArticleLayout
-		? LAYOUT.AVATAR_GAP + mainArticleLayout.height + mediaGapAfter
-		: 0;
-	const gapBeforeQuote = hasMainMediaOrArticle ? 0 : LAYOUT.AVATAR_GAP;
-	const quoteBlockHeight = quoteLayout ? gapBeforeQuote + quoteLayout.height : 0;
-
-	const totalHeight =
-		LAYOUT.PADDING +
-		totalReplyChainHeight +
-		headerHeight +
-		LAYOUT.AVATAR_GAP +
-		mainTextHeight +
-		mediaBlockHeight +
-		articleBlockHeight +
-		quoteBlockHeight +
-		LAYOUT.AVATAR_GAP +
-		statsHeight +
-		LAYOUT.PADDING;
-
-	return {
-		totalHeight,
-		contentWidth,
-		textX,
-		textWidth,
-		mainTweet: {
-			textLines: mainTextLines,
-			textHeight: mainTextHeight,
-			mediaHeight: mainMediaHeight,
-			isVideo: mainMediaIsVideo,
-			articleLayout: mainArticleLayout,
-		},
-		quote: quoteLayout,
-		replyChain: replyChainItems,
-		totalReplyChainHeight,
-		hasMoreInChain: tweet.hasMoreInChain ?? false,
-	};
-}
-
-interface DrawReplyChainParams {
-	colors: ThemeColors;
-	ctx: SKRSContext2D;
-	fontFamily: string;
-	hasMoreInChain: boolean;
-	items: ReplyChainItem[];
-	replyToTextWidth: number;
-	replyToTextX: number;
-	startY: number;
-}
-
-async function drawReplyChain(params: DrawReplyChainParams): Promise<number> {
-	const { ctx, items, hasMoreInChain, startY, colors, fontFamily, replyToTextX, replyToTextWidth } =
-		params;
-
-	let yOffset = startY;
-	const replyAvatarCenterX = LAYOUT.PADDING + REPLY_AVATAR_SIZE / 2;
-
-	if (hasMoreInChain) {
-		ctx.fillStyle = colors.border;
-		for (let i = 0; i < 3; i++) {
-			ctx.beginPath();
-			ctx.arc(
-				replyAvatarCenterX,
-				yOffset + 12 + (i - 1) * (DOT_SIZE + DOT_GAP),
-				DOT_SIZE / 2,
-				0,
-				Math.PI * 2,
-			);
-			ctx.fill();
-		}
-		yOffset += DOTS_INDICATOR_HEIGHT;
-	}
-
-	for (const item of items) {
-		await drawAvatarWithFallback({
-			ctx,
-			url: item.tweet.authorAvatarUrl,
-			x: LAYOUT.PADDING,
-			y: yOffset,
-			size: REPLY_AVATAR_SIZE,
-			fallbackColor: colors.secondaryText,
-		});
-
-		drawAuthorInfo({
-			ctx,
-			name: item.tweet.authorName,
-			username: item.tweet.authorUsername,
-			x: replyToTextX,
-			y: yOffset,
-			fontSize: REPLY_FONT_SIZE_NAME,
-			fontFamily,
-			textColor: colors.text,
-			secondaryColor: colors.secondaryText,
-			themeColors: colors,
-			translationLanguage: getTranslationLanguage(item.tweet),
-			inline: true,
-		});
-
-		const replyTextStartY = yOffset + REPLY_FONT_SIZE_NAME + LAYOUT.TEXT_GAP;
-
-		const replyTextY = drawTextLines({
-			ctx,
-			lines: item.textLines,
-			x: replyToTextX,
-			startY: replyTextStartY,
-			fontSize: REPLY_FONT_SIZE_TEXT,
-			lineHeight: LAYOUT.LINE_HEIGHT,
-			paragraphGap: LAYOUT.PARAGRAPH_GAP,
-			color: colors.text,
-			fontFamily,
-		});
-
-		let mediaEndY = replyTextY;
-		const chainMedia = getFirstMedia(item.tweet.media);
-		if (chainMedia && item.mediaHeight > 0) {
-			const chainImageUrl = getMediaImageUrl(chainMedia);
-			await drawMediaBlock({
-				ctx,
-				imageUrl: chainImageUrl,
-				x: replyToTextX,
-				y: replyTextY + LAYOUT.AVATAR_GAP,
-				width: replyToTextWidth,
-				height: item.mediaHeight,
-				isVideo: item.isVideo,
-				backgroundColor: colors.background,
-				borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
-			});
-			mediaEndY = replyTextY + LAYOUT.AVATAR_GAP + item.mediaHeight;
-		}
-
-		if (item.tweet.quote && item.quoteLayout) {
-			const quoteY =
-				chainMedia && item.mediaHeight > 0
-					? mediaEndY + LAYOUT.MEDIA_GAP
-					: replyTextY + LAYOUT.AVATAR_GAP;
-
-			await drawQuoteTweet({
-				ctx,
-				quote: item.tweet.quote,
-				quoteLayout: item.quoteLayout,
-				x: replyToTextX,
-				y: quoteY,
-				contentWidth: replyToTextWidth,
-				colors,
-				fontFamily,
-			});
-		}
-
-		const lineMargin = 4;
-		const lineStartY = yOffset + REPLY_AVATAR_SIZE + lineMargin;
-		const bottomGap =
-			item.quoteLayout || item.mediaHeight > 0 ? LAYOUT.MEDIA_GAP : LAYOUT.AVATAR_GAP;
-		const lineEndY = yOffset + item.height - bottomGap / 2;
-
-		ctx.strokeStyle = colors.border;
-		ctx.lineWidth = REPLY_LINE_WIDTH;
-		ctx.beginPath();
-		ctx.moveTo(replyAvatarCenterX, lineStartY);
-		ctx.lineTo(replyAvatarCenterX, lineEndY);
-		ctx.stroke();
-
-		yOffset += item.height;
-	}
-
-	return yOffset;
-}
-
-interface DrawArticleBlockParams {
-	articleLayout: ArticleLayout;
-	colors: ThemeColors;
-	containerWidth: number;
-	ctx: SKRSContext2D;
-	fontFamily: string;
-	x: number;
-	y: number;
-}
-
-async function drawArticleBlock(params: DrawArticleBlockParams): Promise<void> {
-	const { ctx, articleLayout, x, y, containerWidth, colors, fontFamily } = params;
-
-	ctx.strokeStyle = colors.border;
-	ctx.lineWidth = ARTICLE_BORDER_WIDTH;
-	roundedRect({
-		ctx,
-		x,
-		y,
-		width: containerWidth,
-		height: articleLayout.height,
-		radius: LAYOUT.MEDIA_BORDER_RADIUS,
-	});
-	ctx.stroke();
-
-	let contentY = y;
-
-	if (articleLayout.coverMedia && articleLayout.coverMediaHeight > 0) {
-		await drawMediaBlock({
-			ctx,
-			imageUrl: articleLayout.coverMedia.url,
-			x,
-			y: contentY,
-			width: containerWidth,
-			height: articleLayout.coverMediaHeight,
-			isVideo: false,
-			backgroundColor: colors.background,
-			borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
-		});
-		contentY += articleLayout.coverMediaHeight;
-	}
-
-	const contentX = x + ARTICLE_PADDING;
-	contentY += ARTICLE_PADDING;
-
-	ctx.fillStyle = colors.text;
-	ctx.font = `bold ${ARTICLE_TITLE_FONT_SIZE}px ${fontFamily}`;
-	contentY = drawTextLines({
-		ctx,
-		lines: articleLayout.titleLines,
-		x: contentX,
-		startY: contentY,
-		fontSize: ARTICLE_TITLE_FONT_SIZE,
-		lineHeight: LAYOUT.LINE_HEIGHT,
-		paragraphGap: 0,
-		color: colors.text,
-		fontFamily,
-	});
-
-	contentY += LAYOUT.TEXT_GAP;
-
-	drawTextLines({
-		ctx,
-		lines: articleLayout.previewLines,
-		x: contentX,
-		startY: contentY,
-		fontSize: ARTICLE_PREVIEW_FONT_SIZE,
-		lineHeight: LAYOUT.LINE_HEIGHT,
-		paragraphGap: 0,
-		color: colors.secondaryText,
-		fontFamily,
-	});
-}
-
-interface DrawQuoteTweetParams {
-	colors: ThemeColors;
-	contentWidth: number;
-	ctx: SKRSContext2D;
-	fontFamily: string;
-	quote: TweetData;
-	quoteLayout: NonNullable<TweetLayout["quote"]>;
-	x: number;
-	y: number;
-}
-
-async function drawQuoteTweet(params: DrawQuoteTweetParams): Promise<void> {
-	const { ctx, quote, quoteLayout, x, y, contentWidth, colors, fontFamily } = params;
-
-	ctx.strokeStyle = colors.border;
-	ctx.lineWidth = QUOTE_BORDER_WIDTH;
-	roundedRect({
-		ctx,
-		x,
-		y,
-		width: contentWidth,
-		height: quoteLayout.height,
-		radius: LAYOUT.MEDIA_BORDER_RADIUS,
-	});
-	ctx.stroke();
-
-	const quoteX = x + QUOTE_PADDING;
-	const quoteTextX = quoteX + QUOTE_AVATAR_SIZE + LAYOUT.AVATAR_GAP;
-	let quoteY = y + QUOTE_PADDING;
-
-	await drawAvatarWithFallback({
-		ctx,
-		url: quote.authorAvatarUrl,
-		x: quoteX,
-		y: quoteY,
-		size: QUOTE_AVATAR_SIZE,
-		fallbackColor: colors.secondaryText,
-	});
-
-	drawAuthorInfo({
-		ctx,
-		name: quote.authorName,
-		username: quote.authorUsername,
-		x: quoteTextX,
-		y: quoteY,
-		fontSize: QUOTE_FONT_SIZE_NAME,
-		fontFamily,
-		textColor: colors.text,
-		secondaryColor: colors.secondaryText,
-		themeColors: colors,
-		translationLanguage: getTranslationLanguage(quote),
-		inline: true,
-	});
-
-	const quoteTextStartY = quoteY + QUOTE_FONT_SIZE_NAME + LAYOUT.TEXT_GAP;
-
-	quoteY = drawTextLines({
-		ctx,
-		lines: quoteLayout.textLines,
-		x: quoteTextX,
-		startY: quoteTextStartY,
-		fontSize: QUOTE_FONT_SIZE_TEXT,
-		lineHeight: LAYOUT.LINE_HEIGHT,
-		paragraphGap: LAYOUT.PARAGRAPH_GAP,
-		color: colors.text,
-		fontFamily,
-	});
-
-	const quoteMedia = getFirstMedia(quote.media);
-	if (quoteMedia && quoteLayout.mediaHeight > 0) {
-		const quoteImageUrl = getMediaImageUrl(quoteMedia);
-		await drawMediaBlock({
-			ctx,
-			imageUrl: quoteImageUrl,
-			x: quoteX,
-			y: quoteY + LAYOUT.AVATAR_GAP,
-			width: quoteLayout.contentWidth,
-			height: quoteLayout.mediaHeight,
-			isVideo: quoteLayout.isVideo,
-			backgroundColor: colors.background,
-			borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
-		});
-		quoteY += LAYOUT.AVATAR_GAP + quoteLayout.mediaHeight;
-	}
-
-	if (quoteLayout.articleLayout) {
-		await drawArticleBlock({
-			ctx,
-			articleLayout: quoteLayout.articleLayout,
-			x: quoteX,
-			y: quoteY + LAYOUT.AVATAR_GAP,
-			containerWidth: quoteLayout.contentWidth,
-			colors,
-			fontFamily,
-		});
-	}
-}
-
-interface DrawCardBackgroundParams {
-	colors: ThemeColors;
-	ctx: SKRSContext2D;
-	totalHeight: number;
-}
-
-function drawCardBackground(params: DrawCardBackgroundParams): void {
-	const { ctx, totalHeight, colors } = params;
-	const cardRadius = LAYOUT.MEDIA_BORDER_RADIUS;
-
-	ctx.fillStyle = colors.cardBackground;
-	roundedRect({
-		ctx,
-		x: 0,
-		y: 0,
-		width: LAYOUT.WIDTH,
-		height: totalHeight,
-		radius: cardRadius,
-	});
-	ctx.fill();
-
-	ctx.strokeStyle = colors.border;
-	ctx.lineWidth = 1;
-	roundedRect({
-		ctx,
-		x: 0.5,
-		y: 0.5,
-		width: LAYOUT.WIDTH - 1,
-		height: totalHeight - 1,
-		radius: cardRadius,
-	});
-	ctx.stroke();
-}
-
-interface DrawStatsParams {
-	colors: ThemeColors;
-	ctx: SKRSContext2D;
-	fontFamily: string;
-	tweet: TweetData;
-	y: number;
-}
-
-function drawStats(params: DrawStatsParams): void {
-	const { ctx, tweet, y, colors, fontFamily } = params;
-
-	ctx.fillStyle = colors.secondaryText;
-	ctx.font = `${LAYOUT.FONT_SIZE_STATS}px ${fontFamily}`;
-
-	const stats = [
-		tweet.createdAt ? format(tweet.createdAt, "MMM d, yyyy") : null,
-		`${formatNumber(tweet.replies)} replies`,
-		`${formatNumber(tweet.retweets)} reposts`,
-		`${formatNumber(tweet.likes)} likes`,
-	].filter((s): s is string => s !== null);
-
-	ctx.fillText(stats.join("  ·  "), LAYOUT.PADDING, y + LAYOUT.FONT_SIZE_STATS);
+	return new Map(entries.filter((entry) => entry !== null));
 }
 
 export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<RenderResult> {
-	registerFonts();
-
+	const renderer = await getRenderer();
 	const colors = themes[theme];
-	const fontFamily = getFontFamily();
 
-	const layout = measureTweetLayout(tweet, fontFamily);
+	const mediaUrls = collectTweetImageUrls(tweet);
+	const mediaBytes = await prefetchImages(mediaUrls);
+	const failedUrls = new Set([...mediaUrls].filter((url) => !mediaBytes.has(url)));
 
-	const mainMedia = getFirstMedia(tweet.media);
-	const replyToTextX = LAYOUT.PADDING + REPLY_AVATAR_SIZE + LAYOUT.AVATAR_GAP;
-	const replyToTextWidth = layout.contentWidth - REPLY_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
+	let node: Node = buildTweetCard({ colors, failedUrls, tweet });
+	node = extractEmojis(node, "twemoji");
 
-	const headerHeight = LAYOUT.AVATAR_SIZE;
-	const mediaGapAfter = LAYOUT.MEDIA_GAP_BOTTOM;
+	const emojiUrls = [...collectRemoteImageSrcs(node)].filter((url) => !mediaBytes.has(url));
+	const emojiBytes = await prefetchImages(emojiUrls);
 
-	const scale = LAYOUT.SCALE_FACTOR;
-	const canvas = createCanvas(LAYOUT.WIDTH * scale, layout.totalHeight * scale);
-	const ctx = canvas.getContext("2d");
-	ctx.scale(scale, scale);
-	ctx.imageSmoothingEnabled = true;
-	ctx.imageSmoothingQuality = "high";
+	const bytesBySrc = new Map([...mediaBytes, ...emojiBytes]);
+	stripUnavailableImages(node, bytesBySrc);
+	node = scaleNode(node, SCALE_FACTOR);
 
-	drawCardBackground({ ctx, totalHeight: layout.totalHeight, colors });
+	const measured = await renderer.measure(node, { width: LAYOUT.WIDTH * SCALE_FACTOR });
 
-	let yOffset: number = LAYOUT.PADDING;
-
-	if (layout.replyChain.length > 0) {
-		yOffset = await drawReplyChain({
-			ctx,
-			items: layout.replyChain,
-			hasMoreInChain: layout.hasMoreInChain,
-			startY: yOffset,
-			colors,
-			fontFamily,
-			replyToTextX,
-			replyToTextWidth,
-		});
-	}
-
-	await drawAvatarWithFallback({
-		ctx,
-		url: tweet.authorAvatarUrl,
-		x: LAYOUT.PADDING,
-		y: yOffset,
-		size: LAYOUT.AVATAR_SIZE,
-		fallbackColor: colors.secondaryText,
+	const buffer = await renderer.render(node, {
+		fontFamilies: FONT_FAMILIES,
+		format: "jpeg",
+		height: measured.height,
+		images: [...bytesBySrc.entries()].map(([src, data]) => ({ data, src })),
+		quality: 100,
+		width: LAYOUT.WIDTH * SCALE_FACTOR,
 	});
-
-	ctx.fillStyle = colors.text;
-	ctx.font = `bold ${LAYOUT.FONT_SIZE_NAME}px ${fontFamily}`;
-	ctx.fillText(tweet.authorName, layout.textX, yOffset + LAYOUT.NAME_OFFSET_Y);
-
-	ctx.fillStyle = colors.secondaryText;
-	ctx.font = `${LAYOUT.FONT_SIZE_USERNAME}px ${fontFamily}`;
-	const usernameLabel = `@${tweet.authorUsername}`;
-	ctx.fillText(usernameLabel, layout.textX, yOffset + LAYOUT.USERNAME_OFFSET_Y);
-
-	const translationLanguage = getTranslationLanguage(tweet);
-	if (translationLanguage) {
-		drawTranslationSource({
-			ctx,
-			colors,
-			fontFamily,
-			fontSize: LAYOUT.FONT_SIZE_USERNAME,
-			language: translationLanguage,
-			x: layout.textX + ctx.measureText(usernameLabel).width + 8,
-			y: yOffset + LAYOUT.USERNAME_OFFSET_Y - LAYOUT.FONT_SIZE_USERNAME,
-		});
-	}
-
-	yOffset += headerHeight + LAYOUT.AVATAR_GAP;
-
-	yOffset = drawTextLines({
-		ctx,
-		lines: layout.mainTweet.textLines,
-		x: LAYOUT.PADDING,
-		startY: yOffset,
-		fontSize: LAYOUT.FONT_SIZE_TEXT,
-		lineHeight: LAYOUT.LINE_HEIGHT,
-		paragraphGap: LAYOUT.PARAGRAPH_GAP,
-		color: colors.text,
-		fontFamily,
-	});
-
-	if (mainMedia && layout.mainTweet.mediaHeight > 0) {
-		yOffset += LAYOUT.AVATAR_GAP;
-
-		const imageUrl = getMediaImageUrl(mainMedia);
-		await drawMediaBlock({
-			ctx,
-			imageUrl,
-			x: LAYOUT.PADDING,
-			y: yOffset,
-			width: layout.contentWidth,
-			height: layout.mainTweet.mediaHeight,
-			isVideo: layout.mainTweet.isVideo,
-			backgroundColor: colors.background,
-			borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
-		});
-
-		yOffset += layout.mainTweet.mediaHeight + mediaGapAfter;
-	}
-
-	if (layout.mainTweet.articleLayout) {
-		yOffset += LAYOUT.AVATAR_GAP;
-
-		await drawArticleBlock({
-			ctx,
-			articleLayout: layout.mainTweet.articleLayout,
-			x: LAYOUT.PADDING,
-			y: yOffset,
-			containerWidth: layout.contentWidth,
-			colors,
-			fontFamily,
-		});
-
-		yOffset += layout.mainTweet.articleLayout.height + mediaGapAfter;
-	}
-
-	const hasMainMediaOrArticle = mainMedia || layout.mainTweet.articleLayout;
-
-	if (tweet.quote && layout.quote) {
-		if (!hasMainMediaOrArticle) {
-			yOffset += LAYOUT.AVATAR_GAP;
-		}
-
-		await drawQuoteTweet({
-			ctx,
-			quote: tweet.quote,
-			quoteLayout: layout.quote,
-			x: LAYOUT.PADDING,
-			y: yOffset,
-			contentWidth: layout.contentWidth,
-			colors,
-			fontFamily,
-		});
-
-		yOffset += layout.quote.height;
-	}
-
-	yOffset += LAYOUT.AVATAR_GAP;
-
-	drawStats({ ctx, tweet, y: yOffset, colors, fontFamily });
-
-	const buffer = canvas.toBuffer("image/jpeg", 100);
 
 	logger.debug(
-		{ width: LAYOUT.WIDTH, height: layout.totalHeight, size: buffer.length },
+		{
+			height: measured.height,
+			size: buffer.length,
+			width: LAYOUT.WIDTH * SCALE_FACTOR,
+		},
 		"Rendered tweet image",
 	);
 
 	return {
-		buffer,
-		width: LAYOUT.WIDTH * scale,
-		height: layout.totalHeight * scale,
+		buffer: Buffer.from(buffer),
+		height: measured.height,
+		width: LAYOUT.WIDTH * SCALE_FACTOR,
 	};
 }

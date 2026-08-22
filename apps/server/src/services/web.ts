@@ -1,5 +1,5 @@
 import { Cause, Effect } from "effect";
-import { Exa } from "@/services/exa";
+import * as Exa from "@/services/exa";
 import type { ExaPage, ExaSearchResult } from "@/services/exa";
 import { runtime } from "@/services/runtime";
 

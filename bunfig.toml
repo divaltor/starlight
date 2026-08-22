@@ -1,2 +1,7 @@
 [install]
 linker = "isolated"
+# Pin newly added dependencies instead of caret ranges.
+exact = true
+# Do not resolve dependency versions published within the last 3 days
+# (supply-chain protection against freshly published compromised releases).
+minimumReleaseAge = 259200

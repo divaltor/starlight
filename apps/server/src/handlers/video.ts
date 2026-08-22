@@ -6,7 +6,7 @@ import { bot } from "@/bot";
 import type { FxEmbedTweet } from "@/services/fxembed/types";
 import { runtime } from "@/services/runtime";
 import { generateTweetImage } from "@/services/tweet/tweet-image.service";
-import { TwitterApi } from "@/services/twitter-api";
+import * as TwitterApi from "@/services/twitter-api";
 import { downloadVideo, downloadVideoFromUrl } from "@/services/video";
 import type { VideoInformation } from "@/services/video";
 import type { Context } from "@/types";

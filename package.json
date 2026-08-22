@@ -22,6 +22,9 @@
   },
   "scripts": {
     "lint": "turbo lint",
+    "lint:effect-patterns": "ast-grep scan -c script/ast-grep/sgconfig.yml apps/server/src packages/api/src",
+    "lint:effect-simplifications": "ast-grep scan -c script/ast-grep/effect-simplifications/sgconfig.yml --off=unused-suppression apps/server/src packages/api/src",
+    "test:ast-grep-rules": "ast-grep test -c script/ast-grep/sgconfig.yml; ast-grep test -c script/ast-grep/effect-simplifications/sgconfig.yml",
     "format": "turbo format",
     "build": "turbo build",
     "dev": "turbo dev",

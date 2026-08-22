@@ -4,7 +4,7 @@ import { renderTweetImage } from "@/services/render";
 import type { TweetData, RenderResult } from "@/services/render";
 import type { FxEmbedTweet, FxEmbedMosaicPhoto } from "@/services/fxembed/types";
 import type { TwitterApiError } from "@/services/twitter-api";
-import { TwitterApi } from "@/services/twitter-api";
+import * as TwitterApi from "@/services/twitter-api";
 import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";

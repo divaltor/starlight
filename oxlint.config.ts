@@ -70,6 +70,12 @@ export default defineConfig({
 		"anti-slop/no-runtime-typeof": "off",
 		// Manual memoization is still needed: React Compiler is not installed.
 		"react-doctor/react-compiler-no-manual-memoization": "off",
+		// Schema.TaggedError classes extend a call expression, which this rule
+		// misreads as an un-newed throw statement.
+		"unicorn/throw-new-error": "off",
+		// Effect.gen / Effect.fn generators legitimately skip yield for pure or
+		// delegating workflows; a missing yield is not a bug there.
+		"require-yield": "off",
 		// EffectTS idioms: services define several Schema/service classes per
 		// module, wrap them in `namespace Service`, pair a value with a same-name
 		// type, export a module-local `Error` union, and pass anonymous

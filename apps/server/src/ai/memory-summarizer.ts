@@ -10,7 +10,7 @@ export interface SummarizeInput {
 	readonly trace: Omit<Llm.TraceContext, "operation">;
 }
 
-export class EmptyOutputError extends Schema.TaggedErrorClass<EmptyOutputError>()(
+export class EmptyOutputError extends Schema.TaggedError<EmptyOutputError>()(
 	"MemorySummaryEmptyOutputError",
 	{
 		message: Schema.String,

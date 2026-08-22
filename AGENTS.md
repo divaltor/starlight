@@ -24,8 +24,57 @@ Bot/Mini App ──> Scraper (BullMQ/Valkey) ──> AI (CLIP/pHash) ──> Pos
 6. Use pre-defined types from libraries\Prisma generated files where is possible. Use Pick, Omit and other Typescript type-helpers to extract required values instead of creating own types with same information.
 7. Align on pre-existing types from libraries and generated code; avoid creating redundant helper types or defensive type-safety checks for scenarios that cannot happen in trusted internal code.
 8. In Grammy handlers, `ctx.<obj>` is guaranteed by middleware; use `ctx.<obj>!` instead of defensive existence checks.
-9. When user asks about EffectTS - use EffectTS skill
+9. When working on Effect TS code, load the local `effect` skill (`.opencode/skills/effect`); the global `effect-ts` skill remains the portable API reference.
 10. Use structured logging: keep messages stable and put object IDs and dynamic context in log fields (for example, `logger.info({ photoId }, "Photo embeddings generated")`), never interpolate them into the message.
+
+## Design Principles
+
+Optimize the design for the normal flow. If the happy path is 95% of behavior, it should be ~95% of what a reader sees.
+
+- Make top-level code read like a use case: orchestrators call well-named domain methods; push parsing, process plumbing, protocol details, and state surgery into the lowest module that owns them.
+- Patterns, layers, interfaces, and files are costs. Add one only when it owns a real invariant, hides real complexity, has multiple real implementations, removes stable duplication, or creates a proven boundary. No reflexive Controller -> Service -> Repository pass-throughs.
+- Prefer deletion and the smallest correct diff. Do not add a dependency, abstraction, configuration, or flexibility without a proven present need; explain the cost first.
+- Parse untrusted input once at the boundary into trusted domain values; make illegal states unrepresentable; pass trusted values inward instead of re-checking raw data.
+- Never reduce validation at trust boundaries, protection against data loss, security, accessibility, or explicitly requested behavior to make a change smaller.
+- No speculative safeguards or theoretical race handling. Fix the smallest real, observed failure at the boundary that owns it. Prefer fewer names, fewer branches, and net-negative diffs.
+- Before adding code, confirm that a change is needed. Then understand and trace the real flow. Reuse an established local pattern, the standard library, platform features, or an installed dependency before writing custom code.
+- For a bug, check all callers and fix the root cause in the lowest shared owner. Do not patch each visible symptom separately.
+- For non-trivial logic, add the smallest focused test or runnable check that proves the changed behavior.
+
+## TypeScript Style
+
+- Use guard clauses and early returns; avoid `else`.
+- Access properties with dot notation (`obj.a`) instead of destructuring.
+- Inline single-use variables; drop intermediate bindings.
+- Type-guard `filter` callbacks to preserve inference.
+- Rely on type inference; annotate only at exports and boundaries.
+- Keep helpers below the code they support; do not extract single-use logic.
+- Comments are rare and explain why, not what.
+
+## Effect TS
+
+Services follow the flat module anatomy (no `export namespace` wrapper) — see `.opencode/skills/effect/SKILL.md` for the full pattern:
+
+```ts
+export interface Interface {
+  readonly method: (input: Input) => Effect.Effect<Output, ServiceError>;
+}
+export class Service extends Context.Service<Service, Interface>()("starlight/Thing") {}
+
+const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    /* bind deps once */
+  }),
+);
+export const defaultLayer = layer.pipe(Layer.provide(FetchHttpClient.layer));
+```
+
+- Bind services while constructing a layer; never nest `(yield* Service).method(...)`.
+- Name workflows `Effect.fn("Module.method")`.
+- Model expected failures as `Schema.TaggedError` with a `static fromCause(...)` helper.
+- One assembled `ManagedRuntime` per process in `services/runtime.ts`.
+- Enforcement: `bun run lint:effect-patterns`, `bun run lint:effect-simplifications`.
 
 ## Maintenance & Tasks
 
@@ -33,3 +82,6 @@ Bot/Mini App ──> Scraper (BullMQ/Valkey) ──> AI (CLIP/pHash) ──> Pos
 - DON'T use `tsc` or `typecheck` or `check-types`.
 - Run `lint` command to check for linting errors. DON'T run `format` — it's triggered automatically by other pipelines.
 - ALWAYS use scripts from package.json to create and apply migrations via Prisma. Never write migration files manually.
+- Never hand-edit `packages/utils/src/generated/prisma`; regenerate with `bun run db:generate`.
+- Follow conventional commits: `type(scope): summary` with types `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
+- Tests assert real behavior, not implementation details; avoid mocks and `globalThis.*` where possible.
