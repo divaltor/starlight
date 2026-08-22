@@ -16,10 +16,7 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
     "paths": {
-      "@/*": ["./src/*"],
-      "@the-convocation/twitter-scraper": [
-        "../../node_modules/@the-convocation/twitter-scraper/src/_module.ts"
-      ]
+      "@/*": ["./src/*"]
     },
     "types": ["bun"],
     "composite": true
