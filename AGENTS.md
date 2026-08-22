@@ -1,19 +1,3 @@
-## Architecture & Data Flow
-
-```
-Bot/Mini App ──> Scraper (BullMQ/Valkey) ──> AI (CLIP/pHash) ──> PostgreSQL (pgvector) <── API (oRPC)
-```
-
-## Project Structure
-
-| Path              | Purpose                                                             |
-| ----------------- | ------------------------------------------------------------------- |
-| `apps/server`     | Grammy Telegram bot and BullMQ worker implementations.              |
-| `apps/web`        | React 19 Telegram Mini App dashboard (Uber-style aesthetics).       |
-| `packages/api`    | API Layer: oRPC router definitions and shared contract types.       |
-| `packages/utils`  | Infrastructure: Prisma schema, database client, and business logic. |
-| `packages/crypto` | Security: Session encryption and perceptual image hashing (pHash).  |
-
 ## Critical Rules
 
 1. Use `@/` alias for all internal imports; relative imports are forbidden in apps.
