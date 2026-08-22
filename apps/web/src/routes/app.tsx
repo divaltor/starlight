@@ -5,7 +5,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle, Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
-import { useCallback, useEffect, useState, lazy, Suspense } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { NotFound } from "@/components/not-found";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,12 +84,9 @@ function TwitterArtViewer() {
 		},
 	});
 
-	const handleDeleteImage = useCallback(
-		(photoId: string) => {
-			deletePhoto(photoId);
-		},
-		[deletePhoto],
-	);
+	const handleDeleteImage = (photoId: string) => {
+		deletePhoto(photoId);
+	};
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -125,13 +122,10 @@ function TwitterArtViewer() {
 		},
 	);
 
-	const renderMasonryItem = useCallback(
-		({ data, width }: { data: TweetData; width: number }) => (
-			<div className="mb-1" style={{ width }}>
-				<TweetImageGrid tweet={data} showActions onDeleteImage={handleDeleteImage} />
-			</div>
-		),
-		[handleDeleteImage],
+	const renderMasonryItem = ({ data, width }: { data: TweetData; width: number }) => (
+		<div className="mb-1" style={{ width }}>
+			<TweetImageGrid tweet={data} showActions onDeleteImage={handleDeleteImage} />
+		</div>
 	);
 
 	// Show error state

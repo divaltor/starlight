@@ -1,6 +1,5 @@
 import type { TweetData, TweetsPageResult } from "@starlight/api/src/types/tweets";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
 import { orpc } from "@/utils/orpc";
 
 const EMPTY_TWEETS: TweetData[] = [];
@@ -28,10 +27,7 @@ export function useTweets(options: UseTweetsOptions = {}) {
 				gcTime: 10 * 60 * 1000,
 			}),
 		);
-	const tweets = useMemo(
-		() => data?.pages.flatMap((page) => page.tweets) ?? EMPTY_TWEETS,
-		[data?.pages],
-	);
+	const tweets = data?.pages.flatMap((page) => page.tweets) ?? EMPTY_TWEETS;
 
 	return {
 		tweets,

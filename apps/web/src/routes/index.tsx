@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
-import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSearch } from "@/hooks/use-search";
@@ -18,6 +18,21 @@ const TweetImageGrid = lazy(() =>
 
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
+
+const renderMasonryItem = ({ data, width }: { data: TweetData; width: number }) => (
+	<div className="mb-1" style={{ width }}>
+		<TweetImageGrid tweet={data} />
+	</div>
+);
+
+// Generate non-overlapping positions for random images; skipped during SSR.
+function placeRandomImages(tweets: TweetData[]) {
+	if (tweets.length === 0 || typeof window === "undefined") {
+		return [];
+	}
+
+	return new LayoutManager(100, 100).placeTweets(tweets);
+}
 
 const examples = [
 	"mumei",
@@ -84,27 +99,8 @@ export default function DiscoverPage() {
 		},
 	);
 
-	const renderMasonryItem = useCallback(
-		({ data, width }: { data: TweetData; width: number }) => (
-			<div className="mb-1" style={{ width }}>
-				<TweetImageGrid tweet={data} />
-			</div>
-		),
-		[],
-	);
-
-	// Stable identity so the layout memo below doesn't re-run every render
-	const randomImages = useMemo<TweetData[]>(() => randomQuery.data || [], [randomQuery.data]);
-
-	// Generate non-overlapping positions for random images
-	const placedData = useMemo(() => {
-		if (randomImages.length === 0 || typeof window === "undefined") {
-			return [];
-		}
-
-		const layout = new LayoutManager(100, 100);
-		return layout.placeTweets(randomImages);
-	}, [randomImages]);
+	const randomImages = randomQuery.data || [];
+	const placedData = placeRandomImages(randomImages);
 
 	const isHomeIdle = !isLoading && results.length === 0;
 	const showHeroCollage =

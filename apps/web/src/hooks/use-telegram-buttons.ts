@@ -1,6 +1,6 @@
 import { useRouter } from "@tanstack/react-router";
 import { backButton, mainButton, secondaryButton, settingsButton } from "@telegram-apps/sdk-react";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type {
 	ButtonAction,
 	ButtonState,
@@ -98,145 +98,146 @@ export function useTelegramButtons(
 	const cleanupFunctions = useRef<(() => void)[]>([]);
 	const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-	// Action execution with error handling and analytics
-	const executeButtonAction = useCallback(
-		(action: ButtonAction, buttonType: string) => {
-			try {
-				switch (action.type) {
-					case "navigate": {
-						router.navigate({ to: action.payload as string });
-						break;
-					}
-					case "callback": {
-						if (typeof action.payload === "function") {
-							(action.payload as () => void | Promise<void>)();
-						}
-						break;
-					}
-					case "external": {
-						window.open(action.payload as string, "_blank");
-						break;
-					}
-					default: {
-						throw new Error(`Invalid action type: ${action.type}`);
-					}
+	// Action execution with error handling and analytics.
+	// The invalid-type case logs directly instead of throwing: React Compiler
+	// cannot lower `throw` inside try/catch.
+	const executeButtonAction = (action: ButtonAction, buttonType: string) => {
+		try {
+			switch (action.type) {
+				case "navigate": {
+					router.navigate({ to: action.payload as string });
+					break;
 				}
-			} catch (error) {
-				console.error("Failed to execute Telegram button action", { buttonType, error });
+				case "callback": {
+					if (typeof action.payload === "function") {
+						(action.payload as () => void | Promise<void>)();
+					}
+					break;
+				}
+				case "external": {
+					window.open(action.payload as string, "_blank");
+					break;
+				}
+				default: {
+					console.error("Failed to execute Telegram button action", {
+						buttonType,
+						error: new Error(`Invalid action type: ${action.type}`),
+					});
+				}
 			}
-		},
-		[router],
-	);
+		} catch (error) {
+			console.error("Failed to execute Telegram button action", { buttonType, error });
+		}
+	};
 
 	// Core button update logic
-	const updateButtonsInternal = useCallback(
-		(config: RouteButtonConfig) => {
-			// Cleanup previous handlers
-			for (const cleanup of cleanupFunctions.current) {
-				cleanup();
-			}
+	const updateButtonsInternal = (config: RouteButtonConfig) => {
+		// Cleanup previous handlers
+		for (const cleanup of cleanupFunctions.current) {
+			cleanup();
+		}
 
-			cleanupFunctions.current = [];
+		cleanupFunctions.current = [];
 
-			const registerCleanup: CleanupRegistrar = (cleanup) => {
-				cleanupFunctions.current.push(cleanup);
-			};
+		const registerCleanup: CleanupRegistrar = (cleanup) => {
+			cleanupFunctions.current.push(cleanup);
+		};
 
-			if (config.mainButton) {
-				syncBottomButton(config.mainButton, "mainButton", executeButtonAction, registerCleanup, {
-					canSubscribeClick: () => mainButton.onClick.isAvailable(),
-					isMounted: () => mainButton.isMounted(),
-					setParams: (updates) => mainButton.setParams(updates),
-					subscribeClick: (handler) => mainButton.onClick(handler),
-				});
-			}
+		if (config.mainButton) {
+			syncBottomButton(config.mainButton, "mainButton", executeButtonAction, registerCleanup, {
+				canSubscribeClick: () => mainButton.onClick.isAvailable(),
+				isMounted: () => mainButton.isMounted(),
+				setParams: (updates) => mainButton.setParams(updates),
+				subscribeClick: (handler) => mainButton.onClick(handler),
+			});
+		}
 
-			if (config.secondaryButton) {
-				syncBottomButton(
-					config.secondaryButton,
-					"secondaryButton",
-					executeButtonAction,
-					registerCleanup,
-					{
-						canSubscribeClick: () => secondaryButton.onClick.isAvailable(),
-						isMounted: () => secondaryButton.isMounted(),
-						setParams: (updates) => secondaryButton.setParams(updates),
-						subscribeClick: (handler) => secondaryButton.onClick(handler),
-					},
-				);
-			}
+		if (config.secondaryButton) {
+			syncBottomButton(
+				config.secondaryButton,
+				"secondaryButton",
+				executeButtonAction,
+				registerCleanup,
+				{
+					canSubscribeClick: () => secondaryButton.onClick.isAvailable(),
+					isMounted: () => secondaryButton.isMounted(),
+					setParams: (updates) => secondaryButton.setParams(updates),
+					subscribeClick: (handler) => secondaryButton.onClick(handler),
+				},
+			);
+		}
 
-			// Settings Button Logic - Always visible
-			if (config.settingsButton) {
-				settingsButton.show.ifAvailable();
+		// Settings Button Logic - Always visible
+		if (config.settingsButton) {
+			settingsButton.show.ifAvailable();
 
-				bindButtonTap(
-					config.settingsButton.action,
-					"settingsButton",
-					executeButtonAction,
-					registerCleanup,
-					() => settingsButton.onClick.isAvailable(),
-					(handler) => settingsButton.onClick(handler),
-				);
-			}
+			bindButtonTap(
+				config.settingsButton.action,
+				"settingsButton",
+				executeButtonAction,
+				registerCleanup,
+				() => settingsButton.onClick.isAvailable(),
+				(handler) => settingsButton.onClick(handler),
+			);
+		}
 
-			// Back Button Logic - Show based on router history
-			if (config.backButton) {
-				backButton.show.ifAvailable();
+		// Back Button Logic - Show based on router history
+		if (config.backButton) {
+			backButton.show.ifAvailable();
 
-				bindButtonTap(
-					config.backButton.action,
-					"backButton",
-					executeButtonAction,
-					registerCleanup,
-					() => backButton.onClick.isAvailable(),
-					(handler) => backButton.onClick(handler),
-				);
-			} else {
-				// Hide back button when not needed
-				backButton.hide.ifAvailable();
-			}
-		},
-		[executeButtonAction],
-	);
+			bindButtonTap(
+				config.backButton.action,
+				"backButton",
+				executeButtonAction,
+				registerCleanup,
+				() => backButton.onClick.isAvailable(),
+				(handler) => backButton.onClick(handler),
+			);
+		} else {
+			// Hide back button when not needed
+			backButton.hide.ifAvailable();
+		}
+	};
 
 	// Debounced config updates
-	const debouncedUpdateButtons = useCallback(
-		(config: RouteButtonConfig) => {
-			if (updateTimeoutRef.current) {
-				clearTimeout(updateTimeoutRef.current);
-			}
+	const debouncedUpdateButtons = (config: RouteButtonConfig) => {
+		if (updateTimeoutRef.current) {
+			clearTimeout(updateTimeoutRef.current);
+		}
 
-			updateTimeoutRef.current = setTimeout(() => {
-				updateButtonsInternal(config);
-			}, options?.debounceMs || 100);
-		},
-		[options?.debounceMs, updateButtonsInternal],
-	);
+		updateTimeoutRef.current = setTimeout(() => {
+			updateButtonsInternal(config);
+		}, options?.debounceMs || 100);
+	};
 
 	// Public API
-	const updateConfig = useCallback(
-		(newConfig: Partial<RouteButtonConfig>) => {
-			configRef.current = { ...configRef.current, ...newConfig };
-			debouncedUpdateButtons(configRef.current);
-		},
-		[debouncedUpdateButtons],
-	);
+	const updateConfig = (newConfig: Partial<RouteButtonConfig>) => {
+		configRef.current = { ...configRef.current, ...newConfig };
+		debouncedUpdateButtons(configRef.current);
+	};
 
-	const resetToDefaults = useCallback(() => {
+	const resetToDefaults = () => {
 		configRef.current = {};
 		debouncedUpdateButtons({});
-	}, [debouncedUpdateButtons]);
+	};
 
-	const getButtonState = useCallback((buttonType: keyof RouteButtonConfig): ButtonState => {
+	const getButtonState = (buttonType: keyof RouteButtonConfig): ButtonState => {
 		const buttonConfig = configRef.current[buttonType];
 		return buttonConfig?.state || "hidden";
-	}, []);
+	};
+
+	// Latest-ref bridge so the mount effect below can call the current sync
+	// function without depending on its per-render identity.
+	const syncRef = useRef(updateButtonsInternal);
+
+	useEffect(() => {
+		syncRef.current = updateButtonsInternal;
+	});
 
 	// Initialize on mount
 	useEffect(() => {
 		if (initialConfig) {
-			updateButtonsInternal(initialConfig);
+			syncRef.current(initialConfig);
 		}
 
 		// Cleanup on unmount
@@ -251,7 +252,7 @@ export function useTelegramButtons(
 				}
 			}
 		};
-	}, [initialConfig, updateButtonsInternal, options?.autoCleanup]);
+	}, [initialConfig, options?.autoCleanup]);
 
 	return { updateConfig, resetToDefaults, getButtonState };
 }

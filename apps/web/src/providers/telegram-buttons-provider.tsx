@@ -1,6 +1,6 @@
 import { useCanGoBack, useRouter } from "@tanstack/react-router";
 import { retrieveRawInitData } from "@telegram-apps/sdk-react";
-import { useCallback, createContext, useContext, useEffect, useMemo } from "react";
+import { createContext, useContext, useEffect } from "react";
 import { useTelegramButtons } from "@/hooks/use-telegram-buttons";
 import type { ButtonState, RouteButtonConfig } from "@/types/telegram-buttons";
 
@@ -30,10 +30,15 @@ export function TelegramButtonsProvider({ children }: { children: React.ReactNod
 	const router = useRouter();
 	const canGoBack = useCanGoBack();
 
-	// Simple configuration using TanStack Router's built-in navigation state
-	const currentConfig = useMemo(
-		() => ({
-			// Settings button always visible
+	const buttonManager = useTelegramButtons(undefined, {
+		autoCleanup: true,
+		debounceMs: 100,
+	});
+
+	// Auto-update when route/history changes. The config is built inside the
+	// effect: a fresh object per render would defeat dependency checks.
+	useEffect(() => {
+		buttonManager.updateConfig({
 			settingsButton: {
 				state: "visible" as const,
 				action: {
@@ -41,32 +46,19 @@ export function TelegramButtonsProvider({ children }: { children: React.ReactNod
 					payload: "/settings",
 				},
 			},
-			// Back button visible when router can go back
 			backButton: canGoBack
 				? {
 						state: "visible" as const,
 						action: {
 							type: "callback" as const,
 							payload: () => {
-								// Use router's built-in back navigation
 								router.history.back();
 							},
 						},
 					}
 				: undefined,
-		}),
-		[canGoBack, router],
-	);
-
-	const buttonManager = useTelegramButtons(currentConfig, {
-		autoCleanup: true,
-		debounceMs: 100,
-	});
-
-	// Auto-update when route/history changes
-	useEffect(() => {
-		buttonManager.updateConfig(currentConfig);
-	}, [currentConfig, buttonManager]);
+		});
+	}, [buttonManager, canGoBack, router]);
 
 	let rawInitData: string | null;
 
@@ -77,34 +69,28 @@ export function TelegramButtonsProvider({ children }: { children: React.ReactNod
 	}
 
 	// Helper function for main button
-	const setMainButton = useCallback(
-		(text: string, visible = true, action?: () => void) => {
-			buttonManager.updateConfig({
-				mainButton: {
-					state: visible ? "visible" : "hidden",
-					text,
-					action: action
-						? {
-								type: "callback",
-								payload: action,
-							}
-						: undefined,
-				},
-			});
-		},
-		[buttonManager],
-	);
+	const setMainButton = (text: string, visible = true, action?: () => void) => {
+		buttonManager.updateConfig({
+			mainButton: {
+				state: visible ? "visible" : "hidden",
+				text,
+				action: action
+					? {
+							type: "callback",
+							payload: action,
+						}
+					: undefined,
+			},
+		});
+	};
 
-	const contextValue = useMemo<TelegramButtonsContextValue>(
-		() => ({
-			updateButtons: buttonManager.updateConfig,
-			resetButtons: buttonManager.resetToDefaults,
-			getButtonState: buttonManager.getButtonState,
-			setMainButton,
-			rawInitData,
-		}),
-		[buttonManager, rawInitData, setMainButton],
-	);
+	const contextValue: TelegramButtonsContextValue = {
+		updateButtons: buttonManager.updateConfig,
+		resetButtons: buttonManager.resetToDefaults,
+		getButtonState: buttonManager.getButtonState,
+		setMainButton,
+		rawInitData,
+	};
 
 	return (
 		<TelegramButtonsContext.Provider value={contextValue}>

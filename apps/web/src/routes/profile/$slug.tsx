@@ -1,7 +1,7 @@
 import type { TweetData, TweetsPageResult } from "@starlight/api/src/types/tweets";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { Masonry, useInfiniteLoader } from "masonic";
-import { useCallback, lazy, Suspense } from "react";
+import { lazy, Suspense } from "react";
 import { NotFound } from "@/components/not-found";
 import { useTweets } from "@/hooks/use-tweets";
 import { orpc } from "@/utils/orpc";
@@ -12,6 +12,12 @@ const TweetImageGrid = lazy(() =>
 
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
+
+const renderMasonryItem = ({ data, width }: { data: TweetData; width: number }) => (
+	<div className="mb-1" style={{ width }}>
+		<TweetImageGrid tweet={data} />
+	</div>
+);
 
 function SharedProfileViewer() {
 	const { slug } = useParams({ from: "/profile/$slug" });
@@ -31,15 +37,6 @@ function SharedProfileViewer() {
 			minimumBatchSize: 30,
 			threshold: 5,
 		},
-	);
-
-	const renderMasonryItem = useCallback(
-		({ data, width }: { data: TweetData; width: number }) => (
-			<div className="mb-1" style={{ width }}>
-				<TweetImageGrid tweet={data} />
-			</div>
-		),
-		[],
 	);
 
 	if (error) {

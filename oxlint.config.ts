@@ -68,8 +68,6 @@ export default defineConfig({
 		"anti-slop/require-safety-comment-for-type-assertion": "off",
 		"anti-slop/no-known-value-widening": "off",
 		"anti-slop/no-runtime-typeof": "off",
-		// Manual memoization is still needed: React Compiler is not installed.
-		"react-doctor/react-compiler-no-manual-memoization": "off",
 		// Schema.TaggedError classes extend a call expression, which this rule
 		// misreads as an un-newed throw statement.
 		"unicorn/throw-new-error": "off",
@@ -101,10 +99,11 @@ export default defineConfig({
 		// shadcn/ui components export cva variant helpers next to components, and
 		// forwarding React props (`onClick={action.onClick}`) is not a handler
 		// naming problem.
+		// react-doctor/no-inline-prop-on-memo-component and friends cover the
+		// cases that still hurt; React Compiler memoizes context values
+		// automatically, so constructed values no longer break consumers.
+		"react/jsx-no-constructed-context-values": "off",
 		"react-doctor/only-export-components": "off",
 		"react/jsx-handler-names": "off",
-		// React Compiler cannot lower throw statements inside try/catch yet
-		// (BuildHIR limitation), which flags valid existing code.
-		"react/todo": "off",
 	},
 });

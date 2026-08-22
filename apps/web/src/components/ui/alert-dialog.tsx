@@ -12,7 +12,7 @@ interface AlertDialogProps {
 }
 
 function AlertDialog({ open, onOpenChange, children }: AlertDialogProps) {
-	const contextValue = React.useMemo(() => ({ onOpenChange }), [onOpenChange]);
+	const contextValue = { onOpenChange };
 
 	return (
 		<AlertDialogContext.Provider value={contextValue}>

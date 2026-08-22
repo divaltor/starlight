@@ -67,26 +67,33 @@ export function TweetImageGrid({
 
 				const filename = currItem?.alt ?? "image.jpg";
 
+				// No `throw` inside try/catch: React Compiler cannot lower that
+				// pattern, and the fallback below covers every failure path.
 				try {
 					const response = await fetch(url);
 
-					if (!response.ok) {
-						throw new Error(`Failed to fetch image: ${response.status}`);
+					if (response.ok) {
+						const blob = await response.blob();
+						const blobUrl = window.URL.createObjectURL(blob);
+						const link = document.createElement("a");
+						link.href = blobUrl;
+						link.download = filename;
+						document.body.append(link);
+						link.click();
+						link.remove();
+						window.URL.revokeObjectURL(blobUrl);
+						return;
 					}
-
-					const blob = await response.blob();
-					const blobUrl = window.URL.createObjectURL(blob);
-					const link = document.createElement("a");
-					link.href = blobUrl;
-					link.download = filename;
-					document.body.append(link);
-					link.click();
-					link.remove();
-					window.URL.revokeObjectURL(blobUrl);
+					console.error("Image download failed", {
+						status: response.status,
+						filename,
+						url,
+					});
 				} catch (error) {
 					console.error("Image download failed", { error, filename, url });
-					window.open(url, "_blank", "noopener,noreferrer");
 				}
+
+				window.open(url, "_blank", "noopener,noreferrer");
 			},
 		},
 	];
