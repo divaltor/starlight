@@ -31,6 +31,7 @@ const env = createEnv({
 		APP_NAME: z.string().default("Starlight"),
 
 		BOT_TOKEN: z.string(),
+		STARLIGHT_BOT_TOKEN: z.string().optional(),
 		BOT_ALIASES: z
 			.string()
 			.default("starlight,звездочка,старка,стар")

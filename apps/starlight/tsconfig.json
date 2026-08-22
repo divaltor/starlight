@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "checkJs": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noPropertyAccessFromIndexSignature": false,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@the-convocation/twitter-scraper": [
+        "../../node_modules/@the-convocation/twitter-scraper/src/_module.ts"
+      ]
+    },
+    "types": ["bun"],
+    "composite": true
+  },
+  "include": ["src/**/*"],
+  "references": [
+    {
+      "path": "../../packages/utils"
+    }
+  ]
+}

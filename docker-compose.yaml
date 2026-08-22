@@ -33,6 +33,18 @@ services:
     networks:
       - starlight
 
+  starlight-bot:
+    build:
+      context: .
+      dockerfile: apps/starlight/Dockerfile
+    env_file:
+      - apps/starlight/.env
+    depends_on:
+      - valkey
+      - postgresql
+    networks:
+      - starlight
+
   web:
     build:
       context: .

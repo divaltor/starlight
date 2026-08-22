@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import { defineConfig } from "prisma/config";
 
 dotenv.config({
-	path: [".env", "../../apps/server/.env"],
+	path: [".env", "../../apps/server/.env", "../../apps/starlight/.env"],
 	quiet: true,
 });
 
