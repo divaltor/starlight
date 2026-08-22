@@ -548,7 +548,7 @@ function avatarOrFallback(
 
 function positioned(node: Node, inset: { left: number; top: number }): Node {
 	if (node.type !== "text") {
-		node.style = { ...node.style, ...inset };
+		node.style = { ...node.style, ...inset, position: "absolute" };
 	}
 	return node;
 }
