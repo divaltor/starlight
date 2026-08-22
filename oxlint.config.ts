@@ -1,6 +1,8 @@
 // Ultracite oxlint rules (applied).
 import { defineConfig } from "oxlint";
 
+import { ALL_REACT_DOCTOR_RULES } from "oxlint-plugin-react-doctor";
+
 import antiSlop from "ultracite/oxlint/anti-slop";
 import core from "ultracite/oxlint/core";
 import jsPlugins, { jsPluginSettings } from "ultracite/oxlint/js-plugins";
@@ -29,6 +31,11 @@ export default defineConfig({
 	],
 	settings: jsPluginSettings,
 	rules: {
+		// Full React Doctor coverage (parity with `bunx react-doctor`), so the
+		// CLI scan is not needed. The security-scan bucket stays CLI-only: those
+		// rules are whole-tree file scans and no-ops under oxlint. Spread first;
+		// repo-specific overrides below keep precedence.
+		...ALL_REACT_DOCTOR_RULES,
 		// Disabled because they conflict with repo conventions: function
 		// declarations, non-alphabetical key order (oRPC routers), TanStack
 		// router filenames, the utils barrel re-exporting Prisma, and
@@ -105,5 +112,23 @@ export default defineConfig({
 		"react/jsx-no-constructed-context-values": "off",
 		"react-doctor/only-export-components": "off",
 		"react/jsx-handler-names": "off",
+		// Full-ruleset parity adjustments: rules the react-doctor CLI ships
+		// disabled by default (defaultEnabled: false) that only produce noise
+		// when oxlint force-enables every listed rule, and rules the CLI gates
+		// behind framework detection (`nextjs`, `pure-preact`) that this
+		// TanStack Start + React app never satisfies.
+		"react-doctor/react-in-jsx-scope": "off",
+		"react-doctor/jsx-boolean-value": "off",
+		"react-doctor/jsx-handler-names": "off",
+		"react-doctor/jsx-props-no-spreading": "off",
+		"react-doctor/nextjs-no-img-element": "off",
+		"react-doctor/preact-no-react-hooks-import": "off",
+		// Multi-component files are the shadcn/ui convention here; mirrors
+		// `react/no-multi-comp` being off in the presets.
+		"react-doctor/no-multi-comp": "off",
+		"react-doctor/no-multi-component-file": "off",
+		// React Compiler memoizes context values automatically; same decision
+		// as `react/jsx-no-constructed-context-values` above.
+		"react-doctor/context-provider-value-from-unmemoized-local-literal": "off",
 	},
 });
