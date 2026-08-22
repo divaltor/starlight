@@ -1,6 +1,7 @@
 import { RedisClient } from "bun";
 import { env } from "@starlight/utils";
 import { createBunRedisClient } from "bullmq";
+import { Schema } from "effect";
 import { Cookie } from "tough-cookie";
 
 export const redis = createBunRedisClient(new RedisClient(env.REDIS_URL));
@@ -11,12 +12,13 @@ export interface RFC6265Cookie {
 	value: string;
 }
 
-// External Firefox cookie-store export shape.
-interface FirefoxCookieRecord {
-	"Content raw": string;
-	"Host raw": string;
-	"Name raw": string;
-}
+const FirefoxCookieRecord = Schema.Struct({
+	"Content raw": Schema.String,
+	"Host raw": Schema.String,
+	"Name raw": Schema.String,
+});
+const FirefoxCookiesFromJson = Schema.fromJsonString(Schema.Array(FirefoxCookieRecord));
+type FirefoxCookieRecord = typeof FirefoxCookieRecord.Type;
 
 const TWID_REGEX = /u=(?<twidValue>\d+)/u;
 const DOMAIN_REGEX = /https?:\/\/(?<domain>.+?)\//u;
@@ -33,8 +35,7 @@ export class Cookies {
 	}
 
 	static fromJSON(data: string): Cookies {
-		// Firefox cookie-store export is external input; parse and narrow once at this boundary.
-		const parsed = JSON.parse(data) as FirefoxCookieRecord[];
+		const parsed = Schema.decodeSync(FirefoxCookiesFromJson)(data);
 
 		return new Cookies(parsed.map((cookie) => new Cookie(mapToRFC6265Cookie(cookie))));
 	}

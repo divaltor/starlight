@@ -1,6 +1,8 @@
+import { Schema } from "effect";
 import { redis } from "./redis";
 
 const EMBEDDING_CACHE_TTL_SECONDS = 30 * 24 * 3600;
+const QueryEmbeddingFromJson = Schema.fromJsonString(Schema.mutable(Schema.Array(Schema.Number)));
 
 // Shared by the mini app search router and the bot inline search handler; both
 // must go through this helper so they hit the same cache keys.
@@ -13,7 +15,7 @@ export async function resolveQueryEmbedding(
 	const cached = await redis.get(cacheKey);
 
 	if (cached) {
-		return JSON.parse(cached) as number[];
+		return Schema.decodeSync(QueryEmbeddingFromJson)(cached);
 	}
 
 	const result = await generate();
