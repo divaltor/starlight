@@ -74,7 +74,15 @@ export function buildTweetCard(params: BuildCardParams): Node {
 		}),
 		...tweetExtrasNodes(params.colors, CARD_WIDTH_INNER, params.failedUrls, params.tweet),
 		...(params.tweet.quote
-			? [quoteBox(params.colors, params.failedUrls, CARD_WIDTH_INNER, params.tweet.quote)]
+			? [
+					quoteBox(
+						params.colors,
+						params.failedUrls,
+						CARD_WIDTH_INNER,
+						params.tweet.quote,
+						hasTweetExtras(params.tweet),
+					),
+				]
 			: []),
 		statsRow(params.colors, CARD_WIDTH_INNER, params.tweet),
 	];
@@ -290,7 +298,17 @@ function replyChainItem(colors: ThemeColors, failedUrls: Set<string>, tweet: Twe
 						style: { marginTop: LAYOUT.TEXT_GAP },
 					}),
 					...tweetExtrasNodes(colors, CHAIN_CONTENT_WIDTH, failedUrls, tweet),
-					...(tweet.quote ? [quoteBox(colors, failedUrls, CHAIN_CONTENT_WIDTH, tweet.quote)] : []),
+					...(tweet.quote
+						? [
+								quoteBox(
+									colors,
+									failedUrls,
+									CHAIN_CONTENT_WIDTH,
+									tweet.quote,
+									hasTweetExtras(tweet),
+								),
+							]
+						: []),
 				],
 				style: { width: CHAIN_CONTENT_WIDTH },
 			}),
@@ -340,44 +358,56 @@ function tweetExtrasNodes(
 	];
 }
 
+function hasTweetExtras(tweet: TweetData): boolean {
+	return getFirstMedia(tweet.media) !== null || tweet.article != null;
+}
+
+// Keep quote text beside the avatar as in the canvas renderer. The preceding
+// media/article already supplies its own bottom gap, so it must not get another one.
 function quoteBox(
 	colors: ThemeColors,
 	failedUrls: Set<string>,
 	outerWidth: number,
 	quote: TweetData,
+	hasPrecedingExtra: boolean,
 ): Node {
 	const innerWidth = outerWidth - QUOTE_PADDING * 2;
+	const textWidth = innerWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
 	const children: Node[] = [
 		box({
 			children: [
 				avatarOrFallback(quote.authorAvatarUrl, QUOTE_AVATAR_SIZE, colors, failedUrls),
 				box({
-					children: nameRowNodes(colors, QUOTE_FONT_SIZE_NAME, quote),
-					style: {
-						alignItems: "baseline",
-						display: "flex",
-						flexDirection: "row",
-						flexWrap: "wrap",
-						flexGrow: 1,
-					},
+					children: [
+						box({
+							children: nameRowNodes(colors, QUOTE_FONT_SIZE_NAME, quote),
+							style: {
+								alignItems: "baseline",
+								display: "flex",
+								flexDirection: "row",
+								flexWrap: "wrap",
+								width: textWidth,
+							},
+						}),
+						box({
+							children: buildTextParagraphs(quote.text, {
+								color: colors.text,
+								fontSize: QUOTE_FONT_SIZE_TEXT,
+								lineHeight: LAYOUT.LINE_HEIGHT,
+								width: textWidth,
+							}),
+							style: { marginTop: LAYOUT.TEXT_GAP },
+						}),
+					],
+					style: { width: textWidth },
 				}),
 			],
 			style: {
-				alignItems: "center",
 				display: "flex",
 				flexDirection: "row",
 				gap: LAYOUT.AVATAR_GAP,
 				width: innerWidth,
 			},
-		}),
-		box({
-			children: buildTextParagraphs(quote.text, {
-				color: colors.text,
-				fontSize: QUOTE_FONT_SIZE_TEXT,
-				lineHeight: LAYOUT.LINE_HEIGHT,
-				width: innerWidth,
-			}),
-			style: { marginTop: LAYOUT.TEXT_GAP },
 		}),
 	];
 	children.push(...tweetExtrasNodes(colors, innerWidth, failedUrls, quote));
@@ -388,7 +418,7 @@ function quoteBox(
 			borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
 			borderStyle: "solid",
 			borderWidth: 1,
-			marginTop: LAYOUT.AVATAR_GAP,
+			marginTop: hasPrecedingExtra ? 0 : LAYOUT.AVATAR_GAP,
 			padding: QUOTE_PADDING,
 			width: outerWidth,
 		},
@@ -548,6 +578,7 @@ function avatarOrFallback(
 
 function positioned(node: Node, inset: { left: number; top: number }): Node {
 	if (node.type !== "text") {
+		// Reply avatars must not take space in the flex column and push the chain down.
 		node.style = { ...node.style, ...inset, position: "absolute" };
 	}
 	return node;

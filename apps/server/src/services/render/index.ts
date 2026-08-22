@@ -1,6 +1,7 @@
 import { logger } from "@/logger";
 import { http } from "@starlight/utils/http";
 import path from "node:path";
+import sharp from "sharp";
 import type { Node } from "takumi-js";
 import { Renderer } from "takumi-js/node";
 import { extractEmojis } from "takumi-js/helpers/emoji";
@@ -75,6 +76,7 @@ const IMAGE_FETCH_TIMEOUT_MS = 5000;
 // The napi build ignores `devicePixelRatio` when both width and height are
 // given, so the 2x output scale is applied to the tree itself instead.
 const SCALE_FACTOR = 2;
+// Scaling unitless values made lineHeight 2.8 and expanded every text block.
 const UNITLESS_STYLE_PROPERTIES = new Set(["flexGrow", "fontWeight", "lineHeight"]);
 
 function scaleNode(node: Node, factor: number): Node {
@@ -138,7 +140,11 @@ async function prefetchImages(urls: Iterable<string>): Promise<Map<string, Uint8
 				if (!response.ok) {
 					throw new Error(`HTTP ${response.status}`);
 				}
-				return [url, new Uint8Array(await response.arrayBuffer())] as const;
+				const data = new Uint8Array(await response.arrayBuffer());
+				// A successful response can contain an HTML error page, which makes Takumi abort the card.
+				// Use sharp because extracted Twemoji assets are SVG, which Bun.Image cannot decode.
+				await sharp(data).metadata();
+				return [url, data] as const;
 			} catch (error) {
 				logger.warn({ error, url }, "Failed to load image for tweet card");
 				return null;
