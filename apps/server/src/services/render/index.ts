@@ -75,6 +75,7 @@ const IMAGE_FETCH_TIMEOUT_MS = 5000;
 // The napi build ignores `devicePixelRatio` when both width and height are
 // given, so the 2x output scale is applied to the tree itself instead.
 const SCALE_FACTOR = 2;
+const UNITLESS_STYLE_PROPERTIES = new Set(["flexGrow", "fontWeight", "lineHeight"]);
 
 function scaleNode(node: Node, factor: number): Node {
 	if (node.style) {
@@ -88,7 +89,7 @@ function scaleNode(node: Node, factor: number): Node {
 
 function scaleStyle(style: NonNullable<Node["style"]>, factor: number): void {
 	for (const [prop, value] of Object.entries(style)) {
-		if (typeof value === "number") {
+		if (typeof value === "number" && !UNITLESS_STYLE_PROPERTIES.has(prop)) {
 			// Style objects come from our own literals, so a numeric index view is safe here.
 			(style as Record<string, number>)[prop] = value * factor;
 		}
