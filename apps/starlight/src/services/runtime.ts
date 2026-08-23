@@ -6,6 +6,12 @@ import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
 import type { LogLevel } from "effect/LogLevel";
 import { createBotEnv } from "@starlight/utils/env";
 import * as Model from "@/ai/model";
+import * as Conversation from "@/conversation/conversation";
+import * as TelegramDelivery from "@/conversation/delivery";
+import * as WakeOutbox from "@/conversation/wake-outbox";
+import * as WakeQueue from "@/conversation/wake-queue";
+import * as ConversationContext from "@/context/context";
+import * as Database from "@/services/database";
 import * as Exa from "@/services/exa";
 
 const env = createBotEnv();
@@ -20,27 +26,17 @@ const SEVERITY: Record<string, SeverityNumber> = {
 	FATAL: SeverityNumber.FATAL,
 };
 
+const LOG_LEVELS: Record<string, LogLevel> = {
+	debug: "Debug",
+	error: "Error",
+	fatal: "Fatal",
+	info: "Info",
+	trace: "Trace",
+	warn: "Warn",
+};
+
 function parseLogLevel(name: string): LogLevel {
-	switch (name.toLowerCase()) {
-		case "trace": {
-			return "Trace";
-		}
-		case "debug": {
-			return "Debug";
-		}
-		case "warn": {
-			return "Warn";
-		}
-		case "error": {
-			return "Error";
-		}
-		case "fatal": {
-			return "Fatal";
-		}
-		default: {
-			return "Info";
-		}
-	}
+	return LOG_LEVELS[name.toLowerCase()] ?? "Info";
 }
 
 // Emits structured records straight to the global OTel LoggerProvider; a no-op
@@ -82,6 +78,27 @@ function activeTraceContext(): Context | undefined {
 
 const production = env.NODE_ENV === "production";
 
+const infrastructure = Layer.mergeAll(
+	Database.layer(env.DATABASE_URL),
+	Exa.defaultLayer,
+	Model.defaultLayer,
+	TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
+	WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
+	Conversation.optionsLayer({
+		affinitySecret: env.CONVERSATION_AFFINITY_SECRET,
+		leaseMs: env.CONVERSATION_LANE_LEASE_MS,
+		maxWaitMs: env.CONVERSATION_BATCH_MAX_WAIT_MS,
+		quietMs: env.CONVERSATION_BATCH_QUIET_MS,
+	}),
+);
+const domain = Layer.mergeAll(Conversation.layer, ConversationContext.layer, WakeOutbox.layer).pipe(
+	Layer.provideMerge(infrastructure),
+);
+const background = Layer.mergeAll(
+	WakeOutbox.publisherLayer,
+	WakeQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
+).pipe(Layer.provideMerge(domain));
+
 export const runtime = ManagedRuntime.make(
 	Layer.mergeAll(
 		Logger.layer([
@@ -92,7 +109,6 @@ export const runtime = ManagedRuntime.make(
 		Layer.succeed(References.MinimumLogLevel)(
 			parseLogLevel(env.LOG_LEVEL ?? (production ? "info" : "debug")),
 		),
-		Exa.defaultLayer,
-		Model.defaultLayer,
+		background,
 	),
 );

@@ -19,6 +19,63 @@ enum ChatMemoryScope {
   global
 }
 
+enum ConversationRunStatus {
+  prepared
+  invoking
+  generated
+  dispatching
+  finalized
+  failed
+}
+
+enum ConversationActionType {
+  ignore
+  text
+  reaction
+}
+
+enum ConversationDeliveryStatus {
+  pending
+  delivered
+  failed
+  unknown
+}
+
+enum ConversationToolCallStatus {
+  pending
+  running
+  completed
+  error
+}
+
+enum ConversationContextStatus {
+  active
+  checkpointing
+  sealed
+  superseded
+  invalid
+}
+
+enum ConversationTranscriptKind {
+  userMessage
+  linkedReplyContext
+  assistantMessage
+  assistantIgnore
+  toolCall
+  toolResult
+  toolError
+  mediaProjection
+  editCorrection
+  systemEvent
+}
+
+enum ConversationContextRole {
+  system
+  user
+  assistant
+  tool
+}
+
 model User {
   id         String  @id @default(uuid(7)) @db.Uuid
   telegramId BigInt  @unique @map("telegram_id")
@@ -321,4 +378,261 @@ model Attachment {
   @@index([mimeType])
   @@index([s3Path])
   @@map("attachments")
+}
+
+model ConversationLane {
+  assistantId BigInt @map("assistant_id")
+  chatId      BigInt @map("chat_id")
+  threadKey   Int    @default(0) @map("thread_key")
+
+  pendingRevision   Int @default(0) @map("pending_revision")
+  processedRevision Int @default(0) @map("processed_revision")
+
+  activeRunId    String?   @unique @map("active_run_id") @db.Uuid
+  activeContextId String?  @unique @map("active_context_id") @db.Uuid
+  fencingToken  BigInt    @default(0) @map("fencing_token")
+  leaseOwner    String?   @map("lease_owner")
+  leaseUntil    DateTime? @map("lease_until")
+  firstPendingAt DateTime? @map("first_pending_at")
+  nextWakeAt     DateTime? @map("next_wake_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  inputs   ConversationInput[]
+  runs     ConversationRun[]
+  contexts ConversationContext[]
+  wakeOutbox ConversationWakeOutbox?
+
+  @@id([assistantId, chatId, threadKey])
+  @@index([nextWakeAt])
+  @@index([leaseUntil])
+  @@map("conversation_lanes")
+}
+
+model ConversationInput {
+  id BigInt @id @default(autoincrement())
+
+  assistantId BigInt @map("assistant_id")
+  chatId      BigInt @map("chat_id")
+  threadKey   Int    @default(0) @map("thread_key")
+
+  sourceUpdateId  Int?   @map("source_update_id")
+  sourceMessageId Int    @map("source_message_id")
+  sourceRevision  String @map("source_revision")
+  senderTelegramId BigInt? @map("sender_telegram_id")
+  senderUserId     String? @map("sender_user_id") @db.Uuid
+
+  payload          Json
+  replyToMessageId Int? @map("reply_to_message_id")
+  forwardMetadata Json? @map("forward_metadata")
+  mediaReferences Json? @map("media_references")
+  admittedRevision Int @map("admitted_revision")
+  claimedRunId String? @map("claimed_run_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lane ConversationLane @relation(fields: [assistantId, chatId, threadKey], references: [assistantId, chatId, threadKey], onDelete: Cascade)
+  runInputs ConversationRunInput[]
+
+  @@unique([assistantId, sourceUpdateId])
+  @@unique([assistantId, chatId, sourceMessageId, sourceRevision])
+  @@unique([assistantId, chatId, threadKey, admittedRevision])
+  @@index([claimedRunId])
+  @@index([senderUserId, id])
+  @@map("conversation_inputs")
+}
+
+model ConversationWakeOutbox {
+  assistantId BigInt @map("assistant_id")
+  chatId      BigInt @map("chat_id")
+  threadKey   Int    @default(0) @map("thread_key")
+
+  pendingRevision Int      @map("pending_revision")
+  desiredWakeAt    DateTime @map("desired_wake_at")
+  publishedAt      DateTime? @map("published_at")
+  attemptCount     Int      @default(0) @map("attempt_count")
+  lastError        String?  @map("last_error") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lane ConversationLane @relation(fields: [assistantId, chatId, threadKey], references: [assistantId, chatId, threadKey], onDelete: Cascade)
+
+  @@id([assistantId, chatId, threadKey])
+  @@index([publishedAt, desiredWakeAt])
+  @@map("conversation_wake_outbox")
+}
+
+model ConversationRun {
+  id String @id @default(uuid(7)) @db.Uuid
+
+  assistantId BigInt @map("assistant_id")
+  chatId      BigInt @map("chat_id")
+  threadKey   Int    @default(0) @map("thread_key")
+  fencingToken BigInt @map("fencing_token")
+
+  inputStartRevision Int @map("input_start_revision")
+  inputEndRevision   Int @map("input_end_revision")
+  status ConversationRunStatus @default(prepared)
+
+  preparedRequest Json? @map("prepared_request")
+  requestHash String? @map("request_hash")
+  modelProfileFingerprint String @map("model_profile_fingerprint")
+  replyEligible Boolean @map("reply_eligible")
+  eligibilityReason String @map("eligibility_reason")
+  attemptCount Int @default(0) @map("attempt_count")
+
+  generatedOutput Json? @map("generated_output")
+  modelTranscript Json? @map("model_transcript")
+  usage Json?
+  finishReason String? @map("finish_reason")
+  errorTag String? @map("error_tag")
+  errorMessage String? @map("error_message") @db.Text
+
+  preparedAt DateTime @default(now()) @map("prepared_at")
+  invokingAt DateTime? @map("invoking_at")
+  generatedAt DateTime? @map("generated_at")
+  finalizedAt DateTime? @map("finalized_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lane ConversationLane @relation(fields: [assistantId, chatId, threadKey], references: [assistantId, chatId, threadKey], onDelete: Cascade)
+  inputs ConversationRunInput[]
+  actions ConversationRunAction[]
+  toolCalls ConversationToolCall[]
+  transcriptTurns ConversationTranscriptTurn[]
+
+  @@index([assistantId, chatId, threadKey, status])
+  @@map("conversation_runs")
+}
+
+model ConversationRunInput {
+  runId String @map("run_id") @db.Uuid
+  ordinal Int
+  inputId BigInt @map("input_id")
+
+  run ConversationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  input ConversationInput @relation(fields: [inputId], references: [id], onDelete: Restrict)
+
+  @@id([runId, ordinal])
+  @@unique([runId, inputId])
+  @@map("conversation_run_inputs")
+}
+
+model ConversationRunAction {
+  runId String @map("run_id") @db.Uuid
+  ordinal Int
+  type ConversationActionType
+  targetMessageId Int? @map("target_message_id")
+  payload Json
+  deliveryStatus ConversationDeliveryStatus @default(pending) @map("delivery_status")
+  telegramMessageId Int? @map("telegram_message_id")
+  attemptCount Int @default(0) @map("attempt_count")
+  unknownRetryCount Int @default(0) @map("unknown_retry_count")
+  lastError String? @map("last_error") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  run ConversationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@id([runId, ordinal])
+  @@index([deliveryStatus, updatedAt])
+  @@map("conversation_run_actions")
+}
+
+model ConversationToolCall {
+  runId String @map("run_id") @db.Uuid
+  providerCallId String @map("provider_call_id")
+  toolName String @map("tool_name")
+  inputHash String @map("input_hash")
+  input Json
+  status ConversationToolCallStatus
+  result Json?
+  errorMessage String? @map("error_message") @db.Text
+  durationMs Int? @map("duration_ms")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  run ConversationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@id([runId, providerCallId])
+  @@map("conversation_tool_calls")
+}
+
+model ConversationContext {
+  id String @id @default(uuid(7)) @db.Uuid
+
+  assistantId BigInt @map("assistant_id")
+  chatId      BigInt @map("chat_id")
+  threadKey   Int    @default(0) @map("thread_key")
+  generation Int
+  status ConversationContextStatus @default(active)
+  activeKey String? @unique @map("active_key")
+  parentContextId String? @map("parent_context_id") @db.Uuid
+  modelProfileFingerprint String @map("model_profile_fingerprint")
+
+  stableEnvelope String @map("stable_envelope") @db.Text
+  stableEnvelopeHash String @map("stable_envelope_hash")
+  frozenMemory String @map("frozen_memory") @db.Text
+  frozenMemoryHash String @map("frozen_memory_hash")
+  basePrefixHash String @map("base_prefix_hash")
+  summaryThroughInputSequence BigInt? @map("summary_through_input_sequence")
+  retainedFromTurnOrdinal Int? @map("retained_from_turn_ordinal")
+  estimatedStableTokens Int @default(0) @map("estimated_stable_tokens")
+  lastObservedInputTokens Int? @map("last_observed_input_tokens")
+  lastObservedCacheReadTokens Int? @map("last_observed_cache_read_tokens")
+  resetReason String? @map("reset_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  sealedAt DateTime? @map("sealed_at")
+
+  lane ConversationLane @relation(fields: [assistantId, chatId, threadKey], references: [assistantId, chatId, threadKey], onDelete: Cascade)
+  turns ConversationContextTurn[]
+
+  @@unique([assistantId, chatId, threadKey, generation])
+  @@index([assistantId, chatId, threadKey, status])
+  @@map("conversation_contexts")
+}
+
+model ConversationTranscriptTurn {
+  id BigInt @id @default(autoincrement())
+  assistantId BigInt @map("assistant_id")
+  chatId BigInt @map("chat_id")
+  threadKey Int @default(0) @map("thread_key")
+  ordinal Int
+  runId String @map("run_id") @db.Uuid
+  kind ConversationTranscriptKind
+  content Json
+  sourceReferences Json @map("source_references")
+  visibility String
+  idempotencyKey String @unique @map("idempotency_key")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  run ConversationRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  contextTurns ConversationContextTurn[]
+
+  @@unique([assistantId, chatId, threadKey, ordinal])
+  @@index([runId])
+  @@map("conversation_transcript_turns")
+}
+
+model ConversationContextTurn {
+  contextId String @map("context_id") @db.Uuid
+  ordinal Int
+  transcriptTurnId BigInt @map("transcript_turn_id")
+  role ConversationContextRole
+  renderedContent String @map("rendered_content") @db.Text
+  renderVersion String @map("render_version")
+  estimatedTokens Int @map("estimated_tokens")
+  segmentHash String @map("segment_hash")
+  rollingPrefixHash String @map("rolling_prefix_hash")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  context ConversationContext @relation(fields: [contextId], references: [id], onDelete: Cascade)
+  transcriptTurn ConversationTranscriptTurn @relation(fields: [transcriptTurnId], references: [id], onDelete: Restrict)
+
+  @@id([contextId, ordinal])
+  @@unique([contextId, transcriptTurnId])
+  @@map("conversation_context_turns")
 }

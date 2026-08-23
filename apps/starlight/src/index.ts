@@ -43,7 +43,7 @@ const boundary = bot.errorBoundary((error) =>
 );
 
 boundary.use(startHandler);
-boundary.use(createMessageHandler(env.STARLIGHT_BOT_TOKEN, env.WHITELIST_CHAT_IDS));
+boundary.use(createMessageHandler(env.WHITELIST_CHAT_IDS));
 
 const runner = run(bot);
 runtime.runSync(Effect.logInfo("Starlight bot is running"));

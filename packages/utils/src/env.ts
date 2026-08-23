@@ -25,6 +25,13 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
 		server: {
 			STARLIGHT_BOT_TOKEN: z.string(),
 			WHITELIST_CHAT_IDS: telegramIdList("WHITELIST_CHAT_IDS", { allowNegative: true }),
+			DATABASE_URL: z.url({ protocol: /^postgresql$/u }),
+			REDIS_URL: z.url({ protocol: /^rediss?$/u }),
+			CONVERSATION_AFFINITY_SECRET: z.string().min(32),
+			CONVERSATION_QUEUE_PREFIX: z.string().default("starlight-conversation"),
+			CONVERSATION_BATCH_QUIET_MS: z.coerce.number().int().positive().default(1000),
+			CONVERSATION_BATCH_MAX_WAIT_MS: z.coerce.number().int().positive().default(3000),
+			CONVERSATION_LANE_LEASE_MS: z.coerce.number().int().positive().default(180_000),
 
 			NODE_ENV: z.enum(["development", "production"]).default("development"),
 			LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),

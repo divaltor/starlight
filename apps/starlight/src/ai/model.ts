@@ -109,9 +109,21 @@ export interface TranscriptEvent {
 export interface GenerationResult<OUTPUT> {
 	readonly finishReason: string;
 	readonly output: OUTPUT;
+	readonly steps: readonly ModelStep[];
 	readonly toolEvents: readonly ToolEvent[];
 	readonly transcript: readonly TranscriptEvent[];
 	readonly usage: GenerationUsage;
+}
+
+export interface ModelStep {
+	readonly actualModel: string;
+	readonly finishReason: string;
+	readonly latencyMs: number;
+	readonly providerRequestId: string;
+	readonly stepNumber: number;
+	readonly toolCallCount: number;
+	readonly upstreamProvider: string | null;
+	readonly usage: StepUsage;
 }
 
 export interface Interface {
@@ -257,6 +269,16 @@ export const layer: Layer.Layer<Service, never, ModelProvider.Service | ModelTel
 				return {
 					finishReason: result.finishReason,
 					output: structuredClone(generated.output),
+					steps: result.steps.map((step, index) => ({
+						actualModel: step.response.modelId,
+						finishReason: step.finishReason,
+						latencyMs: step.performance.stepTimeMs,
+						providerRequestId: step.response.id,
+						stepNumber: step.stepNumber,
+						toolCallCount: step.toolCalls.length,
+						upstreamProvider: getUpstreamProvider(step.providerMetadata),
+						usage: stepUsage[index]!,
+					})),
 					toolEvents: structuredClone(toolEvents),
 					transcript: result.steps.flatMap((step) =>
 						step.text ? [{ text: step.text, type: "assistant-text" as const }] : [],

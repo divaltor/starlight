@@ -1,133 +1,95 @@
-import { Effect } from "effect";
 import { Composer } from "grammy";
 import type { Context } from "grammy";
-import * as ChatReply from "@/ai/chat-reply";
-import type * as Model from "@/ai/model";
-import { extractAllowedUrls } from "@/ai/tools/web";
+import type { Message } from "grammy/types";
+import { Duration, Effect, Schedule } from "effect";
+import * as Conversation from "@/conversation/conversation";
+import * as Prompt from "@/context/prompt";
 import { runtime } from "@/services/runtime";
 
-export function createMessageHandler(
-	affinitySecret: string,
-	whitelistedChatIds: readonly number[],
-): Composer<Context> {
+// 5 retries after the initial attempt; exponential delays 500ms → 8s.
+const ADMISSION_RETRIES = 5;
+
+export function createMessageHandler(whitelistedChatIds: readonly number[]): Composer<Context> {
 	const composer = new Composer<Context>();
 	const whitelist = new Set(whitelistedChatIds);
-	const privateChat = composer.chatType("private").filter((ctx) => whitelist.has(ctx.chat.id));
 	const groupChat = composer
 		.chatType(["group", "supergroup"])
 		.filter((ctx) => whitelist.has(ctx.chat.id));
-	const affinityKey = crypto.subtle.importKey(
-		"raw",
-		new TextEncoder().encode(affinitySecret),
-		{ hash: "SHA-256", name: "HMAC" },
-		false,
-		["sign"],
-	);
 
-	privateChat.on("message:text", (ctx) => handleMessage(ctx, affinityKey));
-	groupChat
-		.on("message:text")
-		.filter((ctx) => isAddressedToBot(ctx))
-		.use((ctx) => handleMessage(ctx, affinityKey));
+	groupChat.on("message:text", (ctx) =>
+		admitMessage(ctx, ctx.message, isAddressedToBot(ctx, ctx.message)),
+	);
+	groupChat.on("edited_message:text", (ctx) =>
+		admitMessage(ctx, ctx.editedMessage, isAddressedToBot(ctx, ctx.editedMessage)),
+	);
 
 	return composer;
 }
 
-async function handleMessage(ctx: Context, affinityKey: Promise<CryptoKey>): Promise<void> {
-	const generated = await runtime.runPromise(
-		ChatReply.generate({
-			allowedUrls: extractAllowedUrls(ctx.message!.text!),
-			messages: createMessages(ctx),
-			sessionId: await createAffinityId(ctx, affinityKey),
-		}).pipe(
-			Effect.catch((error) =>
-				Effect.logError("Chat reply failed").pipe(
-					Effect.annotateLogs({ errorTag: error._tag, retryable: error.retryable }),
-					Effect.as(null),
-				),
-			),
-			Effect.annotateLogs({ updateId: ctx.update.update_id }),
+async function admitMessage(ctx: Context, message: Message.TextMessage, addressed: boolean) {
+	await runtime.runPromise(
+		Effect.gen(function* admit() {
+			const conversation = yield* Conversation.Service;
+			return yield* retryAdmission(
+				conversation.admit({
+					chatTitle: ctx.chat!.title ?? null,
+					chatUsername: ctx.chat!.username ?? null,
+					key: {
+						assistantId: ctx.me.id,
+						chatId: ctx.chat!.id,
+						threadKey: message.message_thread_id ?? 0,
+					},
+					payload: {
+						addressed,
+						date: message.date,
+						editDate: message.edit_date ?? null,
+						forwardOrigin: message.forward_origin
+							? Prompt.canonicalEncode(message.forward_origin)
+							: null,
+						messageId: message.message_id,
+						repliedText:
+							message.reply_to_message?.text ?? message.reply_to_message?.caption ?? null,
+						replyToMessageId: message.reply_to_message?.message_id ?? null,
+						senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
+						senderId: message.from?.id ?? null,
+						senderUsername: message.from?.username ?? null,
+						text: message.text,
+					},
+					updateId: ctx.update.update_id,
+				}),
+				ctx.update.update_id,
+			);
+		}),
+	);
+}
+
+function retryAdmission(
+	admission: Effect.Effect<Conversation.AdmissionResult, Conversation.AdmissionError>,
+	updateId: number,
+): Effect.Effect<Conversation.AdmissionResult, Conversation.AdmissionError> {
+	return admission.pipe(
+		Effect.tapError((error) =>
+			error.retryable
+				? Effect.logWarning("Conversation admission attempt failed").pipe(
+						Effect.annotateLogs({ errorTag: error._tag, updateId }),
+					)
+				: Effect.void,
 		),
+		Effect.retry({
+			schedule: Schedule.exponential(Duration.millis(500)),
+			times: ADMISSION_RETRIES,
+			while: (error) => error.retryable,
+		}),
 	);
-
-	await (generated ? dispatchActions(ctx, generated.output) : Promise.resolve());
 }
 
-function createMessages(ctx: Context): Model.Message[] {
-	const message = ctx.message!;
-	const sender = message.from?.first_name ?? message.sender_chat?.title ?? "unknown";
-	const repliedText = message.reply_to_message?.text ?? message.reply_to_message?.caption;
-	const previous = repliedText
-		? `Previous message #${message.reply_to_message!.message_id}: ${repliedText}\n`
-		: "";
-
-	return [
-		{
-			role: "user",
-			text: `${previous}Current date: ${new Date().toISOString().slice(0, 10)}\nLIVE MESSAGE #${message.message_id} from ${sender}: ${message.text!}`,
-		},
-	];
-}
-
-async function dispatchActions(ctx: Context, response: ChatReply.Response): Promise<void> {
-	await Promise.all(response.replies.map((action) => dispatchAction(ctx, action)));
-}
-
-function dispatchAction(
-	ctx: Context,
-	action: ChatReply.Response["replies"][number],
-): Promise<void> {
-	if (action.type === "ignore") return Promise.resolve();
-	if (action.type === "reaction") return sendReaction(ctx, action);
-	return sendText(ctx, action);
-}
-
-async function sendReaction(
-	ctx: Context,
-	action: Extract<ChatReply.Response["replies"][number], { type: "reaction" }>,
-): Promise<void> {
-	if (!allowedTargetIds(ctx).has(action.messageId)) return;
-
-	await ctx.api.setMessageReaction(ctx.chat!.id, action.messageId, [
-		{ emoji: action.emoji, type: "emoji" },
-	]);
-}
-
-async function sendText(
-	ctx: Context,
-	action: Extract<ChatReply.Response["replies"][number], { type: "text" }>,
-): Promise<void> {
-	if (action.replyTo && !allowedTargetIds(ctx).has(action.replyTo)) return;
-
-	await ctx.reply(action.text, {
-		message_thread_id: ctx.message!.message_thread_id,
-		reply_parameters: action.replyTo ? { message_id: action.replyTo } : undefined,
-	});
-}
-
-function allowedTargetIds(ctx: Context): ReadonlySet<number> {
-	return new Set([
-		ctx.message!.message_id,
-		...(ctx.message!.reply_to_message ? [ctx.message!.reply_to_message.message_id] : []),
-	]);
-}
-
-function isAddressedToBot(ctx: Context): boolean {
-	const text = ctx.message!.text!;
+function isAddressedToBot(ctx: Context, message: Message.TextMessage): boolean {
 	return (
-		ctx.message!.reply_to_message?.from?.id === ctx.me.id ||
-		Boolean(ctx.me.username && text.toLowerCase().includes(`@${ctx.me.username.toLowerCase()}`)) ||
-		/\b(?:старка|зв[её]здочка)\b/iu.test(text)
+		message.reply_to_message?.from?.id === ctx.me.id ||
+		Boolean(
+			ctx.me.username && message.text.toLowerCase().includes(`@${ctx.me.username.toLowerCase()}`),
+		) ||
+		// \b is ASCII-only, so it never bounds Cyrillic words; use explicit letter lookarounds.
+		/(?<![\p{L}\p{N}_])(?:старка|зв[её]здочка)(?![\p{L}\p{N}_])/iu.test(message.text)
 	);
-}
-
-async function createAffinityId(ctx: Context, key: Promise<CryptoKey>): Promise<string> {
-	const thread = ctx.message!.message_thread_id ?? "main";
-	const signature = await crypto.subtle.sign(
-		"HMAC",
-		await key,
-		new TextEncoder().encode(`${ctx.chat!.id}:${thread}`),
-	);
-
-	return Buffer.from(signature).toString("hex").slice(0, 32);
 }
