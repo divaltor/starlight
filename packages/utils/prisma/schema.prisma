@@ -26,6 +26,7 @@ enum ConversationRunStatus {
   dispatching
   finalized
   failed
+  blocked
 }
 
 enum ConversationActionType {
@@ -51,9 +52,26 @@ enum ConversationToolCallStatus {
 enum ConversationContextStatus {
   active
   checkpointing
+  retryNeeded
   sealed
   superseded
   invalid
+}
+
+enum ConversationCheckpointReason {
+  softCost
+  hardSafety
+  profileChange
+  manual
+}
+
+enum ConversationCheckpointStatus {
+  prepared
+  summarizing
+  summarized
+  committed
+  aborted
+  failed
 }
 
 enum ConversationTranscriptKind {
@@ -479,6 +497,7 @@ model ConversationRun {
   preparedRequest Json? @map("prepared_request")
   requestHash String? @map("request_hash")
   modelProfileFingerprint String @map("model_profile_fingerprint")
+  contextId String? @map("context_id") @db.Uuid
   replyEligible Boolean @map("reply_eligible")
   eligibilityReason String @map("eligibility_reason")
   attemptCount Int @default(0) @map("attempt_count")
@@ -498,10 +517,12 @@ model ConversationRun {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   lane ConversationLane @relation(fields: [assistantId, chatId, threadKey], references: [assistantId, chatId, threadKey], onDelete: Cascade)
+  context ConversationContext? @relation("PinnedContext", fields: [contextId], references: [id], onDelete: Restrict)
   inputs ConversationRunInput[]
   actions ConversationRunAction[]
   toolCalls ConversationToolCall[]
   transcriptTurns ConversationTranscriptTurn[]
+  checkpointAttempts ConversationCheckpointAttempt[]
 
   @@index([assistantId, chatId, threadKey, status])
   @@map("conversation_runs")
@@ -569,7 +590,7 @@ model ConversationContext {
   generation Int
   status ConversationContextStatus @default(active)
   activeKey String? @unique @map("active_key")
-  parentContextId String? @map("parent_context_id") @db.Uuid
+  parentContextId String? @unique @map("parent_context_id") @db.Uuid
   modelProfileFingerprint String @map("model_profile_fingerprint")
 
   stableEnvelope String @map("stable_envelope") @db.Text
@@ -588,11 +609,47 @@ model ConversationContext {
   sealedAt DateTime? @map("sealed_at")
 
   lane ConversationLane @relation(fields: [assistantId, chatId, threadKey], references: [assistantId, chatId, threadKey], onDelete: Cascade)
+  parent ConversationContext? @relation("ContextChildren", fields: [parentContextId], references: [id], onDelete: Restrict)
+  child ConversationContext? @relation("ContextChildren")
+  pinnedRuns ConversationRun[] @relation("PinnedContext")
+  checkpointAttempts ConversationCheckpointAttempt[] @relation("CheckpointParent")
   turns ConversationContextTurn[]
 
   @@unique([assistantId, chatId, threadKey, generation])
   @@index([assistantId, chatId, threadKey, status])
   @@map("conversation_contexts")
+}
+
+model ConversationCheckpointAttempt {
+  id String @id @default(uuid(7)) @db.Uuid
+  runId String @map("run_id") @db.Uuid
+  parentContextId String @map("parent_context_id") @db.Uuid
+  parentFencingToken BigInt @map("parent_fencing_token")
+  sealedThroughTurnOrdinal Int @map("sealed_through_turn_ordinal")
+  headEndTurnOrdinal Int @map("head_end_turn_ordinal")
+  retainedStartTurnOrdinal Int? @map("retained_start_turn_ordinal")
+  retainedEndTurnOrdinal Int? @map("retained_end_turn_ordinal")
+  reason ConversationCheckpointReason
+  status ConversationCheckpointStatus @default(prepared)
+  summaryProfileFingerprint String @map("summary_profile_fingerprint")
+  summaryInput String @map("summary_input") @db.Text
+  summaryInputHash String @map("summary_input_hash")
+  summaryOutput Json? @map("summary_output")
+  summaryUsage Json? @map("summary_usage")
+  attemptCount Int @default(0) @map("attempt_count")
+  lastError String? @map("last_error") @db.Text
+  childContextId String? @map("child_context_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  completedAt DateTime? @map("completed_at")
+
+  run ConversationRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  parentContext ConversationContext @relation("CheckpointParent", fields: [parentContextId], references: [id], onDelete: Restrict)
+
+  @@unique([parentContextId, runId, reason])
+  @@index([parentContextId, status])
+  @@index([runId, status])
+  @@map("conversation_checkpoint_attempts")
 }
 
 model ConversationTranscriptTurn {

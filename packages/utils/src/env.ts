@@ -32,6 +32,12 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       CONVERSATION_BATCH_QUIET_MS: z.coerce.number().int().positive().default(1000),
       CONVERSATION_BATCH_MAX_WAIT_MS: z.coerce.number().int().positive().default(3000),
       CONVERSATION_LANE_LEASE_MS: z.coerce.number().int().positive().default(180_000),
+      CONTEXT_SOFT_TOKEN_CAP: z.coerce.number().int().positive().default(30_000),
+      CONTEXT_HARD_TOKEN_CAP: z.coerce.number().int().positive().default(900_000),
+      CONTEXT_RETAINED_TOKEN_TARGET: z.coerce.number().int().positive().default(8000),
+      CONTEXT_OUTPUT_RESERVE_TOKENS: z.coerce.number().int().nonnegative().default(1024),
+      CONTEXT_TOOL_RESERVE_TOKENS: z.coerce.number().int().nonnegative().default(4096),
+      CONTEXT_ESTIMATE_SAFETY_RATIO: z.coerce.number().min(1).default(1.15),
 
       NODE_ENV: z.enum(["development", "production"]).default("development"),
       LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),
