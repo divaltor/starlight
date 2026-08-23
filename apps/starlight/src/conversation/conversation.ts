@@ -613,6 +613,7 @@ function invokeModel(
       cacheBase: contextRequest.cacheBase,
       instructions: contextRequest.instructions,
       messages: contextRequest.messages,
+      promptCacheKey: contextRequest.contextId,
       sessionId: prepared.sessionId,
       webLookupEnabled: contextRequest.webLookupEnabled,
     }).pipe(
