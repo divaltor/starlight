@@ -11,8 +11,9 @@ import { selected } from "@/ai/model-profile";
 import * as Model from "@/ai/model";
 import * as CacheDiagnostics from "@/context/cache-diagnostics";
 import * as Prompt from "@/context/prompt";
-import type * as ConversationKey from "@/conversation/key";
+import * as ConversationKey from "@/conversation/key";
 import * as Lane from "@/conversation/lane";
+import { PreparedRequestSchema, StoredPayloadSchema } from "@/conversation/run-artifacts";
 import * as Database from "@/services/database";
 import * as Exa from "@/services/exa";
 
@@ -246,14 +247,14 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
           const knownMessageIds = collectMessageIds(turns.map((turn) => turn.transcriptTurn.content));
           // Dot notation is the project convention; destructuring is intentionally disabled.
           // oxlint-disable-next-line prefer-destructuring
-          const currentDate = Schema.decodeUnknownSync(PreparedRequestMetadata)(run.preparedRequest).currentDate;
+          const currentDate = Schema.decodeUnknownSync(PreparedRequestSchema)(run.preparedRequest).currentDate;
           const current = [
             {
               role: "user" as const,
               text: `TRUSTED REQUEST METADATA\nCurrent date: ${currentDate}`,
             },
             ...run.inputs.map((runInput) => {
-              const payload = Schema.decodeUnknownSync(StoredPayload)(runInput.input.payload);
+              const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
               return {
                 role: "user" as const,
                 text: Prompt.renderLiveMessage(payload, Prompt.describeReplyTarget(payload, knownMessageIds)),
@@ -270,7 +271,7 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
           const finalizedTokens = turns.reduce((total, turn) => total + turn.estimatedTokens, 0);
           const currentTokens = current.reduce((total, message) => total + Math.ceil(message.text.length / 4), 0);
           const baseTokens = Math.ceil(context.stableEnvelope.length / 4) + Math.ceil(cacheBase.length / 4);
-          const terminalPrefixHash = verifyPrefix(context.basePrefixHash, turns);
+          const terminalPrefixHash = Prompt.verifyPrefix(context.basePrefixHash, turns);
           const prepared = {
             cacheBase,
             contextId: context.id,
@@ -421,11 +422,7 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
     ) {
       return yield* database
         .transaction(async (transaction) => {
-          const key = {
-            assistantId: BigInt(input.key.assistantId),
-            chatId: BigInt(input.key.chatId),
-            threadKey: input.key.threadKey,
-          };
+          const key = ConversationKey.toDb(input.key);
           await Lane.lockLane(transaction, key);
           if (input.run) await Lane.assertFence(transaction, key, input.run);
           const profileFingerprint = Prompt.profileFingerprint(input.webLookupEnabled);
@@ -483,12 +480,12 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
           const child = await transaction.conversationContext.create({
             data: {
               ...key,
-              activeKey: `v1/${input.key.assistantId}/${input.key.chatId}/${input.key.threadKey}`,
+              activeKey: ConversationKey.format(input.key),
               generation: parent.generation + 1,
               modelProfileFingerprint: profileFingerprint,
               parentContextId: parent.id,
               resetReason: input.reason,
-              ...stableSeed(envelope, memory),
+              ...Prompt.stableSeed(envelope, memory),
             },
           });
           // One Prisma transaction connection must execute its queries serially.
@@ -824,14 +821,14 @@ async function commitCheckpoint(
       assistantId: parent.assistantId,
       chatId: parent.chatId,
       threadKey: parent.threadKey,
-      activeKey: `v1/${Number(parent.assistantId)}/${Number(parent.chatId)}/${parent.threadKey}`,
+      activeKey: ConversationKey.format(ConversationKey.fromDb(parent)),
       generation: parent.generation + 1,
       modelProfileFingerprint: parent.modelProfileFingerprint,
       parentContextId: parent.id,
       resetReason: input.reason,
       retainedFromTurnOrdinal: attempt.retainedStartTurnOrdinal,
       summaryThroughInputSequence: BigInt(attempt.headEndTurnOrdinal),
-      ...stableSeed(parent.stableEnvelope, memory),
+      ...Prompt.stableSeed(parent.stableEnvelope, memory),
     },
   });
   let rollingHash = child.basePrefixHash;
@@ -927,25 +924,6 @@ function resolveCheckpointBoundary<
   };
 }
 
-function verifyPrefix(
-  basePrefixHash: string,
-  turns: readonly {
-    readonly renderedContent: string;
-    readonly rollingPrefixHash: string;
-    readonly segmentHash: string;
-  }[],
-): string {
-  let rollingHash = basePrefixHash;
-  for (const turn of turns) {
-    const segment = Prompt.extendPrefix(rollingHash, turn.renderedContent);
-    if (segment.segmentHash !== turn.segmentHash || segment.rollingPrefixHash !== turn.rollingPrefixHash) {
-      throw new Error("Context prefix chain is invalid");
-    }
-    rollingHash = segment.rollingPrefixHash;
-  }
-  return rollingHash;
-}
-
 const ROLE_BY_KIND: Record<ConversationTranscriptKind, ConversationContextRole> = {
   assistantIgnore: "assistant",
   assistantMessage: "assistant",
@@ -969,21 +947,6 @@ function collectMessageIds(contents: readonly Prisma.JsonValue[]): Set<number> {
       ];
     }),
   );
-}
-
-// The seed fields derive the context base from the frozen envelope and memory;
-// both creation paths must produce byte-identical values or the two chains diverge.
-function stableSeed(envelope: string, memory: string) {
-  return {
-    basePrefixHash: new Bun.CryptoHasher("sha256")
-      .update(`${envelope.length}:${envelope}${memory.length}:${memory}`)
-      .digest("hex"),
-    estimatedStableTokens: Math.ceil(envelope.length / 4) + Math.ceil(memory.length / 4),
-    frozenMemory: memory,
-    frozenMemoryHash: new Bun.CryptoHasher("sha256").update(memory).digest("hex"),
-    stableEnvelope: envelope,
-    stableEnvelopeHash: new Bun.CryptoHasher("sha256").update(envelope).digest("hex"),
-  };
 }
 
 interface Projection {
@@ -1038,10 +1001,10 @@ async function ensureActiveContext(
   const created = await transaction.conversationContext.create({
     data: {
       ...key,
-      activeKey: `v1/${Number(key.assistantId)}/${Number(key.chatId)}/${key.threadKey}`,
+      activeKey: ConversationKey.format(ConversationKey.fromDb(key)),
       generation: 1,
       modelProfileFingerprint: Prompt.profileFingerprint(webLookupEnabled),
-      ...stableSeed(envelope, memory),
+      ...Prompt.stableSeed(envelope, memory),
     },
   });
   await transaction.conversationLane.update({
@@ -1054,7 +1017,7 @@ async function ensureActiveContext(
 function createProjections(run: ProjectionRun, knownMessageIds: ReadonlySet<number>): Projection[] {
   const seenMessageIds = new Set(knownMessageIds);
   const userTurns = run.inputs.flatMap((runInput, index) => {
-    const payload = Schema.decodeUnknownSync(StoredPayload)(runInput.input.payload);
+    const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
     // Dot notation is the project convention; destructuring is intentionally disabled.
     // oxlint-disable-next-line prefer-destructuring, sonarjs/destructuring-assignment-syntax
     const messageId = payload.messageId;
@@ -1173,17 +1136,3 @@ function createProjections(run: ProjectionRun, knownMessageIds: ReadonlySet<numb
 
   return [...userTurns, ...toolTurns, ...assistantTurns, ...failureTurns];
 }
-
-const StoredPayload = Schema.Struct({
-  date: Schema.Int,
-  editDate: Schema.NullOr(Schema.Int),
-  forwardOrigin: Schema.NullOr(Schema.String),
-  messageId: Schema.Int,
-  repliedText: Schema.NullOr(Schema.String),
-  replyToMessageId: Schema.NullOr(Schema.Int),
-  senderFirstName: Schema.String,
-  senderId: Schema.NullOr(Schema.Int),
-  text: Schema.String,
-});
-
-const PreparedRequestMetadata = Schema.Struct({ currentDate: Schema.String });

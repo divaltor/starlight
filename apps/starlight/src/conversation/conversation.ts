@@ -6,6 +6,8 @@ import * as Prompt from "@/context/prompt";
 import * as ConversationContext from "@/context/context";
 import * as ConversationKey from "@/conversation/key";
 import * as Lane from "@/conversation/lane";
+import { PreparedRequestSchema } from "@/conversation/run-artifacts";
+import type { InputPayload } from "@/conversation/run-artifacts";
 import * as TelegramDelivery from "@/conversation/delivery";
 import * as Database from "@/services/database";
 import * as Exa from "@/services/exa";
@@ -13,20 +15,6 @@ import * as Exa from "@/services/exa";
 const MAX_BATCH_MESSAGES = 20;
 const MAX_DELIVERY_ATTEMPTS = 5;
 const MAX_MODEL_ATTEMPTS = 5;
-
-export interface InputPayload extends Prisma.InputJsonObject {
-  readonly addressed: boolean;
-  readonly date: number;
-  readonly editDate: number | null;
-  readonly forwardOrigin: string | null;
-  readonly messageId: number;
-  readonly replyToMessageId: number | null;
-  readonly repliedText: string | null;
-  readonly senderFirstName: string;
-  readonly senderId: number | null;
-  readonly senderUsername: string | null;
-  readonly text: string;
-}
 
 export interface AdmissionInput {
   readonly chatTitle: string | null;
@@ -99,7 +87,7 @@ export const layer = Layer.effect(
     const admit = Effect.fn("Conversation.admit")(function* admit(input: AdmissionInput) {
       const admitted = yield* database
         .transaction(async (transaction) => {
-          const key = dbKey(input.key);
+          const key = ConversationKey.toDb(input.key);
           const sourceRevision = `${
             input.payload.editDate === null ? "original" : "edit"
           }:${input.payload.editDate ?? input.payload.date}:${new Bun.CryptoHasher("sha256")
@@ -224,7 +212,7 @@ export const layer = Layer.effect(
 
       yield* Effect.logInfo("Conversation input admitted").pipe(
         Effect.annotateLogs({
-          conversationKey: `v1/${input.key.assistantId}/${input.key.chatId}/${input.key.threadKey}`,
+          conversationKey: ConversationKey.format(input.key),
           duplicate: admitted.duplicate,
           inputId: admitted.inputId.toString(),
           pendingRevision: admitted.pendingRevision,
@@ -402,14 +390,6 @@ const failed =
   (cause: unknown): ConversationError =>
     new ConversationError({ cause, message, retryable: true });
 
-function dbKey(key: ConversationKey.Value) {
-  return {
-    assistantId: BigInt(key.assistantId),
-    chatId: BigInt(key.chatId),
-    threadKey: key.threadKey,
-  };
-}
-
 function claimRun(
   database: Database.Interface,
   key: ConversationKey.Value,
@@ -418,7 +398,7 @@ function claimRun(
 ) {
   return database
     .transaction(async (transaction): Promise<ClaimedRun | DrainResult> => {
-      const where = dbKey(key);
+      const where = ConversationKey.toDb(key);
       await Lane.lockLane(transaction, where);
       const lane = await transaction.conversationLane.findUnique({
         where: { assistantId_chatId_threadKey: where },
@@ -536,7 +516,7 @@ function claimRun(
 function prepareRun(database: Database.Interface, claimed: ClaimedRun, options: Options, webLookupEnabled: boolean) {
   return Effect.gen(function* prepare() {
     if (claimed.preparedRequest !== null) {
-      return Schema.decodeUnknownSync(PreparedRunSchema)(claimed.preparedRequest);
+      return Schema.decodeUnknownSync(PreparedRequestSchema)(claimed.preparedRequest);
     }
     const payloads = claimed.inputs.map((input) => input.payload as InputPayload);
     const currentDate = new Date().toISOString().slice(0, 10);
@@ -568,7 +548,7 @@ function prepareRun(database: Database.Interface, claimed: ClaimedRun, options: 
 
     yield* database
       .transaction(async (transaction) => {
-        await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
+        await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
         await transaction.conversationRun.update({
           where: { id: claimed.runId },
           data: {
@@ -600,7 +580,7 @@ function invokeModel(
     }
     yield* database
       .transaction(async (transaction) => {
-        await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
+        await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
         await transaction.conversationRun.update({
           where: { id: claimed.runId },
           data: { attemptCount: { increment: 1 }, invokingAt: new Date(), status: "invoking" },
@@ -608,7 +588,7 @@ function invokeModel(
         // Lease renewal rides this stage boundary so the model call cannot outlive the
         // lease and let a second worker re-invoke the same run.
         await transaction.conversationLane.update({
-          where: { assistantId_chatId_threadKey: dbKey(claimed.key) },
+          where: { assistantId_chatId_threadKey: ConversationKey.toDb(claimed.key) },
           data: { leaseUntil: new Date(Date.now() + options.leaseMs) },
         });
       })
@@ -662,7 +642,7 @@ function persistGeneration(
   };
   return database
     .transaction(async (transaction) => {
-      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
+      await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
       const run = await transaction.conversationRun.findUniqueOrThrow({
         where: { id: claimed.runId },
         select: { contextId: true },
@@ -743,7 +723,7 @@ function dispatchRun(
   return Effect.gen(function* dispatch() {
     yield* database
       .transaction(async (transaction) => {
-        await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
+        await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
         await transaction.conversationRun.update({
           where: { id: claimed.runId },
           data: { status: "dispatching" },
@@ -751,7 +731,7 @@ function dispatchRun(
         // Same renewal contract as the model stage: Telegram delivery bursts must not
         // outlive the lease while another worker waits on it.
         await transaction.conversationLane.update({
-          where: { assistantId_chatId_threadKey: dbKey(claimed.key) },
+          where: { assistantId_chatId_threadKey: ConversationKey.toDb(claimed.key) },
           data: { leaseUntil: new Date(Date.now() + options.leaseMs) },
         });
       })
@@ -773,7 +753,7 @@ function dispatchRun(
         if (stored.deliveryStatus === "unknown" && stored.unknownRetryCount > 0) {
           return database
             .transaction(async (transaction) => {
-              await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
+              await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
               await transaction.conversationRunAction.update({
                 where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
                 data: {
@@ -811,7 +791,7 @@ function deliverStoredAction(
 ): Effect.Effect<void, ConversationError> {
   return database
     .transaction(async (transaction) => {
-      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
+      await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
       await transaction.conversationRunAction.update({
         where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
         data: {
@@ -832,7 +812,7 @@ function deliverStoredAction(
       ),
       Effect.flatMap((receipt) =>
         database.transaction(async (transaction) => {
-          await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
+          await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
           await transaction.conversationRunAction.update({
             where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
             data: {
@@ -903,7 +883,7 @@ function recordDeliveryFailure(
 ) {
   return database
     .transaction(async (transaction) => {
-      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
+      await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
       await transaction.conversationRunAction.update({
         where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
         data: {
@@ -974,7 +954,7 @@ function blockRun(
 ) {
   return database
     .transaction(async (transaction) => {
-      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
+      await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
       await transaction.conversationRun.update({
         where: { id: claimed.runId },
         data: { errorMessage: message, errorTag, finalizedAt: new Date(), status: "blocked" },
@@ -992,7 +972,7 @@ function finalizeRun(
 ) {
   return database
     .transaction(async (transaction) => {
-      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
+      await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
       const run = await transaction.conversationRun.findUniqueOrThrow({
         where: { id: claimed.runId },
         select: { status: true },
@@ -1011,7 +991,7 @@ function finalizeRun(
 // Shared tail of every terminal run transition: clears the lease, advances processedRevision
 // past this run's batch, and schedules the successor wake when newer inputs are waiting.
 async function releaseLane(transaction: Prisma.TransactionClient, claimed: ClaimedRun, options: Options) {
-  const where = dbKey(claimed.key);
+  const where = ConversationKey.toDb(claimed.key);
   const lane = await transaction.conversationLane.findUniqueOrThrow({
     where: { assistantId_chatId_threadKey: where },
   });
@@ -1048,7 +1028,7 @@ async function releaseLane(transaction: Prisma.TransactionClient, claimed: Claim
 function recordModelFailure(database: Database.Interface, claimed: ClaimedRun, error: Model.Error, terminal: boolean) {
   return database
     .transaction(async (transaction) => {
-      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
+      await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
       await transaction.conversationRun.update({
         where: { id: claimed.runId },
         data: {
@@ -1060,7 +1040,7 @@ function recordModelFailure(database: Database.Interface, claimed: ClaimedRun, e
       });
       if (!terminal) {
         await transaction.conversationLane.update({
-          where: { assistantId_chatId_threadKey: dbKey(claimed.key) },
+          where: { assistantId_chatId_threadKey: ConversationKey.toDb(claimed.key) },
           data: { leaseUntil: new Date() },
         });
       }
@@ -1068,24 +1048,12 @@ function recordModelFailure(database: Database.Interface, claimed: ClaimedRun, e
     .pipe(Effect.mapError(failed("Failed to record model failure")));
 }
 
-const PreparedRunSchema = Schema.Struct({
-  allowedTargetIds: Schema.Array(Schema.Int),
-  messages: Schema.Array(
-    Schema.Struct({
-      role: Schema.Literals(["assistant", "user"]),
-      text: Schema.String,
-    }),
-  ),
-  replyEligible: Schema.Boolean,
-  sessionId: Schema.String,
-});
-
 function expireLease(database: Database.Interface, claimed: ClaimedRun) {
   return database
     .query((client) =>
       client.conversationLane.updateMany({
         where: {
-          ...dbKey(claimed.key),
+          ...ConversationKey.toDb(claimed.key),
           activeRunId: claimed.runId,
           fencingToken: claimed.fencingToken,
         },

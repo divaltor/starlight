@@ -13,8 +13,7 @@ import type { ZodType } from "zod";
 import { selected } from "@/ai/model-profile";
 import * as ModelProvider from "@/ai/model-provider";
 import * as ModelTelemetry from "@/ai/model-telemetry";
-import { aggregateGenerationUsage, getUpstreamProvider, normalizeStepUsage } from "@/ai/usage";
-import type { GenerationUsage, StepUsage } from "@/ai/usage";
+import * as Usage from "@/ai/usage";
 
 const MODEL_TIMEOUT_MS = 120_000;
 
@@ -83,7 +82,7 @@ export interface GenerationResult<OUTPUT> {
   readonly steps: readonly ModelStep[];
   readonly toolEvents: readonly ToolEvent[];
   readonly transcript: readonly TranscriptEvent[];
-  readonly usage: GenerationUsage;
+  readonly usage: Usage.GenerationUsage;
 }
 
 export interface ModelStep {
@@ -94,7 +93,7 @@ export interface ModelStep {
   readonly stepNumber: number;
   readonly toolCallCount: number;
   readonly upstreamProvider: string | null;
-  readonly usage: StepUsage;
+  readonly usage: Usage.StepUsage;
 }
 
 export interface Interface {
@@ -171,7 +170,7 @@ export const layer: Layer.Layer<Service, never, ModelProvider.Service | ModelTel
       // oxlint-disable-next-line prefer-destructuring
       const result = generated.result;
       const stepUsage = result.steps.map((step) =>
-        normalizeStepUsage(step.usage, step.providerMetadata, selected.prices),
+        Usage.normalizeStep(step.usage, step.providerMetadata, selected.prices),
       );
 
       yield* Effect.all(
@@ -198,7 +197,7 @@ export const layer: Layer.Layer<Service, never, ModelProvider.Service | ModelTel
                   stepIndex: step.stepNumber,
                   toolCallCount: step.toolCalls.length,
                   uncachedInputTokens: stepUsage[index]?.uncachedInputTokens ?? null,
-                  upstreamProvider: getUpstreamProvider(step.providerMetadata),
+                  upstreamProvider: Usage.upstreamProvider(step.providerMetadata),
                 }),
               ),
             ),
@@ -216,7 +215,7 @@ export const layer: Layer.Layer<Service, never, ModelProvider.Service | ModelTel
         );
       }
 
-      const usage = aggregateGenerationUsage(stepUsage);
+      const usage = Usage.aggregate(stepUsage);
       telemetry.recordGeneration({ finishReason: result.finishReason, usage });
 
       yield* Effect.logInfo("Model generation completed").pipe(
@@ -244,7 +243,7 @@ export const layer: Layer.Layer<Service, never, ModelProvider.Service | ModelTel
           providerRequestId: step.response.id,
           stepNumber: step.stepNumber,
           toolCallCount: step.toolCalls.length,
-          upstreamProvider: getUpstreamProvider(step.providerMetadata),
+          upstreamProvider: Usage.upstreamProvider(step.providerMetadata),
           usage: stepUsage[index]!,
         })),
         toolEvents: structuredClone(toolEvents),
@@ -384,8 +383,8 @@ function logFailure(
   toolEvents: readonly ToolEvent[],
   telemetry: ModelTelemetry.Interface,
 ) {
-  const stepUsage = steps.map((step) => normalizeStepUsage(step.usage, step.providerMetadata, selected.prices));
-  const usage = aggregateGenerationUsage(stepUsage);
+  const stepUsage = steps.map((step) => Usage.normalizeStep(step.usage, step.providerMetadata, selected.prices));
+  const usage = Usage.aggregate(stepUsage);
   // Dot notation is the project convention; destructuring is intentionally disabled.
   // oxlint-disable-next-line prefer-destructuring
   const cause = error.cause;
@@ -415,7 +414,7 @@ function logFailure(
   ]).pipe(Effect.asVoid);
 }
 
-function recordStep(telemetry: ModelTelemetry.Interface, step: StepResult<ToolSet>, usage: StepUsage): void {
+function recordStep(telemetry: ModelTelemetry.Interface, step: StepResult<ToolSet>, usage: Usage.StepUsage): void {
   telemetry.recordStep({
     actualModel: step.response.modelId,
     finishReason: step.finishReason,
@@ -423,7 +422,7 @@ function recordStep(telemetry: ModelTelemetry.Interface, step: StepResult<ToolSe
     providerRequestId: step.response.id,
     stepIndex: step.stepNumber,
     toolCallCount: step.toolCalls.length,
-    upstreamProvider: getUpstreamProvider(step.providerMetadata),
+    upstreamProvider: Usage.upstreamProvider(step.providerMetadata),
     usage,
   });
 }

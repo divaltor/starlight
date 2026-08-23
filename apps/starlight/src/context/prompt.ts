@@ -23,6 +23,7 @@ export interface RenderedTurn {
 export interface LiveMessagePayload {
   readonly forwardOrigin: string | null;
   readonly messageId: number;
+  readonly repliedText: string | null;
   readonly replyToMessageId: number | null;
   readonly senderFirstName: string;
   readonly text: string;
@@ -109,4 +110,38 @@ function canonicalize(value: Prisma.InputJsonValue): Prisma.InputJsonValue {
       .toSorted((left, right) => left[0].localeCompare(right[0]))
       .map((entry) => [entry[0], canonicalize(entry[1])]),
   );
+}
+
+export function verifyPrefix(
+  basePrefixHash: string,
+  turns: readonly {
+    readonly renderedContent: string;
+    readonly rollingPrefixHash: string;
+    readonly segmentHash: string;
+  }[],
+): string {
+  let rollingHash = basePrefixHash;
+  for (const turn of turns) {
+    const segment = extendPrefix(rollingHash, turn.renderedContent);
+    if (segment.segmentHash !== turn.segmentHash || segment.rollingPrefixHash !== turn.rollingPrefixHash) {
+      throw new Error("Context prefix chain is invalid");
+    }
+    rollingHash = segment.rollingPrefixHash;
+  }
+  return rollingHash;
+}
+
+// The seed fields derive the context base from the frozen envelope and memory;
+// both creation paths must produce byte-identical values or the two chains diverge.
+export function stableSeed(envelope: string, memory: string) {
+  return {
+    basePrefixHash: new Bun.CryptoHasher("sha256")
+      .update(`${envelope.length}:${envelope}${memory.length}:${memory}`)
+      .digest("hex"),
+    estimatedStableTokens: Math.ceil(envelope.length / 4) + Math.ceil(memory.length / 4),
+    frozenMemory: memory,
+    frozenMemoryHash: new Bun.CryptoHasher("sha256").update(memory).digest("hex"),
+    stableEnvelope: envelope,
+    stableEnvelopeHash: new Bun.CryptoHasher("sha256").update(envelope).digest("hex"),
+  };
 }
