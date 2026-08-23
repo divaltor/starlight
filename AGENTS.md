@@ -12,6 +12,11 @@
 10. Don't use `git stash` mid-session; other agents or the user can edit files at the same time.
 11. **Never write a test before the admission gate under # Testing passes.**
 
+## Communication
+
+- Human-facing output (replies, commit messages, PR text): fewest words that carry the point.
+- No superlatives, praise, or agreement padding. State disagreements and risks plainly.
+
 ## Design Principles
 
 Optimize the design for the normal flow. If the happy path is 95% of behavior, it should be ~95% of what a reader sees.
@@ -43,6 +48,8 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 - NEVER extract a one-liner, even a heavily used one: a body that is a single call or expression — `estimateTokens(value)` = `Math.ceil(value.length / 4)`, `hash(value)` = one `Bun.CryptoHasher` chain, `profileFingerprint(input)` = `hash(renderEnvelope(input))` — gets written inline at every call site. A wrapper name sends every human reader on a hop to find a line they already know; repetition is not complexity.
 - Keep helpers below the code they support; do not extract multi-line logic used fewer than three times.
 - Comments are rare and explain why, not what.
+- Name recurring or spec-defined values (HTTP statuses, limits, callback prefixes) as consts or enums; inline self-explanatory one-off literals.
+- Prefer options objects or enums over positional boolean parameters; `send({ retry: true })` reads better at the call site than `send(true)`.
 
 ## Effect TS
 
