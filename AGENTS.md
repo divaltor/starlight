@@ -22,6 +22,7 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 - Parse untrusted input once at the boundary into trusted domain values; make illegal states unrepresentable; pass trusted values inward instead of re-checking raw data.
 - Never reduce validation at trust boundaries, protection against data loss, security, accessibility, or explicitly requested behavior to make a change smaller.
 - No speculative safeguards or theoretical race handling. Fix the smallest real, observed failure at the boundary that owns it. Prefer fewer names, fewer branches, and net-negative diffs.
+- Before adding complexity for a speculative edge case, explain the concrete failure mode, its likelihood, and the cost; get the user's buy-in first.
 - Before adding code, confirm that a change is needed. Then understand and trace the real flow. Reuse an established local pattern, the standard library, platform features, or an installed dependency before writing custom code; search for a maintained third-party library before building one.
 - For a bug, check all callers and fix the root cause in the lowest shared owner. Do not patch each visible symptom separately.
 - For non-trivial logic, add the smallest focused test or runnable check that proves the changed behavior.
@@ -29,10 +30,12 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 ## TypeScript Style
 
 - Use guard clauses and early returns; avoid `else`.
+- Avoid `try`/`catch` where possible; in Effect code, put expected failures in the error channel.
 - Access properties with dot notation (`obj.a`) instead of destructuring.
 - Inline single-use variables; drop intermediate bindings.
 - Type-guard `filter` callbacks to preserve inference.
 - Rely on type inference; annotate only at exports and boundaries.
+- Avoid the `any` type.
 - Prefer `const`; use ternaries or early returns instead of reassignment.
 - Never alias imports (`import { x as y }`) and never use star imports.
 - Prefer functional array methods (`map`, `filter`, `flatMap`) over `for` loops.
@@ -62,6 +65,8 @@ export const defaultLayer = layer.pipe(Layer.provide(FetchHttpClient.layer));
 - Name workflows `Effect.fn("Module.method")`.
 - Model expected failures as `Schema.TaggedError` with a `static fromCause(...)` helper.
 - One assembled `ManagedRuntime` per process in `services/runtime.ts`.
+- Keep pure parsing, validation, and option building synchronous; do not return `Effect` from helpers that do no effectful work.
+- Decode untrusted JSON with `Schema` helpers such as `Schema.decodeUnknownOption`, not manual `JSON.parse` wrapped in `Effect.try`.
 - Enforcement: `bun run lint`.
 
 ## Maintenance & Tasks
@@ -72,12 +77,14 @@ export const defaultLayer = layer.pipe(Layer.provide(FetchHttpClient.layer));
 - ALWAYS use scripts from package.json to create and apply migrations via Prisma. Never write migration files manually.
 - Never hand-edit `packages/utils/src/generated/prisma`; regenerate with `bun run db:generate`.
 - Follow conventional commits: `type(scope): summary` with types `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
+- Scopes are optional; use the affected app or package, for example `web`, `server`, `starlight`, `utils`.
 
 ## Testing
 
 - Tests verify e2e flows and extraordinary logic in our data flow, not that 2 + 2 = 4.
 - Don't test third-party logic already tested by library authors, and don't verify data validation — Zod and Prisma own that.
 - Test behavior, not implementation: assert observable outcomes; never assert internal calls, call order, or intermediate values.
+- Do not duplicate production logic inside tests.
 - Every test must name the class of bug or the user rule it protects. If you can't name it, delete it. Regression tests are exempt: the fixed bug is their provenance.
 - A test must be able to fail. Break the behavior by hand and watch it go red. If it stays green, it's a change-detector — rewrite or delete it.
 - Mock only the external boundary: Telegram API, AI SDK, time, randomness. For flow tests use real collaborators — a real Prisma client against the test database.
