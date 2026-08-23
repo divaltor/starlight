@@ -5,7 +5,6 @@ import { env } from "@starlight/utils";
 import { Bot, InlineKeyboard } from "grammy";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
-import { attachMessage } from "@/middlewares/message";
 import { attachChat, attachChatMember, attachUser } from "@/middlewares/session";
 import type { Context } from "@/types";
 
@@ -42,7 +41,6 @@ bot.use(async (ctx, next) => {
 bot.use(attachUser);
 bot.use(attachChat);
 bot.use(attachChatMember);
-bot.use(attachMessage);
 bot.use(logUpdates);
 
 export { bot };
