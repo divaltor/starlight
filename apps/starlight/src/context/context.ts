@@ -7,7 +7,9 @@ import type {
 import { Context, Effect, Layer, Schema } from "effect";
 import { z } from "zod";
 import * as ChatReply from "@/ai/chat-reply";
+import { selected } from "@/ai/model-profile";
 import * as Model from "@/ai/model";
+import * as CacheDiagnostics from "@/context/cache-diagnostics";
 import * as Prompt from "@/context/prompt";
 import type * as ConversationKey from "@/conversation/key";
 import * as Lane from "@/conversation/lane";
@@ -91,6 +93,7 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
     const database = yield* Database.Service;
     const exa = yield* Exa.Service;
     const model = yield* Model.Service;
+    const prefixSnapshots = new Map<string, CacheDiagnostics.PrefixSnapshot>();
 
     const appendFinalized = Effect.fn("ConversationContext.appendFinalized")(function* appendFinalized(
       input: RunReference,
@@ -206,7 +209,7 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
     });
 
     const prepare = Effect.fn("ConversationContext.prepare")(function* prepare(input: RunReference) {
-      return yield* database
+      const outcome = yield* database
         .transaction(async (transaction) => {
           const run = await transaction.conversationRun.findUniqueOrThrow({
             where: { id: input.runId },
@@ -294,6 +297,14 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
             terminalPrefixHash,
             webLookupEnabled: envelope.tools.length > 0,
           };
+          const snapshot: CacheDiagnostics.PrefixSnapshot = {
+            messages: messages.map((message) => new Bun.CryptoHasher("sha256").update(message.text).digest("hex")),
+            settings: `${selected.model}:${selected.reasoning}:${envelope.tools.length > 0}`,
+            system: [
+              new Bun.CryptoHasher("sha256").update(context.stableEnvelope).digest("hex"),
+              new Bun.CryptoHasher("sha256").update(cacheBase).digest("hex"),
+            ],
+          };
           if (run.requestHash !== null && run.requestHash !== prepared.requestHash) {
             // Rendering changed between freeze and replay (typically a deploy). Retrying cannot
             // succeed because attemptCount only advances during model invocation, so surface a
@@ -307,9 +318,26 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
             where: { id: run.id },
             data: { contextId: context.id, requestHash: prepared.requestHash },
           });
-          return prepared;
+          return { prepared, snapshot };
         })
         .pipe(Effect.mapError(failed("Failed to prepare context request")));
+      const previous = prefixSnapshots.get(outcome.prepared.contextId);
+      prefixSnapshots.set(outcome.prepared.contextId, outcome.snapshot);
+      const verdict = CacheDiagnostics.comparePrefix(previous, outcome.snapshot);
+      const annotations: Record<string, string | number> = {
+        contextId: outcome.prepared.contextId,
+        messageCount: outcome.snapshot.messages.length,
+        status: verdict.status,
+      };
+      if (verdict.status === "append-only") annotations.appendedMessages = verdict.appendedMessages;
+      if (verdict.status === "changed") annotations.component = verdict.changed;
+      if (previous !== undefined) annotations.previousMessageCount = previous.messages.length;
+      yield* (
+        verdict.status === "changed"
+          ? Effect.logWarning("Prepared context prefix changed")
+          : Effect.logDebug("Prepared context prefix compared")
+      ).pipe(Effect.annotateLogs(annotations));
+      return outcome.prepared;
     });
 
     const checkpoint = Effect.fn("ConversationContext.checkpoint")(function* checkpoint(
