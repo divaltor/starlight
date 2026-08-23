@@ -3,6 +3,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "moduleDetection": "force",
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "jsx": "react-jsx",
@@ -21,10 +22,5 @@
     "types": ["bun"],
     "composite": true
   },
-  "include": ["src/**/*"],
-  "references": [
-    {
-      "path": "../../packages/utils"
-    }
-  ]
+  "include": ["src/**/*"]
 }

@@ -1,4 +1,4 @@
-import type { TweetData } from "@starlight/api/src/types/tweets";
+import type { TweetData } from "@starlight/api/types/tweets";
 import { X } from "lucide-react";
 import type { UIElementData } from "photoswipe";
 import type { PhotoSwipe } from "photoswipe/lightbox";

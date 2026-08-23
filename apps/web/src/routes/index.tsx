@@ -1,4 +1,4 @@
-import type { TweetData } from "@starlight/api/src/types/tweets";
+import type { TweetData } from "@starlight/api/types/tweets";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Search } from "lucide-react";

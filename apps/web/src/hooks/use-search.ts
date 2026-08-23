@@ -1,4 +1,4 @@
-import type { SearchPageResult, TweetData } from "@starlight/api/src/types/tweets";
+import type { SearchPageResult, TweetData } from "@starlight/api/types/tweets";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { orpc } from "@/utils/orpc";
 

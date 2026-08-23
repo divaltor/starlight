@@ -1,4 +1,4 @@
-import type { TweetData } from "@starlight/api/src/types/tweets";
+import type { TweetData } from "@starlight/api/types/tweets";
 
 export class LayoutManager {
 	pageWidth: number;

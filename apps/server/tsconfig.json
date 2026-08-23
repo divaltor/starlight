@@ -24,16 +24,5 @@
     "types": ["bun"],
     "composite": true
   },
-  "include": ["src/**/*"],
-  "references": [
-    {
-      "path": "../../packages/utils"
-    },
-    {
-      "path": "../../packages/crypto"
-    },
-    {
-      "path": "../../packages/api"
-    }
-  ]
+  "include": ["src/**/*"]
 }

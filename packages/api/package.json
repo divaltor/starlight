@@ -2,11 +2,11 @@
   "name": "@starlight/api",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/index.d.mts",
       "default": "./src/index.ts"
     },
     "./*": {
-      "types": "./dist/*.d.ts",
+      "types": "./dist/*.d.mts",
       "default": "./src/*.ts"
     }
   },

@@ -1,4 +1,4 @@
-import type { TweetData, TweetsPageResult } from "@starlight/api/src/types/tweets";
+import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { lazy, Suspense } from "react";
