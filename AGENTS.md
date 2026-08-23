@@ -10,6 +10,7 @@
 8. In Grammy handlers, `ctx.<obj>` is guaranteed by middleware; use `ctx.<obj>!` instead of defensive existence checks.
 9. When working on Effect TS code, load the local `effect` skill (`.opencode/skills/effect`); the global `effect-ts` skill remains the portable API reference.
 10. Use structured logging: keep messages stable and put object IDs and dynamic context in log fields (for example, `logger.info({ photoId }, "Photo embeddings generated")`), never interpolate them into the message.
+11. Don't use `git stash` mid-session; other agents or the user can edit files at the same time.
 
 ## Design Principles
 
@@ -21,7 +22,7 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 - Parse untrusted input once at the boundary into trusted domain values; make illegal states unrepresentable; pass trusted values inward instead of re-checking raw data.
 - Never reduce validation at trust boundaries, protection against data loss, security, accessibility, or explicitly requested behavior to make a change smaller.
 - No speculative safeguards or theoretical race handling. Fix the smallest real, observed failure at the boundary that owns it. Prefer fewer names, fewer branches, and net-negative diffs.
-- Before adding code, confirm that a change is needed. Then understand and trace the real flow. Reuse an established local pattern, the standard library, platform features, or an installed dependency before writing custom code.
+- Before adding code, confirm that a change is needed. Then understand and trace the real flow. Reuse an established local pattern, the standard library, platform features, or an installed dependency before writing custom code; search for a maintained third-party library before building one.
 - For a bug, check all callers and fix the root cause in the lowest shared owner. Do not patch each visible symptom separately.
 - For non-trivial logic, add the smallest focused test or runnable check that proves the changed behavior.
 
@@ -32,7 +33,10 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 - Inline single-use variables; drop intermediate bindings.
 - Type-guard `filter` callbacks to preserve inference.
 - Rely on type inference; annotate only at exports and boundaries.
-- Keep helpers below the code they support; do not extract single-use logic.
+- Prefer `const`; use ternaries or early returns instead of reassignment.
+- Never alias imports (`import { x as y }`) and never use star imports.
+- Prefer functional array methods (`map`, `filter`, `flatMap`) over `for` loops.
+- Keep helpers below the code they support; do not extract logic used fewer than three times.
 - Comments are rare and explain why, not what.
 
 ## Effect TS
@@ -68,4 +72,28 @@ export const defaultLayer = layer.pipe(Layer.provide(FetchHttpClient.layer));
 - ALWAYS use scripts from package.json to create and apply migrations via Prisma. Never write migration files manually.
 - Never hand-edit `packages/utils/src/generated/prisma`; regenerate with `bun run db:generate`.
 - Follow conventional commits: `type(scope): summary` with types `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
-- Tests assert real behavior, not implementation details; avoid mocks and `globalThis.*` where possible.
+
+## Testing
+
+- Tests verify e2e flows and extraordinary logic in our data flow, not that 2 + 2 = 4.
+- Don't test third-party logic already tested by library authors, and don't verify data validation — Zod and Prisma own that.
+- Test behavior, not implementation: assert observable outcomes; never assert internal calls, call order, or intermediate values.
+- Every test must name the class of bug or the user rule it protects. If you can't name it, delete it. Regression tests are exempt: the fixed bug is their provenance.
+- A test must be able to fail. Break the behavior by hand and watch it go red. If it stays green, it's a change-detector — rewrite or delete it.
+- Mock only the external boundary: Telegram API, AI SDK, time, randomness. For flow tests use real collaborators — a real Prisma client against the test database.
+- Every bug fix ships with the regression test that would have caught it first.
+- One behavior per test, one equivalence class per test.
+
+### Levels
+
+- Most value is in integration tests: several real units together, only the external boundary mocked. Write mostly these.
+- Unit-test only genuinely tricky logic (cursor pagination, parsing, scoring).
+- Test each rule once, at the cheapest level that can express it; don't repeat the same behavior across levels.
+
+### Test code
+
+- Use fixtures instead of private helpers.
+- Tests are isolated and deterministic: each creates its own data, runs in any order, and gives the same result every time. No shared mutable state, no `sleep`, no real clock, no real network.
+- Assert specific values, not truthiness.
+- No loops or conditionals in tests — parametrize instead (`test.each`).
+- Name tests as behavior sentences: `test("keeps every media row for a post on the same page")`.
