@@ -1,11 +1,17 @@
 import env from "@starlight/utils/config";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Schema } from "effect";
 import {
 	FetchHttpClient,
 	HttpClient,
 	HttpClientRequest,
 	HttpClientResponse,
 } from "effect/unstable/http";
+
+// Without a deadline a stalled ML service pins the caller forever: the
+// concurrency-1 embeddings worker slot (BullMQ renews the lock, so the job
+// never fails) or a runner update context.
+const EMBEDDINGS_TIMEOUT_MS = 30_000;
+const QUERY_EMBEDDINGS_TIMEOUT_MS = 10_000;
 
 export class EmbeddingsError extends Schema.TaggedError<EmbeddingsError>()("EmbeddingsError", {
 	message: Schema.String,
@@ -75,13 +81,12 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 				),
 			);
 
-			const response = yield* client
-				.execute(request)
-				.pipe(
-					Effect.mapError((error) =>
-						EmbeddingsError.fromCause({ message: "API request failed", cause: error }),
-					),
-				);
+			const response = yield* client.execute(request).pipe(
+				Effect.timeout(Duration.millis(EMBEDDINGS_TIMEOUT_MS)),
+				Effect.mapError((error) =>
+					EmbeddingsError.fromCause({ message: "API request failed", cause: error }),
+				),
+			);
 
 			const okResponse = yield* HttpClientResponse.filterStatusOk(response).pipe(
 				Effect.catch(() =>
@@ -134,13 +139,12 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 				),
 			);
 
-			const response = yield* client
-				.execute(request)
-				.pipe(
-					Effect.mapError((error) =>
-						EmbeddingsError.fromCause({ message: "API request failed", cause: error }),
-					),
-				);
+			const response = yield* client.execute(request).pipe(
+				Effect.timeout(Duration.millis(QUERY_EMBEDDINGS_TIMEOUT_MS)),
+				Effect.mapError((error) =>
+					EmbeddingsError.fromCause({ message: "API request failed", cause: error }),
+				),
+			);
 
 			const okResponse = yield* HttpClientResponse.filterStatusOk(response).pipe(
 				Effect.catch(() =>

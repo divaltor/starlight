@@ -9,6 +9,7 @@ import { saveMessage } from "@/middlewares/message";
 import { buildChatMemoryPromptContext } from "@/services/chat-memory";
 import { buildRecentToolContextByMessageId } from "@/services/message-parts";
 import { ToolResultPart } from "@/types";
+import { loadAttachmentBase64Data } from "@/utils/attachment";
 import { History } from "@/utils/history";
 import {
 	getSystemPrompt,
@@ -107,21 +108,34 @@ async function runChatReplyGeneration(params: {
 				},
 			},
 		}).pipe(
-			Effect.catchTag("LlmProviderError", (error) =>
-				Effect.sync(() => {
-					ctx.logger.error(
-						{
-							error: {
-								name: error.providerErrorName,
-								message: error.message,
-								statusCode: error.statusCode,
-								isRetryable: error.isRetryable,
+			Effect.catchTags({
+				LlmProviderError: (error) =>
+					Effect.sync(() => {
+						ctx.logger.error(
+							{
+								error: {
+									name: error.providerErrorName,
+									message: error.message,
+									statusCode: error.statusCode,
+									isRetryable: error.isRetryable,
+								},
 							},
-						},
-						"AI provider returned error",
-					);
-				}).pipe(Effect.as(null)),
-			),
+							"AI provider returned error",
+						);
+					}).pipe(Effect.as(null)),
+				LlmInvocationError: (error) =>
+					Effect.sync(() => {
+						ctx.logger.error(
+							{
+								error: {
+									message: error.message,
+									operation: error.operation,
+								},
+							},
+							"AI generation failed",
+						);
+					}).pipe(Effect.as(null)),
+			}),
 		),
 	);
 }
@@ -328,11 +342,21 @@ whitelistedGroupChat
 				.map((message) => message.messageId),
 			...(directReplyEntry ? [directReplyEntry.messageId] : []),
 		];
-		const recentToolContextByMessageId = await buildRecentToolContextByMessageId({
-			chatId,
-			messageThreadId,
-			messageIds: recentToolContextMessageIds,
-		});
+		const [recentToolContextByMessageId, liveTurnAttachments] = await Promise.all([
+			buildRecentToolContextByMessageId({
+				chatId,
+				messageThreadId,
+				messageIds: recentToolContextMessageIds,
+			}),
+			// Attachments are stored in S3 by middleware; only the reply path needs
+			// the bytes, so load them here instead of pinning base64 on every context.
+			Promise.all(
+				ctx.attachments.map(async (attachment) => ({
+					...attachment,
+					base64Data: await loadAttachmentBase64Data(attachment.s3Path),
+				})),
+			),
+		]);
 		const currentConversationTurn = toConversationTurn(
 			{
 				messageId: triggerMessageId,
@@ -343,7 +367,7 @@ whitelistedGroupChat
 				fromFirstName: ctx.message.from?.first_name,
 				text: ctx.message.text,
 				caption: ctx.message.caption,
-				attachments: ctx.attachments,
+				attachments: liveTurnAttachments,
 			},
 			botId,
 			{

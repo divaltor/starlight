@@ -13,6 +13,10 @@ import type { Context } from "@/types";
 
 const INLINE_QUERY_PAGE_SIZE = 50;
 const INLINE_QUERY_CANDIDATE_MULTIPLIER = 8;
+// The offset is client-controlled; clamping it bounds the legacy paging loop,
+// which otherwise scans the whole tweet corpus accumulating every photo in
+// memory while chasing a huge offset.
+const MAX_INLINE_QUERY_PHOTO_OFFSET = 1000;
 const INLINE_QUERY_AUTHOR_REGEX = /(?:^|\s)@(?<author>[A-Za-z0-9_]+)/gu;
 const SET_COOKIES_LABEL = "Set cookies";
 
@@ -651,7 +655,10 @@ composer
 	.on("inline_query")
 	.filter((ctx) => !isTwitterUrl(ctx.inlineQuery.query.trim()))
 	.use(async (ctx) => {
-		const photoOffset = Number(ctx.inlineQuery.offset || "0") || 0;
+		const photoOffset = Math.min(
+			Math.max(Number(ctx.inlineQuery.offset || "0") || 0, 0),
+			MAX_INLINE_QUERY_PHOTO_OFFSET,
+		);
 		const query = ctx.inlineQuery.query.trim();
 		const { authors, textQuery } = parseInlineImageQuery(query);
 

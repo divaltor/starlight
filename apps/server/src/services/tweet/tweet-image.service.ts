@@ -21,7 +21,11 @@ const getMosaicDimensions = Effect.fn("getMosaicDimensions")(
 
 			const dimensions = yield* Effect.tryPromise({
 				try: async () => {
-					const response = await http(mosaic.formats.jpeg, { timeout: MOSAIC_METADATA_TIMEOUT_MS });
+					// Abort signal bounds headers AND body; ky's `timeout` alone only
+					// covers time-to-headers, so arrayBuffer() could hang on a stalled stream.
+					const response = await http(mosaic.formats.jpeg, {
+						signal: AbortSignal.timeout(MOSAIC_METADATA_TIMEOUT_MS),
+					});
 					if (!response.ok) {
 						throw new Error(`Failed to fetch mosaic: ${response.status}`);
 					}

@@ -136,7 +136,11 @@ async function prefetchImages(urls: Iterable<string>): Promise<Map<string, Uint8
 	const entries = await Promise.all(
 		[...urls].map(async (url) => {
 			try {
-				const response = await http(url, { timeout: IMAGE_FETCH_TIMEOUT_MS });
+				// Abort signal bounds headers AND body; ky's `timeout` alone only
+				// covers time-to-headers, so arrayBuffer() could hang on a stalled stream.
+				const response = await http(url, {
+					signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
+				});
 				if (!response.ok) {
 					throw new Error(`HTTP ${response.status}`);
 				}

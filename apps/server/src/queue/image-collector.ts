@@ -15,6 +15,11 @@ export interface ImageCollectorJobData {
 	userId: string;
 }
 
+// Bounds the photo download including the response body (ky's `timeout` only
+// covers time-to-headers), so a stalled CDN stream fails the job for retry
+// instead of hanging the worker.
+const PHOTO_DOWNLOAD_TIMEOUT_MS = 30_000;
+
 export const imagesQueue = new Queue<ImageCollectorJobData>("images-collector", {
 	connection: redis,
 	defaultJobOptions: {
@@ -86,6 +91,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 				headers: {
 					"User-Agent": userAgent.toString(),
 				},
+				signal: AbortSignal.timeout(PHOTO_DOWNLOAD_TIMEOUT_MS),
 			});
 
 			if (!response.ok) {

@@ -1,4 +1,5 @@
 import { run } from "@grammyjs/runner";
+import type { Update } from "@grammyjs/types";
 import { bot } from "@/bot";
 import "@/services/runtime";
 import chatMemberHandler from "@/handlers/chat-member";
@@ -33,7 +34,35 @@ boundary.use(chatMemberHandler);
 
 const workers = [imagesWorker, classificationWorker, embeddingsWorker, scrapperWorker];
 const queues = [imagesQueue, classificationQueue, embeddingsQueue, scrapperQueue];
-const runner = run(bot);
+
+const UPDATE_PROCESSING_TIMEOUT_MS = 1000 * 60 * 10;
+
+function handleUpdateTimeout(update: Update, task: Promise<void>) {
+	// The runner evicts the drift so the update stops pinning a slot and its
+	// context; the middleware itself keeps running until it settles.
+	const updateType = Object.keys(update).find((key) => key !== "update_id") ?? "unknown";
+
+	logger.error(
+		{ updateId: update.update_id, updateType },
+		"Update handler timed out; evicted from runner queue",
+	);
+
+	task.catch((error) => {
+		logger.error(
+			{ err: error, updateId: update.update_id, updateType },
+			"Timed-out update handler failed",
+		);
+	});
+}
+
+const runner = run(bot, {
+	sink: {
+		timeout: {
+			milliseconds: UPDATE_PROCESSING_TIMEOUT_MS,
+			handler: handleUpdateTimeout,
+		},
+	},
+});
 
 for (const worker of workers) {
 	worker.run().catch((error) => logger.error({ err: error }, "Queue worker stopped"));

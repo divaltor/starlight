@@ -1,5 +1,5 @@
 import { logger } from "@/logger";
-import { s3 } from "@/storage";
+import { loadAttachmentBase64Data } from "@/utils/attachment";
 import type { Context } from "@/types";
 import { toConversationTurn } from "@/utils/message";
 import type { ConversationTurn } from "@/utils/message";
@@ -195,26 +195,9 @@ export class History {
 					return attachment;
 				}
 
-				try {
-					const payload = await s3.file(attachment.s3Path).arrayBuffer();
+				const base64Data = await loadAttachmentBase64Data(attachment.s3Path);
 
-					return {
-						...attachment,
-						base64Data: Buffer.from(payload).toString("base64"),
-					};
-				} catch (error) {
-					logger.warn(
-						{
-							error,
-							messageId: entry.messageId,
-							s3Path: attachment.s3Path,
-							mimeType: attachment.mimeType,
-						},
-						"Failed to inline video attachment for provider payload",
-					);
-
-					return attachment;
-				}
+				return base64Data ? { ...attachment, base64Data } : attachment;
 			}),
 		);
 

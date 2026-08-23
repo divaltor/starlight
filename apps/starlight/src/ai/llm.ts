@@ -8,6 +8,10 @@ import { openrouter } from "@/utils/message";
 export const Operation = Schema.Literals(["chat-memory", "message-reply"]);
 export type Operation = typeof Operation.Type;
 
+// Total deadline for one LLM call. Without it a stalled provider response never
+// settles, which pins the runner update context (with its media) forever.
+const LLM_TIMEOUT_MS = 120_000;
+
 export interface TraceContext {
 	readonly operation: Operation;
 	readonly sessionId: string;
@@ -61,7 +65,7 @@ export function invoke<A>(
 	trace: TraceContext,
 	execute: (
 		model: LanguageModel,
-		generationOptions: ReturnType<typeof getLangfuseTelemetry>,
+		generationOptions: ReturnType<typeof getLangfuseTelemetry> & { timeout: number },
 	) => Promise<A>,
 ): Effect.Effect<A, Error> {
 	return Effect.gen(function* () {
@@ -80,10 +84,10 @@ export function invoke<A>(
 
 		return yield* Effect.tryPromise({
 			try: () =>
-				execute(
-					provider(env.OPENROUTER_MODEL),
-					getLangfuseTelemetry(trace.operation, runtimeContext),
-				),
+				execute(provider(env.OPENROUTER_MODEL), {
+					...getLangfuseTelemetry(trace.operation, runtimeContext),
+					timeout: LLM_TIMEOUT_MS,
+				}),
 			catch: (cause) =>
 				APICallError.isInstance(cause)
 					? ProviderError.fromApiCallError(trace.operation, cause)

@@ -12,6 +12,11 @@ interface ClassificationJobData {
 	userId: string;
 }
 
+// Bounds the classification request including the response body (ky's
+// `timeout` only covers time-to-headers), so a stalled ML service fails the
+// job for retry instead of hanging the worker.
+const CLASSIFICATION_TIMEOUT_MS = 10_000;
+
 export const classificationQueue = new Queue<ClassificationJobData>("classification", {
 	connection: redis,
 	defaultJobOptions: {
@@ -75,6 +80,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 				method: "post",
 				headers,
 				json: { image: photo.s3Url },
+				signal: AbortSignal.timeout(CLASSIFICATION_TIMEOUT_MS),
 			});
 		} catch (error) {
 			logger.error(

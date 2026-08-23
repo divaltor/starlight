@@ -33,8 +33,20 @@ export interface SavedAttachment extends Pick<
 	"attachmentType" | "mimeType" | "s3Path"
 > {
 	// Summary is null because we generate it on demand via queue and it's not ready yet usually on immediate acces
-	base64Data: string;
 	summary: null;
+}
+
+// Loads attachment bytes for model inlining; undefined makes toModelMessage fall back to the CDN URL.
+export async function loadAttachmentBase64Data(s3Path: string): Promise<string | undefined> {
+	try {
+		const payload = await s3.file(s3Path).arrayBuffer();
+
+		return Buffer.from(payload).toString("base64");
+	} catch (error) {
+		logger.warn({ error, s3Path }, "Failed to load attachment data from S3");
+
+		return undefined;
+	}
 }
 
 function extensionFromMimeType(mimeType: string, fallback: string): string {
@@ -250,7 +262,6 @@ export class Attachment {
 		const savedAttachments = await Promise.all(
 			preparedAttachments.map(async (attachment, index) => {
 				const s3Path = `attachments/${ctx.chat!.id}/${msg.message_id}-${index}.${attachment.extension}`;
-				const base64Data = Buffer.from(attachment.payload).toString("base64");
 
 				await s3.write(s3Path, attachment.payload, { type: attachment.mimeType });
 
@@ -261,7 +272,6 @@ export class Attachment {
 
 				return {
 					attachmentType: attachment.attachmentType,
-					base64Data,
 					mimeType: attachment.mimeType,
 					s3Path,
 					summary: null,

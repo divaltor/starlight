@@ -6,6 +6,11 @@ import { logger } from "@/logger";
 
 const filesGlob = new Bun.Glob("*.mp4");
 
+// Spawn timeout kills yt-dlp (SIGTERM) so a hung download rejects, runs the
+// fallback path, and reaches the temp-dir cleanup instead of pinning the
+// update context forever.
+const VIDEO_DOWNLOAD_TIMEOUT_MS = 180_000;
+
 interface VideoMetadata {
 	height?: number;
 	width?: number;
@@ -49,7 +54,11 @@ export async function downloadVideoFromUrl(
 
 	logger.debug({ url }, "Downloading video directly from URL");
 
-	const response = await http(url);
+	// ky's `timeout` only bounds time-to-headers; the abort signal also bounds
+	// the response body so Bun.write cannot hang on a stalled CDN stream.
+	const response = await http(url, {
+		signal: AbortSignal.timeout(VIDEO_DOWNLOAD_TIMEOUT_MS),
+	});
 
 	if (!(response.ok && response.body)) {
 		throw new Error(`Failed to download video from ${url}: ${response.status}`);
@@ -65,17 +74,21 @@ export async function downloadVideo(url: string, folder: string): Promise<VideoI
 
 	const uuid = Bun.randomUUIDv7();
 
-	const subprocess = await youtubedl.exec(url, {
-		paths: folder,
-		quiet: true,
-		noWarnings: true,
-		noPostOverwrites: true,
-		noOverwrites: true,
-		format: "mp4",
-		writeInfoJson: true,
-		noCheckCertificates: true,
-		output: `${uuid}.%(ext)s`,
-	});
+	const subprocess = await youtubedl.exec(
+		url,
+		{
+			paths: folder,
+			quiet: true,
+			noWarnings: true,
+			noPostOverwrites: true,
+			noOverwrites: true,
+			format: "mp4",
+			writeInfoJson: true,
+			noCheckCertificates: true,
+			output: `${uuid}.%(ext)s`,
+		},
+		{ timeout: VIDEO_DOWNLOAD_TIMEOUT_MS },
+	);
 
 	if (subprocess.error) {
 		logger.error({ url }, "Failed to download video");
