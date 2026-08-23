@@ -14,61 +14,61 @@ import { cn } from "@/lib/utils";
 const loadDomAnimation = () => import("motion/react").then((features) => features.domAnimation);
 
 const Carousel = ({
-	images,
-	className,
-	spaceBetween = 20,
-	renderSlide,
+  images,
+  className,
+  spaceBetween = 20,
+  renderSlide,
 }: {
-	images: {
-		src: string;
-		alt: string;
-		id?: string;
-		height?: number;
-		width?: number;
-		is_nsfw?: boolean;
-	}[];
-	className?: string;
-	spaceBetween?: number;
-	renderSlide: (
-		image: {
-			src: string;
-			alt: string;
-			id?: string;
-			height?: number;
-			width?: number;
-			is_nsfw?: boolean;
-		},
-		index: number,
-	) => ReactNode;
+  images: {
+    src: string;
+    alt: string;
+    id?: string;
+    height?: number;
+    width?: number;
+    is_nsfw?: boolean;
+  }[];
+  className?: string;
+  spaceBetween?: number;
+  renderSlide: (
+    image: {
+      src: string;
+      alt: string;
+      id?: string;
+      height?: number;
+      width?: number;
+      is_nsfw?: boolean;
+    },
+    index: number,
+  ) => ReactNode;
 }) => (
-	<LazyMotion features={loadDomAnimation}>
-		<m.div
-			animate={{ opacity: 1, transform: "translateY(0)" }}
-			className={cn("relative w-full max-w-3xl", className)}
-			transition={{
-				duration: 0.3,
-				delay: 0.5,
-			}}
-		>
-			<Swiper
-				cardsEffect={{ slideShadows: false, rotate: false }}
-				effect="cards"
-				grabCursor={true}
-				modules={[EffectCards]}
-				preventClicks={false}
-				preventClicksPropagation={false}
-				slideToClickedSlide={true}
-				spaceBetween={spaceBetween}
-			>
-				{images.map((image, index) => (
-					// biome-ignore lint/suspicious/noArrayIndexKey: images may not have stable ids
-					// Static slide list, order-stable
-					// oxlint-disable-next-line react-doctor/no-array-index-as-key
-					<SwiperSlide key={index}>{renderSlide(image, index)}</SwiperSlide>
-				))}
-			</Swiper>
-		</m.div>
-	</LazyMotion>
+  <LazyMotion features={loadDomAnimation}>
+    <m.div
+      animate={{ opacity: 1, transform: "translateY(0)" }}
+      className={cn("relative w-full max-w-3xl", className)}
+      transition={{
+        duration: 0.3,
+        delay: 0.5,
+      }}
+    >
+      <Swiper
+        cardsEffect={{ slideShadows: false, rotate: false }}
+        effect="cards"
+        grabCursor={true}
+        modules={[EffectCards]}
+        preventClicks={false}
+        preventClicksPropagation={false}
+        slideToClickedSlide={true}
+        spaceBetween={spaceBetween}
+      >
+        {images.map((image, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: images may not have stable ids
+          // Static slide list, order-stable
+          // oxlint-disable-next-line react-doctor/no-array-index-as-key
+          <SwiperSlide key={index}>{renderSlide(image, index)}</SwiperSlide>
+        ))}
+      </Swiper>
+    </m.div>
+  </LazyMotion>
 );
 
 export { Carousel };

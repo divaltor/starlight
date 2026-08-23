@@ -13,85 +13,84 @@ import { paginateSearchResults } from "../utils/search-pagination";
 import { transformSearchResults } from "../utils/transformations";
 
 export const searchImages = maybeAuthProcedure
-	.input(
-		z.object({
-			query: z.string().max(256),
-			cursor: z.string().optional(),
-			limit: z.number().min(1).max(100).default(30),
-			ownOnly: z.boolean().optional().default(false),
-		}),
-	)
-	.handler(async ({ input, context }) => {
-		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
-			throw new ORPCError("Service not available, sorry!");
-		}
+  .input(
+    z.object({
+      query: z.string().max(256),
+      cursor: z.string().optional(),
+      limit: z.number().min(1).max(100).default(30),
+      ownOnly: z.boolean().optional().default(false),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
+      throw new ORPCError("Service not available, sorry!");
+    }
 
-		const { user } = context;
-		const query = input.query.trim();
-		const { cursor, limit, ownOnly } = input;
+    const { user } = context;
+    const query = input.query.trim();
+    const { cursor, limit, ownOnly } = input;
 
-		if (ownOnly && !user) {
-			throw new ORPCError("UNAUTHORIZED", {
-				message: "Authentication required for personal search",
-				status: 401,
-			});
-		}
+    if (ownOnly && !user) {
+      throw new ORPCError("UNAUTHORIZED", {
+        message: "Authentication required for personal search",
+        status: 401,
+      });
+    }
 
-		let databaseUserId: string | null = null;
-		if (ownOnly && user) {
-			const dbUser = await prisma.user.findUnique({
-				where: { telegramId: user.id },
-				select: { id: true },
-			});
-			if (!dbUser) {
-				throw new ORPCError("NOT_FOUND", {
-					message: "User not found",
-					status: 404,
-				});
-			}
-			databaseUserId = dbUser.id;
-		}
+    let databaseUserId: string | null = null;
+    if (ownOnly && user) {
+      const dbUser = await prisma.user.findUnique({
+        where: { telegramId: user.id },
+        select: { id: true },
+      });
+      if (!dbUser) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "User not found",
+          status: 404,
+        });
+      }
+      databaseUserId = dbUser.id;
+    }
 
-		const { requestId } = context;
-		const text = await resolveQueryEmbedding(
-			() =>
-				runtime.runPromise(EmbeddingsService.Service.use((s) => s.generateText(query, requestId))),
-			query,
-		);
+    const { requestId } = context;
+    const text = await resolveQueryEmbedding(
+      () => runtime.runPromise(EmbeddingsService.Service.use((s) => s.generateText(query, requestId))),
+      query,
+    );
 
-		if (!text) {
-			throw new ORPCError("Failed to search images", {
-				status: 500,
-			});
-		}
+    if (!text) {
+      throw new ORPCError("Failed to search images", {
+        status: 500,
+      });
+    }
 
-		let cursorData: SearchCursorPayload | null = null;
-		if (cursor) {
-			cursorData = Cursor.parse(cursor, SearchCursorPayloadSchema);
+    let cursorData: SearchCursorPayload | null = null;
+    if (cursor) {
+      cursorData = Cursor.parse(cursor, SearchCursorPayloadSchema);
 
-			if (!cursorData) {
-				return {
-					results: [],
-					nextCursor: null,
-				};
-			}
-		}
+      if (!cursorData) {
+        return {
+          results: [],
+          nextCursor: null,
+        };
+      }
+    }
 
-		const queryTime = cursorData?.queryTime ?? new Date().toISOString();
-		const textQuery = `[${text.join(",")}]`;
-		const queryLower = query.toLowerCase();
-		const queryContains = `%${queryLower}%`;
-		const queryStartsWith = `${queryLower}%`;
-		const queryStartsWithSeries = `${queryLower} (%`;
-		const candidateLimit = Math.max(limit * 8, 200);
-		const hasLexicalQuery = queryLower.length > 0;
+    const queryTime = cursorData?.queryTime ?? new Date().toISOString();
+    const textQuery = `[${text.join(",")}]`;
+    const queryLower = query.toLowerCase();
+    const queryContains = `%${queryLower}%`;
+    const queryStartsWith = `${queryLower}%`;
+    const queryStartsWithSeries = `${queryLower} (%`;
+    const candidateLimit = Math.max(limit * 8, 200);
+    const hasLexicalQuery = queryLower.length > 0;
 
-		const userFilter =
-			ownOnly && databaseUserId
-				? Prisma.sql`p.user_id = ${databaseUserId}`
-				: Prisma.sql`p.user_id IN (SELECT id FROM users WHERE is_public = true)`;
+    const userFilter =
+      ownOnly && databaseUserId
+        ? Prisma.sql`p.user_id = ${databaseUserId}`
+        : Prisma.sql`p.user_id IN (SELECT id FROM users WHERE is_public = true)`;
 
-		const baseFilter = Prisma.sql`
+    const baseFilter = Prisma.sql`
 			p.deleted_at IS NULL
 			AND p.s3_path IS NOT NULL
 			AND p.classification IS NOT NULL
@@ -100,8 +99,8 @@ export const searchImages = maybeAuthProcedure
 			AND ${userFilter}
 		`;
 
-		const lexicalMatch = hasLexicalQuery
-			? Prisma.sql`
+    const lexicalMatch = hasLexicalQuery
+      ? Prisma.sql`
 				(
 					EXISTS (
 						SELECT 1
@@ -128,16 +127,16 @@ export const searchImages = maybeAuthProcedure
 					)
 				)
 			`
-			: Prisma.sql`FALSE`;
+      : Prisma.sql`FALSE`;
 
-		const paginationClause = cursorData
-			? Prisma.sql`WHERE (
+    const paginationClause = cursorData
+      ? Prisma.sql`WHERE (
 				final_score < ${cursorData.lastScore}
 				OR (final_score = ${cursorData.lastScore} AND tweet_id < ${cursorData.lastTweetId})
 			)`
-			: Prisma.empty;
+      : Prisma.empty;
 
-		const images = await prisma.$queryRaw<SearchResult[]>(Prisma.sql`
+    const images = await prisma.$queryRaw<SearchResult[]>(Prisma.sql`
 			WITH image_candidates AS (
 				SELECT p.id, p.user_id
 				FROM photos p
@@ -320,29 +319,29 @@ export const searchImages = maybeAuthProcedure
 			ORDER BY paged_posts.final_score DESC NULLS LAST, paged_posts.tweet_id DESC, p.created_at DESC, p.id DESC
 		`);
 
-		const page = paginateSearchResults(images, limit);
-		const transformedResults = transformSearchResults(page.rows);
+    const page = paginateSearchResults(images, limit);
+    const transformedResults = transformSearchResults(page.rows);
 
-		let nextCursor: string | null = null;
-		if (page.hasNextPage && page.lastPost) {
-			nextCursor = Cursor.create<SearchCursorPayload>({
-				lastScore: page.lastPost.final_score,
-				lastTweetId: page.lastPost.tweet_id,
-				queryTime,
-			});
-		}
+    let nextCursor: string | null = null;
+    if (page.hasNextPage && page.lastPost) {
+      nextCursor = Cursor.create<SearchCursorPayload>({
+        lastScore: page.lastPost.final_score,
+        lastTweetId: page.lastPost.tweet_id,
+        queryTime,
+      });
+    }
 
-		return {
-			results: transformedResults,
-			nextCursor,
-		};
-	});
+    return {
+      results: transformedResults,
+      nextCursor,
+    };
+  });
 
 export const randomImages = publicProcedure.handler(async () => {
-	// Rank on narrow tuples so window sorts stay in memory; display columns are
-	// joined back only for the surviving top500. Decay math must stay float8 —
-	// EXTRACT() yields numeric and EXP/LN on numeric is ~100ms slower at this scale.
-	const images = await prisma.$queryRaw<SearchResult[]>`
+  // Rank on narrow tuples so window sorts stay in memory; display columns are
+  // joined back only for the surviving top500. Decay math must stay float8 —
+  // EXTRACT() yields numeric and EXP/LN on numeric is ~100ms slower at this scale.
+  const images = await prisma.$queryRaw<SearchResult[]>`
 		WITH core AS (
 			SELECT
 				p.id AS photo_id,
@@ -397,5 +396,5 @@ export const randomImages = publicProcedure.handler(async () => {
 		LIMIT 30
 	`;
 
-	return transformSearchResults(images);
+  return transformSearchResults(images);
 });

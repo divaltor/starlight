@@ -5,71 +5,69 @@ import { protectedProcedure } from "../middlewares/auth";
 import { verifyCookies } from "./cookies";
 
 export const changeProfileVisibility = protectedProcedure
-	.input(
-		z.object({
-			status: z.enum(["public", "private"]),
-		}),
-	)
-	.handler(async ({ input, context }) => {
-		const userId = context.databaseUserId;
+  .input(
+    z.object({
+      status: z.enum(["public", "private"]),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    const userId = context.databaseUserId;
 
-		await prisma.user.update({
-			where: { id: userId },
-			data: { isPublic: input.status === "public" },
-		});
+    await prisma.user.update({
+      where: { id: userId },
+      data: { isPublic: input.status === "public" },
+    });
 
-		return { success: true };
-	});
+    return { success: true };
+  });
 
 const UserProfileSchema = z.object({
-	user: z.object({
-		username: z.string(),
-		isPublic: z.boolean(),
-	}),
-	hasValidCookies: z.boolean(),
-	postingChannel: z
-		.object({
-			id: z.bigint(),
-			title: z.string().nullable(),
-			username: z.string().nullable(),
-			photoThumbnail: z.string().optional(),
-			photoBig: z.string().optional(),
-		})
-		.optional(),
+  user: z.object({
+    username: z.string(),
+    isPublic: z.boolean(),
+  }),
+  hasValidCookies: z.boolean(),
+  postingChannel: z
+    .object({
+      id: z.bigint(),
+      title: z.string().nullable(),
+      username: z.string().nullable(),
+      photoThumbnail: z.string().optional(),
+      photoBig: z.string().optional(),
+    })
+    .optional(),
 });
 
-export const getUserProfile = protectedProcedure
-	.output(UserProfileSchema)
-	.handler(async ({ context }) => {
-		const userId = context.databaseUserId;
+export const getUserProfile = protectedProcedure.output(UserProfileSchema).handler(async ({ context }) => {
+  const userId = context.databaseUserId;
 
-		const [userProfile, hasValidCookies] = await Promise.all([
-			prisma.user.findUnique({
-				where: { id: userId },
-				select: {
-					id: true,
-					username: true,
-					isPublic: true,
-					createdAt: true,
-					updatedAt: true,
-				},
-			}),
-			verifyCookies({ context }),
-		]);
+  const [userProfile, hasValidCookies] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        isPublic: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }),
+    verifyCookies({ context }),
+  ]);
 
-		if (!userProfile) {
-			throw new ORPCError("NOT_FOUND", {
-				message: "User not found",
-				status: 404,
-			});
-		}
+  if (!userProfile) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "User not found",
+      status: 404,
+    });
+  }
 
-		return {
-			user: {
-				id: userProfile.id,
-				username: userProfile.username ?? "",
-				isPublic: userProfile.isPublic,
-			},
-			hasValidCookies: hasValidCookies.hasValidCookies,
-		};
-	});
+  return {
+    user: {
+      id: userProfile.id,
+      username: userProfile.username ?? "",
+      isPublic: userProfile.isPublic,
+    },
+    hasValidCookies: hasValidCookies.hasValidCookies,
+  };
+});

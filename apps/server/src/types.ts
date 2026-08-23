@@ -6,44 +6,44 @@ import type { Context as BaseContext } from "grammy";
 import type { Logger } from "@/logger";
 
 interface ExtendedContext {
-	logger: Logger;
-	user?: User;
-	userChat?: Chat;
-	userChatMember?: ChatMember;
-	isSupervisor: boolean;
+  logger: Logger;
+  user?: User;
+  userChat?: Chat;
+  userChatMember?: ChatMember;
+  isSupervisor: boolean;
 }
 
 export interface Classification {
-	aesthetic: number;
-	characters: string[];
-	nsfw: {
-		is_nsfw: boolean;
-		scores: {
-			neutral: number;
-			low: number;
-			medium: number;
-			high: number;
-		};
-	};
-	style: {
-		anime: number;
-		other: number;
-		third_dimension: number;
-		real_life: number;
-		manga_like: number;
-	};
-	tags: string[];
+  aesthetic: number;
+  characters: string[];
+  nsfw: {
+    is_nsfw: boolean;
+    scores: {
+      neutral: number;
+      low: number;
+      medium: number;
+      high: number;
+    };
+  };
+  style: {
+    anime: number;
+    other: number;
+    third_dimension: number;
+    real_life: number;
+    manga_like: number;
+  };
+  tags: string[];
 }
 
 export type Context = FileFlavor<BaseContext & ExtendedContext>;
 
 declare global {
-	// biome-ignore lint/style/noNamespace: Prisma
-	namespace PrismaJson {
-		type TweetType = Tweet;
-		type ClassificationType = Classification;
-		type MessageEntitiesType = MessageEntity[];
-		type ForwardOriginType = MessageOrigin;
-		type TelegramMessageType = Message;
-	}
+  // biome-ignore lint/style/noNamespace: Prisma
+  namespace PrismaJson {
+    type TweetType = Tweet;
+    type ClassificationType = Classification;
+    type MessageEntitiesType = MessageEntity[];
+    type ForwardOriginType = MessageOrigin;
+    type TelegramMessageType = Message;
+  }
 }

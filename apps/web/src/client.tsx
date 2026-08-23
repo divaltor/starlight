@@ -5,21 +5,21 @@ import { mockEnv } from "@/lib/mock-env";
 
 // One-time TMA initialization on client hydration
 async function initializeClient() {
-	try {
-		// Set up mock environment for development
-		await mockEnv();
+  try {
+    // Set up mock environment for development
+    await mockEnv();
 
-		// Initialize TMA with all components
-		initTMA();
+    // Initialize TMA with all components
+    initTMA();
 
-		console.log("✅ TMA client initialization completed");
-	} catch (error) {
-		if (process.env.NODE_ENV !== "development") {
-			return;
-		}
+    console.log("✅ TMA client initialization completed");
+  } catch (error) {
+    if (process.env.NODE_ENV !== "development") {
+      return;
+    }
 
-		console.error("TMA client initialization failed", { error });
-	}
+    console.error("TMA client initialization failed", { error });
+  }
 }
 
 // Initialize TMA before hydrating

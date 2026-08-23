@@ -21,224 +21,222 @@ const INLINE_QUERY_AUTHOR_REGEX = /(?:^|\s)@(?<author>[A-Za-z0-9_]+)/gu;
 const SET_COOKIES_LABEL = "Set cookies";
 
 interface InlineImageSearchResult {
-	photo_id: string;
-	s3_path: string;
-	tweet_id: string;
-	username: string | null;
-	height: number | null;
-	width: number | null;
-	final_score: number;
+  photo_id: string;
+  s3_path: string;
+  tweet_id: string;
+  username: string | null;
+  height: number | null;
+  width: number | null;
+  final_score: number;
 }
 
 interface InlineQueryLogFields {
-	candidateLimit?: number;
-	pageQueryLimit?: number;
-	pageSize?: number;
-	photoOffset?: number;
-	searchMode: string;
-	tweetSkip?: number;
-	userId: string;
+  candidateLimit?: number;
+  pageQueryLimit?: number;
+  pageSize?: number;
+  photoOffset?: number;
+  searchMode: string;
+  tweetSkip?: number;
+  userId: string;
 }
 
 async function runInlineImageQuery<T>(
-	logger: Logger,
-	fields: InlineQueryLogFields,
-	query: () => Promise<T[]>,
+  logger: Logger,
+  fields: InlineQueryLogFields,
+  query: () => Promise<T[]>,
 ): Promise<T[]> {
-	const startedAt = performance.now();
+  const startedAt = performance.now();
 
-	try {
-		const results = await query();
+  try {
+    const results = await query();
 
-		logger.debug(
-			{
-				...fields,
-				durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
-				resultCount: results.length,
-			},
-			"Inline image database query completed",
-		);
+    logger.debug(
+      {
+        ...fields,
+        durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+        resultCount: results.length,
+      },
+      "Inline image database query completed",
+    );
 
-		return results;
-	} catch (error) {
-		logger.debug(
-			{
-				...fields,
-				durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
-				error,
-			},
-			"Inline image database query failed",
-		);
+    return results;
+  } catch (error) {
+    logger.debug(
+      {
+        ...fields,
+        durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+        error,
+      },
+      "Inline image database query failed",
+    );
 
-		throw error;
-	}
+    throw error;
+  }
 }
 
 async function fetchLegacyTweetsPage(
-	logger: Logger,
-	userId: string,
-	tweetSkip: number,
-	whereClause: Prisma.TweetWhereInput,
+  logger: Logger,
+  userId: string,
+  tweetSkip: number,
+  whereClause: Prisma.TweetWhereInput,
 ) {
-	return await runInlineImageQuery(
-		logger,
-		{ searchMode: "legacy", userId, tweetSkip, pageSize: INLINE_QUERY_PAGE_SIZE },
-		() =>
-			prisma.tweet.findMany({
-				where: {
-					userId,
-					photos: {
-						some: {
-							deletedAt: null,
-							s3Path: { not: null },
-						},
-					},
-					...whereClause,
-				},
-				include: {
-					photos: {
-						where: {
-							deletedAt: null,
-							s3Path: { not: null },
-						},
-						orderBy: {
-							createdAt: "desc",
-						},
-					},
-				},
-				orderBy: {
-					createdAt: "desc",
-				},
-				take: INLINE_QUERY_PAGE_SIZE,
-				skip: tweetSkip,
-			}),
-	);
+  return await runInlineImageQuery(
+    logger,
+    { searchMode: "legacy", userId, tweetSkip, pageSize: INLINE_QUERY_PAGE_SIZE },
+    () =>
+      prisma.tweet.findMany({
+        where: {
+          userId,
+          photos: {
+            some: {
+              deletedAt: null,
+              s3Path: { not: null },
+            },
+          },
+          ...whereClause,
+        },
+        include: {
+          photos: {
+            where: {
+              deletedAt: null,
+              s3Path: { not: null },
+            },
+            orderBy: {
+              createdAt: "desc",
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: INLINE_QUERY_PAGE_SIZE,
+        skip: tweetSkip,
+      }),
+  );
 }
 
 async function searchInlineImagesWithLegacyQuery(
-	logger: Logger,
-	userId: string,
-	query: string,
-	photoOffset: number,
-	pageQueryLimit: number,
+  logger: Logger,
+  userId: string,
+  query: string,
+  photoOffset: number,
+  pageQueryLimit: number,
 ): Promise<InlineImageSearchResult[]> {
-	const allPhotos: InlineImageSearchResult[] = [];
-	const seenPhotoKeys = new Set<string>();
-	let tweetSkip = 0;
+  const allPhotos: InlineImageSearchResult[] = [];
+  const seenPhotoKeys = new Set<string>();
+  let tweetSkip = 0;
 
-	while (allPhotos.length < photoOffset + pageQueryLimit) {
-		const { authors, textQuery } = parseInlineImageQuery(query);
-		const whereClause: Prisma.TweetWhereInput = {};
+  while (allPhotos.length < photoOffset + pageQueryLimit) {
+    const { authors, textQuery } = parseInlineImageQuery(query);
+    const whereClause: Prisma.TweetWhereInput = {};
 
-		if (authors.length > 0 && textQuery) {
-			whereClause.AND = [
-				{
-					OR: authors.map((author) => ({
-						username: { contains: author, mode: "insensitive" },
-					})),
-				},
-				{ tweetText: { contains: textQuery, mode: "insensitive" } },
-			];
-		} else if (authors.length > 0) {
-			whereClause.OR = authors.map((author) => ({
-				username: { contains: author, mode: "insensitive" },
-			}));
-		} else if (textQuery) {
-			whereClause.tweetText = { contains: textQuery, mode: "insensitive" };
-		}
+    if (authors.length > 0 && textQuery) {
+      whereClause.AND = [
+        {
+          OR: authors.map((author) => ({
+            username: { contains: author, mode: "insensitive" },
+          })),
+        },
+        { tweetText: { contains: textQuery, mode: "insensitive" } },
+      ];
+    } else if (authors.length > 0) {
+      whereClause.OR = authors.map((author) => ({
+        username: { contains: author, mode: "insensitive" },
+      }));
+    } else if (textQuery) {
+      whereClause.tweetText = { contains: textQuery, mode: "insensitive" };
+    }
 
-		const tweets = await fetchLegacyTweetsPage(logger, userId, tweetSkip, whereClause);
+    const tweets = await fetchLegacyTweetsPage(logger, userId, tweetSkip, whereClause);
 
-		if (tweets.length === 0) {
-			break;
-		}
+    if (tweets.length === 0) {
+      break;
+    }
 
-		for (const tweet of tweets) {
-			for (const photo of tweet.photos) {
-				const dedupeKey = photo.perceptualHash?.trim() || photo.id;
+    for (const tweet of tweets) {
+      for (const photo of tweet.photos) {
+        const dedupeKey = photo.perceptualHash?.trim() || photo.id;
 
-				if (seenPhotoKeys.has(dedupeKey)) {
-					continue;
-				}
+        if (seenPhotoKeys.has(dedupeKey)) {
+          continue;
+        }
 
-				seenPhotoKeys.add(dedupeKey);
-				allPhotos.push({
-					photo_id: photo.id,
-					s3_path: photo.s3Path as string,
-					tweet_id: tweet.id,
-					username: tweet.username,
-					height: photo.height,
-					width: photo.width,
-					final_score: 0,
-				});
-			}
-		}
+        seenPhotoKeys.add(dedupeKey);
+        allPhotos.push({
+          photo_id: photo.id,
+          s3_path: photo.s3Path as string,
+          tweet_id: tweet.id,
+          username: tweet.username,
+          height: photo.height,
+          width: photo.width,
+          final_score: 0,
+        });
+      }
+    }
 
-		tweetSkip += INLINE_QUERY_PAGE_SIZE;
-	}
+    tweetSkip += INLINE_QUERY_PAGE_SIZE;
+  }
 
-	return allPhotos.slice(photoOffset, photoOffset + pageQueryLimit);
+  return allPhotos.slice(photoOffset, photoOffset + pageQueryLimit);
 }
 
 function parseInlineImageQuery(query: string) {
-	const authors = [...query.matchAll(INLINE_QUERY_AUTHOR_REGEX)].map((match) =>
-		match.groups!.author!.toLowerCase(),
-	);
+  const authors = [...query.matchAll(INLINE_QUERY_AUTHOR_REGEX)].map((match) => match.groups!.author!.toLowerCase());
 
-	return {
-		authors: [...new Set(authors)],
-		textQuery: query.replace(INLINE_QUERY_AUTHOR_REGEX, " ").replaceAll(/\s+/gu, " ").trim(),
-	};
+  return {
+    authors: [...new Set(authors)],
+    textQuery: query.replace(INLINE_QUERY_AUTHOR_REGEX, " ").replaceAll(/\s+/gu, " ").trim(),
+  };
 }
 
 function getInlineQueryEmbedding(query: string) {
-	if (!(env.ENABLE_EMBEDDINGS && env.ML_BASE_URL && env.ML_API_TOKEN)) {
-		return Promise.resolve<number[] | null>(null);
-	}
+  if (!(env.ENABLE_EMBEDDINGS && env.ML_BASE_URL && env.ML_API_TOKEN)) {
+    return Promise.resolve<number[] | null>(null);
+  }
 
-	return resolveQueryEmbedding(
-		() => runtime.runPromise(EmbeddingsService.Service.use((s) => s.generateText(query))),
-		query,
-	);
+  return resolveQueryEmbedding(
+    () => runtime.runPromise(EmbeddingsService.Service.use((s) => s.generateText(query))),
+    query,
+  );
 }
 
 interface InlineLexicalFragmentInputs {
-	queryContains: string;
-	queryLower: string;
-	queryStartsWith: string;
-	queryStartsWithSeries: string;
+  queryContains: string;
+  queryLower: string;
+  queryStartsWith: string;
+  queryStartsWithSeries: string;
 }
 
 function buildAuthorFilters(authors: string[]): { filter: Prisma.Sql; score: Prisma.Sql } {
-	if (authors.length === 0) {
-		return { filter: Prisma.empty, score: Prisma.sql`0.0` };
-	}
+  if (authors.length === 0) {
+    return { filter: Prisma.empty, score: Prisma.sql`0.0` };
+  }
 
-	const filter = Prisma.sql`AND (${Prisma.join(
-		authors.map((author) => Prisma.sql`strpos(lower(COALESCE(t.username, '')), ${author}) > 0`),
-		" OR ",
-	)})`;
+  const filter = Prisma.sql`AND (${Prisma.join(
+    authors.map((author) => Prisma.sql`strpos(lower(COALESCE(t.username, '')), ${author}) > 0`),
+    " OR ",
+  )})`;
 
-	const score = Prisma.sql`GREATEST(${Prisma.join(
-		authors.map(
-			(author) =>
-				Prisma.sql`CASE
+  const score = Prisma.sql`GREATEST(${Prisma.join(
+    authors.map(
+      (author) =>
+        Prisma.sql`CASE
 									WHEN lower(COALESCE(t.username, '')) = ${author} THEN 1.0
 									WHEN strpos(lower(COALESCE(t.username, '')), ${author}) = 1 THEN 0.88
 									WHEN strpos(lower(COALESCE(t.username, '')), ${author}) > 0 THEN 0.76
 									ELSE 0.0
 								END`,
-		),
-		", ",
-	)})`;
+    ),
+    ", ",
+  )})`;
 
-	return { filter, score };
+  return { filter, score };
 }
 
 function buildLexicalMatch(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
-	const { queryContains, queryLower, queryStartsWith, queryStartsWithSeries } = inputs;
+  const { queryContains, queryLower, queryStartsWith, queryStartsWithSeries } = inputs;
 
-	return Prisma.sql`
+  return Prisma.sql`
 				(
 					EXISTS (
 						SELECT 1
@@ -268,9 +266,9 @@ function buildLexicalMatch(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
 }
 
 function buildCharacterScore(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
-	const { queryContains, queryLower, queryStartsWith, queryStartsWithSeries } = inputs;
+  const { queryContains, queryLower, queryStartsWith, queryStartsWithSeries } = inputs;
 
-	return Prisma.sql`
+  return Prisma.sql`
 				COALESCE(
 					(
 						SELECT MAX(
@@ -290,9 +288,9 @@ function buildCharacterScore(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
 }
 
 function buildTagLexicalScore(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
-	const { queryContains, queryLower, queryStartsWith } = inputs;
+  const { queryContains, queryLower, queryStartsWith } = inputs;
 
-	return Prisma.sql`
+  return Prisma.sql`
 				COALESCE(
 					(
 						SELECT MAX(
@@ -311,9 +309,9 @@ function buildTagLexicalScore(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
 }
 
 function buildHashtagScore(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
-	const { queryContains, queryLower, queryStartsWith } = inputs;
+  const { queryContains, queryLower, queryStartsWith } = inputs;
 
-	return Prisma.sql`
+  return Prisma.sql`
 				COALESCE(
 					(
 						SELECT MAX(
@@ -332,49 +330,47 @@ function buildHashtagScore(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
 }
 
 interface SemanticInlineSearch {
-	authorFilter: Prisma.Sql;
-	authorScore: Prisma.Sql;
-	candidateLimit: number;
-	characterScore: Prisma.Sql;
-	hashtagScore: Prisma.Sql;
-	lexicalMatch: Prisma.Sql;
-	logger: Logger;
-	pageQueryLimit: number;
-	photoDedupeKey: Prisma.Sql;
-	photoOffset: number;
-	queryTime: string;
-	tagLexicalScore: Prisma.Sql;
-	textVector: string;
-	tweetTextScore: Prisma.Sql;
-	userId: string;
+  authorFilter: Prisma.Sql;
+  authorScore: Prisma.Sql;
+  candidateLimit: number;
+  characterScore: Prisma.Sql;
+  hashtagScore: Prisma.Sql;
+  lexicalMatch: Prisma.Sql;
+  logger: Logger;
+  pageQueryLimit: number;
+  photoDedupeKey: Prisma.Sql;
+  photoOffset: number;
+  queryTime: string;
+  tagLexicalScore: Prisma.Sql;
+  textVector: string;
+  tweetTextScore: Prisma.Sql;
+  userId: string;
 }
 
-async function runSemanticInlineSearch(
-	search: SemanticInlineSearch,
-): Promise<InlineImageSearchResult[]> {
-	const {
-		authorFilter,
-		authorScore,
-		candidateLimit,
-		characterScore,
-		hashtagScore,
-		lexicalMatch,
-		logger,
-		pageQueryLimit,
-		photoDedupeKey,
-		photoOffset,
-		queryTime,
-		tagLexicalScore,
-		textVector,
-		tweetTextScore,
-		userId,
-	} = search;
+async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<InlineImageSearchResult[]> {
+  const {
+    authorFilter,
+    authorScore,
+    candidateLimit,
+    characterScore,
+    hashtagScore,
+    lexicalMatch,
+    logger,
+    pageQueryLimit,
+    photoDedupeKey,
+    photoOffset,
+    queryTime,
+    tagLexicalScore,
+    textVector,
+    tweetTextScore,
+    userId,
+  } = search;
 
-	return await runInlineImageQuery(
-		logger,
-		{ searchMode: "semantic", userId, photoOffset, pageQueryLimit, candidateLimit },
-		() =>
-			prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+  return await runInlineImageQuery(
+    logger,
+    { searchMode: "semantic", userId, photoOffset, pageQueryLimit, candidateLimit },
+    () =>
+      prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH image_candidates AS (
 						SELECT p.id, p.user_id
 						FROM photos p
@@ -487,28 +483,23 @@ async function runSemanticInlineSearch(
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
 						`),
-	);
+  );
 }
 
 interface RecencyInlineSearch {
-	authorFilter: Prisma.Sql;
-	logger: Logger;
-	pageQueryLimit: number;
-	photoDedupeKey: Prisma.Sql;
-	photoOffset: number;
-	userId: string;
+  authorFilter: Prisma.Sql;
+  logger: Logger;
+  pageQueryLimit: number;
+  photoDedupeKey: Prisma.Sql;
+  photoOffset: number;
+  userId: string;
 }
 
-async function runRecencyInlineSearch(
-	search: RecencyInlineSearch,
-): Promise<InlineImageSearchResult[]> {
-	const { authorFilter, logger, pageQueryLimit, photoDedupeKey, photoOffset, userId } = search;
+async function runRecencyInlineSearch(search: RecencyInlineSearch): Promise<InlineImageSearchResult[]> {
+  const { authorFilter, logger, pageQueryLimit, photoDedupeKey, photoOffset, userId } = search;
 
-	return await runInlineImageQuery(
-		logger,
-		{ searchMode: "recency", userId, photoOffset, pageQueryLimit },
-		() =>
-			prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+  return await runInlineImageQuery(logger, { searchMode: "recency", userId, photoOffset, pageQueryLimit }, () =>
+    prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH ranked AS (
 						SELECT
 							p.id AS photo_id,
@@ -543,271 +534,253 @@ async function runRecencyInlineSearch(
 					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
 				`),
-	);
+  );
 }
 
 interface RankedInlinePhotoSearch {
-	authors: string[];
-	logger: Logger;
-	photoOffset: number;
-	query: string;
-	textQuery: string;
-	userId: string | undefined;
+  authors: string[];
+  logger: Logger;
+  photoOffset: number;
+  query: string;
+  textQuery: string;
+  userId: string | undefined;
 }
 
-async function searchRankedInlinePhotos(
-	search: RankedInlinePhotoSearch,
-): Promise<InlineImageSearchResult[]> {
-	const { authors, logger, photoOffset, query, textQuery, userId } = search;
+async function searchRankedInlinePhotos(search: RankedInlinePhotoSearch): Promise<InlineImageSearchResult[]> {
+  const { authors, logger, photoOffset, query, textQuery, userId } = search;
 
-	const queryLower = textQuery.toLowerCase();
-	const hasTextQuery = queryLower.length > 0;
-	const queryContains = `%${queryLower}%`;
-	const queryStartsWith = `${queryLower}%`;
-	const queryStartsWithSeries = `${queryLower} (%`;
-	const pageQueryLimit = INLINE_QUERY_PAGE_SIZE + 1;
-	const candidateLimit = Math.max(
-		(photoOffset + pageQueryLimit) * INLINE_QUERY_CANDIDATE_MULTIPLIER,
-		200,
-	);
-	const queryTime = new Date().toISOString();
-	const photoDedupeKey = Prisma.sql`COALESCE(NULLIF(p.perceptual_hash, ''), p.id)`;
+  const queryLower = textQuery.toLowerCase();
+  const hasTextQuery = queryLower.length > 0;
+  const queryContains = `%${queryLower}%`;
+  const queryStartsWith = `${queryLower}%`;
+  const queryStartsWithSeries = `${queryLower} (%`;
+  const pageQueryLimit = INLINE_QUERY_PAGE_SIZE + 1;
+  const candidateLimit = Math.max((photoOffset + pageQueryLimit) * INLINE_QUERY_CANDIDATE_MULTIPLIER, 200);
+  const queryTime = new Date().toISOString();
+  const photoDedupeKey = Prisma.sql`COALESCE(NULLIF(p.perceptual_hash, ''), p.id)`;
 
-	const fragmentInputs = {
-		queryContains,
-		queryLower,
-		queryStartsWith,
-		queryStartsWithSeries,
-	};
-	const authorFilters = buildAuthorFilters(authors);
-	const authorFilter = authorFilters.filter;
-	const authorScore = authorFilters.score;
-	const lexicalMatch = hasTextQuery ? buildLexicalMatch(fragmentInputs) : Prisma.sql`FALSE`;
-	const characterScore = hasTextQuery ? buildCharacterScore(fragmentInputs) : Prisma.sql`0.0`;
-	const tagLexicalScore = hasTextQuery ? buildTagLexicalScore(fragmentInputs) : Prisma.sql`0.0`;
-	const hashtagScore = hasTextQuery ? buildHashtagScore(fragmentInputs) : Prisma.sql`0.0`;
-	const tweetTextScore = hasTextQuery
-		? Prisma.sql`CASE WHEN lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END`
-		: Prisma.sql`0.0`;
+  const fragmentInputs = {
+    queryContains,
+    queryLower,
+    queryStartsWith,
+    queryStartsWithSeries,
+  };
+  const authorFilters = buildAuthorFilters(authors);
+  const authorFilter = authorFilters.filter;
+  const authorScore = authorFilters.score;
+  const lexicalMatch = hasTextQuery ? buildLexicalMatch(fragmentInputs) : Prisma.sql`FALSE`;
+  const characterScore = hasTextQuery ? buildCharacterScore(fragmentInputs) : Prisma.sql`0.0`;
+  const tagLexicalScore = hasTextQuery ? buildTagLexicalScore(fragmentInputs) : Prisma.sql`0.0`;
+  const hashtagScore = hasTextQuery ? buildHashtagScore(fragmentInputs) : Prisma.sql`0.0`;
+  const tweetTextScore = hasTextQuery
+    ? Prisma.sql`CASE WHEN lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END`
+    : Prisma.sql`0.0`;
 
-	if (!userId) {
-		return [];
-	}
+  if (!userId) {
+    return [];
+  }
 
-	if (!hasTextQuery) {
-		return await runRecencyInlineSearch({
-			authorFilter,
-			logger,
-			pageQueryLimit,
-			photoDedupeKey,
-			photoOffset,
-			userId,
-		});
-	}
+  if (!hasTextQuery) {
+    return await runRecencyInlineSearch({
+      authorFilter,
+      logger,
+      pageQueryLimit,
+      photoDedupeKey,
+      photoOffset,
+      userId,
+    });
+  }
 
-	let textEmbedding: number[] | null = null;
+  let textEmbedding: number[] | null = null;
 
-	try {
-		textEmbedding = await getInlineQueryEmbedding(textQuery);
-	} catch (error) {
-		logger.warn({ error, query: textQuery }, "Inline image semantic search unavailable");
-	}
+  try {
+    textEmbedding = await getInlineQueryEmbedding(textQuery);
+  } catch (error) {
+    logger.warn({ error, query: textQuery }, "Inline image semantic search unavailable");
+  }
 
-	if (!textEmbedding) {
-		return await searchInlineImagesWithLegacyQuery(
-			logger,
-			userId,
-			query,
-			photoOffset,
-			pageQueryLimit,
-		);
-	}
+  if (!textEmbedding) {
+    return await searchInlineImagesWithLegacyQuery(logger, userId, query, photoOffset, pageQueryLimit);
+  }
 
-	return await runSemanticInlineSearch({
-		authorFilter,
-		authorScore,
-		candidateLimit,
-		characterScore,
-		hashtagScore,
-		lexicalMatch,
-		logger,
-		pageQueryLimit,
-		photoDedupeKey,
-		photoOffset,
-		queryTime,
-		tagLexicalScore,
-		textVector: `[${textEmbedding.join(",")}]`,
-		tweetTextScore,
-		userId,
-	});
+  return await runSemanticInlineSearch({
+    authorFilter,
+    authorScore,
+    candidateLimit,
+    characterScore,
+    hashtagScore,
+    lexicalMatch,
+    logger,
+    pageQueryLimit,
+    photoDedupeKey,
+    photoOffset,
+    queryTime,
+    tagLexicalScore,
+    textVector: `[${textEmbedding.join(",")}]`,
+    tweetTextScore,
+    userId,
+  });
 }
 
-const cookieEncryption = new CookieEncryption(
-	env.COOKIE_ENCRYPTION_KEY,
-	env.COOKIE_ENCRYPTION_SALT,
-);
+const cookieEncryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY, env.COOKIE_ENCRYPTION_SALT);
 
 const composer = new Composer<Context>();
 
 const privateChat = composer.chatType("private");
 
 composer
-	.on("inline_query")
-	.filter((ctx) => !isTwitterUrl(ctx.inlineQuery.query.trim()))
-	.use(async (ctx) => {
-		const photoOffset = Math.min(
-			Math.max(Number(ctx.inlineQuery.offset || "0") || 0, 0),
-			MAX_INLINE_QUERY_PHOTO_OFFSET,
-		);
-		const query = ctx.inlineQuery.query.trim();
-		const { authors, textQuery } = parseInlineImageQuery(query);
+  .on("inline_query")
+  .filter((ctx) => !isTwitterUrl(ctx.inlineQuery.query.trim()))
+  .use(async (ctx) => {
+    const photoOffset = Math.min(
+      Math.max(Number(ctx.inlineQuery.offset || "0") || 0, 0),
+      MAX_INLINE_QUERY_PHOTO_OFFSET,
+    );
+    const query = ctx.inlineQuery.query.trim();
+    const { authors, textQuery } = parseInlineImageQuery(query);
 
-		const rankedPhotos = await searchRankedInlinePhotos({
-			authors,
-			logger: ctx.logger,
-			photoOffset,
-			query,
-			textQuery,
-			userId: ctx.user?.id,
-		});
+    const rankedPhotos = await searchRankedInlinePhotos({
+      authors,
+      logger: ctx.logger,
+      photoOffset,
+      query,
+      textQuery,
+      userId: ctx.user?.id,
+    });
 
-		const photosForThisPage = rankedPhotos.slice(0, INLINE_QUERY_PAGE_SIZE);
+    const photosForThisPage = rankedPhotos.slice(0, INLINE_QUERY_PAGE_SIZE);
 
-		if (photosForThisPage.length === 0 && !ctx.user?.cookies) {
-			// User didn't setup the bot yet
-			await ctx.answerInlineQuery(
-				[
-					InlineQueryResultBuilder.article(`id:no-photos:${ctx.from?.id}`, "Oops, no photos...", {
-						reply_markup: new InlineKeyboard().url(
-							SET_COOKIES_LABEL,
-							`${env.BASE_FRONTEND_URL}/settings`,
-						),
-					}).text("No photos found, did you setup the bot?"),
-				],
-				{
-					is_personal: true,
-				},
-			);
+    if (photosForThisPage.length === 0 && !ctx.user?.cookies) {
+      // User didn't setup the bot yet
+      await ctx.answerInlineQuery(
+        [
+          InlineQueryResultBuilder.article(`id:no-photos:${ctx.from?.id}`, "Oops, no photos...", {
+            reply_markup: new InlineKeyboard().url(SET_COOKIES_LABEL, `${env.BASE_FRONTEND_URL}/settings`),
+          }).text("No photos found, did you setup the bot?"),
+        ],
+        {
+          is_personal: true,
+        },
+      );
 
-			return;
-		}
+      return;
+    }
 
-		const results = photosForThisPage.map((photo) => {
-			const photoUrl = `${env.BASE_CDN_URL}/${photo.s3_path}`;
-			const caption = photo.username
-				? FormattedString.link(`@${photo.username}`, `https://x.com/i/status/${photo.tweet_id}`)
-				: new FormattedString(`https://x.com/i/status/${photo.tweet_id}`);
+    const results = photosForThisPage.map((photo) => {
+      const photoUrl = `${env.BASE_CDN_URL}/${photo.s3_path}`;
+      const caption = photo.username
+        ? FormattedString.link(`@${photo.username}`, `https://x.com/i/status/${photo.tweet_id}`)
+        : new FormattedString(`https://x.com/i/status/${photo.tweet_id}`);
 
-			return InlineQueryResultBuilder.photo(photo.photo_id, photoUrl, {
-				caption: caption.caption,
-				caption_entities: caption.caption_entities,
-				thumbnail_url: photoUrl,
-				photo_height: photo.height ?? undefined,
-				photo_width: photo.width ?? undefined,
-			});
-		});
+      return InlineQueryResultBuilder.photo(photo.photo_id, photoUrl, {
+        caption: caption.caption,
+        caption_entities: caption.caption_entities,
+        thumbnail_url: photoUrl,
+        photo_height: photo.height ?? undefined,
+        photo_width: photo.width ?? undefined,
+      });
+    });
 
-		// Calculate next offset for pagination
-		let nextOffset = "";
-		if (rankedPhotos.length > INLINE_QUERY_PAGE_SIZE) {
-			nextOffset = String(photoOffset + INLINE_QUERY_PAGE_SIZE);
-		}
+    // Calculate next offset for pagination
+    let nextOffset = "";
+    if (rankedPhotos.length > INLINE_QUERY_PAGE_SIZE) {
+      nextOffset = String(photoOffset + INLINE_QUERY_PAGE_SIZE);
+    }
 
-		await ctx.answerInlineQuery(results, {
-			next_offset: nextOffset,
-			is_personal: true,
-			cache_time: 30,
-		});
-	});
+    await ctx.answerInlineQuery(results, {
+      next_offset: nextOffset,
+      is_personal: true,
+      cache_time: 30,
+    });
+  });
 
 privateChat
-	.command("cookies")
-	.filter((ctx) => !ctx.user?.cookies)
-	.use(async (ctx) => {
-		const keyboard = new InlineKeyboard().webApp(SET_COOKIES_LABEL, {
-			url: `${env.BASE_FRONTEND_URL}/settings`,
-		});
+  .command("cookies")
+  .filter((ctx) => !ctx.user?.cookies)
+  .use(async (ctx) => {
+    const keyboard = new InlineKeyboard().webApp(SET_COOKIES_LABEL, {
+      url: `${env.BASE_FRONTEND_URL}/settings`,
+    });
 
-		await ctx.reply("No cookies found. Please set your cookies first.", {
-			reply_markup: keyboard,
-		});
-	});
-
-privateChat
-	.command("cookies")
-	.filter((ctx) => Boolean(ctx.user?.cookies))
-	.use(async (ctx) => {
-		try {
-			const userCookies = ctx.user?.cookies;
-
-			if (!(userCookies && ctx.user)) {
-				await ctx.reply("No cookies found.");
-				return;
-			}
-
-			const cookiesJson = cookieEncryption.safeDecrypt(userCookies, ctx.user.telegramId.toString());
-
-			const cookies = Cookies.fromJSON(cookiesJson);
-			const cookiesString = cookies.toString();
-
-			await ctx.reply(`Your cookies:\n\n${cookiesString}`);
-		} catch (error) {
-			ctx.logger.error({ error }, "Failed to decrypt cookies");
-			await ctx.reply("Failed to decrypt cookies. Please try setting them again.");
-		}
-	});
+    await ctx.reply("No cookies found. Please set your cookies first.", {
+      reply_markup: keyboard,
+    });
+  });
 
 privateChat
-	.command("scrapper")
-	.filter((ctx) => !ctx.user?.cookies)
-	.use(async (ctx) => {
-		const keyboard = new InlineKeyboard().webApp(SET_COOKIES_LABEL, {
-			url: `${env.BASE_FRONTEND_URL}/cookies`,
-		});
+  .command("cookies")
+  .filter((ctx) => Boolean(ctx.user?.cookies))
+  .use(async (ctx) => {
+    try {
+      const userCookies = ctx.user?.cookies;
 
-		await ctx.reply(
-			"Beep boop, you need to give me your cookies before I can send you daily images.",
-			{ reply_markup: keyboard },
-		);
-	});
+      if (!(userCookies && ctx.user)) {
+        await ctx.reply("No cookies found.");
+        return;
+      }
+
+      const cookiesJson = cookieEncryption.safeDecrypt(userCookies, ctx.user.telegramId.toString());
+
+      const cookies = Cookies.fromJSON(cookiesJson);
+      const cookiesString = cookies.toString();
+
+      await ctx.reply(`Your cookies:\n\n${cookiesString}`);
+    } catch (error) {
+      ctx.logger.error({ error }, "Failed to decrypt cookies");
+      await ctx.reply("Failed to decrypt cookies. Please try setting them again.");
+    }
+  });
 
 privateChat
-	.command("scrapper")
-	.filter((ctx) => Boolean(ctx.user?.cookies))
-	.use(async (ctx) => {
-		const user = ctx.user!;
-		const schedulerId = `scrapper-${user.id}`;
-		const scheduledJob = await scrapperQueue.getJobScheduler(schedulerId);
+  .command("scrapper")
+  .filter((ctx) => !ctx.user?.cookies)
+  .use(async (ctx) => {
+    const keyboard = new InlineKeyboard().webApp(SET_COOKIES_LABEL, {
+      url: `${env.BASE_FRONTEND_URL}/cookies`,
+    });
 
-		if (scheduledJob) {
-			await scrapperQueue.add(
-				"scrapper",
-				{ userId: user.id, count: 0, limit: 100 },
-				{ deduplication: { id: schedulerId } },
-			);
+    await ctx.reply("Beep boop, you need to give me your cookies before I can send you daily images.", {
+      reply_markup: keyboard,
+    });
+  });
 
-			await ctx.reply("Starting to collect images, check back in a few minutes.");
-		} else {
-			ctx.logger.debug({ userId: user.id }, "Scheduled scrapper");
+privateChat
+  .command("scrapper")
+  .filter((ctx) => Boolean(ctx.user?.cookies))
+  .use(async (ctx) => {
+    const user = ctx.user!;
+    const schedulerId = `scrapper-${user.id}`;
+    const scheduledJob = await scrapperQueue.getJobScheduler(schedulerId);
 
-			await scrapperQueue.upsertJobScheduler(
-				schedulerId,
-				{
-					every: 1000 * 60 * 60 * 6,
-				},
-				{
-					data: { userId: user.id, count: 0, limit: 300 },
-					name: schedulerId,
-				},
-			);
+    if (scheduledJob) {
+      await scrapperQueue.add(
+        "scrapper",
+        { userId: user.id, count: 0, limit: 100 },
+        { deduplication: { id: schedulerId } },
+      );
 
-			await ctx.reply(
-				"You placed in the queue (runs every 6 hours). You can check your images in a few minutes in your gallery.\n\nYou can start the job anytime by sending /scrapper command again.",
-				{
-					reply_markup: webAppKeyboard("app", "View gallery"),
-				},
-			);
-		}
-	});
+      await ctx.reply("Starting to collect images, check back in a few minutes.");
+    } else {
+      ctx.logger.debug({ userId: user.id }, "Scheduled scrapper");
+
+      await scrapperQueue.upsertJobScheduler(
+        schedulerId,
+        {
+          every: 1000 * 60 * 60 * 6,
+        },
+        {
+          data: { userId: user.id, count: 0, limit: 300 },
+          name: schedulerId,
+        },
+      );
+
+      await ctx.reply(
+        "You placed in the queue (runs every 6 hours). You can check your images in a few minutes in your gallery.\n\nYou can start the job anytime by sending /scrapper command again.",
+        {
+          reply_markup: webAppKeyboard("app", "View gallery"),
+        },
+      );
+    }
+  });
 
 export default composer;

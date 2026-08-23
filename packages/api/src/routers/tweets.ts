@@ -9,175 +9,173 @@ import type { CursorPayload } from "../utils/cursor";
 import { transformTweets } from "../utils/transformations";
 
 const TweetsQuery = z.object({
-	username: z.string().optional(),
-	cursor: z.string().optional(),
-	limit: z.number().min(1).max(100).default(30),
+  username: z.string().optional(),
+  cursor: z.string().optional(),
+  limit: z.number().min(1).max(100).default(30),
 });
 
-export const listUserTweets = maybeAuthProcedure
-	.input(TweetsQuery)
-	.handler(async ({ input, context }) => {
-		const { user } = context;
+export const listUserTweets = maybeAuthProcedure.input(TweetsQuery).handler(async ({ input, context }) => {
+  const { user } = context;
 
-		const { cursor, limit } = input;
+  const { cursor, limit } = input;
 
-		// Determine target user
-		let targetUser: Pick<User, "id" | "telegramId" | "username" | "isPublic"> | null = null;
+  // Determine target user
+  let targetUser: Pick<User, "id" | "telegramId" | "username" | "isPublic"> | null = null;
 
-		if (input.username) {
-			targetUser = await prisma.user.findUnique({
-				where: { username: input.username },
-				select: { id: true, telegramId: true, username: true, isPublic: true },
-			});
+  if (input.username) {
+    targetUser = await prisma.user.findUnique({
+      where: { username: input.username },
+      select: { id: true, telegramId: true, username: true, isPublic: true },
+    });
 
-			if (!targetUser) {
-				throw new ORPCError("NOT_FOUND", {
-					message: "User not found",
-					status: 404,
-				});
-			}
-		} else if (user) {
-			// Own tweets (authenticated, no username provided)
-			targetUser = await prisma.user.findUnique({
-				where: { telegramId: user.id },
-				select: { id: true, telegramId: true, username: true, isPublic: true },
-			});
-		} else {
-			// Anonymous cannot request own tweets without specifying a username
-			throw new ORPCError("UNAUTHORIZED", {
-				message: "Unauthorized",
-				status: 401,
-			});
-		}
+    if (!targetUser) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "User not found",
+        status: 404,
+      });
+    }
+  } else if (user) {
+    // Own tweets (authenticated, no username provided)
+    targetUser = await prisma.user.findUnique({
+      where: { telegramId: user.id },
+      select: { id: true, telegramId: true, username: true, isPublic: true },
+    });
+  } else {
+    // Anonymous cannot request own tweets without specifying a username
+    throw new ORPCError("UNAUTHORIZED", {
+      message: "Unauthorized",
+      status: 401,
+    });
+  }
 
-		const isSelf = !!user && targetUser?.telegramId === BigInt(user.id);
+  const isSelf = !!user && targetUser?.telegramId === BigInt(user.id);
 
-		// Access control: only self or public profiles
-		if (!(isSelf || targetUser?.isPublic)) {
-			throw new ORPCError("UNAUTHORIZED", {
-				message: "Unauthorized",
-				status: 401,
-			});
-		}
+  // Access control: only self or public profiles
+  if (!(isSelf || targetUser?.isPublic)) {
+    throw new ORPCError("UNAUTHORIZED", {
+      message: "Unauthorized",
+      status: 401,
+    });
+  }
 
-		return await retrieveUserTweets({
-			// biome-ignore lint/style/noNonNullAssertion: We know targetUser is not null
-			userId: targetUser!.id,
-			cursor,
-			limit,
-		});
-	});
+  return await retrieveUserTweets({
+    // biome-ignore lint/style/noNonNullAssertion: We know targetUser is not null
+    userId: targetUser!.id,
+    cursor,
+    limit,
+  });
+});
 
 export const retrieveUserTweets = no
-	.input(
-		TweetsQuery.omit({ username: true }).extend({
-			userId: z.string(),
-		}),
-	)
-	.handler(async ({ input }) => {
-		const { userId, cursor, limit } = input;
+  .input(
+    TweetsQuery.omit({ username: true }).extend({
+      userId: z.string(),
+    }),
+  )
+  .handler(async ({ input }) => {
+    const { userId, cursor, limit } = input;
 
-		try {
-			let cursorData: CursorPayload | null = null;
-			if (cursor) {
-				cursorData = Cursor.parse(cursor, CursorPayloadSchema);
+    try {
+      let cursorData: CursorPayload | null = null;
+      if (cursor) {
+        cursorData = Cursor.parse(cursor, CursorPayloadSchema);
 
-				if (!cursorData) {
-					return {
-						tweets: [],
-						nextCursor: null,
-					};
-				}
-			}
+        if (!cursorData) {
+          return {
+            tweets: [],
+            nextCursor: null,
+          };
+        }
+      }
 
-			const whereClause: Prisma.TweetWhereInput = {
-				userId,
-			};
+      const whereClause: Prisma.TweetWhereInput = {
+        userId,
+      };
 
-			if (cursorData) {
-				const cursorDate = new Date(cursorData.createdAt);
-				whereClause.OR = [
-					{ createdAt: { lt: cursorDate } },
-					{ createdAt: cursorDate, id: { lt: cursorData.lastTweetId } },
-				];
-			}
+      if (cursorData) {
+        const cursorDate = new Date(cursorData.createdAt);
+        whereClause.OR = [
+          { createdAt: { lt: cursorDate } },
+          { createdAt: cursorDate, id: { lt: cursorData.lastTweetId } },
+        ];
+      }
 
-			const tweets = await prisma.tweet.findMany({
-				where: {
-					...whereClause,
-					...prisma.tweet.available(),
-				},
-				include: {
-					photos: {
-						where: prisma.photo.available(),
-						orderBy: {
-							createdAt: "desc",
-						},
-					},
-				},
-				orderBy: [
-					{
-						createdAt: "desc",
-					},
-					{
-						id: "desc",
-					},
-				],
-				take: limit,
-			});
+      const tweets = await prisma.tweet.findMany({
+        where: {
+          ...whereClause,
+          ...prisma.tweet.available(),
+        },
+        include: {
+          photos: {
+            where: prisma.photo.available(),
+            orderBy: {
+              createdAt: "desc",
+            },
+          },
+        },
+        orderBy: [
+          {
+            createdAt: "desc",
+          },
+          {
+            id: "desc",
+          },
+        ],
+        take: limit,
+      });
 
-			const transformedTweets = transformTweets(tweets);
+      const transformedTweets = transformTweets(tweets);
 
-			let nextCursor: string | null = null;
-			if (tweets.length === limit) {
-				// biome-ignore lint/style/noNonNullAssertion: We know there's at least one tweet
-				const lastTweet = tweets.at(-1)!;
-				nextCursor = Cursor.create({
-					lastTweetId: lastTweet.id,
-					createdAt: lastTweet.createdAt.toISOString(),
-				});
-			}
+      let nextCursor: string | null = null;
+      if (tweets.length === limit) {
+        // biome-ignore lint/style/noNonNullAssertion: We know there's at least one tweet
+        const lastTweet = tweets.at(-1)!;
+        nextCursor = Cursor.create({
+          lastTweetId: lastTweet.id,
+          createdAt: lastTweet.createdAt.toISOString(),
+        });
+      }
 
-			return {
-				tweets: transformedTweets,
-				nextCursor,
-			};
-		} catch {
-			return {
-				tweets: [],
-				nextCursor: null,
-			};
-		}
-	})
-	.callable();
+      return {
+        tweets: transformedTweets,
+        nextCursor,
+      };
+    } catch {
+      return {
+        tweets: [],
+        nextCursor: null,
+      };
+    }
+  })
+  .callable();
 
 export const deletePhoto = protectedProcedure
-	.input(z.object({ photoId: z.string() }))
-	.handler(async ({ input, context }) => {
-		const photo = await prisma.photo.findFirst({
-			where: {
-				id: input.photoId,
-				userId: context.databaseUserId,
-				deletedAt: null,
-			},
-		});
+  .input(z.object({ photoId: z.string() }))
+  .handler(async ({ input, context }) => {
+    const photo = await prisma.photo.findFirst({
+      where: {
+        id: input.photoId,
+        userId: context.databaseUserId,
+        deletedAt: null,
+      },
+    });
 
-		if (!photo) {
-			throw new ORPCError("NOT_FOUND", {
-				message: "Photo not found",
-				status: 404,
-			});
-		}
+    if (!photo) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Photo not found",
+        status: 404,
+      });
+    }
 
-		await prisma.photo.update({
-			where: {
-				photoId: {
-					id: input.photoId,
-					userId: context.databaseUserId,
-				},
-			},
-			data: { deletedAt: new Date() },
-		});
+    await prisma.photo.update({
+      where: {
+        photoId: {
+          id: input.photoId,
+          userId: context.databaseUserId,
+        },
+      },
+      data: { deletedAt: new Date() },
+    });
 
-		return { success: true };
-	});
+    return { success: true };
+  });

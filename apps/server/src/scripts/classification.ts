@@ -22,28 +22,28 @@ const FORCE = process.env.FORCE === "1";
 const ALL_PICTURES = process.env.ALL_PICTURES === "1";
 
 async function main() {
-	logger.info(
-		{
-			dryRun: DRY_RUN,
-			clear: CLEAR_QUEUE,
-			force: FORCE,
-			allPictures: ALL_PICTURES,
-		},
-		"Starting enqueue of all photos for classification",
-	);
+  logger.info(
+    {
+      dryRun: DRY_RUN,
+      clear: CLEAR_QUEUE,
+      force: FORCE,
+      allPictures: ALL_PICTURES,
+    },
+    "Starting enqueue of all photos for classification",
+  );
 
-	if (CLEAR_QUEUE) {
-		await classificationQueue.drain(true);
-		logger.info("Classification queue drained");
-	}
+  if (CLEAR_QUEUE) {
+    await classificationQueue.drain(true);
+    logger.info("Classification queue drained");
+  }
 
-	const photos = ALL_PICTURES
-		? await prisma.photo.findMany({
-				where: { deletedAt: null, s3Path: { not: null } },
-				select: { id: true, userId: true },
-				orderBy: { id: "asc" },
-			})
-		: await prisma.$queryRaw<{ id: string; userId: string }[]>`
+  const photos = ALL_PICTURES
+    ? await prisma.photo.findMany({
+        where: { deletedAt: null, s3Path: { not: null } },
+        select: { id: true, userId: true },
+        orderBy: { id: "asc" },
+      })
+    : await prisma.$queryRaw<{ id: string; userId: string }[]>`
 			SELECT id, user_id as "userId"
 			FROM photos
 			WHERE deleted_at IS NULL
@@ -58,52 +58,52 @@ async function main() {
 			ORDER BY id ASC
 		`;
 
-	logger.info({ count: photos.length }, "Fetched all photos to enqueue");
+  logger.info({ count: photos.length }, "Fetched all photos to enqueue");
 
-	let enqueued = 0;
-	if (!DRY_RUN && photos.length > 0) {
-		await classificationQueue.addBulk(
-			photos.map((photo) => {
-				const base = `classify-${photo.id}-${photo.userId}`;
-				const jobId = FORCE ? `${base}-${Date.now()}` : base;
-				return {
-					name: `classify-${photo.id}`,
-					data: { photoId: photo.id, userId: photo.userId },
-					opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
-				};
-			}),
-		);
-		enqueued = photos.length;
-	}
+  let enqueued = 0;
+  if (!DRY_RUN && photos.length > 0) {
+    await classificationQueue.addBulk(
+      photos.map((photo) => {
+        const base = `classify-${photo.id}-${photo.userId}`;
+        const jobId = FORCE ? `${base}-${Date.now()}` : base;
+        return {
+          name: `classify-${photo.id}`,
+          data: { photoId: photo.id, userId: photo.userId },
+          opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
+        };
+      }),
+    );
+    enqueued = photos.length;
+  }
 
-	logger.info(
-		{
-			enqueued,
-			dryRun: DRY_RUN,
-			force: FORCE,
-			clearQueue: CLEAR_QUEUE,
-			allPictures: ALL_PICTURES,
-		},
-		"Finished enqueue script",
-	);
+  logger.info(
+    {
+      enqueued,
+      dryRun: DRY_RUN,
+      force: FORCE,
+      clearQueue: CLEAR_QUEUE,
+      allPictures: ALL_PICTURES,
+    },
+    "Finished enqueue script",
+  );
 }
 
 main()
-	.catch((error) => {
-		logger.error({ error }, "Enqueue script failed");
-		process.exitCode = 1;
-	})
-	.finally(async () => {
-		await Promise.all([classificationWorker.close(), embeddingsWorker.close()]).catch((error) => {
-			logger.error({ error }, "Failed to close queue workers");
-		});
-		await Promise.all([classificationQueue.close(), embeddingsQueue.close()]).catch((error) => {
-			logger.error({ error }, "Failed to close queue clients");
-		});
-		await prisma.$disconnect().catch((error) => {
-			logger.error({ error }, "Failed to disconnect from database");
-		});
-		await redis.quit().catch((error) => {
-			logger.error({ error }, "Failed to quit Redis");
-		});
-	});
+  .catch((error) => {
+    logger.error({ error }, "Enqueue script failed");
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await Promise.all([classificationWorker.close(), embeddingsWorker.close()]).catch((error) => {
+      logger.error({ error }, "Failed to close queue workers");
+    });
+    await Promise.all([classificationQueue.close(), embeddingsQueue.close()]).catch((error) => {
+      logger.error({ error }, "Failed to close queue clients");
+    });
+    await prisma.$disconnect().catch((error) => {
+      logger.error({ error }, "Failed to disconnect from database");
+    });
+    await redis.quit().catch((error) => {
+      logger.error({ error }, "Failed to quit Redis");
+    });
+  });

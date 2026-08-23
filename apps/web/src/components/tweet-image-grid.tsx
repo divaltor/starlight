@@ -5,323 +5,317 @@ import type { PhotoSwipe } from "photoswipe/lightbox";
 import { useState } from "react";
 import { Gallery, Item } from "react-photoswipe-gallery";
 import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Carousel } from "@/components/ui/skiper-ui/carousel";
 
 interface TweetImageGridProps {
-	onDeleteImage?: (photoId: string) => void;
-	showActions?: boolean;
-	showArtistOnHover?: boolean;
-	tweet: TweetData;
+  onDeleteImage?: (photoId: string) => void;
+  showActions?: boolean;
+  showArtistOnHover?: boolean;
+  tweet: TweetData;
 }
 
 export function TweetImageGrid({
-	tweet,
-	showActions = false,
-	showArtistOnHover = false,
-	onDeleteImage,
+  tweet,
+  showActions = false,
+  showArtistOnHover = false,
+  onDeleteImage,
 }: TweetImageGridProps) {
-	const [isImageLoading, setIsImageLoading] = useState<{
-		[key: string]: boolean;
-	}>({});
-	const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [isImageLoading, setIsImageLoading] = useState<{
+    [key: string]: boolean;
+  }>({});
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-	const handleImageLoad = (imageId: string, isLoading: boolean) => {
-		setIsImageLoading((prev) => ({ ...prev, [imageId]: isLoading }));
-	};
+  const handleImageLoad = (imageId: string, isLoading: boolean) => {
+    setIsImageLoading((prev) => ({ ...prev, [imageId]: isLoading }));
+  };
 
-	const handleArtistClick = (e: React.MouseEvent) => {
-		e.stopPropagation();
+  const handleArtistClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
 
-		window.open(tweet.sourceUrl, "_blank", "noopener,noreferrer");
-	};
+    window.open(tweet.sourceUrl, "_blank", "noopener,noreferrer");
+  };
 
-	const uiElements: UIElementData[] = [
-		{
-			name: "download-button",
-			ariaLabel: "Download image",
-			order: 9,
-			isButton: true,
-			html: {
-				isCustomSVG: true,
-				inner: `<path d="M20.5 14.3 17.1 18V10h-2.2v7.9l-3.4-3.6L10 16l6 6.1 6-6.1ZM23 23H9v2h14Z" id="pswp__icn-download"/>`,
-				outlineID: "pswp__icn-download",
-			},
-			appendTo: "bar",
-			onClick: async (e: MouseEvent, _el: HTMLElement, pswpInstance: PhotoSwipe) => {
-				e.preventDefault();
-				const currItem = pswpInstance.currSlide?.data;
-				const url = currItem?.src;
-				if (!url) {
-					return;
-				}
+  const uiElements: UIElementData[] = [
+    {
+      name: "download-button",
+      ariaLabel: "Download image",
+      order: 9,
+      isButton: true,
+      html: {
+        isCustomSVG: true,
+        inner: `<path d="M20.5 14.3 17.1 18V10h-2.2v7.9l-3.4-3.6L10 16l6 6.1 6-6.1ZM23 23H9v2h14Z" id="pswp__icn-download"/>`,
+        outlineID: "pswp__icn-download",
+      },
+      appendTo: "bar",
+      onClick: async (e: MouseEvent, _el: HTMLElement, pswpInstance: PhotoSwipe) => {
+        e.preventDefault();
+        const currItem = pswpInstance.currSlide?.data;
+        const url = currItem?.src;
+        if (!url) {
+          return;
+        }
 
-				const filename = currItem?.alt ?? "image.jpg";
+        const filename = currItem?.alt ?? "image.jpg";
 
-				// No `throw` inside try/catch: React Compiler cannot lower that
-				// pattern, and the fallback below covers every failure path.
-				try {
-					const response = await fetch(url);
+        // No `throw` inside try/catch: React Compiler cannot lower that
+        // pattern, and the fallback below covers every failure path.
+        try {
+          const response = await fetch(url);
 
-					if (response.ok) {
-						const blob = await response.blob();
-						const blobUrl = window.URL.createObjectURL(blob);
-						const link = document.createElement("a");
-						link.href = blobUrl;
-						link.download = filename;
-						document.body.append(link);
-						link.click();
-						link.remove();
-						window.URL.revokeObjectURL(blobUrl);
-						return;
-					}
-					console.error("Image download failed", {
-						status: response.status,
-						filename,
-						url,
-					});
-				} catch (error) {
-					console.error("Image download failed", { error, filename, url });
-				}
+          if (response.ok) {
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = blobUrl;
+            link.download = filename;
+            document.body.append(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(blobUrl);
+            return;
+          }
+          console.error("Image download failed", {
+            status: response.status,
+            filename,
+            url,
+          });
+        } catch (error) {
+          console.error("Image download failed", { error, filename, url });
+        }
 
-				window.open(url, "_blank", "noopener,noreferrer");
-			},
-		},
-	];
+        window.open(url, "_blank", "noopener,noreferrer");
+      },
+    },
+  ];
 
-	if (tweet.photos.length === 1) {
-		const [photo] = tweet.photos;
+  if (tweet.photos.length === 1) {
+    const [photo] = tweet.photos;
 
-		return (
-			<Gallery
-				options={{
-					showHideAnimationType: "zoom",
-				}}
-				uiElements={uiElements}
-				withCaption={false}
-			>
-				<Item
-					alt={photo.alt}
-					height={photo.height}
-					original={photo.url}
-					thumbnail={photo.url}
-					width={photo.width}
-				>
-					{({ ref, open }) => (
-						<div className="group relative overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md">
-							<button
-								aria-label="Open artwork"
-								className="absolute inset-0 cursor-pointer"
-								onClick={open}
-								type="button"
-							/>
-							{isImageLoading[photo.id] && (
-								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
-									<div className="loading loading-spinner loading-sm" />
-								</div>
-							)}
-							{/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
-							<img
-								alt={photo.alt}
-								className={`pointer-events-none ${
-									photo.is_nsfw ? "blur-sm" : ""
-								} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
-								height={photo.height || 400}
-								onLoad={() => handleImageLoad(photo.id, false)}
-								onLoadStart={() => handleImageLoad(photo.id, true)}
-								ref={ref}
-								src={photo.url}
-								width={photo.width || 400}
-							/>
-							<div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							<div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
-								<div className="w-full p-3 text-white">
-									<div className="flex items-center justify-between">
-										<div
-											className={
-												showArtistOnHover
-													? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
-													: "pointer-events-auto"
-											}
-										>
-											<button
-												className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-primary"
-												onClick={(e) => handleArtistClick(e)}
-												type="button"
-											>
-												{tweet.artist}
-											</button>
-										</div>
-										{showActions && onDeleteImage && (
-											<Button
-												className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
-												onClick={(e) => {
-													e.stopPropagation();
-													setDeleteConfirm(photo.id);
-												}}
-												size="sm"
-												variant="ghost"
-											>
-												<X className="size-3" />
-											</Button>
-										)}
-									</div>
-								</div>
-							</div>
-						</div>
-					)}
-				</Item>
-				<DeleteConfirmDialog
-					deleteConfirm={deleteConfirm}
-					onConfirm={() => {
-						if (deleteConfirm) onDeleteImage?.(deleteConfirm);
-						setDeleteConfirm(null);
-					}}
-					onOpenChange={(open) => !open && setDeleteConfirm(null)}
-				/>
-			</Gallery>
-		);
-	}
+    return (
+      <Gallery
+        options={{
+          showHideAnimationType: "zoom",
+        }}
+        uiElements={uiElements}
+        withCaption={false}
+      >
+        <Item alt={photo.alt} height={photo.height} original={photo.url} thumbnail={photo.url} width={photo.width}>
+          {({ ref, open }) => (
+            <div className="group relative overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md">
+              <button
+                aria-label="Open artwork"
+                className="absolute inset-0 cursor-pointer"
+                onClick={open}
+                type="button"
+              />
+              {isImageLoading[photo.id] && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
+                  <div className="loading loading-spinner loading-sm" />
+                </div>
+              )}
+              {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
+              <img
+                alt={photo.alt}
+                className={`pointer-events-none ${
+                  photo.is_nsfw ? "blur-sm" : ""
+                } h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
+                height={photo.height || 400}
+                onLoad={() => handleImageLoad(photo.id, false)}
+                onLoadStart={() => handleImageLoad(photo.id, true)}
+                ref={ref}
+                src={photo.url}
+                width={photo.width || 400}
+              />
+              <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+              <div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
+                <div className="w-full p-3 text-white">
+                  <div className="flex items-center justify-between">
+                    <div
+                      className={
+                        showArtistOnHover
+                          ? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                          : "pointer-events-auto"
+                      }
+                    >
+                      <button
+                        className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-primary"
+                        onClick={(e) => handleArtistClick(e)}
+                        type="button"
+                      >
+                        {tweet.artist}
+                      </button>
+                    </div>
+                    {showActions && onDeleteImage && (
+                      <Button
+                        className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteConfirm(photo.id);
+                        }}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        <X className="size-3" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </Item>
+        <DeleteConfirmDialog
+          deleteConfirm={deleteConfirm}
+          onConfirm={() => {
+            if (deleteConfirm) onDeleteImage?.(deleteConfirm);
+            setDeleteConfirm(null);
+          }}
+          onOpenChange={(open) => !open && setDeleteConfirm(null)}
+        />
+      </Gallery>
+    );
+  }
 
-	const convertedPhotos = tweet.photos.map((photo) => ({
-		src: photo.url,
-		alt: photo.alt,
-		id: photo.id,
-		height: photo.height,
-		width: photo.width,
-		is_nsfw: photo.is_nsfw,
-	}));
+  const convertedPhotos = tweet.photos.map((photo) => ({
+    src: photo.url,
+    alt: photo.alt,
+    id: photo.id,
+    height: photo.height,
+    width: photo.width,
+    is_nsfw: photo.is_nsfw,
+  }));
 
-	return (
-		<Gallery
-			options={{
-				showHideAnimationType: "zoom",
-			}}
-			uiElements={uiElements}
-			withCaption={false}
-		>
-			<Carousel
-				images={convertedPhotos}
-				renderSlide={(item) => (
-					<Item
-						alt={item.alt}
-						height={item.height || 400}
-						original={item.src}
-						thumbnail={item.src}
-						width={item.width || 400}
-					>
-						{({ ref, open }) => (
-							<div className="group relative h-full w-full overflow-hidden rounded-box hover:z-10">
-								<button
-									aria-label="Open artwork"
-									className="absolute inset-0 cursor-pointer"
-									onClick={open}
-									type="button"
-								/>
-								{isImageLoading[item.id || ""] && (
-									<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100/80">
-										<div className="loading loading-spinner loading-sm" />
-									</div>
-								)}
-								{/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
-								<img
-									alt={item.alt}
-									className={`pointer-events-none ${
-										item.is_nsfw ? "blur-sm" : ""
-									} block h-full w-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
-									height={item.height || 400}
-									onLoad={() => handleImageLoad(item.id || "", false)}
-									onLoadStart={() => handleImageLoad(item.id || "", true)}
-									ref={ref}
-									src={item.src}
-									width={item.width || 400}
-								/>
-								<div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-								<div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
-									<div className="w-full p-3 text-white">
-										<div className="flex items-center justify-between">
-											<div
-												className={
-													showArtistOnHover
-														? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
-														: "pointer-events-auto"
-												}
-											>
-												<button
-													className="cursor-pointer text-left font-medium text-sm drop-shadow-lg transition-colors duration-200 hover:text-primary"
-													onClick={(e) => handleArtistClick(e)}
-													type="button"
-												>
-													{tweet.artist}
-												</button>
-											</div>
-											{showActions && onDeleteImage && (
-												<Button
-													className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
-													onClick={(e) => {
-														e.stopPropagation();
-														setDeleteConfirm(item.id || "");
-													}}
-													size="sm"
-													variant="ghost"
-												>
-													<X className="size-3" />
-												</Button>
-											)}
-										</div>
-									</div>
-								</div>
-							</div>
-						)}
-					</Item>
-				)}
-			/>
-			<DeleteConfirmDialog
-				deleteConfirm={deleteConfirm}
-				onConfirm={() => {
-					if (deleteConfirm) onDeleteImage?.(deleteConfirm);
-					setDeleteConfirm(null);
-				}}
-				onOpenChange={(open) => !open && setDeleteConfirm(null)}
-			/>
-		</Gallery>
-	);
+  return (
+    <Gallery
+      options={{
+        showHideAnimationType: "zoom",
+      }}
+      uiElements={uiElements}
+      withCaption={false}
+    >
+      <Carousel
+        images={convertedPhotos}
+        renderSlide={(item) => (
+          <Item
+            alt={item.alt}
+            height={item.height || 400}
+            original={item.src}
+            thumbnail={item.src}
+            width={item.width || 400}
+          >
+            {({ ref, open }) => (
+              <div className="group relative h-full w-full overflow-hidden rounded-box hover:z-10">
+                <button
+                  aria-label="Open artwork"
+                  className="absolute inset-0 cursor-pointer"
+                  onClick={open}
+                  type="button"
+                />
+                {isImageLoading[item.id || ""] && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100/80">
+                    <div className="loading loading-spinner loading-sm" />
+                  </div>
+                )}
+                {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
+                <img
+                  alt={item.alt}
+                  className={`pointer-events-none ${
+                    item.is_nsfw ? "blur-sm" : ""
+                  } block h-full w-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
+                  height={item.height || 400}
+                  onLoad={() => handleImageLoad(item.id || "", false)}
+                  onLoadStart={() => handleImageLoad(item.id || "", true)}
+                  ref={ref}
+                  src={item.src}
+                  width={item.width || 400}
+                />
+                <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+                <div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
+                  <div className="w-full p-3 text-white">
+                    <div className="flex items-center justify-between">
+                      <div
+                        className={
+                          showArtistOnHover
+                            ? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                            : "pointer-events-auto"
+                        }
+                      >
+                        <button
+                          className="cursor-pointer text-left font-medium text-sm drop-shadow-lg transition-colors duration-200 hover:text-primary"
+                          onClick={(e) => handleArtistClick(e)}
+                          type="button"
+                        >
+                          {tweet.artist}
+                        </button>
+                      </div>
+                      {showActions && onDeleteImage && (
+                        <Button
+                          className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirm(item.id || "");
+                          }}
+                          size="sm"
+                          variant="ghost"
+                        >
+                          <X className="size-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Item>
+        )}
+      />
+      <DeleteConfirmDialog
+        deleteConfirm={deleteConfirm}
+        onConfirm={() => {
+          if (deleteConfirm) onDeleteImage?.(deleteConfirm);
+          setDeleteConfirm(null);
+        }}
+        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+      />
+    </Gallery>
+  );
 }
 
 function DeleteConfirmDialog({
-	deleteConfirm,
-	onConfirm,
-	onOpenChange,
+  deleteConfirm,
+  onConfirm,
+  onOpenChange,
 }: {
-	deleteConfirm: string | null;
-	onConfirm: () => void;
-	onOpenChange: (open: boolean) => void;
+  deleteConfirm: string | null;
+  onConfirm: () => void;
+  onOpenChange: (open: boolean) => void;
 }) {
-	return (
-		<AlertDialog open={deleteConfirm !== null} onOpenChange={onOpenChange}>
-			<AlertDialogContent>
-				<AlertDialogHeader>
-					<AlertDialogTitle>Delete image</AlertDialogTitle>
-					<AlertDialogDescription>
-						Are you sure you want to delete this image? This action cannot be undone.
-					</AlertDialogDescription>
-				</AlertDialogHeader>
-				<AlertDialogFooter>
-					<AlertDialogCancel>Cancel</AlertDialogCancel>
-					<AlertDialogAction variant="destructive" onClick={onConfirm}>
-						Delete
-					</AlertDialogAction>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
-	);
+  return (
+    <AlertDialog open={deleteConfirm !== null} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete image</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete this image? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={onConfirm}>
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }

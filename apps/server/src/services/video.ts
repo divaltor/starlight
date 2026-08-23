@@ -12,96 +12,96 @@ const filesGlob = new Bun.Glob("*.mp4");
 const VIDEO_DOWNLOAD_TIMEOUT_MS = 180_000;
 
 interface VideoMetadata {
-	height?: number;
-	width?: number;
+  height?: number;
+  width?: number;
 }
 
 export interface VideoInformation {
-	filePath: string;
-	metadata: VideoMetadata;
+  filePath: string;
+  metadata: VideoMetadata;
 }
 
 async function createVideoInformation(filePath: string): Promise<VideoInformation> {
-	const parsedPath = path.parse(filePath);
+  const parsedPath = path.parse(filePath);
 
-	const infoJsonPath = path.join(parsedPath.dir, `${parsedPath.name}.info.json`);
+  const infoJsonPath = path.join(parsedPath.dir, `${parsedPath.name}.info.json`);
 
-	logger.debug({ infoJsonPath }, "Creating video information");
+  logger.debug({ infoJsonPath }, "Creating video information");
 
-	let metadata: VideoMetadata = {};
+  let metadata: VideoMetadata = {};
 
-	try {
-		metadata = (await Bun.file(infoJsonPath).json()) as VideoMetadata;
-	} catch (error) {
-		logger.error({ error, filePath }, "Failed to create video information");
-	}
+  try {
+    metadata = (await Bun.file(infoJsonPath).json()) as VideoMetadata;
+  } catch (error) {
+    logger.error({ error, filePath }, "Failed to create video information");
+  }
 
-	return {
-		filePath,
-		metadata,
-	};
+  return {
+    filePath,
+    metadata,
+  };
 }
 
 const youtubedl = create(env.YOUTUBE_DL_PATH);
 
 export async function downloadVideoFromUrl(
-	url: string,
-	folder: string,
-	metadata: VideoMetadata = {},
+  url: string,
+  folder: string,
+  metadata: VideoMetadata = {},
 ): Promise<VideoInformation> {
-	const uuid = Bun.randomUUIDv7();
-	const filePath = path.join(folder, `${uuid}.mp4`);
+  const uuid = Bun.randomUUIDv7();
+  const filePath = path.join(folder, `${uuid}.mp4`);
 
-	logger.debug({ url }, "Downloading video directly from URL");
+  logger.debug({ url }, "Downloading video directly from URL");
 
-	// ky's `timeout` only bounds time-to-headers; the abort signal also bounds
-	// the response body so Bun.write cannot hang on a stalled CDN stream.
-	const response = await http(url, {
-		signal: AbortSignal.timeout(VIDEO_DOWNLOAD_TIMEOUT_MS),
-	});
+  // ky's `timeout` only bounds time-to-headers; the abort signal also bounds
+  // the response body so Bun.write cannot hang on a stalled CDN stream.
+  const response = await http(url, {
+    signal: AbortSignal.timeout(VIDEO_DOWNLOAD_TIMEOUT_MS),
+  });
 
-	if (!(response.ok && response.body)) {
-		throw new Error(`Failed to download video from ${url}: ${response.status}`);
-	}
+  if (!(response.ok && response.body)) {
+    throw new Error(`Failed to download video from ${url}: ${response.status}`);
+  }
 
-	await Bun.write(filePath, response);
+  await Bun.write(filePath, response);
 
-	return { filePath, metadata };
+  return { filePath, metadata };
 }
 
 export async function downloadVideo(url: string, folder: string): Promise<VideoInformation[]> {
-	logger.debug({ folder, url }, "Downloading video");
+  logger.debug({ folder, url }, "Downloading video");
 
-	const uuid = Bun.randomUUIDv7();
+  const uuid = Bun.randomUUIDv7();
 
-	const subprocess = await youtubedl.exec(
-		url,
-		{
-			paths: folder,
-			quiet: true,
-			noWarnings: true,
-			noPostOverwrites: true,
-			noOverwrites: true,
-			format: "mp4",
-			writeInfoJson: true,
-			noCheckCertificates: true,
-			output: `${uuid}.%(ext)s`,
-		},
-		{ timeout: VIDEO_DOWNLOAD_TIMEOUT_MS },
-	);
+  const subprocess = await youtubedl.exec(
+    url,
+    {
+      paths: folder,
+      quiet: true,
+      noWarnings: true,
+      noPostOverwrites: true,
+      noOverwrites: true,
+      format: "mp4",
+      writeInfoJson: true,
+      noCheckCertificates: true,
+      output: `${uuid}.%(ext)s`,
+    },
+    { timeout: VIDEO_DOWNLOAD_TIMEOUT_MS },
+  );
 
-	if (subprocess.error) {
-		logger.error({ url }, "Failed to download video");
-		throw subprocess.error;
-	}
+  if (subprocess.error) {
+    logger.error({ url }, "Failed to download video");
+    throw subprocess.error;
+  }
 
-	const mp4Files = filesGlob.scan({ cwd: folder });
+  const mp4Files = filesGlob.scan({ cwd: folder });
 
-	const videoInformations: VideoInformation[] = [];
+  const videoInformations: VideoInformation[] = [];
 
-	for await (const filePath of mp4Files) {
-		videoInformations.push(await createVideoInformation(path.join(folder, filePath)));
-	}
+  for await (const filePath of mp4Files) {
+    videoInformations.push(await createVideoInformation(path.join(folder, filePath)));
+  }
 
-	return videoInformations;
+  return videoInformations;
 }

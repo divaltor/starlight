@@ -12,63 +12,62 @@ import { getRequest } from "@tanstack/react-start/server";
 import { retrieveRawInitData } from "@telegram-apps/sdk-react";
 
 const serializer = new StandardRPCJsonSerializer({
-	customJsonSerializers: [],
+  customJsonSerializers: [],
 });
 
 export function createQueryClient() {
-	return new QueryClient({
-		defaultOptions: {
-			queries: {
-				queryKeyHashFn: (queryKey) => {
-					const [json, meta] = serializer.serialize(queryKey);
-					return JSON.stringify({ json, meta });
-				},
-				staleTime: 60 * 1000,
-			},
-			dehydrate: {
-				shouldDehydrateQuery: (query) =>
-					defaultShouldDehydrateQuery(query) || query.state.status === "pending",
-				serializeData: (data) => {
-					const [json, meta] = serializer.serialize(data);
-					return { json, meta };
-				},
-			},
-			hydrate: {
-				deserializeData: (data) => serializer.deserialize(data.json, data.meta),
-			},
-		},
-	});
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        queryKeyHashFn: (queryKey) => {
+          const [json, meta] = serializer.serialize(queryKey);
+          return JSON.stringify({ json, meta });
+        },
+        staleTime: 60 * 1000,
+      },
+      dehydrate: {
+        shouldDehydrateQuery: (query) => defaultShouldDehydrateQuery(query) || query.state.status === "pending",
+        serializeData: (data) => {
+          const [json, meta] = serializer.serialize(data);
+          return { json, meta };
+        },
+      },
+      hydrate: {
+        deserializeData: (data) => serializer.deserialize(data.json, data.meta),
+      },
+    },
+  });
 }
 
 export const queryClient = createQueryClient();
 
 const getORPCClient = createIsomorphicFn()
-	.server(() =>
-		createRouterClient(appRouter, {
-			context: () => {
-				const request = getRequest();
-				return createContext({ request });
-			},
-		}),
-	)
-	.client((): AppRouterClient => {
-		let rawInitData: string;
+  .server(() =>
+    createRouterClient(appRouter, {
+      context: () => {
+        const request = getRequest();
+        return createContext({ request });
+      },
+    }),
+  )
+  .client((): AppRouterClient => {
+    let rawInitData: string;
 
-		try {
-			rawInitData = retrieveRawInitData() ?? "";
-		} catch {
-			rawInitData = "";
-		}
+    try {
+      rawInitData = retrieveRawInitData() ?? "";
+    } catch {
+      rawInitData = "";
+    }
 
-		return createORPCClient(
-			new RPCLink({
-				url: `${window.location.origin}/api/rpc`,
-				headers: {
-					Authorization: rawInitData,
-				},
-			}),
-		);
-	});
+    return createORPCClient(
+      new RPCLink({
+        url: `${window.location.origin}/api/rpc`,
+        headers: {
+          Authorization: rawInitData,
+        },
+      }),
+    );
+  });
 
 export const client: AppRouterClient = getORPCClient();
 
