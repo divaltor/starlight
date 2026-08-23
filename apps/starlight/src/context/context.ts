@@ -10,6 +10,7 @@ import * as ChatReply from "@/ai/chat-reply";
 import * as Model from "@/ai/model";
 import * as Prompt from "@/context/prompt";
 import type * as ConversationKey from "@/conversation/key";
+import * as Lane from "@/conversation/lane";
 import * as Database from "@/services/database";
 import * as Exa from "@/services/exa";
 
@@ -109,8 +110,7 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
             chatId: run.chatId,
             threadKey: run.threadKey,
           };
-          await lockLane(transaction, key);
-          await assertFence(transaction, key, input);
+          await Lane.assertFence(transaction, key, input);
           if (run.actions.some((action) => !["delivered", "failed"].includes(action.deliveryStatus))) {
             throw new Error("Run delivery is not terminal");
           }
@@ -220,8 +220,7 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
             chatId: run.chatId,
             threadKey: run.threadKey,
           };
-          await lockLane(transaction, key);
-          await assertFence(transaction, key, input);
+          await Lane.assertFence(transaction, key, input);
           const context = run.contextId
             ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
             : await ensureActiveContext(transaction, key, exa.isEnabled());
@@ -244,7 +243,6 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
           // Dot notation is the project convention; destructuring is intentionally disabled.
           // oxlint-disable-next-line prefer-destructuring
           const currentDate = Schema.decodeUnknownSync(PreparedRequestMetadata)(run.preparedRequest).currentDate;
-          /* oxlint-disable sonarjs/no-nested-functions -- reply projection stays at its context boundary. */
           const current = [
             {
               role: "user" as const,
@@ -254,19 +252,10 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
               const payload = Schema.decodeUnknownSync(StoredPayload)(runInput.input.payload);
               return {
                 role: "user" as const,
-                text: Prompt.renderLiveMessage(payload, (replyToMessageId) => {
-                  if (knownMessageIds.has(replyToMessageId)) {
-                    return `REPLIES TO MESSAGE #${replyToMessageId}\n`;
-                  }
-                  if (payload.repliedText) {
-                    return `REPLIED MESSAGE #${replyToMessageId}: ${payload.repliedText}\n`;
-                  }
-                  return `REPLIED MESSAGE #${replyToMessageId}: [target unavailable]\n`;
-                }),
+                text: Prompt.renderLiveMessage(payload, Prompt.describeReplyTarget(payload, knownMessageIds)),
               };
             }),
           ];
-          /* oxlint-enable sonarjs/no-nested-functions */
           const finalized = turns.map((turn) => ({
             role: turn.role === "assistant" ? ("assistant" as const) : ("user" as const),
             text: turn.renderedContent,
@@ -306,7 +295,13 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
             webLookupEnabled: envelope.tools.length > 0,
           };
           if (run.requestHash !== null && run.requestHash !== prepared.requestHash) {
-            throw new Error("Prepared context request changed after it was frozen");
+            // Rendering changed between freeze and replay (typically a deploy). Retrying cannot
+            // succeed because attemptCount only advances during model invocation, so surface a
+            // permanent error for the caller to block the run instead of redriving forever.
+            throw new ContextError({
+              message: "Prepared context request changed after it was frozen",
+              retryable: false,
+            });
           }
           await transaction.conversationRun.update({
             where: { id: run.id },
@@ -323,10 +318,10 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
       const prepared = yield* database
         .transaction((client) => prepareCheckpoint(client, checkpointInput, Prompt.profileFingerprint(exa.isEnabled())))
         .pipe(Effect.mapError(failed("Failed to prepare context checkpoint")));
-      if ("notPossible" in prepared) {
+      if (prepared.kind === "notPossible") {
         return yield* new ContextError({ message: prepared.message, retryable: false });
       }
-      if (prepared.committed) return prepared.result;
+      if (prepared.kind === "committed") return prepared.result;
 
       const summarized = prepared.summary ?? (yield* summarizeCheckpoint(database, model, prepared, checkpointInput));
 
@@ -372,8 +367,7 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
               chatId: attempt.parentContext.chatId,
               threadKey: attempt.parentContext.threadKey,
             };
-            await lockLane(transaction, key);
-            await assertFence(transaction, key, checkpointInput);
+            await Lane.assertFence(transaction, key, checkpointInput);
             await transaction.conversationCheckpointAttempt.update({
               where: { id: attempt.id },
               data: {
@@ -403,8 +397,8 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
             chatId: BigInt(input.key.chatId),
             threadKey: input.key.threadKey,
           };
-          await lockLane(transaction, key);
-          if (input.run) await assertFence(transaction, key, input.run);
+          await Lane.lockLane(transaction, key);
+          if (input.run) await Lane.assertFence(transaction, key, input.run);
           const profileFingerprint = Prompt.profileFingerprint(input.webLookupEnabled);
           const run = input.run
             ? await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.run.runId } })
@@ -532,26 +526,24 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
   }),
 );
 
-type Key = Pick<Prisma.ConversationLaneGetPayload<object>, "assistantId" | "chatId" | "threadKey">;
+type PreparedCheckpoint =
+  | { readonly kind: "committed"; readonly result: CheckpointResult }
+  | { readonly kind: "notPossible"; readonly message: string }
+  | ({ readonly kind: "ready" } & ReadyCheckpoint);
 
-interface PreparedCheckpoint {
-  readonly attemptId: string;
-  readonly committed: boolean;
-  readonly key: Key;
-  readonly parentContextId: string;
-  readonly result: CheckpointResult;
-  readonly summary: string | null;
-  readonly summaryInput: string;
-  readonly tail: readonly {
-    readonly renderedContent: string;
-    readonly role: ConversationContextRole;
-    readonly transcriptTurnId: bigint;
-  }[];
+interface CheckpointTailTurn {
+  readonly renderedContent: string;
+  readonly role: ConversationContextRole;
+  readonly transcriptTurnId: bigint;
 }
 
-interface CheckpointNotPossible {
-  readonly message: string;
-  readonly notPossible: true;
+interface ReadyCheckpoint {
+  readonly attemptId: string;
+  readonly key: Lane.LaneKey;
+  readonly parentContextId: string;
+  readonly summary: string | null;
+  readonly summaryInput: string;
+  readonly tail: readonly CheckpointTailTurn[];
 }
 
 const CHECKPOINT_INSTRUCTIONS = `Summarize the conversation history for future continuity.
@@ -562,21 +554,23 @@ const CheckpointSummary = z.object({ summary: z.string().min(1) });
 const failed =
   (message: string) =>
   (cause: unknown): ContextError => {
-    if (cause instanceof ContextError) return cause;
+    // ContextErrors thrown inside a Prisma callback arrive wrapped in TransactionError;
+    // unwrap them so their retryability classification survives this mapping.
+    const direct = cause instanceof Database.TransactionError ? cause.cause : cause;
+    if (direct instanceof ContextError) return direct;
     return new ContextError({ cause, message, retryable: true });
   };
 
 function summarizeCheckpoint(
   database: Database.Interface,
   model: Model.Interface,
-  prepared: PreparedCheckpoint,
+  prepared: ReadyCheckpoint,
   checkpointInput: CheckpointInput,
 ) {
   return Effect.gen(function* generateCheckpointSummary() {
     yield* database
       .transaction(async (transaction) => {
-        await lockLane(transaction, prepared.key);
-        await assertFence(transaction, prepared.key, checkpointInput);
+        await Lane.assertFence(transaction, prepared.key, checkpointInput);
         await transaction.conversationCheckpointAttempt.update({
           where: { id: prepared.attemptId },
           data: { attemptCount: { increment: 1 }, lastError: null, status: "summarizing" },
@@ -594,8 +588,12 @@ function summarizeCheckpoint(
         tools: [],
       })
       .pipe(
+        // Preserve the model's classification: resumeCheckpoint re-picks failed hardSafety
+        // attempts without an attempt bound, so a permanent failure marked retryable here
+        // would be retried forever.
         Effect.mapError(
-          (error) => new ContextError({ cause: error, message: "Failed to summarize context", retryable: true }),
+          (error) =>
+            new ContextError({ cause: error, message: "Failed to summarize context", retryable: error.retryable }),
         ),
       );
     const summary = generated.output.summary.trim();
@@ -604,8 +602,7 @@ function summarizeCheckpoint(
     }
     yield* database
       .transaction(async (transaction) => {
-        await lockLane(transaction, prepared.key);
-        await assertFence(transaction, prepared.key, checkpointInput);
+        await Lane.assertFence(transaction, prepared.key, checkpointInput);
         await transaction.conversationCheckpointAttempt.update({
           where: { id: prepared.attemptId },
           data: {
@@ -624,8 +621,7 @@ function summarizeCheckpoint(
     Effect.tapError((error) =>
       database
         .transaction(async (transaction) => {
-          await lockLane(transaction, prepared.key);
-          await assertFence(transaction, prepared.key, checkpointInput);
+          await Lane.assertFence(transaction, prepared.key, checkpointInput);
           await transaction.conversationCheckpointAttempt.updateMany({
             where: { id: prepared.attemptId, status: { not: "committed" } },
             data: { lastError: error.message, status: "failed" },
@@ -644,11 +640,10 @@ async function prepareCheckpoint(
   transaction: Prisma.TransactionClient,
   input: CheckpointInput,
   currentProfileFingerprint: string,
-): Promise<CheckpointNotPossible | PreparedCheckpoint> {
+): Promise<PreparedCheckpoint> {
   const run = await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.runId } });
   const key = { assistantId: run.assistantId, chatId: run.chatId, threadKey: run.threadKey };
-  await lockLane(transaction, key);
-  await assertFence(transaction, key, input);
+  await Lane.assertFence(transaction, key, input);
   if (run.contextId === null) throw new Error("Run has no pinned context");
   const parent = await transaction.conversationContext.findUniqueOrThrow({
     where: { id: run.contextId },
@@ -673,14 +668,14 @@ async function prepareCheckpoint(
       where: { id: existing.childContextId },
     });
     return {
-      attemptId: existing.id,
-      committed: true,
-      key,
-      parentContextId: parent.id,
-      result: { childContextId: child.id, generation: child.generation, retainedTurns: 0 },
-      summary: null,
-      summaryInput: existing.summaryInput,
-      tail: [],
+      kind: "committed",
+      result: {
+        childContextId: child.id,
+        generation: child.generation,
+        // Count the published child turns so replays report the same retained size as
+        // the original commit instead of a placeholder zero.
+        retainedTurns: await transaction.conversationContextTurn.count({ where: { contextId: child.id } }),
+      },
     };
   }
   if (!["active", "checkpointing", "retryNeeded"].includes(parent.status)) {
@@ -697,7 +692,7 @@ async function prepareCheckpoint(
   }
   const boundaries = resolveCheckpointBoundary(turns, existing, input.retainedTokenTarget);
   if (boundaries === null) {
-    return { message: "Context has no complete head unit to summarize", notPossible: true };
+    return { kind: "notPossible", message: "Context has no complete head unit to summarize" };
   }
   const summaryInput = existing
     ? existing.summaryInput
@@ -743,11 +738,10 @@ async function prepareCheckpoint(
   const storedSummary = attempt.summaryOutput ? CheckpointSummary.parse(attempt.summaryOutput).summary.trim() : null;
 
   return {
+    kind: "ready",
     attemptId: attempt.id,
-    committed: false,
     key,
     parentContextId: parent.id,
-    result: { childContextId: "", generation: parent.generation + 1, retainedTurns: boundaries.tail.length },
     summary: storedSummary,
     summaryInput: attempt.summaryInput,
     tail: boundaries.tail.map((turn) => ({
@@ -761,11 +755,10 @@ async function prepareCheckpoint(
 async function commitCheckpoint(
   transaction: Prisma.TransactionClient,
   input: CheckpointInput,
-  prepared: PreparedCheckpoint,
+  prepared: ReadyCheckpoint,
   summary: string,
 ): Promise<CheckpointResult> {
-  await lockLane(transaction, prepared.key);
-  await assertFence(transaction, prepared.key, input);
+  await Lane.assertFence(transaction, prepared.key, input);
   const attempt = await transaction.conversationCheckpointAttempt.findUniqueOrThrow({
     where: { id: prepared.attemptId },
   });
@@ -995,7 +988,11 @@ interface ProjectionRun {
   }[];
 }
 
-async function ensureActiveContext(transaction: Prisma.TransactionClient, key: Key, webLookupEnabled: boolean) {
+async function ensureActiveContext(
+  transaction: Prisma.TransactionClient,
+  key: Lane.LaneKey,
+  webLookupEnabled: boolean,
+) {
   const existing = await transaction.conversationContext.findFirst({
     where: { ...key, status: "active" },
   });
@@ -1140,26 +1137,6 @@ function createProjections(run: ProjectionRun, knownMessageIds: ReadonlySet<numb
       : [];
 
   return [...userTurns, ...toolTurns, ...assistantTurns, ...failureTurns];
-}
-
-async function lockLane(transaction: Prisma.TransactionClient, key: Key) {
-  await transaction.$queryRaw`
-		SELECT 1 FROM conversation_lanes
-		WHERE assistant_id = ${key.assistantId}
-			AND chat_id = ${key.chatId}
-			AND thread_key = ${key.threadKey}
-		FOR UPDATE
-	`;
-}
-
-async function assertFence(transaction: Prisma.TransactionClient, key: Key, input: RunReference) {
-  const lane = await transaction.conversationLane.findUniqueOrThrow({
-    where: { assistantId_chatId_threadKey: key },
-    select: { activeRunId: true, fencingToken: true },
-  });
-  if (lane.activeRunId !== input.runId || lane.fencingToken !== input.fencingToken) {
-    throw new Error("Conversation lane fence is stale");
-  }
 }
 
 const StoredPayload = Schema.Struct({

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type { PrismaClient } from "@starlight/utils/generated/prisma/client";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import * as Model from "@/ai/model";
 import * as ConversationContext from "@/context/context";
@@ -7,6 +8,19 @@ import * as Database from "@/services/database";
 import * as Exa from "@/services/exa";
 
 const databaseUrl = process.env.DATABASE_URL;
+
+// Each test owns an isolated assistant/chat pair; clearing every conversation row for the
+// pair keeps runs independent of execution order.
+async function clearConversation(client: PrismaClient, assistantId: bigint, chatId: bigint) {
+  const where = { assistantId, chatId };
+  await client.conversationCheckpointAttempt.deleteMany({ where: { parentContext: where } });
+  await client.conversationRun.updateMany({ where, data: { contextId: null } });
+  await client.conversationContext.deleteMany({ where });
+  await client.conversationTranscriptTurn.deleteMany({ where });
+  await client.conversationRun.deleteMany({ where });
+  await client.conversationInput.deleteMany({ where });
+  await client.conversationLane.deleteMany({ where });
+}
 
 test.skipIf(!databaseUrl)("repeated finalization appends one immutable context sequence", async () => {
   const runtime = ManagedRuntime.make(
@@ -30,20 +44,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable context s
         const context = yield* ConversationContext.Service;
         const database = yield* Database.Service;
         runId = yield* database.query(async (client) => {
-          await client.conversationCheckpointAttempt.deleteMany({
-            where: { parentContext: { assistantId, chatId } },
-          });
-          await client.conversationRun.updateMany({
-            where: { assistantId, chatId },
-            data: { contextId: null },
-          });
-          await client.conversationContext.deleteMany({ where: { assistantId, chatId } });
-          await client.conversationTranscriptTurn.deleteMany({
-            where: { assistantId, chatId },
-          });
-          await client.conversationRun.deleteMany({ where: { assistantId, chatId } });
-          await client.conversationInput.deleteMany({ where: { assistantId, chatId } });
-          await client.conversationLane.deleteMany({ where: { assistantId, chatId } });
+          await clearConversation(client, assistantId, chatId);
           await client.conversationLane.create({
             data: {
               assistantId,
@@ -136,20 +137,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable context s
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query(async (client) => {
-          await client.conversationCheckpointAttempt.deleteMany({
-            where: { parentContext: { assistantId, chatId } },
-          });
-          await client.conversationRun.updateMany({
-            where: { assistantId, chatId },
-            data: { contextId: null },
-          });
-          await client.conversationContext.deleteMany({ where: { assistantId, chatId } });
-          await client.conversationTranscriptTurn.deleteMany({ where: { assistantId, chatId } });
-          await client.conversationRun.deleteMany({ where: { assistantId, chatId } });
-          await client.conversationInput.deleteMany({ where: { assistantId, chatId } });
-          await client.conversationLane.deleteMany({ where: { assistantId, chatId } });
-        });
+        yield* database.query((client) => clearConversation(client, assistantId, chatId));
       }),
     );
     await runtime.dispose();
@@ -177,14 +165,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
         const context = yield* ConversationContext.Service;
         const database = yield* Database.Service;
         const runId = yield* database.query(async (client) => {
-          const where = { assistantId, chatId };
-          await client.conversationCheckpointAttempt.deleteMany({ where: { parentContext: where } });
-          await client.conversationRun.updateMany({ where, data: { contextId: null } });
-          await client.conversationContext.deleteMany({ where });
-          await client.conversationTranscriptTurn.deleteMany({ where });
-          await client.conversationRun.deleteMany({ where });
-          await client.conversationInput.deleteMany({ where });
-          await client.conversationLane.deleteMany({ where });
+          await clearConversation(client, assistantId, chatId);
           await client.conversationLane.create({
             data: {
               assistantId,
@@ -254,16 +235,111 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query(async (client) => {
-          const where = { assistantId, chatId };
-          await client.conversationCheckpointAttempt.deleteMany({ where: { parentContext: where } });
-          await client.conversationRun.updateMany({ where, data: { contextId: null } });
-          await client.conversationContext.deleteMany({ where });
-          await client.conversationTranscriptTurn.deleteMany({ where });
-          await client.conversationRun.deleteMany({ where });
-          await client.conversationInput.deleteMany({ where });
-          await client.conversationLane.deleteMany({ where });
+        yield* database.query((client) => clearConversation(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
+test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fails permanently", async () => {
+  const runtime = ManagedRuntime.make(
+    ConversationContext.layer.pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Database.layer(databaseUrl!),
+          Layer.succeed(Exa.Service)(disabledExa),
+          Layer.succeed(Model.Service)(unavailableModel),
+        ),
+      ),
+    ),
+  );
+  const assistantId = 8_000_000_100n;
+  const chatId = -8_000_000_100n;
+  let runId = "";
+
+  try {
+    await runtime.runPromise(
+      Effect.gen(function* seedFrozenRun() {
+        const context = yield* ConversationContext.Service;
+        const database = yield* Database.Service;
+        runId = yield* database.query(async (client) => {
+          await clearConversation(client, assistantId, chatId);
+          await client.conversationLane.create({
+            data: { assistantId, chatId, pendingRevision: 1, processedRevision: 1, threadKey: 0 },
+          });
+          const input = await client.conversationInput.create({
+            data: {
+              admittedRevision: 1,
+              assistantId,
+              chatId,
+              payload: {
+                addressed: true,
+                date: 1_700_000_000,
+                editDate: null,
+                forwardOrigin: null,
+                messageId: 61,
+                repliedText: null,
+                replyToMessageId: null,
+                senderFirstName: "Alice",
+                senderId: 42,
+                senderUsername: "alice",
+                text: "Hello",
+              },
+              senderTelegramId: 42n,
+              sourceMessageId: 61,
+              sourceRevision: "original:61",
+              sourceUpdateId: 161,
+              threadKey: 0,
+            },
+          });
+          const run = await client.conversationRun.create({
+            data: {
+              assistantId,
+              chatId,
+              eligibilityReason: "frozen-hash-test",
+              fencingToken: 1n,
+              inputEndRevision: 1,
+              inputStartRevision: 1,
+              inputs: { create: { inputId: input.id, ordinal: 0 } },
+              modelProfileFingerprint: Prompt.profileFingerprint(false),
+              preparedRequest: { currentDate: "2026-08-24" },
+              replyEligible: true,
+              status: "invoking",
+              threadKey: 0,
+            },
+          });
+          await client.conversationLane.update({
+            where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
+            data: { activeRunId: run.id, fencingToken: 1n },
+          });
+          return run.id;
         });
+
+        // Freeze the request, then corrupt the stored hash the way an unversioned rendering
+        // change between freeze and replay would.
+        yield* context.appendFinalized({ fencingToken: 1n, runId });
+        yield* database.query((client) =>
+          client.conversationRun.update({ where: { id: runId }, data: { requestHash: "stale-hash" } }),
+        );
+      }),
+    );
+
+    // Regression: a hash mismatch must be permanent. Marked retryable it would redrive
+    // forever because attemptCount only advances during model invocation.
+    await expect(
+      runtime.runPromise(
+        Effect.gen(function* reprepareFrozenRun() {
+          const context = yield* ConversationContext.Service;
+          return yield* context.prepare({ fencingToken: 1n, runId });
+        }),
+      ),
+    ).rejects.toMatchObject({ retryable: false });
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => clearConversation(client, assistantId, chatId));
       }),
     );
     await runtime.dispose();

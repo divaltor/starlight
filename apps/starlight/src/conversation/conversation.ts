@@ -6,6 +6,7 @@ import { extractAllowedUrls } from "@/ai/tools/web";
 import * as Prompt from "@/context/prompt";
 import * as ConversationContext from "@/context/context";
 import * as ConversationKey from "@/conversation/key";
+import * as Lane from "@/conversation/lane";
 import * as TelegramDelivery from "@/conversation/delivery";
 import * as Database from "@/services/database";
 import * as Exa from "@/services/exa";
@@ -144,13 +145,9 @@ export const layer = Layer.effect(
             create: key,
             update: {},
           });
-          await transaction.$queryRaw`
-						SELECT 1 FROM conversation_lanes
-						WHERE assistant_id = ${key.assistantId}
-							AND chat_id = ${key.chatId}
-							AND thread_key = ${key.threadKey}
-						FOR UPDATE
-					`;
+          // Admission upserts before locking so duplicate detection and revision bookkeeping
+          // run under the same lane lock the drain side uses.
+          await Lane.lockLane(transaction, key);
           const existing = await transaction.conversationInput.findFirst({
             where: {
               OR: [
@@ -249,7 +246,19 @@ export const layer = Layer.effect(
             retainedTokenTarget: options.contextRetainedTokenTarget,
             runId: claimed.runId,
           })
-          .pipe(Effect.mapError(contextFailed));
+          .pipe(
+            Effect.mapError(contextFailed),
+            // A permanent checkpoint failure (e.g. summarization that can never succeed) would
+            // otherwise be redriven forever: failed hardSafety attempts are deliberately
+            // resumable with no attempt bound.
+            Effect.catch((error) =>
+              error.retryable
+                ? Effect.fail(error)
+                : blockRun(database, claimed, options, "checkpoint-failed", error.message).pipe(
+                    Effect.andThen(Effect.fail(error)),
+                  ),
+            ),
+          );
         if (claimed.status === "generated" || claimed.status === "dispatching") {
           yield* dispatchRun(database, delivery, claimed);
           yield* appendAndCheckpoint(context, claimed, options);
@@ -262,10 +271,14 @@ export const layer = Layer.effect(
           return { kind: "completed" as const, runId: claimed.runId };
         }
         if (claimed.status === "blocked") {
-          return yield* new ConversationError({
-            message: claimed.errorMessage ?? "Conversation run is blocked",
-            retryable: false,
-          });
+          // Crash recovery: blockRun releases the lane in the same transaction, so a live claim
+          // on a blocked run means it was blocked before that existed. Release the lane instead
+          // of failing forever, or every later message stays stuck behind this run.
+          yield* finalizeRun(database, claimed, options, "blocked");
+          yield* Effect.logWarning("Released a lane pinned by a blocked run").pipe(
+            Effect.annotateLogs({ runId: claimed.runId }),
+          );
+          return { kind: "completed" as const, runId: claimed.runId };
         }
 
         const prepared = yield* prepareRun(database, claimed, options, webLookupEnabled);
@@ -281,7 +294,7 @@ export const layer = Layer.effect(
             Effect.catch((error) =>
               error.retryable
                 ? Effect.fail(error)
-                : blockRun(database, claimed, "profile-transition-required", error.message).pipe(
+                : blockRun(database, claimed, options, "profile-transition-required", error.message).pipe(
                     Effect.andThen(Effect.fail(error)),
                   ),
             ),
@@ -297,7 +310,7 @@ export const layer = Layer.effect(
           Effect.catch((error) =>
             error.retryable
               ? Effect.fail(error)
-              : blockRun(database, claimed, "profile-transition-required", error.message).pipe(
+              : blockRun(database, claimed, options, "context-prepare-failed", error.message).pipe(
                   Effect.andThen(Effect.fail(error)),
                 ),
           ),
@@ -315,7 +328,7 @@ export const layer = Layer.effect(
               Effect.catch((error) =>
                 error.retryable
                   ? Effect.fail(error)
-                  : blockRun(database, claimed, "oversized-input", error.message).pipe(
+                  : blockRun(database, claimed, options, "oversized-input", error.message).pipe(
                       Effect.andThen(Effect.fail(error)),
                     ),
               ),
@@ -327,6 +340,7 @@ export const layer = Layer.effect(
             yield* blockRun(
               database,
               claimed,
+              options,
               "oversized-input",
               "Prepared request exceeds the hard context limit after checkpoint",
             );
@@ -361,7 +375,6 @@ export class OptionsService extends Context.Service<OptionsService, Options>()("
 export const optionsLayer = Layer.succeed(OptionsService);
 
 interface ClaimedRun {
-  readonly errorMessage: string | null;
   readonly fencingToken: bigint;
   readonly inputEndRevision: number;
   readonly inputs: readonly {
@@ -406,13 +419,7 @@ function claimRun(
   return database
     .transaction(async (transaction): Promise<ClaimedRun | DrainResult> => {
       const where = dbKey(key);
-      await transaction.$queryRaw`
-				SELECT 1 FROM conversation_lanes
-				WHERE assistant_id = ${where.assistantId}
-					AND chat_id = ${where.chatId}
-					AND thread_key = ${where.threadKey}
-				FOR UPDATE
-			`;
+      await Lane.lockLane(transaction, where);
       const lane = await transaction.conversationLane.findUnique({
         where: { assistantId_chatId_threadKey: where },
       });
@@ -459,7 +466,6 @@ function claimRun(
           data: { fencingToken, leaseOwner: crypto.randomUUID(), leaseUntil },
         });
         return {
-          errorMessage: active.errorMessage,
           fencingToken,
           inputEndRevision: active.inputEndRevision,
           inputs: active.inputs.map((runInput) => runInput.input),
@@ -513,7 +519,6 @@ function claimRun(
       });
 
       return {
-        errorMessage: null,
         fencingToken,
         inputEndRevision: lastInput.admittedRevision,
         inputs,
@@ -542,11 +547,7 @@ function prepareRun(database: Database.Interface, claimed: ClaimedRun, options: 
       },
       ...payloads.map((payload) => ({
         role: "user" as const,
-        text: Prompt.renderLiveMessage(payload, (replyToMessageId) =>
-          payload.repliedText
-            ? `REPLIED MESSAGE #${replyToMessageId}: ${payload.repliedText}\n`
-            : `REPLIED MESSAGE #${replyToMessageId}: [target unavailable]\n`,
-        ),
+        text: Prompt.renderLiveMessage(payload, Prompt.describeReplyTarget(payload)),
       })),
     ];
     const allowedTargetIds = payloads.flatMap((payload) => [
@@ -568,7 +569,7 @@ function prepareRun(database: Database.Interface, claimed: ClaimedRun, options: 
 
     yield* database
       .transaction(async (transaction) => {
-        await assertFence(transaction, claimed);
+        await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
         await transaction.conversationRun.update({
           where: { id: claimed.runId },
           data: {
@@ -599,7 +600,7 @@ function invokeModel(
     }
     yield* database
       .transaction(async (transaction) => {
-        await assertFence(transaction, claimed);
+        await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
         await transaction.conversationRun.update({
           where: { id: claimed.runId },
           data: { attemptCount: { increment: 1 }, invokingAt: new Date(), status: "invoking" },
@@ -655,7 +656,7 @@ function persistGeneration(
   };
   return database
     .transaction(async (transaction) => {
-      await assertFence(transaction, claimed);
+      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
       const run = await transaction.conversationRun.findUniqueOrThrow({
         where: { id: claimed.runId },
         select: { contextId: true },
@@ -731,7 +732,7 @@ function dispatchRun(database: Database.Interface, delivery: TelegramDelivery.In
   return Effect.gen(function* dispatch() {
     yield* database
       .transaction(async (transaction) => {
-        await assertFence(transaction, claimed);
+        await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
         await transaction.conversationRun.update({
           where: { id: claimed.runId },
           data: { status: "dispatching" },
@@ -755,7 +756,7 @@ function dispatchRun(database: Database.Interface, delivery: TelegramDelivery.In
         if (stored.deliveryStatus === "unknown" && stored.unknownRetryCount > 0) {
           return database
             .transaction(async (transaction) => {
-              await assertFence(transaction, claimed);
+              await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
               await transaction.conversationRunAction.update({
                 where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
                 data: {
@@ -793,7 +794,7 @@ function deliverStoredAction(
 ): Effect.Effect<void, ConversationError> {
   return database
     .transaction(async (transaction) => {
-      await assertFence(transaction, claimed);
+      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
       await transaction.conversationRunAction.update({
         where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
         data: {
@@ -814,7 +815,7 @@ function deliverStoredAction(
       ),
       Effect.flatMap((receipt) =>
         database.transaction(async (transaction) => {
-          await assertFence(transaction, claimed);
+          await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
           await transaction.conversationRunAction.update({
             where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
             data: {
@@ -885,7 +886,7 @@ function recordDeliveryFailure(
 ) {
   return database
     .transaction(async (transaction) => {
-      await assertFence(transaction, claimed);
+      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
       await transaction.conversationRunAction.update({
         where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
         data: {
@@ -944,76 +945,92 @@ function contextFailed(error: ConversationContext.ContextError): ConversationErr
   });
 }
 
-function blockRun(database: Database.Interface, claimed: ClaimedRun, errorTag: string, message: string) {
+// Blocking is terminal for the run, so the lane must be released in the same transaction:
+// leaving a blocked run as activeRunId makes every future message reclaim it and fail forever.
+function blockRun(
+  database: Database.Interface,
+  claimed: ClaimedRun,
+  options: Options,
+  errorTag: string,
+  message: string,
+) {
   return database
     .transaction(async (transaction) => {
-      await assertFence(transaction, claimed);
+      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
       await transaction.conversationRun.update({
         where: { id: claimed.runId },
-        data: { errorMessage: message, errorTag, status: "blocked" },
+        data: { errorMessage: message, errorTag, finalizedAt: new Date(), status: "blocked" },
       });
+      await releaseLane(transaction, claimed, options);
     })
-    .pipe(Effect.mapError(failed("Failed to block oversized conversation run")));
+    .pipe(Effect.mapError(failed("Failed to block conversation run")));
 }
 
-function finalizeRun(database: Database.Interface, claimed: ClaimedRun, options: Options) {
+function finalizeRun(
+  database: Database.Interface,
+  claimed: ClaimedRun,
+  options: Options,
+  status?: ConversationRunStatus,
+) {
   return database
     .transaction(async (transaction) => {
-      await assertFence(transaction, claimed);
-      const where = dbKey(claimed.key);
-      const lane = await transaction.conversationLane.findUniqueOrThrow({
-        where: { assistantId_chatId_threadKey: where },
-      });
-      const hasSuccessor = lane.pendingRevision > claimed.inputEndRevision;
-      const now = new Date();
-      const successorWakeAt = hasSuccessor
-        ? new Date(now.getTime() + Math.min(options.quietMs, options.maxWaitMs))
-        : null;
+      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
       const run = await transaction.conversationRun.findUniqueOrThrow({
         where: { id: claimed.runId },
         select: { status: true },
       });
       await transaction.conversationRun.update({
         where: { id: claimed.runId },
-        data: { finalizedAt: now, status: run.status === "failed" ? "failed" : "finalized" },
+        // The override exists for crash recovery of runs already blocked in an earlier deploy;
+        // their status must stay "blocked" instead of being rewritten to "finalized".
+        data: { finalizedAt: new Date(), status: status ?? (run.status === "failed" ? "failed" : "finalized") },
       });
-      await transaction.conversationLane.update({
-        where: { assistantId_chatId_threadKey: where },
-        data: {
-          activeRunId: null,
-          firstPendingAt: hasSuccessor ? now : null,
-          leaseOwner: null,
-          leaseUntil: null,
-          nextWakeAt: successorWakeAt,
-          processedRevision: claimed.inputEndRevision,
-        },
-      });
-      if (!successorWakeAt) {
-        await transaction.conversationWakeOutbox.deleteMany({ where });
-        return;
-      }
-      await transaction.conversationWakeOutbox.upsert({
-        where: { assistantId_chatId_threadKey: where },
-        create: {
-          ...where,
-          desiredWakeAt: successorWakeAt,
-          pendingRevision: lane.pendingRevision,
-        },
-        update: {
-          desiredWakeAt: successorWakeAt,
-          lastError: null,
-          pendingRevision: lane.pendingRevision,
-          publishedAt: null,
-        },
-      });
+      await releaseLane(transaction, claimed, options);
     })
     .pipe(Effect.mapError(failed("Failed to finalize conversation run")));
+}
+
+// Shared tail of every terminal run transition: clears the lease, advances processedRevision
+// past this run's batch, and schedules the successor wake when newer inputs are waiting.
+async function releaseLane(transaction: Prisma.TransactionClient, claimed: ClaimedRun, options: Options) {
+  const where = dbKey(claimed.key);
+  const lane = await transaction.conversationLane.findUniqueOrThrow({
+    where: { assistantId_chatId_threadKey: where },
+  });
+  const hasSuccessor = lane.pendingRevision > claimed.inputEndRevision;
+  const now = new Date();
+  const successorWakeAt = hasSuccessor ? new Date(now.getTime() + Math.min(options.quietMs, options.maxWaitMs)) : null;
+  await transaction.conversationLane.update({
+    where: { assistantId_chatId_threadKey: where },
+    data: {
+      activeRunId: null,
+      firstPendingAt: hasSuccessor ? now : null,
+      leaseOwner: null,
+      leaseUntil: null,
+      nextWakeAt: successorWakeAt,
+      processedRevision: claimed.inputEndRevision,
+    },
+  });
+  if (!successorWakeAt) {
+    await transaction.conversationWakeOutbox.deleteMany({ where });
+    return;
+  }
+  await transaction.conversationWakeOutbox.upsert({
+    where: { assistantId_chatId_threadKey: where },
+    create: { ...where, desiredWakeAt: successorWakeAt, pendingRevision: lane.pendingRevision },
+    update: {
+      desiredWakeAt: successorWakeAt,
+      lastError: null,
+      pendingRevision: lane.pendingRevision,
+      publishedAt: null,
+    },
+  });
 }
 
 function recordModelFailure(database: Database.Interface, claimed: ClaimedRun, error: Model.Error, terminal: boolean) {
   return database
     .transaction(async (transaction) => {
-      await assertFence(transaction, claimed);
+      await Lane.assertFence(transaction, dbKey(claimed.key), claimed);
       await transaction.conversationRun.update({
         where: { id: claimed.runId },
         data: {
@@ -1031,24 +1048,6 @@ function recordModelFailure(database: Database.Interface, claimed: ClaimedRun, e
       }
     })
     .pipe(Effect.mapError(failed("Failed to record model failure")));
-}
-
-async function assertFence(transaction: Prisma.TransactionClient, claimed: ClaimedRun) {
-  const key = dbKey(claimed.key);
-  await transaction.$queryRaw`
-		SELECT 1 FROM conversation_lanes
-		WHERE assistant_id = ${key.assistantId}
-			AND chat_id = ${key.chatId}
-			AND thread_key = ${key.threadKey}
-		FOR UPDATE
-	`;
-  const lane = await transaction.conversationLane.findUnique({
-    where: { assistantId_chatId_threadKey: key },
-    select: { activeRunId: true, fencingToken: true },
-  });
-  if (lane?.activeRunId !== claimed.runId || lane.fencingToken !== claimed.fencingToken) {
-    throw new Error("Conversation lane fence is stale");
-  }
 }
 
 const PreparedRunSchema = Schema.Struct({
