@@ -1,9 +1,9 @@
 const TWITTER_URL_REGEX =
-	/(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com|fxtwitter\.com|fixupx\.com)\/\w+\/status\/(\d+)(?:.+)?/i;
+	/(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com|fxtwitter\.com|fixupx\.com)\/\w+\/status\/(?<tweetId>\d+)(?:.+)?/iu;
 
 export function extractTweetId(url: string): string | null {
 	const match = url.match(TWITTER_URL_REGEX);
-	return match?.at(1) ?? null;
+	return match?.groups?.tweetId ?? null;
 }
 
 export function isTwitterUrl(text: string): boolean {
@@ -18,9 +18,9 @@ export function cleanupTweetText(text: string | undefined): string | undefined {
 	return (
 		text
 			// Remove all hashtags
-			.replace(/#[\p{L}0-9_]+/gu, "")
+			.replaceAll(/#[\p{L}0-9_]+/gu, "")
 			// Remove all URLs
-			.replace(/https?:\/\/\S+/g, "")
+			.replaceAll(/https?:\/\/\S+/gu, "")
 			.trim()
 	);
 }

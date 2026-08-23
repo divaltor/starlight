@@ -1,6 +1,5 @@
 import type { SearchPageResult, PostData } from "@starlight/api/src/types/posts";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
 import { orpc } from "@/utils/orpc";
 
 const EMPTY_RESULTS: PostData[] = [];
@@ -33,10 +32,7 @@ export function useSearch(options: UseSearchOptions) {
 		);
 
 	const isEnabled = !!query.trim();
-	const results = useMemo(
-		() => data?.pages.flatMap((page) => page.results) ?? EMPTY_RESULTS,
-		[data?.pages],
-	);
+	const results = data?.pages.flatMap((page) => page.results) ?? EMPTY_RESULTS;
 
 	return {
 		results,

@@ -1,9 +1,9 @@
-import { Absurd } from "absurd-sdk";
 import { env, prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
+import { Queue, Worker } from "bullmq";
 import { logger } from "@/logger";
-import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
-import { embeddingsApp } from "@/queue/embeddings";
+import { embeddingsQueue } from "@/queue/embeddings";
+import { redis } from "@/storage";
 import type { Classification } from "@/types";
 
 interface ClassificationJobData {
@@ -13,22 +13,25 @@ interface ClassificationJobData {
 	userId: string;
 }
 
-export const classificationApp = new Absurd({
-	db: env.DATABASE_URL,
-	log: absurdLogger,
-	queueName: QUEUES.classification,
+export const classificationQueue = new Queue<ClassificationJobData>("classification", {
+	connection: redis,
+	defaultJobOptions: {
+		attempts: 5,
+		backoff: { type: "exponential", delay: 30_000 },
+		removeOnComplete: true,
+		removeOnFail: true,
+	},
 });
 
-classificationApp.registerTask<ClassificationJobData>(
-	{ name: "classification" },
-	async (params, ctx) => {
+export const classificationWorker = new Worker<ClassificationJobData>(
+	"classification",
+	async (job) => {
 		if (!env.ENABLE_CLASSIFICATION) {
-			logger.warn({ jobId: ctx.taskID }, "Classification skipped: feature disabled");
+			logger.warn({ jobId: job.id }, "Classification skipped: feature disabled");
 			return;
 		}
 
-		const { photoId, userId, requestId: incomingRequestId } = params;
-		const provider = params.provider ?? "twitter";
+		const { photoId, provider = "twitter", userId, requestId: incomingRequestId } = job.data;
 		const requestId = incomingRequestId || Bun.randomUUIDv7();
 
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
@@ -40,7 +43,7 @@ classificationApp.registerTask<ClassificationJobData>(
 
 		// Fetch photo record to get URL
 		const photo = await prisma.media.findUnique({
-			where: { mediaId: { id: photoId, userId, provider } },
+			where: { mediaId: { id: photoId, provider, userId } },
 			select: {
 				id: true,
 				userId: true,
@@ -104,20 +107,38 @@ classificationApp.registerTask<ClassificationJobData>(
 		}
 
 		await prisma.media.update({
-			where: { mediaId: { id: photoId, userId, provider } },
+			where: { mediaId: { id: photoId, provider, userId } },
 			data: { classification: data },
 		});
 
-		await embeddingsApp.spawn(
-			"embeddings",
+		await embeddingsQueue.add(
+			`embed-${provider}-${photoId}`,
 			{ photoId, provider, userId, requestId },
 			{
-				idempotencyKey: `embed-${provider}-${photoId}-${userId}`,
-				maxAttempts: 5,
-				retryStrategy: RETRY.embeddings,
+				jobId: `embed-${provider}-${photoId}-${userId}`,
+				deduplication: { id: `embed-${provider}-${photoId}-${userId}` },
 			},
 		);
 
 		logger.info({ photoId, userId, requestId }, "Photo classified");
 	},
+	{
+		connection: redis,
+		concurrency: 1,
+		autorun: false,
+		lockDuration: 1000 * 60 * 5,
+	},
 );
+
+classificationWorker.on("failed", (job) => {
+	logger.error(
+		{
+			err: job?.failedReason,
+			jobId: job?.id,
+			photoId: job?.data.photoId,
+			stack: job?.stacktrace,
+			userId: job?.data.userId,
+		},
+		"Classification job failed",
+	);
+});

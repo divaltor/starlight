@@ -12,16 +12,28 @@ interface AlertDialogProps {
 }
 
 function AlertDialog({ open, onOpenChange, children }: AlertDialogProps) {
+	const contextValue = { onOpenChange };
+
 	return (
-		<AlertDialogContext.Provider value={{ onOpenChange }}>
+		<AlertDialogContext.Provider value={contextValue}>
 			{open ? children : null}
 		</AlertDialogContext.Provider>
 	);
 }
 
-const AlertDialogContext = React.createContext<{ onOpenChange: (open: boolean) => void }>({
-	onOpenChange: () => {},
-});
+function useAlertDialogContext() {
+	const context = React.useContext(AlertDialogContext);
+
+	if (!context) {
+		throw new Error("AlertDialog components must be used within <AlertDialog>");
+	}
+
+	return context;
+}
+
+const AlertDialogContext = React.createContext<{ onOpenChange: (open: boolean) => void } | null>(
+	null,
+);
 
 function AlertDialogContent({
 	className,
@@ -31,7 +43,7 @@ function AlertDialogContent({
 	children?: React.ReactNode;
 	className?: string;
 }) {
-	const { onOpenChange } = React.useContext(AlertDialogContext);
+	const { onOpenChange } = useAlertDialogContext();
 
 	return (
 		<AriaModal
@@ -100,7 +112,7 @@ function AlertDialogCancel({
 	variant = "outline",
 	...props
 }: React.ComponentProps<typeof Button>) {
-	const { onOpenChange } = React.useContext(AlertDialogContext);
+	const { onOpenChange } = useAlertDialogContext();
 
 	return (
 		<Button

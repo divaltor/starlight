@@ -1,14 +1,23 @@
 import type { PostData, PostsPageResult } from "@starlight/api/src/types/posts";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { Masonry, useInfiniteLoader } from "masonic";
-import { useCallback, lazy, Suspense } from "react";
+import { lazy, Suspense } from "react";
 import { NotFound } from "@/components/not-found";
-const PostMediaGrid = lazy(() => import("@/components/post-media-grid").then((m) => ({ default: m.PostMediaGrid })));
 import { usePosts } from "@/hooks/use-posts";
 import { orpc } from "@/utils/orpc";
 
+const PostMediaGrid = lazy(() =>
+	import("@/components/post-media-grid").then((m) => ({ default: m.PostMediaGrid })),
+);
+
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
+
+const renderMasonryItem = ({ data, width }: { data: PostData; width: number }) => (
+	<div className="mb-1" style={{ width }}>
+		<PostMediaGrid post={data} />
+	</div>
+);
 
 function SharedProfileViewer() {
 	const { slug } = useParams({ from: "/profile/$slug" });
@@ -18,7 +27,7 @@ function SharedProfileViewer() {
 	});
 
 	const infiniteLoader = useInfiniteLoader(
-		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
+		async (_startIndex, _stopIndex, _items) => {
 			if (hasNextPage && !isFetchingNextPage) {
 				await fetchNextPage();
 			}
@@ -30,18 +39,9 @@ function SharedProfileViewer() {
 		},
 	);
 
-	const renderMasonryItem = useCallback(
-		({ data, width }: { data: PostData; width: number }) => (
-			<div className="mb-1" style={{ width }}>
-				<PostMediaGrid post={data} />
-			</div>
-		),
-		[],
-	);
-
 	if (error) {
 		return (
-			<div className="h-screen bg-base-100 p-4">
+			<div className="h-dvh bg-base-100 p-4">
 				<NotFound
 					description="Profile is private or no longer exists."
 					primaryAction={{
@@ -57,7 +57,7 @@ function SharedProfileViewer() {
 	}
 
 	return (
-		<div className="flex min-h-screen flex-col bg-base-100 p-4">
+		<div className="flex min-h-dvh flex-col bg-base-100 p-4">
 			{!isLoading && posts.length === 0 && (
 				<div className="flex flex-1 items-center justify-center">
 					<NotFound
@@ -70,17 +70,17 @@ function SharedProfileViewer() {
 			{posts.length > 0 && (
 				<div className="flex-1">
 					<div className="mx-auto max-w-7xl">
-					<Suspense fallback={null}>
-						<Masonry
-							columnGutter={16}
-							itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
-							itemKey={(post) => post.id}
-							items={posts}
-							onRender={infiniteLoader}
-							overscanBy={MASONRY_OVERSCAN_BY}
-							render={renderMasonryItem}
-						/>
-					</Suspense>
+						<Suspense fallback={null}>
+							<Masonry
+								columnGutter={16}
+								itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
+								itemKey={(post) => post.id}
+								items={posts}
+								onRender={infiniteLoader}
+								overscanBy={MASONRY_OVERSCAN_BY}
+								render={renderMasonryItem}
+							/>
+						</Suspense>
 					</div>
 				</div>
 			)}

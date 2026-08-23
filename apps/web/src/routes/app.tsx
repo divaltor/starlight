@@ -5,11 +5,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle, Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
-import { useCallback, useEffect, useState, lazy, Suspense } from "react";
-import NotFound from "@/components/not-found";
-const PostMediaGrid = lazy(() =>
-	import("@/components/post-media-grid").then((m) => ({ default: m.PostMediaGrid })),
-);
+import { useEffect, useState, lazy, Suspense } from "react";
+import { NotFound } from "@/components/not-found";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSearch } from "@/hooks/use-search";
@@ -17,6 +14,10 @@ import { usePosts } from "@/hooks/use-posts";
 import { cn } from "@/lib/utils";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { client, orpc } from "@/utils/orpc";
+
+const PostMediaGrid = lazy(() =>
+	import("@/components/post-media-grid").then((m) => ({ default: m.PostMediaGrid })),
+);
 
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
@@ -83,12 +84,9 @@ function MediaGallery() {
 		},
 	});
 
-	const handleDeleteMedia = useCallback(
-		(mediaId: string) => {
-			deleteMedia(mediaId);
-		},
-		[deleteMedia],
-	);
+	const handleDeleteMedia = (mediaId: string) => {
+		deleteMedia(mediaId);
+	};
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -98,7 +96,7 @@ function MediaGallery() {
 
 	// Infinite loader for regular posts
 	const infiniteLoader = useInfiniteLoader(
-		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
+		async (_startIndex, _stopIndex, _items) => {
 			if (hasNextPage && !isFetchingNextPage) {
 				await fetchNextPage();
 			}
@@ -112,7 +110,7 @@ function MediaGallery() {
 
 	// Infinite loader for search results
 	const searchInfiniteLoader = useInfiniteLoader(
-		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
+		async (_startIndex, _stopIndex, _items) => {
 			if (hasSearchNextPage && !isSearchFetchingNextPage) {
 				await fetchSearchNextPage();
 			}
@@ -124,19 +122,16 @@ function MediaGallery() {
 		},
 	);
 
-	const renderMasonryItem = useCallback(
-		({ data, width }: { data: PostData; width: number }) => (
-			<div className="mb-1" style={{ width }}>
-				<PostMediaGrid post={data} showActions onDeleteMedia={handleDeleteMedia} />
-			</div>
-		),
-		[handleDeleteMedia],
+	const renderMasonryItem = ({ data, width }: { data: PostData; width: number }) => (
+		<div className="mb-1" style={{ width }}>
+			<PostMediaGrid post={data} showActions onDeleteMedia={handleDeleteMedia} />
+		</div>
 	);
 
 	// Show error state
 	if (error) {
 		return (
-			<div className="flex min-h-screen items-center justify-center">
+			<div className="flex min-h-dvh items-center justify-center">
 				<NotFound
 					description="An error occurred while loading posts. Please try again later."
 					icon={<AlertTriangle className="size-10 text-base-content/20" />}
@@ -152,13 +147,13 @@ function MediaGallery() {
 	const currentInfiniteLoader = isSearchActive ? searchInfiniteLoader : infiniteLoader;
 
 	return (
-		<div className="flex min-h-screen flex-col p-4">
+		<div className="flex min-h-dvh flex-col p-4">
 			{/* Loading State */}
 			{displayLoading && (
 				<div className="flex flex-1 items-center justify-center">
 					{/** biome-ignore lint/correctness/useImageSize: animated loader uses CSS sizing intentionally */}
 					<img
-						alt="Searching for cute anime girls..."
+					alt="Searching for cute anime girls…"
 						className="mx-auto h-auto w-64"
 						src="/suisei-hq.webp"
 					/>
@@ -205,7 +200,7 @@ function MediaGallery() {
 							<Input
 								className="input input-bordered join-item flex-1"
 								onChange={(e) => setInputValue(e.target.value)}
-								placeholder="Search for images..."
+								placeholder="Search for images…"
 								type="text"
 								value={inputValue}
 							/>
@@ -215,9 +210,9 @@ function MediaGallery() {
 								type="submit"
 							>
 								{displayLoading ? (
-									<span className="loading loading-spinner h-4 w-4" />
+									<span className="loading loading-spinner size-4" />
 								) : (
-									<Search className="h-4 w-4" />
+									<Search className="size-4" />
 								)}
 								<span className="hidden sm:inline">Search</span>
 							</Button>
@@ -244,21 +239,22 @@ export const Route = createFileRoute("/app")({
 			retry: 1,
 		});
 
-		await queryClient.fetchQuery(profileOptions);
-
-		await queryClient.fetchInfiniteQuery(
-			orpc.posts.list.infiniteOptions({
-				input: (pageParam: string | undefined) => ({
-					cursor: pageParam,
-					limit: 30,
+		await Promise.all([
+			queryClient.fetchQuery(profileOptions),
+			queryClient.fetchInfiniteQuery(
+				orpc.posts.list.infiniteOptions({
+					input: (pageParam: string | undefined) => ({
+						cursor: pageParam,
+						limit: 30,
+					}),
+					queryKey: ["posts", { username: undefined }],
+					initialPageParam: undefined,
+					getNextPageParam: (lastPage: PostsPageResult) => lastPage.nextCursor ?? undefined,
+					retry: false,
+					gcTime: 10 * 60 * 1000,
 				}),
-				queryKey: ["posts", { username: undefined }],
-				initialPageParam: undefined,
-				getNextPageParam: (lastPage: PostsPageResult) => lastPage.nextCursor ?? undefined,
-				retry: false,
-				gcTime: 10 * 60 * 1000,
-			}),
-		);
+			),
+		]);
 	},
 	component: MediaGallery,
 });

@@ -3,7 +3,8 @@ import { CookieEncryption } from "@starlight/crypto";
 
 describe("CookieEncryption", () => {
 	let encryption: CookieEncryption;
-	const masterKey = "a".repeat(64); // 64 character hex string (32 bytes)
+	// 64 character hex string (32 bytes)
+	const masterKey = "a".repeat(64);
 	const testUserId = "123456789";
 	const testCookieData = JSON.stringify({
 		auth_token: "test_auth_token_12345",
@@ -49,7 +50,7 @@ describe("CookieEncryption", () => {
 	describe("generateMasterKey", () => {
 		test("should generate a 64-character hex string", () => {
 			const key = CookieEncryption.generateMasterKey();
-			expect(key).toMatch(/^[0-9a-f]{64}$/);
+			expect(key).toMatch(/^[0-9a-f]{64}$/u);
 			expect(key.length).toBe(64);
 		});
 
@@ -62,20 +63,20 @@ describe("CookieEncryption", () => {
 
 	describe("isEncrypted", () => {
 		test("should return false for short strings", () => {
-			expect(encryption.isEncrypted("short")).toBe(false);
+			expect(CookieEncryption.isEncrypted("short")).toBe(false);
 		});
 
 		test("should return false for non-hex strings", () => {
-			expect(encryption.isEncrypted("z".repeat(80))).toBe(false);
+			expect(CookieEncryption.isEncrypted("z".repeat(80))).toBe(false);
 		});
 
 		test("should return false for JSON data", () => {
-			expect(encryption.isEncrypted(testCookieData)).toBe(false);
+			expect(CookieEncryption.isEncrypted(testCookieData)).toBe(false);
 		});
 
 		test("should return true for hex strings longer than 80 characters", () => {
 			const hexString = "a".repeat(160);
-			expect(encryption.isEncrypted(hexString)).toBe(true);
+			expect(CookieEncryption.isEncrypted(hexString)).toBe(true);
 		});
 	});
 
@@ -103,7 +104,7 @@ describe("CookieEncryption", () => {
 
 		test("should return hex-encoded ciphertext", () => {
 			const encrypted = encryption.encrypt(testCookieData, testUserId);
-			expect(encrypted).toMatch(/^[0-9a-f]+$/);
+			expect(encrypted).toMatch(/^[0-9a-f]+$/u);
 			expect(encrypted.length).toBeGreaterThan(80);
 		});
 
@@ -135,7 +136,8 @@ describe("CookieEncryption", () => {
 		});
 
 		test("should throw error for invalid encrypted data", () => {
-			const invalidEncrypted = "a".repeat(160); // Valid hex but invalid encryption
+			// Valid hex but invalid encryption
+			const invalidEncrypted = "a".repeat(160);
 
 			expect(() => {
 				encryption.safeDecrypt(invalidEncrypted, testUserId);

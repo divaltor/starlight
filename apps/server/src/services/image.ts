@@ -9,7 +9,7 @@ function initSQRT(N: number): number[] {
 	for (let i = 1; i < N; i++) {
 		c[i] = 1;
 	}
-	c[0] = 1 / Math.sqrt(2.0);
+	c[0] = 1 / Math.sqrt(2);
 	return c;
 }
 
@@ -22,7 +22,7 @@ function initCOS(N: number): number[][] {
 		// oxlint-disable-next-line no-new-array
 		cosines[k] = new Array(N);
 		for (let n = 0; n < N; n++) {
-			cosines[k][n] = Math.cos(((2 * k + 1) / (2.0 * N)) * n * Math.PI);
+			cosines[k][n] = Math.cos(((2 * k + 1) / (2 * N)) * n * Math.PI);
 		}
 	}
 	return cosines;

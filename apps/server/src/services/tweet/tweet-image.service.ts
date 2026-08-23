@@ -1,9 +1,10 @@
 import { http } from "@starlight/utils/http";
 import { Effect } from "effect";
-import type { TweetData } from "@/services/render";
-import { renderTweetImage, type RenderResult } from "@/services/render";
-import { type FxEmbedTweet, type FxEmbedMosaicPhoto } from "@/services/fxembed/types";
-import { TwitterApi, TwitterApiError } from "@/services/twitter-api";
+import { renderTweetImage } from "@/services/render";
+import type { TweetData, RenderResult } from "@/services/render";
+import type { FxEmbedTweet, FxEmbedMosaicPhoto } from "@/services/fxembed/types";
+import type { TwitterApiError } from "@/services/twitter-api";
+import * as TwitterApi from "@/services/twitter-api";
 import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";

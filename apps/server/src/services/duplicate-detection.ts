@@ -1,6 +1,6 @@
 import { prisma } from "@starlight/utils";
 import { logger } from "@/logger";
-import { calculateHashDistance, calculatePerceptualHash } from "./image";
+import { calculateHashDistance, calculatePerceptualHash } from "@/services/image";
 
 interface SimilarPhoto {
 	distance: number;

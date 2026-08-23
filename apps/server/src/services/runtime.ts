@@ -1,12 +1,15 @@
-import { EmbeddingsService } from "@starlight/api/services/embeddings";
+import * as EmbeddingsService from "@starlight/api/services/embeddings";
 import env from "@starlight/utils/config";
-import { Layer, Logger, ManagedRuntime, References } from "effect";
+import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
 import type { LogLevel } from "effect/LogLevel";
 import { logger } from "@/logger";
-import { Exa } from "@/services/exa";
-import { TwitterApi } from "@/services/twitter-api";
+import * as Exa from "@/services/exa";
+import * as TwitterApi from "@/services/twitter-api";
 
-const effectLogger = Logger.map(Logger.formatStructured, (output) => {
+// Derived from Logger.formatStructured's output; effect does not export this structural type.
+type StructuredLogOutput = ReturnType<(typeof Logger.formatStructured)["log"]>;
+
+function forwardEffectLog(output: StructuredLogOutput): void {
 	const text = Array.isArray(output.message) ? output.message.join(" ") : String(output.message);
 	const metadata = {
 		annotations: output.annotations,
@@ -17,37 +20,51 @@ const effectLogger = Logger.map(Logger.formatStructured, (output) => {
 
 	switch (output.level) {
 		case "FATAL":
-		case "ERROR":
+		case "ERROR": {
 			logger.error(metadata, text);
 			break;
-		case "WARN":
+		}
+		case "WARN": {
 			logger.warn(metadata, text);
 			break;
-		case "DEBUG":
+		}
+		case "DEBUG": {
 			logger.debug(metadata, text);
 			break;
-		case "TRACE":
+		}
+		case "TRACE": {
 			logger.trace(metadata, text);
 			break;
-		default:
+		}
+		default: {
 			logger.info(metadata, text);
+		}
 	}
-});
+}
+
+// pipe form: Logger.map(self, fn) reads as Array#map(callback, thisArg) to oxlint
+const effectLogger = pipe(Logger.formatStructured, Logger.map(forwardEffectLog));
 
 const getEffectLogLevel = (): LogLevel => {
 	switch ((env.LOG_LEVEL || (env.NODE_ENV === "development" ? "debug" : "info")).toLowerCase()) {
-		case "trace":
+		case "trace": {
 			return "Trace";
-		case "debug":
+		}
+		case "debug": {
 			return "Debug";
-		case "warn":
+		}
+		case "warn": {
 			return "Warn";
-		case "error":
+		}
+		case "error": {
 			return "Error";
-		case "fatal":
+		}
+		case "fatal": {
 			return "Fatal";
-		default:
+		}
+		default: {
 			return "Info";
+		}
 	}
 };
 

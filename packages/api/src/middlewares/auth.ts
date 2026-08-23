@@ -81,12 +81,10 @@ export const optionalAuthMiddleware = o.middleware(({ next, context }) => {
 				validate(auth, env.BOT_TOKEN);
 			}
 
-			const parsedData = parse(auth);
-			if (parsedData.user) {
-				user = parsedData.user;
-			}
-			// biome-ignore lint/suspicious/noEmptyBlockStatements: Ignore auth errors for optional auth
-		} catch {}
+			({ user } = parse(auth));
+		} catch {
+			// Invalid init data leaves the request anonymous in optional auth
+		}
 	}
 
 	return next({

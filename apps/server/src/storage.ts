@@ -1,6 +1,10 @@
 import { getTwitterUserId, parseTwitterCookies } from "@starlight/api/services/twitter-cookies";
+import { RedisClient } from "bun";
 import { env } from "@starlight/utils";
+import { createBunRedisClient } from "bullmq";
 import { Cookie } from "tough-cookie";
+
+export const redis = createBunRedisClient(new RedisClient(env.REDIS_URL));
 
 export class Cookies {
 	readonly cookies: Cookie[];

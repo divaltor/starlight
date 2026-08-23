@@ -14,7 +14,9 @@ export default defineConfig({
 		}),
 		tailwindcss(),
 		tanstackStart(),
-		viteReact(),
+		// React Compiler via the Rust port; requires the oxc-transform-react
+		// devDependency (optional peer of @vitejs/plugin-react).
+		viteReact({ compiler: true }),
 	],
 	ssr: {
 		// Bundle lucide-react into the server build so only used icons ship,

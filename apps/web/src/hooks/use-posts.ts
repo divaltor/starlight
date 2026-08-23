@@ -1,6 +1,5 @@
 import type { PostData, PostsPageResult } from "@starlight/api/src/types/posts";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
 import { orpc } from "@/utils/orpc";
 
 const EMPTY_POSTS: PostData[] = [];
@@ -28,10 +27,7 @@ export function usePosts(options: UsePostsOptions = {}) {
 				gcTime: 10 * 60 * 1000,
 			}),
 		);
-	const posts = useMemo(
-		() => data?.pages.flatMap((page) => page.posts) ?? EMPTY_POSTS,
-		[data?.pages],
-	);
+	const posts = data?.pages.flatMap((page) => page.posts) ?? EMPTY_POSTS;
 
 	return {
 		posts,

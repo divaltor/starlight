@@ -10,7 +10,7 @@ import {
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
-const HEX_REGEX = /^[0-9a-fA-F]+$/;
+const HEX_REGEX = /^[0-9a-fA-F]+$/u;
 
 /**
  * Cookie encryption utility using XChaCha20-Poly1305
@@ -41,7 +41,7 @@ export class CookieEncryption {
 	/**
 	 * Check if data appears to be encrypted (hex string with expected length)
 	 */
-	isEncrypted(data: string): boolean {
+	static isEncrypted(data: string): boolean {
 		// Encrypted data should be hex string with minimum length
 		// XChaCha20-Poly1305 with managedNonce adds 24-byte nonce + 16-byte tag
 		// So minimum encrypted length is (24 + 16) * 2 = 80 hex characters
@@ -110,8 +110,9 @@ export class CookieEncryption {
 	 * Safely decrypt with fallback to unencrypted data
 	 */
 	safeDecrypt(data: string, userId: string): string {
-		if (!this.isEncrypted(data)) {
-			return data; // Return as-is if not encrypted (migration support)
+		if (!CookieEncryption.isEncrypted(data)) {
+			// Return as-is if not encrypted (migration support)
+			return data;
 		}
 
 		try {
@@ -119,6 +120,7 @@ export class CookieEncryption {
 		} catch (error) {
 			throw new Error(
 				`Failed to decrypt cookie data: ${error instanceof Error ? error.message : "Unknown error"}`,
+				{ cause: error },
 			);
 		}
 	}

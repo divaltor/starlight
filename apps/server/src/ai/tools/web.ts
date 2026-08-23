@@ -1,12 +1,14 @@
 import { tool } from "ai";
+import type { Tool } from "ai";
 import { z } from "zod";
 import { lookupWebPage, searchWeb } from "@/services/web";
-import { FetchPageToolResultPart, SearchToolResultPart, type ToolResultPart } from "@/types";
+import { FetchPageToolResultPart, SearchToolResultPart } from "@/types";
+import type { ToolResultPart } from "@/types";
 
 export const WEB_LOOKUP_TOOL_ID = "web_lookup";
 
-const MAX_PAGE_CONTENT_LENGTH = 6_000;
-const MAX_SEARCH_CONTENT_LENGTH = 2_000;
+const MAX_PAGE_CONTENT_LENGTH = 6000;
+const MAX_SEARCH_CONTENT_LENGTH = 2000;
 const MAX_SEARCH_RESULTS = 5;
 
 function looksLikeUrl(value: string): boolean {
@@ -18,17 +20,28 @@ function looksLikeUrl(value: string): boolean {
 	}
 }
 
-export function createWebLookupTool(messageParts: ToolResultPart[]) {
+// The SDK's exported Tool type keeps the signature nameable in declaration
+// output; full inference references internal AI SDK types that cannot be.
+export function createWebLookupTool(messageParts: ToolResultPart[]): Tool {
+	const inputSchema = z.object({
+		mode: z.enum(["url", "search"]),
+		url: z.url().optional().describe('Required when mode="url".'),
+		query: z.string().min(3).max(300).optional().describe('Required when mode="search".'),
+	});
+
 	return tool({
 		description:
 			'Access the web. Use mode="url" only to read a web page whose URL is explicitly written in conversation message text or a caption. Use mode="search" only to discover sources or verify current facts when there is no page URL to read. Never use attachment or media URLs.',
-		inputSchema: z.object({
-			mode: z.enum(["url", "search"]),
-			url: z.url().optional().describe('Required when mode="url".'),
-			query: z.string().min(3).max(300).optional().describe('Required when mode="search".'),
-		}),
+		inputSchema,
 		execute: async ({ mode, url, query }) => {
-			const lookupTarget = mode === "url" ? url : query && looksLikeUrl(query) ? query : undefined;
+			const queryLooksLikeUrl = Boolean(query && looksLikeUrl(query));
+
+			let lookupTarget: string | undefined;
+			if (mode === "url") {
+				lookupTarget = url;
+			} else if (queryLooksLikeUrl && query) {
+				lookupTarget = query;
+			}
 
 			if (lookupTarget) {
 				const page = await lookupWebPage(lookupTarget);

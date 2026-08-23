@@ -1,8 +1,10 @@
 import { logger } from "@/logger";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
-import { type ConversationTurn, toConversationTurn } from "@/utils/message";
-import { env, type Prisma, prisma } from "@starlight/utils";
+import { toConversationTurn } from "@/utils/message";
+import type { ConversationTurn } from "@/utils/message";
+import { env, prisma } from "@starlight/utils";
+import type { Prisma } from "@starlight/utils";
 
 const messageHistorySelect = {
 	messageId: true,

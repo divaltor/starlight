@@ -104,10 +104,10 @@ export async function attachChat(ctx: Context, next: NextFunction) {
 }
 
 export async function attachChatMember(ctx: Context, next: NextFunction) {
-	if (
-		!(ctx.chat && ctx.from && ctx.user) ||
-		(ctx.chat.type !== "group" && ctx.chat.type !== "supergroup")
-	) {
+	const hasChatUserContext = Boolean(ctx.chat && ctx.from && ctx.user);
+	const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
+
+	if (!hasChatUserContext || !isGroupChat) {
 		return await next();
 	}
 
@@ -118,7 +118,7 @@ export async function attachChatMember(ctx: Context, next: NextFunction) {
 			where: {
 				chatId_userId: {
 					chatId,
-					userId: ctx.user.id,
+					userId: ctx.user!.id,
 				},
 			},
 		});
@@ -128,18 +128,18 @@ export async function attachChatMember(ctx: Context, next: NextFunction) {
 			return await next();
 		}
 
-		const telegramMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+		const telegramMember = await ctx.api.getChatMember(ctx.chat!.id, ctx.from!.id);
 
 		ctx.userChatMember = await prisma.chatMember.upsert({
 			where: {
 				chatId_userId: {
 					chatId,
-					userId: ctx.user.id,
+					userId: ctx.user!.id,
 				},
 			},
 			create: {
 				chatId,
-				userId: ctx.user.id,
+				userId: ctx.user!.id,
 				status: telegramMember.status,
 			},
 			update: {
@@ -150,8 +150,8 @@ export async function attachChatMember(ctx: Context, next: NextFunction) {
 		ctx.logger.warn(
 			{
 				error,
-				chatId: ctx.chat.id,
-				userId: ctx.from.id,
+				chatId: ctx.chat!.id,
+				userId: ctx.from!.id,
 			},
 			"Failed to attach chat member.",
 		);

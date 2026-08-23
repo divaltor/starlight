@@ -13,12 +13,12 @@
   "type": "module",
   "scripts": {
     "build": "bun run -b tsdown",
-    "lint": "oxlint --fix && tsc -b",
+    "lint": "tsc -b",
     "format": "oxfmt"
   },
   "devDependencies": {
     "tsdown": "catalog:",
-    "@types/bun": "1.3.14"
+    "@types/bun": "1.4.0"
   },
   "peerDependencies": {
     "typescript": "^7.0.2"
@@ -31,7 +31,7 @@
     "@starlight/utils": "workspace:*",
     "@telegram-apps/init-data-node": "^2.0.10",
     "date-fns": "^4.4.0",
-    "effect": "4.0.0-beta.100",
+    "effect": "4.0.0-rc.111",
     "zod": "catalog:"
   }
 }

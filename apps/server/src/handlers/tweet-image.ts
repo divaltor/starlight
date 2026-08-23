@@ -1,17 +1,18 @@
 import { env, extractTweetId, isTwitterUrl } from "@starlight/utils";
 import { Composer, GrammyError, InlineKeyboard, InlineQueryResultBuilder, InputFile } from "grammy";
 import { renderTweetImage } from "@/services/render";
-import {
-	generateTweetImage,
-	prepareTweetData,
-	type Theme,
-} from "@/services/tweet/tweet-image.service";
+import { generateTweetImage, prepareTweetData } from "@/services/tweet/tweet-image.service";
+import type { Theme } from "@/services/tweet/tweet-image.service";
 import { runtime } from "@/services/runtime";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
 
 const composer = new Composer<Context>();
 const chats = composer.chatType(["private", "group", "supergroup"]);
+
+const TWEET_NOT_FOUND_MESSAGE = "Tweet not found";
+
+const IMAGE_JPEG_TYPE = "image/jpeg";
 
 function createThemeKeyboard(tweetId: string, currentTheme: Theme, userId: number): InlineKeyboard {
 	const nextTheme = currentTheme === "dark" ? "light" : "dark";
@@ -23,20 +24,21 @@ function createThemeKeyboard(tweetId: string, currentTheme: Theme, userId: numbe
 	);
 }
 
-chats.command("quote").filter(
-	(ctx) => ctx.match.trim() !== "" && extractTweetId(ctx.match.trim()) === null,
-	async (ctx) => {
+chats
+	.command("quote")
+	.filter((ctx) => ctx.match.trim() !== "" && extractTweetId(ctx.match.trim()) === null)
+	.use(async (ctx) => {
 		ctx.logger.debug(
 			{ userId: ctx.from.id, input: ctx.match.trim() },
 			"Invalid tweet URL provided",
 		);
 		await ctx.reply("Please provide a valid tweet link");
-	},
-);
+	});
 
-chats.command("quote").filter(
-	(ctx) => extractTweetId(ctx.match.trim()) !== null,
-	async (ctx) => {
+chats
+	.command("quote")
+	.filter((ctx) => extractTweetId(ctx.match.trim()) !== null)
+	.use(async (ctx) => {
 		const tweetId = extractTweetId(ctx.match.trim()) as string;
 
 		ctx.logger.info({ userId: ctx.from.id, tweetId }, "Processing /q command");
@@ -69,7 +71,7 @@ chats.command("quote").filter(
 		} catch (error) {
 			ctx.logger.error({ error, tweetId }, "Failed to generate tweet image");
 
-			if (error instanceof Error && error.message === "Tweet not found") {
+			if (error instanceof Error && error.message === TWEET_NOT_FOUND_MESSAGE) {
 				await ctx.reply(
 					"Could not fetch this tweet. It may be:\n" +
 						"• Private or from a protected account\n" +
@@ -79,18 +81,18 @@ chats.command("quote").filter(
 				return;
 			}
 
-			if (error instanceof GrammyError) {
-				await ctx.reply("Failed to send image. Please try again.");
-			} else {
-				await ctx.reply("Something went wrong. Please try again later.");
-			}
+			await ctx.reply(
+				error instanceof GrammyError
+					? "Failed to send image. Please try again."
+					: "Something went wrong. Please try again later.",
+			);
 		}
-	},
-);
+	});
 
-composer.on("inline_query").filter(
-	(ctx) => isTwitterUrl(ctx.inlineQuery.query.trim()),
-	async (ctx) => {
+composer
+	.on("inline_query")
+	.filter((ctx) => isTwitterUrl(ctx.inlineQuery.query.trim()))
+	.use(async (ctx) => {
 		const query = ctx.inlineQuery.query.trim();
 		const tweetId = extractTweetId(query);
 
@@ -114,8 +116,8 @@ composer.on("inline_query").filter(
 			const darkS3Path = `tweets/${tweetId}/dark.jpg`;
 
 			await Promise.all([
-				s3.write(lightS3Path, lightResult.buffer, { type: "image/jpeg" }),
-				s3.write(darkS3Path, darkResult.buffer, { type: "image/jpeg" }),
+				s3.write(lightS3Path, lightResult.buffer, { type: IMAGE_JPEG_TYPE }),
+				s3.write(darkS3Path, darkResult.buffer, { type: IMAGE_JPEG_TYPE }),
 			]);
 
 			ctx.logger.debug({ tweetId, lightS3Path, darkS3Path }, "Uploaded tweet images to S3");
@@ -169,8 +171,8 @@ composer.on("inline_query").filter(
 				const darkNoChainS3Path = `tweets/${tweetId}/dark-no-chain.jpg`;
 
 				await Promise.all([
-					s3.write(lightNoChainS3Path, lightNoChainResult.buffer, { type: "image/jpeg" }),
-					s3.write(darkNoChainS3Path, darkNoChainResult.buffer, { type: "image/jpeg" }),
+					s3.write(lightNoChainS3Path, lightNoChainResult.buffer, { type: IMAGE_JPEG_TYPE }),
+					s3.write(darkNoChainS3Path, darkNoChainResult.buffer, { type: IMAGE_JPEG_TYPE }),
 				]);
 
 				ctx.logger.debug(
@@ -220,62 +222,68 @@ composer.on("inline_query").filter(
 		} catch (error) {
 			ctx.logger.error({ error, tweetId }, "Failed to generate inline tweet images");
 
-			if (error instanceof Error && error.message === "Tweet not found") {
+			if (error instanceof Error && error.message === TWEET_NOT_FOUND_MESSAGE) {
 				await ctx.answerInlineQuery([
-					InlineQueryResultBuilder.article(`tweet-not-found:${tweetId}`, "Tweet not found").text(
-						"Could not fetch this tweet. It may be private or deleted.",
-					),
+					InlineQueryResultBuilder.article(
+						`tweet-not-found:${tweetId}`,
+						TWEET_NOT_FOUND_MESSAGE,
+					).text("Could not fetch this tweet. It may be private or deleted."),
 				]);
 				return;
 			}
 
 			await ctx.answerInlineQuery([]);
 		}
-	},
-);
-
-chats.callbackQuery(/^tweet_img:toggle:(\d+):(light|dark):(\d+)$/, async (ctx) => {
-	// biome-ignore lint/style/noNonNullAssertion: regex callback query guarantees match groups
-	const tweetId = ctx.match.at(1)!;
-	const newTheme = ctx.match.at(2) as Theme;
-	const ownerId = ctx.match.at(3);
-
-	if (ctx.from.id !== Number(ownerId)) {
-		await ctx.answerCallbackQuery({
-			text: "Only the person who requested this image can change the theme",
-			show_alert: true,
-		});
-		return;
-	}
-
-	ctx.logger.info({ userId: ctx.from.id, tweetId, newTheme }, "Processing theme toggle callback");
-
-	await ctx.answerCallbackQuery({
-		text: `Generating ${newTheme} theme...`,
 	});
 
-	try {
-		const result = await runtime.runPromise(generateTweetImage(tweetId, newTheme));
+chats.callbackQuery(
+	/^tweet_img:toggle:(?<tweetId>\d+):(?<theme>light|dark):(?<userId>\d+)$/u,
+	async (ctx) => {
+		// The regex callback query route guarantees all named match groups are present
+		const { theme, tweetId, userId } = (ctx.match as RegExpMatchArray).groups as Record<
+			"theme" | "tweetId" | "userId",
+			string
+		>;
+		const newTheme = theme as Theme;
+		const ownerId = userId;
 
-		ctx.logger.debug({ tweetId, newTheme }, "Theme toggle image generated");
-
-		await ctx.editMessageMedia(
-			{
-				type: "photo",
-				media: new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
-				caption: ctx.msg?.caption,
-			},
-			{
-				reply_markup: createThemeKeyboard(tweetId, newTheme, ctx.from.id),
-			},
-		);
-	} catch (error) {
-		if (error instanceof GrammyError) {
-			ctx.logger.warn({ error, tweetId }, "Failed to edit message for theme toggle");
-		} else {
-			throw error;
+		if (ctx.from.id !== Number(ownerId)) {
+			await ctx.answerCallbackQuery({
+				text: "Only the person who requested this image can change the theme",
+				show_alert: true,
+			});
+			return;
 		}
-	}
-});
+
+		ctx.logger.info({ userId: ctx.from.id, tweetId, newTheme }, "Processing theme toggle callback");
+
+		await ctx.answerCallbackQuery({
+			text: `Generating ${newTheme} theme...`,
+		});
+
+		try {
+			const result = await runtime.runPromise(generateTweetImage(tweetId, newTheme));
+
+			ctx.logger.debug({ tweetId, newTheme }, "Theme toggle image generated");
+
+			await ctx.editMessageMedia(
+				{
+					type: "photo",
+					media: new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
+					caption: ctx.msg?.caption,
+				},
+				{
+					reply_markup: createThemeKeyboard(tweetId, newTheme, ctx.from.id),
+				},
+			);
+		} catch (error) {
+			if (error instanceof GrammyError) {
+				ctx.logger.warn({ error, tweetId }, "Failed to edit message for theme toggle");
+			} else {
+				throw error;
+			}
+		}
+	},
+);
 
 export default composer;

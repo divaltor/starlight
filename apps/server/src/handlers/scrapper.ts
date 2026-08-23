@@ -3,9 +3,12 @@ import { env, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard } from "grammy";
 import { webAppKeyboard } from "@/bot";
 import type { Logger } from "@/logger";
-import { RETRY } from "@/queue/absurd";
-import { getScheduledPixivGeneration, pixivApp } from "@/queue/pixiv";
-import { getScheduledScrapperGeneration, scrapperApp } from "@/queue/scrapper";
+import { pixivQueue, SCHEDULED_PIXIV_INTERVAL_SECONDS } from "@/queue/pixiv";
+import {
+	FEED_SCRAPPER_QUEUE,
+	scrapperQueue,
+	SCHEDULED_SCRAPPER_INTERVAL_SECONDS,
+} from "@/queue/scrapper";
 import type { Context } from "@/types";
 
 type ProviderCollectionResult = {
@@ -66,23 +69,18 @@ async function startTwitterCollection(
 	updateId: number,
 	logger: Logger,
 ): Promise<ProviderCollectionResult> {
-	const generation = getScheduledScrapperGeneration();
 	let scheduleReady = false;
-	let firstSchedule = false;
 
 	try {
-		const scheduledJob = await scrapperApp.spawn(
-			"scheduled-feed-scrapper",
-			{ generation, userId, limit: 300 },
-			{
-				idempotencyKey: `scheduled-scrapper-${userId}-${generation}`,
-				maxAttempts: 3,
-				retryStrategy: RETRY.scrapper,
-			},
+		const schedulerId = `scrapper-${userId}`;
+		const scheduledJob = await scrapperQueue.getJobScheduler(schedulerId);
+		await scrapperQueue.upsertJobScheduler(
+			schedulerId,
+			{ every: SCHEDULED_SCRAPPER_INTERVAL_SECONDS * 1000 },
+			{ name: FEED_SCRAPPER_QUEUE, data: { count: 0, limit: 300, userId } },
 		);
 		scheduleReady = true;
-		firstSchedule = scheduledJob.created;
-		if (firstSchedule) {
+		if (!scheduledJob) {
 			logger.debug({ userId, provider: "twitter" }, "Scheduled collector");
 		}
 	} catch (error) {
@@ -91,13 +89,11 @@ async function startTwitterCollection(
 
 	let immediateStarted = false;
 	try {
-		await scrapperApp.spawn(
-			"feed-scrapper",
-			{ userId, count: 0, limit: firstSchedule ? 300 : 100 },
+		await scrapperQueue.add(
+			FEED_SCRAPPER_QUEUE,
+			{ userId, count: 0, limit: scheduleReady ? 300 : 100 },
 			{
-				idempotencyKey: `manual-scrapper-${userId}-${updateId}`,
-				maxAttempts: 3,
-				retryStrategy: RETRY.scrapper,
+				deduplication: { id: `manual-scrapper-${userId}-${updateId}` },
 			},
 		);
 		immediateStarted = true;
@@ -113,25 +109,18 @@ async function startPixivCollection(
 	updateId: number,
 	logger: Logger,
 ): Promise<ProviderCollectionResult> {
-	const generation = getScheduledPixivGeneration();
 	const runId = `manual-${userId}-${updateId}`;
 	const [schedule, immediate] = await Promise.allSettled([
-		pixivApp.spawn(
-			"scheduled-pixiv-bookmarks",
-			{ generation, userId, limit: 300 },
-			{
-				idempotencyKey: `scheduled-pixiv-${userId}-${generation}`,
-				maxAttempts: 3,
-				retryStrategy: RETRY.pixiv,
-			},
+		pixivQueue.upsertJobScheduler(
+			`pixiv-${userId}`,
+			{ every: SCHEDULED_PIXIV_INTERVAL_SECONDS * 1000 },
+			{ name: "pixiv-bookmarks", data: { userId, runId: "scheduled", count: 0, limit: 300 } },
 		),
-		pixivApp.spawn(
+		pixivQueue.add(
 			"pixiv-bookmarks",
 			{ userId, runId, count: 0, limit: 300 },
 			{
-				idempotencyKey: `pixiv-${userId}-${runId}`,
-				maxAttempts: 3,
-				retryStrategy: RETRY.pixiv,
+				deduplication: { id: `pixiv-${userId}-${runId}` },
 			},
 		),
 	]);

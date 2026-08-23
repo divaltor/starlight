@@ -13,6 +13,8 @@ export interface RouterAppContext {
 	queryClient: QueryClient;
 }
 
+const APP_TITLE = "Starlight Gallery";
+
 export const Route = createRootRouteWithContext<RouterAppContext>()({
 	head: () => ({
 		meta: [
@@ -24,11 +26,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "Starlight Gallery",
+				title: APP_TITLE,
 			},
 			{
 				property: "og:title",
-				content: "Starlight Gallery",
+				content: APP_TITLE,
 			},
 			{
 				property: "og:description",
@@ -44,7 +46,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 			},
 			{
 				name: "twitter:title",
-				content: "Starlight Gallery",
+				content: APP_TITLE,
 			},
 			{
 				name: "twitter:description",
@@ -77,7 +79,7 @@ function RootDocument() {
 			<head>
 				<HeadContent />
 			</head>
-			<body className="min-h-screen bg-base-100">
+			<body className="min-h-dvh bg-base-100">
 				<TelegramButtonsProvider>
 					<StrictMode>
 						<NuqsAdapter>

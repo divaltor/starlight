@@ -7,3 +7,6 @@ pre-commit:
     oxfmt:
       run: bunx oxfmt --no-error-on-unmatched-pattern "{staged_files}"
       stage_fixed: true
+    ast-grep:
+      glob: "*.{ts,tsx}"
+      run: ast-grep scan -c script/ast-grep/sgconfig.yml "{staged_files}"

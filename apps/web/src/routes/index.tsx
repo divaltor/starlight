@@ -4,10 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
-import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
-const PostMediaGrid = lazy(() =>
-	import("@/components/post-media-grid").then((m) => ({ default: m.PostMediaGrid })),
-);
+import { useEffect, useState, lazy, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSearch } from "@/hooks/use-search";
@@ -15,8 +12,27 @@ import { cn } from "@/lib/utils";
 import { LayoutManager } from "@/utils/layout";
 import { orpc } from "@/utils/orpc";
 
+const PostMediaGrid = lazy(() =>
+	import("@/components/post-media-grid").then((m) => ({ default: m.PostMediaGrid })),
+);
+
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
+
+const renderMasonryItem = ({ data, width }: { data: PostData; width: number }) => (
+	<div className="mb-1" style={{ width }}>
+		<PostMediaGrid post={data} />
+	</div>
+);
+
+// Generate non-overlapping positions for random posts; skipped during SSR.
+function placeRandomPosts(posts: PostData[]) {
+	if (posts.length === 0 || typeof window === "undefined") {
+		return [];
+	}
+
+	return new LayoutManager(100, 100).placePosts(posts);
+}
 
 const examples = [
 	"mumei",
@@ -33,18 +49,16 @@ export default function DiscoverPage() {
 	const [urlQuery, setUrlQuery] = useQueryState("q", parseAsString.withDefault(""));
 	const [inputValue, setInputValue] = useState(urlQuery);
 	const [isLargeScreen, setIsLargeScreen] = useState(false);
-	const [visibleIndices, setVisibleIndices] = useState<number[]>([]);
 
 	const inputPosition: "initial" | "bottom" = urlQuery ? "bottom" : "initial";
 	const showExamples = !urlQuery;
 
 	useEffect(() => {
-		const updateScreen = () => {
+		const observer = new ResizeObserver(() => {
 			setIsLargeScreen(window.innerWidth > 1024);
-		};
-		updateScreen();
-		window.addEventListener("resize", updateScreen);
-		return () => window.removeEventListener("resize", updateScreen);
+		});
+		observer.observe(document.documentElement);
+		return () => observer.disconnect();
 	}, []);
 
 	const { results, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useSearch({
@@ -58,8 +72,6 @@ export default function DiscoverPage() {
 		staleTime: Number.POSITIVE_INFINITY,
 		gcTime: Number.POSITIVE_INFINITY,
 	});
-
-	const randomPosts: PostData[] = randomQuery.data || [];
 
 	const handleSearch = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -75,7 +87,7 @@ export default function DiscoverPage() {
 	};
 
 	const infiniteLoader = useInfiniteLoader(
-		async (_startIndex: number, _stopIndex: number, _items: any[]) => {
+		async (_startIndex, _stopIndex, _items) => {
 			if (hasNextPage && !isFetchingNextPage) {
 				await fetchNextPage();
 			}
@@ -87,45 +99,15 @@ export default function DiscoverPage() {
 		},
 	);
 
-	const renderMasonryItem = useCallback(
-		({ data, width }: { data: any; width: number }) => (
-			<div className="mb-1" style={{ width }}>
-				<PostMediaGrid post={data} />
-			</div>
-		),
-		[],
-	);
+	const randomPosts = randomQuery.data || [];
+	const placedData = placeRandomPosts(randomPosts);
 
-	// Generate non-overlapping positions for random posts
-	const placedData = useMemo(() => {
-		if (randomPosts.length === 0 || typeof window === "undefined") {
-			return [];
-		}
-
-		const layout = new LayoutManager(100, 100);
-		return layout.placePosts(randomPosts);
-	}, [randomPosts]);
-
-	useEffect(() => {
-		if (placedData.length > 0 && randomQuery.isSuccess && !isLoading && results.length === 0) {
-			const timeouts: NodeJS.Timeout[] = [];
-			for (let i = 0; i < placedData.length; i++) {
-				const item = placedData[i];
-				const timer = setTimeout(() => {
-					setVisibleIndices((prev) => [...prev, item.index]);
-				}, i * 500);
-				timeouts.push(timer);
-			}
-			return () => {
-				for (const timeout of timeouts) {
-					clearTimeout(timeout);
-				}
-			};
-		}
-	}, [placedData, randomQuery.isSuccess, isLoading, results.length]);
+	const isHomeIdle = !isLoading && results.length === 0;
+	const showHeroCollage =
+		isLargeScreen && randomQuery.isSuccess && placedData.length > 0 && isHomeIdle;
 
 	return (
-		<div className="flex min-h-screen flex-col bg-base-100">
+		<div className="flex min-h-dvh flex-col bg-base-100">
 			{/* Main Content */}
 			<div className="flex flex-1 flex-col items-center justify-center p-4">
 				{results.length > 0 ? (
@@ -152,7 +134,7 @@ export default function DiscoverPage() {
 									<div className="flex justify-center py-6">
 										{/** biome-ignore lint/correctness/useImageSize: animated loader uses CSS sizing intentionally */}
 										<img
-											alt="Searching for cute anime girls..."
+										alt="Searching for cute anime girls…"
 											className="mx-auto h-auto w-64"
 											src="/suisei-hq.webp"
 										/>
@@ -176,7 +158,7 @@ export default function DiscoverPage() {
 												<Input
 													className="input input-bordered join-item flex-1"
 													onChange={(e) => setInputValue(e.target.value)}
-													placeholder="Search for images..."
+											placeholder="Search for images…"
 													type="text"
 													value={inputValue}
 												/>
@@ -186,9 +168,9 @@ export default function DiscoverPage() {
 													type="submit"
 												>
 													{isLoading ? (
-														<span className="loading loading-spinner h-4 w-4" />
+												<span className="loading loading-spinner size-4" />
 													) : (
-														<Search className="h-4 w-4" />
+												<Search className="size-4" />
 													)}
 													<span className="hidden sm:inline">Search</span>
 												</Button>
@@ -221,39 +203,32 @@ export default function DiscoverPage() {
 					</section>
 				)}
 			</div>
-			{isLargeScreen &&
-				randomQuery.isSuccess &&
-				placedData.length > 0 &&
-				!isLoading &&
-				results.length === 0 && (
-					<Suspense fallback={null}>
-						<div className="pointer-events-none absolute inset-0 overflow-hidden">
-							{placedData.map(({ position, index }) => {
-								const post = randomPosts[index];
-								const isVisible = visibleIndices.includes(index);
-								return (
-									<div
-										className={cn(
-											"pointer-events-auto absolute transition-opacity duration-700 ease-in-out",
-											isVisible ? "opacity-85" : "opacity-0",
-										)}
-										key={post.id}
-										style={{
-											top: `${position.top}%`,
-											left: `${position.left}%`,
-											width: "250px",
-											height: "auto",
-											transform: "translate(-50%, -50%)",
-											zIndex: 1,
-										}}
-									>
-										<PostMediaGrid showArtistOnHover post={post} />
-									</div>
-								);
-							})}
-						</div>
-					</Suspense>
-				)}
+			{showHeroCollage && (
+				<Suspense fallback={null}>
+					<div className="pointer-events-none absolute inset-0 overflow-hidden">
+						{placedData.map(({ position, index }, i) => {
+							const post = randomPosts[index];
+							return (
+								<div
+									className="pointer-events-auto absolute motion-safe:animate-fade-in opacity-85"
+									key={post.id}
+									style={{
+										animationDelay: `${i * 500}ms`,
+										top: `${position.top}%`,
+										left: `${position.left}%`,
+										width: "250px",
+										height: "auto",
+										transform: "translate(-50%, -50%)",
+										zIndex: 1,
+									}}
+								>
+									<PostMediaGrid showArtistOnHover post={post} />
+								</div>
+							);
+						})}
+					</div>
+				</Suspense>
+			)}
 
 			{/* Sticky Search Bar - only when results */}
 			{results.length > 0 && (
@@ -264,7 +239,7 @@ export default function DiscoverPage() {
 								<Input
 									className="input input-bordered join-item flex-1"
 									onChange={(e) => setInputValue(e.target.value)}
-									placeholder="Search for images..."
+									placeholder="Search for images…"
 									type="text"
 									value={inputValue}
 								/>
@@ -274,9 +249,9 @@ export default function DiscoverPage() {
 									type="submit"
 								>
 									{isLoading ? (
-										<span className="loading loading-spinner h-4 w-4" />
+										<span className="loading loading-spinner size-4" />
 									) : (
-										<Search className="h-4 w-4" />
+										<Search className="size-4" />
 									)}
 									<span className="hidden sm:inline">Search</span>
 								</Button>

@@ -7,7 +7,6 @@ import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
 import { attachMessage } from "@/middlewares/message";
 import { attachChat, attachChatMember, attachUser } from "@/middlewares/session";
-// biome-ignore lint/style/noExportedImports: Don't care
 import type { Context } from "@/types";
 
 const bot = new Bot<Context>(env.BOT_TOKEN);
@@ -46,4 +45,5 @@ bot.use(attachChatMember);
 bot.use(attachMessage);
 bot.use(logUpdates);
 
-export { bot, type Context };
+export { bot };
+export type { Context } from "@/types";

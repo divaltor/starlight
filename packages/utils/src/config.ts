@@ -10,7 +10,7 @@ function parseTelegramIdList(
 		return [];
 	}
 
-	const idPattern = allowNegative ? /^-?\d+$/ : /^\d+$/;
+	const idPattern = allowNegative ? /^-?\d+$/u : /^\d+$/u;
 
 	return [...new Set(value.split(",").map((id) => id.trim()))].filter(Boolean).map((id) => {
 		if (!idPattern.test(id)) {
@@ -19,7 +19,7 @@ function parseTelegramIdList(
 
 		const numericId = Number(id);
 		if (!Number.isSafeInteger(numericId)) {
-			throw new Error(`${envKey} contains unsafe integer ID: ${id}`);
+			throw new TypeError(`${envKey} contains unsafe integer ID: ${id}`);
 		}
 
 		return numericId;
@@ -38,7 +38,8 @@ const env = createEnv({
 				[...new Set(value.split(",").map((alias) => alias.trim().toLowerCase()))].filter(Boolean),
 			),
 
-		DATABASE_URL: z.url({ protocol: /^postgresql$/ }),
+		DATABASE_URL: z.url({ protocol: /^postgresql$/u }),
+		REDIS_URL: z.url({ protocol: /^rediss?$/u }),
 
 		CORS_ORIGIN: z.string().default("http://localhost:3001"),
 

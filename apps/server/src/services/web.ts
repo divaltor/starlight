@@ -1,8 +1,11 @@
 import { Cause, Effect } from "effect";
-import { Exa, type ExaPage, type ExaSearchResult } from "@/services/exa";
+import * as Exa from "@/services/exa";
+import type { ExaPage, ExaSearchResult } from "@/services/exa";
 import { runtime } from "@/services/runtime";
 
-export const lookupWebPageEffect = Effect.fn("lookupWebPage")(function* (url: string) {
+export const lookupWebPageEffect = Effect.fn("lookupWebPage")(function* lookupWebPageEffect(
+	url: string,
+) {
 	const exa = yield* Exa.Service;
 
 	return yield* exa
@@ -17,7 +20,7 @@ export const lookupWebPageEffect = Effect.fn("lookupWebPage")(function* (url: st
 		);
 });
 
-export const searchWebEffect = Effect.fn("searchWeb")(function* (query: string) {
+export const searchWebEffect = Effect.fn("searchWeb")(function* searchWebEffect(query: string) {
 	const exa = yield* Exa.Service;
 
 	return yield* exa

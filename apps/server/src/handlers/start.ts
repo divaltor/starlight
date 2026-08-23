@@ -6,7 +6,7 @@ const composer = new Composer<Context>();
 const privateChat = composer.chatType("private");
 
 privateChat.command("start", async (ctx) => {
-	const username = ctx.me.username;
+	const { username } = ctx.me;
 
 	const appUrl = env.BASE_FRONTEND_URL ? `\n\n${env.BASE_FRONTEND_URL}` : "";
 

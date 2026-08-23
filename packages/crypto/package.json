@@ -13,15 +13,15 @@
   },
   "scripts": {
     "build": "bun run -b tsdown",
-    "lint": "oxlint --fix && tsc -b",
+    "lint": "tsc -b",
     "format": "oxfmt"
   },
   "devDependencies": {
     "tsdown": "catalog:"
   },
   "dependencies": {
-    "@noble/ciphers": "^2.2.0",
-    "@noble/hashes": "^2.2.0"
+    "@noble/ciphers": "^2.3.0",
+    "@noble/hashes": "^2.3.0"
   },
   "peerDependencies": {
     "typescript": "^7.0.2"

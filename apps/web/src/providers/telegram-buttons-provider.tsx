@@ -1,12 +1,12 @@
 import { useCanGoBack, useRouter } from "@tanstack/react-router";
 import { retrieveRawInitData } from "@telegram-apps/sdk-react";
-import { createContext, useContext, useEffect, useMemo } from "react";
+import { createContext, useContext, useEffect } from "react";
 import { useTelegramButtons } from "@/hooks/use-telegram-buttons";
 import type { ButtonState, RouteButtonConfig } from "@/types/telegram-buttons";
 
 interface TelegramButtonsContextValue {
 	getButtonState: (buttonType: keyof RouteButtonConfig) => ButtonState;
-	rawInitData: string | undefined;
+	rawInitData: string | null;
 	resetButtons: () => void;
 	setMainButton: (text: string, visible?: boolean, action?: () => void) => void;
 	updateButtons: (config: Partial<RouteButtonConfig>) => void;
@@ -30,10 +30,15 @@ export function TelegramButtonsProvider({ children }: { children: React.ReactNod
 	const router = useRouter();
 	const canGoBack = useCanGoBack();
 
-	// Simple configuration using TanStack Router's built-in navigation state
-	const currentConfig = useMemo(() => {
-		return {
-			// Settings button always visible
+	const buttonManager = useTelegramButtons(undefined, {
+		autoCleanup: true,
+		debounceMs: 100,
+	});
+
+	// Auto-update when route/history changes. The config is built inside the
+	// effect: a fresh object per render would defeat dependency checks.
+	useEffect(() => {
+		buttonManager.updateConfig({
 			settingsButton: {
 				state: "visible" as const,
 				action: {
@@ -41,38 +46,26 @@ export function TelegramButtonsProvider({ children }: { children: React.ReactNod
 					payload: "/settings",
 				},
 			},
-			// Back button visible when router can go back
 			backButton: canGoBack
 				? {
 						state: "visible" as const,
 						action: {
 							type: "callback" as const,
 							payload: () => {
-								// Use router's built-in back navigation
 								router.history.back();
 							},
 						},
 					}
 				: undefined,
-		};
-	}, [canGoBack, router]);
+		});
+	}, [buttonManager, canGoBack, router]);
 
-	const buttonManager = useTelegramButtons(currentConfig, {
-		autoCleanup: true,
-		debounceMs: 100,
-	});
-
-	// Auto-update when route/history changes
-	useEffect(() => {
-		buttonManager.updateConfig(currentConfig);
-	}, [currentConfig, buttonManager]);
-
-	let rawInitData: string | undefined;
+	let rawInitData: string | null;
 
 	try {
-		rawInitData = retrieveRawInitData() ?? undefined;
+		rawInitData = retrieveRawInitData() ?? null;
 	} catch {
-		rawInitData = undefined;
+		rawInitData = null;
 	}
 
 	// Helper function for main button

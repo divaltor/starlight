@@ -4,12 +4,12 @@ export class LayoutManager {
 	pageWidth: number;
 	pageHeight: number;
 	centerZone: { x: number; y: number; width: number; height: number };
-	placedRects: Array<{
+	placedRects: {
 		x: number;
 		y: number;
 		width: number;
 		height: number;
-	}> = [];
+	}[] = [];
 
 	constructor(pageWidth: number, pageHeight: number, centerZonePercent = 0.3) {
 		this.pageWidth = pageWidth;
@@ -25,7 +25,7 @@ export class LayoutManager {
 		};
 	}
 
-	overlaps(
+	static overlaps(
 		r1: { x: number; y: number; width: number; height: number },
 		r2: { x: number; y: number; width: number; height: number },
 	) {
@@ -38,12 +38,12 @@ export class LayoutManager {
 	}
 
 	isValidPosition(rect: { x: number; y: number; width: number; height: number }) {
-		if (this.overlaps(rect, this.centerZone)) {
+		if (LayoutManager.overlaps(rect, this.centerZone)) {
 			return false;
 		}
 
 		for (const placedRect of this.placedRects) {
-			if (this.overlaps(rect, placedRect)) {
+			if (LayoutManager.overlaps(rect, placedRect)) {
 				return false;
 			}
 		}
@@ -76,7 +76,7 @@ export class LayoutManager {
 				height,
 			};
 
-			if (this.overlaps(rect, this.centerZone)) {
+			if (LayoutManager.overlaps(rect, this.centerZone)) {
 				continue;
 			}
 
@@ -95,7 +95,7 @@ export class LayoutManager {
 					width: placedRect.width + 2 * padding,
 					height: placedRect.height + 2 * padding,
 				};
-				if (this.overlaps(paddedNew, paddedPlaced)) {
+				if (LayoutManager.overlaps(paddedNew, paddedPlaced)) {
 					valid = false;
 					break;
 				}
@@ -110,10 +110,10 @@ export class LayoutManager {
 	}
 
 	placePosts(posts: PostData[]) {
-		const results: Array<{
+		const results: {
 			position: { top: number; left: number };
 			index: number;
-		}> = [];
+		}[] = [];
 		const CONTAINER_WIDTH_PERCENT = 20;
 
 		// Place in original order

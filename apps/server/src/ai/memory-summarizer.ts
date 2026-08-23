@@ -10,14 +10,14 @@ export interface SummarizeInput {
 	readonly trace: Omit<Llm.TraceContext, "operation">;
 }
 
-export class EmptyOutputError extends Schema.TaggedErrorClass<EmptyOutputError>()(
+export class EmptyOutputError extends Schema.TaggedError<EmptyOutputError>()(
 	"MemorySummaryEmptyOutputError",
 	{
 		message: Schema.String,
 	},
 ) {}
 
-export const summarize = Effect.fn("MemorySummarizer.summarize")(function* (
+export const summarize = Effect.fn("MemorySummarizer.summarize")(function* summarize(
 	input: SummarizeInput,
 ): Effect.fn.Return<string, EmptyOutputError | Llm.Error> {
 	const text = yield* Llm.invoke(

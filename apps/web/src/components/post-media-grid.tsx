@@ -45,13 +45,6 @@ export function PostMediaGrid({
 		window.open(post.sourceUrl, "_blank", "noopener,noreferrer");
 	};
 
-	const handleGalleryOpenKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-		if (event.key === "Enter" || event.key === " ") {
-			event.preventDefault();
-			event.currentTarget.click();
-		}
-	};
-
 	const uiElements: UIElementData[] = [
 		{
 			name: "download-button",
@@ -74,26 +67,33 @@ export function PostMediaGrid({
 
 				const filename = currItem?.alt ?? "image.jpg";
 
+				// No `throw` inside try/catch: React Compiler cannot lower that
+				// pattern, and the fallback below covers every failure path.
 				try {
 					const response = await fetch(url);
 
-					if (!response.ok) {
-						throw new Error(`Failed to fetch image: ${response.status}`);
+					if (response.ok) {
+						const blob = await response.blob();
+						const blobUrl = window.URL.createObjectURL(blob);
+						const link = document.createElement("a");
+						link.href = blobUrl;
+						link.download = filename;
+						document.body.append(link);
+						link.click();
+						link.remove();
+						window.URL.revokeObjectURL(blobUrl);
+						return;
 					}
-
-					const blob = await response.blob();
-					const blobUrl = window.URL.createObjectURL(blob);
-					const link = document.createElement("a");
-					link.href = blobUrl;
-					link.download = filename;
-					document.body.appendChild(link);
-					link.click();
-					document.body.removeChild(link);
-					window.URL.revokeObjectURL(blobUrl);
+					console.error("Image download failed", {
+						status: response.status,
+						filename,
+						url,
+					});
 				} catch (error) {
 					console.error("Image download failed", { error, filename, url });
-					window.open(url, "_blank", "noopener,noreferrer");
 				}
+
+				window.open(url, "_blank", "noopener,noreferrer");
 			},
 		},
 	];
@@ -117,15 +117,13 @@ export function PostMediaGrid({
 					width={media.width}
 				>
 					{({ ref, open }) => (
-						// biome-ignore lint/a11y/useSemanticElements: wrapper must stay a non-button container because it contains nested interactive controls
-						<div
-							className="group relative cursor-pointer overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md"
-							onClick={open}
-							onKeyDown={handleGalleryOpenKeyDown}
-							ref={ref}
-							role="button"
-							tabIndex={0}
-						>
+						<div className="group relative overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md">
+							<button
+								aria-label="Open artwork"
+								className="absolute inset-0 cursor-pointer"
+								onClick={open}
+								type="button"
+							/>
 							{isImageLoading[media.id] && (
 								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
 									<div className="loading loading-spinner loading-sm" />
@@ -134,24 +132,25 @@ export function PostMediaGrid({
 							{/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
 							<img
 								alt={media.alt}
-								className={`${
+								className={`pointer-events-none ${
 									media.is_nsfw ? "blur-sm" : ""
 								} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
 								height={media.height || 400}
 								onLoad={() => handleImageLoad(media.id, false)}
 								onLoadStart={() => handleImageLoad(media.id, true)}
+								ref={ref}
 								src={media.url}
 								width={media.width || 400}
 							/>
-							<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-							<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
+							<div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+							<div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
 								<div className="w-full p-3 text-white">
 									<div className="flex items-center justify-between">
 										<div
 											className={
 												showArtistOnHover
 													? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
-													: ""
+													: "pointer-events-auto"
 											}
 										>
 											<button
@@ -164,7 +163,7 @@ export function PostMediaGrid({
 										</div>
 										{showActions && onDeleteMedia && (
 											<Button
-												className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+											className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
 												onClick={(e) => {
 													e.stopPropagation();
 													setDeleteConfirm(media.id);
@@ -221,15 +220,13 @@ export function PostMediaGrid({
 						width={item.width || 400}
 					>
 						{({ ref, open }) => (
-							// biome-ignore lint/a11y/useSemanticElements: wrapper must stay a non-button container because it contains nested interactive controls
-							<div
-								className="group relative h-full w-full cursor-pointer overflow-hidden rounded-box transition-all duration-300 hover:z-10"
-								onClick={open}
-								onKeyDown={handleGalleryOpenKeyDown}
-								ref={ref}
-								role="button"
-								tabIndex={0}
-							>
+							<div className="group relative h-full w-full overflow-hidden rounded-box hover:z-10">
+								<button
+									aria-label="Open artwork"
+									className="absolute inset-0 cursor-pointer"
+									onClick={open}
+									type="button"
+								/>
 								{isImageLoading[item.id || ""] && (
 									<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100/80">
 										<div className="loading loading-spinner loading-sm" />
@@ -238,24 +235,25 @@ export function PostMediaGrid({
 								{/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
 								<img
 									alt={item.alt}
-									className={`${
+								className={`pointer-events-none ${
 										item.is_nsfw ? "blur-sm" : ""
 									} block h-full w-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
 									height={item.height || 400}
-									onLoad={() => handleImageLoad(item.id || "", false)}
-									onLoadStart={() => handleImageLoad(item.id || "", true)}
+								onLoad={() => handleImageLoad(item.id || "", false)}
+								onLoadStart={() => handleImageLoad(item.id || "", true)}
+								ref={ref}
 									src={item.src}
 									width={item.width || 400}
 								/>
-								<div className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-								<div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 via-transparent to-transparent">
+							<div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+							<div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
 									<div className="w-full p-3 text-white">
 										<div className="flex items-center justify-between">
 											<div
 												className={
 													showArtistOnHover
 														? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
-														: ""
+													: "pointer-events-auto"
 												}
 											>
 												<button
@@ -268,7 +266,7 @@ export function PostMediaGrid({
 											</div>
 											{showActions && onDeleteMedia && (
 												<Button
-													className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+											className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
 													onClick={(e) => {
 														e.stopPropagation();
 														setDeleteConfirm(item.id || "");

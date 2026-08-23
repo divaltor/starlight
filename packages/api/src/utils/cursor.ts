@@ -1,9 +1,9 @@
-import z from "zod";
+import { z } from "zod";
 
 export const CursorPayloadSchema = z.object({
 	lastPostId: z.string().min(1),
 	provider: z.string().optional(),
-	createdAt: z.string().datetime(),
+	createdAt: z.iso.datetime(),
 });
 
 export type CursorPayload = z.infer<typeof CursorPayloadSchema>;
@@ -13,7 +13,7 @@ export const SearchCursorPayloadSchema = z.object({
 	lastProvider: z.string().trim().min(1),
 	lastPostId: z.string().trim().min(1),
 	lastUserId: z.string().trim().min(1),
-	queryTime: z.string().datetime(),
+	queryTime: z.iso.datetime(),
 });
 
 export type SearchCursorPayload = z.infer<typeof SearchCursorPayloadSchema>;

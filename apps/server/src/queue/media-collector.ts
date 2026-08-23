@@ -1,10 +1,8 @@
-import { Absurd } from "absurd-sdk";
-import { env, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
+import { Queue, Worker } from "bullmq";
 import sharp from "sharp";
 import { logger } from "@/logger";
-import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
-import { classificationApp } from "@/queue/classification";
-import { enqueueClassification } from "@/queue/classification-recovery";
+import { classificationQueue } from "@/queue/classification";
 import { findSimilarPhotos } from "@/services/duplicate-detection";
 import { calculatePerceptualHash } from "@/services/image";
 import { normalizeCollectorTags } from "@/services/collector-tags";
@@ -14,13 +12,7 @@ import {
 	MAX_POST_DOWNLOAD_BYTES,
 	readResponseBounded,
 } from "@/services/media-download";
-import { s3 } from "@/storage";
-
-export const mediaCollectorApp = new Absurd({
-	db: env.DATABASE_URL,
-	log: absurdLogger,
-	queueName: QUEUES.media,
-});
+import { redis, s3 } from "@/storage";
 
 export interface MediaCollectorJobData {
 	userId: string;
@@ -45,10 +37,20 @@ export interface MediaCollectorJobData {
 	};
 }
 
-mediaCollectorApp.registerTask<MediaCollectorJobData>(
-	{ name: "images-collector" },
-	async (data) => {
-		const { post, userId } = data;
+export const mediaCollectorQueue = new Queue<MediaCollectorJobData>("images-collector", {
+	connection: redis,
+	defaultJobOptions: {
+		attempts: 3,
+		backoff: { type: "exponential", delay: 10_000 },
+		removeOnComplete: { age: 60 * 60, count: 1000 },
+		removeOnFail: { age: 60 * 60 * 24, count: 5000 },
+	},
+});
+
+export const mediaCollectorWorker = new Worker<MediaCollectorJobData>(
+	"images-collector",
+	async (job) => {
+		const { post, userId } = job.data;
 		const tags = normalizeCollectorTags(post.provider, post.tags, post.providerPayload);
 		let downloadedBytes = 0;
 		const postRecord = await prisma.post.upsert({
@@ -66,17 +68,7 @@ mediaCollectorApp.registerTask<MediaCollectorJobData>(
 				tags,
 				username: post.authorUsername,
 				providerPayload: post.providerPayload,
-				media: {
-					createMany: {
-						data: post.media.map((media) => ({
-							id: media.externalId,
-							position: media.position,
-							kind: media.kind ?? "image",
-							originalUrl: media.url,
-						})),
-						skipDuplicates: true,
-					},
-				},
+				media: { createMany: { data: post.media.map((media) => ({ id: media.externalId, position: media.position, kind: media.kind ?? "image", originalUrl: media.url })), skipDuplicates: true } },
 			},
 			update: {
 				sourceUrl: post.sourceUrl,
@@ -88,17 +80,7 @@ mediaCollectorApp.registerTask<MediaCollectorJobData>(
 				tags,
 				username: post.authorUsername,
 				providerPayload: post.providerPayload,
-				media: {
-					createMany: {
-						data: post.media.map((media) => ({
-							id: media.externalId,
-							position: media.position,
-							kind: media.kind ?? "image",
-							originalUrl: media.url,
-						})),
-						skipDuplicates: true,
-					},
-				},
+				media: { createMany: { data: post.media.map((media) => ({ id: media.externalId, position: media.position, kind: media.kind ?? "image", originalUrl: media.url })), skipDuplicates: true } },
 			},
 			include: { media: true },
 		});
@@ -106,12 +88,7 @@ mediaCollectorApp.registerTask<MediaCollectorJobData>(
 		for (const media of postRecord.media) {
 			if (isMediaResolved(media)) {
 				if (media.kind === "image" && media.classification === null) {
-					await enqueueClassification(
-						{ classificationApp, retryStrategy: RETRY.classification, logger },
-						media.id,
-						post.provider,
-						userId,
-					);
+					await classificationQueue.add(`classify-${post.provider}-${media.id}`, { photoId: media.id, provider: post.provider, userId }, { jobId: `classify-${post.provider}-${media.id}-${userId}`, deduplication: { id: `classify-${post.provider}-${media.id}-${userId}` } });
 				}
 				continue;
 			}
@@ -123,20 +100,14 @@ mediaCollectorApp.registerTask<MediaCollectorJobData>(
 			if (remainingBytes <= 0) {
 				throw new Error("Post media is too large");
 			}
-			const bytes = await readResponseBounded(
-				await fetch(media.originalUrl, { headers: input.fetchHeaders }),
-				Math.min(MAX_MEDIA_DOWNLOAD_BYTES, remainingBytes),
-			);
+			const bytes = await readResponseBounded(await fetch(media.originalUrl, { headers: input.fetchHeaders }), Math.min(MAX_MEDIA_DOWNLOAD_BYTES, remainingBytes));
 			downloadedBytes += bytes.byteLength;
 			const extension = new URL(media.originalUrl).pathname.split(".").at(-1) ?? "jpg";
 			const mediaPath = `media/${post.provider}/${userId}/${media.id}.${extension}`;
 
 			if (media.kind !== "image") {
 				await s3.write(mediaPath, bytes);
-				await prisma.media.update({
-					where: { mediaId: { id: media.id, userId, provider: post.provider } },
-					data: { s3Path: mediaPath },
-				});
+				await prisma.media.update({ where: { mediaId: { id: media.id, userId, provider: post.provider } }, data: { s3Path: mediaPath } });
 				continue;
 			}
 
@@ -144,49 +115,18 @@ mediaCollectorApp.registerTask<MediaCollectorJobData>(
 			const duplicates = await findSimilarPhotos(hash);
 			if (duplicates.length > 0) {
 				const asset = duplicates[0]!;
-				await prisma.media.update({
-					where: { mediaId: { id: media.id, userId, provider: post.provider } },
-					data: resolveMediaFromAsset(asset),
-				});
-				logger.info(
-					{
-						mediaId: media.id,
-						provider: post.provider,
-						userId,
-						assetMediaId: asset.id,
-						assetUserId: asset.userId,
-					},
-					"Duplicate media resolved from existing asset",
-				);
-				await enqueueClassification(
-					{ classificationApp, retryStrategy: RETRY.classification, logger },
-					media.id,
-					post.provider,
-					userId,
-				);
-				continue;
+				await prisma.media.update({ where: { mediaId: { id: media.id, userId, provider: post.provider } }, data: resolveMediaFromAsset(asset) });
+				logger.info({ mediaId: media.id, provider: post.provider, userId, assetMediaId: asset.id, assetUserId: asset.userId }, "Duplicate media resolved from existing asset");
+			} else {
+				const [, metadata] = await Promise.all([s3.write(mediaPath, bytes), sharp(bytes).metadata().catch(() => ({ height: null, width: null }))]);
+				await prisma.media.update({ where: { mediaId: { id: media.id, userId, provider: post.provider } }, data: { perceptualHash: hash, s3Path: mediaPath, height: metadata.height, width: metadata.width } });
 			}
-			const [, metadata] = await Promise.all([
-				s3.write(mediaPath, bytes),
-				sharp(bytes)
-					.metadata()
-					.catch(() => ({ height: null, width: null })),
-			]);
-			await prisma.media.update({
-				where: { mediaId: { id: media.id, userId, provider: post.provider } },
-				data: {
-					perceptualHash: hash,
-					s3Path: mediaPath,
-					height: metadata.height,
-					width: metadata.width,
-				},
-			});
-			await enqueueClassification(
-				{ classificationApp, retryStrategy: RETRY.classification, logger },
-				media.id,
-				post.provider,
-				userId,
-			);
+			await classificationQueue.add(`classify-${post.provider}-${media.id}`, { photoId: media.id, provider: post.provider, userId }, { jobId: `classify-${post.provider}-${media.id}-${userId}`, deduplication: { id: `classify-${post.provider}-${media.id}-${userId}` } });
 		}
 	},
+	{ connection: redis, concurrency: 3, autorun: false },
 );
+
+mediaCollectorWorker.on("failed", (job) => {
+	logger.error({ err: job?.failedReason, jobId: job?.id, stack: job?.stacktrace }, "Media collector job failed");
+});

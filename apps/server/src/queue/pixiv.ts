@@ -1,18 +1,15 @@
-import { Absurd } from "absurd-sdk";
 import { withPixivClient } from "@starlight/api/services/pixiv-credential";
-import { env, prisma } from "@starlight/utils";
-import { absurdLogger, QUEUES, RETRY } from "@/queue/absurd";
-import { mediaCollectorApp, type MediaCollectorJobData } from "@/queue/media-collector";
+import { prisma } from "@starlight/utils";
+import { Queue, Worker } from "bullmq";
+import { logger } from "@/logger";
+import { mediaCollectorQueue } from "@/queue/media-collector";
+import type { MediaCollectorJobData } from "@/queue/media-collector";
 import { mediaResolvedWhere } from "@/services/media-resolution";
+import { redis } from "@/storage";
 
 const CONSECUTIVE_THRESHOLD = 15;
-const SCHEDULE_INTERVAL_SECONDS = 60 * 60 * 6;
-
-export const pixivApp = new Absurd({
-	db: env.DATABASE_URL,
-	log: absurdLogger,
-	queueName: QUEUES.pixiv,
-});
+const PIXIV_QUEUE = "pixiv-bookmarks";
+export const SCHEDULED_PIXIV_INTERVAL_SECONDS = 60 * 60 * 6;
 
 export interface PixivCrawlJobData {
 	userId: string;
@@ -23,160 +20,56 @@ export interface PixivCrawlJobData {
 	visibility?: "public" | "private";
 }
 
-export interface ScheduledPixivJobData {
-	generation: number;
-	limit: number;
-	userId: string;
-}
-
-export const getScheduledPixivGeneration = (date = new Date()) =>
-	Math.floor(date.getTime() / (SCHEDULE_INTERVAL_SECONDS * 1000));
-
-pixivApp.registerTask<ScheduledPixivJobData>(
-	{ name: "scheduled-pixiv-bookmarks" },
-	async (data, ctx) => {
-		await ctx.sleepFor("next-run", SCHEDULE_INTERVAL_SECONDS);
-		try {
-			const credential = await prisma.providerCredential.findUnique({
-				where: { userId_provider: { userId: data.userId, provider: "pixiv" } },
-				select: { credentialType: true },
-			});
-			if (credential?.credentialType === "refresh_token") {
-				await pixivApp.spawn(
-					"pixiv-bookmarks",
-					{
-						count: 0,
-						limit: data.limit,
-						runId: `scheduled-${data.generation}`,
-						userId: data.userId,
-					},
-					{
-						idempotencyKey: `scheduled-pixiv-run-${data.userId}-${data.generation}`,
-						maxAttempts: 3,
-						retryStrategy: RETRY.pixiv,
-					},
-				);
-			}
-		} finally {
-			const nextGeneration = data.generation + 1;
-			await pixivApp.spawn(
-				"scheduled-pixiv-bookmarks",
-				{ ...data, generation: nextGeneration },
-				{
-					idempotencyKey: `scheduled-pixiv-${data.userId}-${nextGeneration}`,
-					maxAttempts: 3,
-					retryStrategy: RETRY.pixiv,
-				},
-			);
-		}
+export const pixivQueue = new Queue<PixivCrawlJobData>(PIXIV_QUEUE, {
+	connection: redis,
+	defaultJobOptions: {
+		attempts: 3,
+		backoff: { type: "exponential", delay: 150_000 },
+		removeOnComplete: { age: 60 * 60 * 24, count: 2000 },
+		removeOnFail: { age: 60 * 60 * 24, count: 2000 },
 	},
-);
+});
 
-pixivApp.registerTask<PixivCrawlJobData>({ name: "pixiv-bookmarks" }, async (data) => {
-	if (!data.visibility) {
-		const user = await prisma.user.findUnique({
-			where: { id: data.userId },
-			select: {
-				pixivIncludePrivate: true,
-				providerCredentials: {
-					where: { provider: "pixiv", credentialType: "refresh_token" },
-				},
-			},
-		});
-		if (!user?.providerCredentials.length) {
+export const pixivWorker = new Worker<PixivCrawlJobData>(
+	PIXIV_QUEUE,
+	async (job) => {
+		const { data } = job;
+		if (!data.visibility) {
+			const runId = data.runId === "scheduled" ? `scheduled-${job.id}` : data.runId;
+			const user = await prisma.user.findUnique({ where: { id: data.userId }, select: { pixivIncludePrivate: true, providerCredentials: { where: { provider: "pixiv", credentialType: "refresh_token" } } } });
+			if (!user?.providerCredentials.length) {
+				return;
+			}
+			const visibilities: ("public" | "private")[] = user.pixivIncludePrivate ? ["public", "private"] : ["public"];
+			await pixivQueue.addBulk(visibilities.map((visibility) => ({ name: PIXIV_QUEUE, data: { ...data, count: 0, runId, visibility }, opts: { jobId: `pixiv-${data.userId}-${runId}-${visibility}-start`, deduplication: { id: `pixiv-${data.userId}-${runId}-${visibility}-start` } } })));
 			return;
 		}
-		const visibilities: Array<"public" | "private"> = ["public"];
-		if (user.pixivIncludePrivate) {
-			visibilities.push("private");
+
+		const page = await withPixivClient(data.userId, (client) => client.bookmarks({ cursor: data.cursor, visibility: data.visibility! }));
+		if (!page) {
+			return;
 		}
-		await Promise.all(
-			visibilities.map((visibility) =>
-				pixivApp.spawn(
-					"pixiv-bookmarks",
-					{ ...data, count: 0, cursor: undefined, visibility },
-					{
-						idempotencyKey: `pixiv-${data.userId}-${data.runId}-${visibility}-start`,
-						maxAttempts: 3,
-						retryStrategy: RETRY.pixiv,
-					},
-				),
-			),
-		);
-		return;
-	}
-
-	const page = await withPixivClient(data.userId, (client) =>
-		client.bookmarks({ cursor: data.cursor, visibility: data.visibility! }),
-	);
-	if (!page) {
-		return;
-	}
-	const known = new Set(
-		(
-			await prisma.post.findMany({
-				where: {
-					userId: data.userId,
-					provider: "pixiv",
-					id: { in: page.artworks.map((artwork) => artwork.id) },
-					media: { every: mediaResolvedWhere },
-				},
-				select: { id: true },
-			})
-		).map((post) => post.id),
-	);
-
-	let consecutiveKnown = 0;
-	const jobs: MediaCollectorJobData[] = [];
-	for (const artwork of page.artworks) {
-		consecutiveKnown = known.has(artwork.id) ? consecutiveKnown + 1 : 0;
-		jobs.push({
-			userId: data.userId,
-			post: {
-				provider: "pixiv",
-				externalId: artwork.id,
-				sourceUrl: artwork.sourceUrl,
-				authorExternalId: artwork.author.id,
-				authorName: artwork.author.name,
-				authorUsername: artwork.author.username,
-				title: artwork.title,
-				text: artwork.caption,
-				tags: artwork.tags,
-				providerPayload: { starlightMediaType: artwork.type },
-				media: artwork.mediaUrls.map((url, position) => ({
-					externalId: `${artwork.id}:${position}`,
-					url,
-					position,
-					kind: artwork.type === "ugoira" ? "animation-preview" : "image",
-					fetchHeaders: { Referer: "https://www.pixiv.net/" },
-				})),
-			},
-		});
-		if (consecutiveKnown >= CONSECUTIVE_THRESHOLD) {
-			break;
+		const knownPosts = await prisma.post.findMany({ where: { userId: data.userId, provider: "pixiv", id: { in: page.artworks.map((artwork) => artwork.id) }, media: { every: mediaResolvedWhere } }, select: { id: true } });
+		const known = new Set(knownPosts.map((post) => post.id));
+		let consecutiveKnown = 0;
+		const jobs: MediaCollectorJobData[] = [];
+		for (const artwork of page.artworks) {
+			consecutiveKnown = known.has(artwork.id) ? consecutiveKnown + 1 : 0;
+			jobs.push({ userId: data.userId, post: { provider: "pixiv", externalId: artwork.id, sourceUrl: artwork.sourceUrl, authorExternalId: artwork.author.id, authorName: artwork.author.name, authorUsername: artwork.author.username, title: artwork.title, text: artwork.caption, tags: artwork.tags, providerPayload: { starlightMediaType: artwork.type }, media: artwork.mediaUrls.map((url, position) => ({ externalId: `${artwork.id}:${position}`, url, position, kind: artwork.type === "ugoira" ? "animation-preview" : "image", fetchHeaders: { Referer: "https://www.pixiv.net/" } })) } });
+			if (consecutiveKnown >= CONSECUTIVE_THRESHOLD) {
+				break;
+			}
 		}
-	}
-	await Promise.all(
-		jobs.map((job) =>
-			mediaCollectorApp.spawn("images-collector", job, {
-				idempotencyKey: `media-pixiv-${data.userId}-${job.post.externalId}`,
-				maxAttempts: 3,
-				retryStrategy: RETRY.media,
-			}),
-		),
-	);
+		await mediaCollectorQueue.addBulk(jobs.map((mediaJob) => ({ name: `post-pixiv-${mediaJob.post.externalId}`, data: mediaJob, opts: { jobId: `post-pixiv-${mediaJob.post.externalId}-${mediaJob.userId}`, deduplication: { id: `post-pixiv-${mediaJob.post.externalId}-${mediaJob.userId}` } } })));
+		const count = data.count + page.artworks.length;
+		if (consecutiveKnown >= CONSECUTIVE_THRESHOLD || count >= data.limit || !page.nextCursor) {
+			return;
+		}
+		await pixivQueue.add(PIXIV_QUEUE, { ...data, count, cursor: page.nextCursor }, { deduplication: { id: `pixiv-${data.userId}-${data.runId}-${data.visibility}-${page.nextCursor}` } });
+	},
+	{ connection: redis, concurrency: 1, autorun: false },
+);
 
-	const count = data.count + page.artworks.length;
-	if (consecutiveKnown >= CONSECUTIVE_THRESHOLD || count >= data.limit || !page.nextCursor) {
-		return;
-	}
-	await pixivApp.spawn(
-		"pixiv-bookmarks",
-		{ ...data, count, cursor: page.nextCursor },
-		{
-			idempotencyKey: `pixiv-${data.userId}-${data.runId}-${data.visibility}-${page.nextCursor}`,
-			maxAttempts: 3,
-			retryStrategy: RETRY.pixiv,
-		},
-	);
+pixivWorker.on("failed", (job) => {
+	logger.error({ err: job?.failedReason, jobId: job?.id, stack: job?.stacktrace, userId: job?.data.userId }, "Pixiv worker failed");
 });

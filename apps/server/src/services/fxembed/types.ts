@@ -95,6 +95,9 @@ export class FxEmbedTranslation extends Schema.Class<FxEmbedTranslation>("FxEmbe
 }
 
 function FxEmbedTweetSelf(): Schema.Schema<FxEmbedTweet> {
+	// Recursive self-reference: the schema type is only complete after the class declaration below,
+	// so a double cast is required to satisfy the Schema.suspend() lazy reference.
+	// oxlint-disable-next-line anti-slop/no-chained-type-assertions
 	return FxEmbedTweet as unknown as Schema.Schema<FxEmbedTweet>;
 }
 
@@ -121,7 +124,7 @@ export class FxEmbedTweet extends Schema.Class<FxEmbedTweet>("FxEmbedTweet")({
 	}
 
 	stripLeadingMention(username: string): string {
-		const mentionPattern = new RegExp(`^@${username}\\s*`, "i");
+		const mentionPattern = new RegExp(`^@${username}\\s*`, "iu");
 		return this.getDisplayText().replace(mentionPattern, "").trim();
 	}
 }

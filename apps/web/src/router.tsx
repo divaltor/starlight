@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createRouter as createTanstackRouter } from "@tanstack/react-router";
-import NotFound from "@/components/not-found";
+import { NotFound } from "@/components/not-found";
 import { routeTree } from "@/routeTree.gen";
 import { orpc, queryClient } from "@/utils/orpc";
 
@@ -11,7 +11,7 @@ export const getRouter = () => {
 		defaultPreloadStaleTime: 0,
 		context: { queryClient, orpc },
 		defaultNotFoundComponent: () => (
-			<div className="h-screen bg-base-100 p-4">
+			<div className="h-dvh bg-base-100 p-4">
 				<NotFound />
 			</div>
 		),

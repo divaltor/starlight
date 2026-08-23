@@ -1,9 +1,10 @@
 import { ORPCError } from "@orpc/client";
 import { env, Prisma, prisma } from "@starlight/utils";
-import z from "zod";
+import { z } from "zod";
 import { publicProcedure } from "..";
 import { maybeAuthProcedure } from "../middlewares/auth";
-import { EmbeddingsService } from "../services/embeddings";
+import { resolveQueryEmbedding } from "../services/embedding-cache";
+import * as EmbeddingsService from "../services/embeddings";
 import { runtime } from "../services/runtime";
 import type { SearchResult } from "../types/posts";
 import { Cursor, SearchCursorPayloadSchema, type SearchCursorPayload } from "../utils/cursor";
@@ -59,32 +60,17 @@ export const searchImages = maybeAuthProcedure
 			databaseUserId = dbUser.id;
 		}
 
-		const hashedQuery = BigInt.asIntN(64, BigInt(Bun.hash.xxHash3(query)));
-		let text: number[];
-
-		const [cached] = await prisma.$queryRaw<Array<{ embedding: string }>>(
-			Prisma.sql`SELECT embedding FROM embedding_cache WHERE query = ${hashedQuery}`,
+		const { requestId } = context;
+		const text = await resolveQueryEmbedding(
+			() =>
+				runtime.runPromise(EmbeddingsService.Service.use((s) => s.generateText(query, requestId))),
+			query,
 		);
 
-		if (cached) {
-			text = JSON.parse(cached.embedding) as number[];
-		} else {
-			const result = await runtime.runPromise(
-				EmbeddingsService.Service.use((s) => s.generateText(query, context.requestId)),
-			);
-
-			if (!result) {
-				throw new ORPCError("Failed to search images", {
-					status: 500,
-				});
-			}
-
-			text = result;
-
-			const vecStr = `[${text.join(",")}]`;
-			await prisma.$executeRaw(
-				Prisma.sql`INSERT INTO embedding_cache (query, embedding, updated_at) VALUES (${hashedQuery}, ${vecStr}::vector, NOW()) ON CONFLICT (query) DO UPDATE SET embedding = EXCLUDED.embedding, updated_at = NOW()`,
-			);
+		if (!text) {
+			throw new ORPCError("Failed to search images", {
+				status: 500,
+			});
 		}
 
 		let cursorData: SearchCursorPayload | null = null;
