@@ -11,7 +11,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@ai-sdk/otel": "^1.0.76",
+    "@ai-sdk/otel": "^1.0.77",
     "@grammyjs/auto-retry": "^2.0.2",
     "@grammyjs/files": "^1.2.0",
     "@grammyjs/hydrate": "^1.7.0",
@@ -19,6 +19,7 @@
     "@grammyjs/types": "4.0.0",
     "@langfuse/otel": "^5.10.1",
     "@openrouter/ai-sdk-provider": "^3.0.0",
+    "@opentelemetry/api": "1.9.1",
     "@opentelemetry/instrumentation": "^0.221.0",
     "@opentelemetry/instrumentation-pino": "^0.67.0",
     "@opentelemetry/resources": "^2.10.0",
@@ -28,7 +29,7 @@
     "@prisma/instrumentation": "catalog:",
     "@roziscoding/grammy-autoquote": "^2.0.9",
     "@starlight/utils": "workspace:*",
-    "ai": "^7.0.76",
+    "ai": "^7.0.77",
     "bullmq": "^6.2.0",
     "date-fns": "^4.4.0",
     "effect": "4.0.0-rc.111",

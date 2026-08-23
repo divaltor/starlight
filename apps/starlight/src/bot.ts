@@ -3,6 +3,7 @@ import { hydrateFiles } from "@grammyjs/files";
 import { autoQuote } from "@roziscoding/grammy-autoquote";
 import { env } from "@starlight/utils";
 import { Bot } from "grammy";
+import { createUpdateTracer } from "@/instrumentation";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
 import { attachMessage } from "@/middlewares/message";
@@ -14,6 +15,15 @@ if (!env.STARLIGHT_BOT_TOKEN) {
 }
 
 const bot = new Bot<Context>(env.STARLIGHT_BOT_TOKEN);
+
+bot.use(
+	createUpdateTracer({
+		attributes: (ctx) => ({
+			"user.id": ctx.from?.id.toString(),
+			"session.id": ctx.chat?.id.toString(),
+		}),
+	}),
+);
 
 bot.use(async (ctx, next) => {
 	ctx.logger = logger.child({});

@@ -5,6 +5,7 @@ import { Queue, Worker } from "bullmq";
 import * as MemorySummarizer from "@/ai/memory-summarizer";
 import { logger } from "@/logger";
 import { GLOBAL_MEMORY_WINDOW_SIZE, TOPIC_MEMORY_WINDOW_SIZE } from "@/services/chat-memory";
+import { otelTelemetry } from "@/queue/tracing";
 import { formatSenderName, openrouter } from "@/utils/message";
 import { redis } from "@/storage";
 
@@ -144,6 +145,7 @@ type MemoryWindowMessage = Prisma.MessageGetPayload<{
 
 export const memoryQueue = new Queue<ChatMemoryJobData>("chat-memory", {
 	connection: redis,
+	telemetry: otelTelemetry,
 	defaultJobOptions: {
 		attempts: 5,
 		backoff: { type: "exponential", delay: 20_000 },
@@ -558,6 +560,7 @@ export const memoryWorker = new Worker<ChatMemoryJobData>(
 	(job) => processMemoryJob(job.name, job.data),
 	{
 		connection: redis,
+		telemetry: otelTelemetry,
 		concurrency: 2,
 		autorun: false,
 		lockDuration: 1000 * 60 * 5,

@@ -13,7 +13,7 @@
     "queue:embeddings": "bun run src/scripts/embeddings.ts"
   },
   "dependencies": {
-    "@ai-sdk/otel": "^1.0.76",
+    "@ai-sdk/otel": "^1.0.77",
     "@grammyjs/auto-retry": "^2.0.2",
     "@grammyjs/files": "^1.2.0",
     "@grammyjs/hydrate": "^1.7.0",
@@ -35,7 +35,7 @@
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
     "@the-convocation/twitter-scraper": "^0.22.3",
-    "ai": "^7.0.76",
+    "ai": "^7.0.77",
     "bullmq": "^6.2.0",
     "date-fns": "^4.4.0",
     "effect": "4.0.0-rc.111",
@@ -46,7 +46,7 @@
     "takumi-js": "^2.10.0",
     "tmp": "^0.2.7",
     "tough-cookie": "^6.0.2",
-    "user-agents": "^2.1.159",
+    "user-agents": "^2.1.160",
     "youtube-dl-exec": "^3.1.12",
     "zod": "catalog:"
   },
