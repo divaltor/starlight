@@ -1,62 +1,72 @@
-import env from "@starlight/utils/config";
-import { Output, generateText, isStepCount } from "ai";
-import type { ModelMessage, StepResult, ToolSet } from "ai";
 import { Effect } from "effect";
-import * as Llm from "@/ai/llm";
-import { chatResponseSchema } from "@/ai/schema";
-import type { ChatResponse } from "@/ai/schema";
-import { createWebLookupTool, WEB_LOOKUP_TOOL_ID } from "@/ai/tools/web";
-import type { ToolResultPart } from "@/types";
+import { z } from "zod";
+import * as Model from "@/ai/model";
+import { createWebLookupTool } from "@/ai/tools/web";
+import * as Exa from "@/services/exa";
 
-const MAX_WEB_LOOKUPS = 1;
+const SYSTEM_PROMPT = await Bun.file(new URL("system-prompt.txt", import.meta.url)).text();
+const MAX_REPLY_OUTPUT_TOKENS = 1024;
 
-function limitWebLookups(steps: StepResult<ToolSet>[]) {
-	const lookupCount = steps.reduce(
-		(count, step) =>
-			count + step.toolCalls.filter((call) => call.toolName === WEB_LOOKUP_TOOL_ID).length,
-		0,
-	);
+const reactionEmojiSchema = z.enum([
+	"😁",
+	"🤮",
+	"🤡",
+	"🤔",
+	"😭",
+	"🥰",
+	"😡",
+	"🔥",
+	"👏",
+	"👌",
+	"👎",
+	"👍",
+	"💔",
+	"💯",
+]);
 
-	return lookupCount >= MAX_WEB_LOOKUPS ? { activeTools: [] } : undefined;
-}
+export const responseSchema = z.object({
+	replies: z
+		.array(
+			z.discriminatedUnion("type", [
+				z.object({ type: z.literal("ignore") }),
+				z.object({
+					replyTo: z.number().int().nullable().optional(),
+					text: z.string().min(1),
+					type: z.literal("text"),
+				}),
+				z.object({
+					emoji: reactionEmojiSchema,
+					messageId: z.number().int(),
+					type: z.literal("reaction"),
+				}),
+			]),
+		)
+		.min(1)
+		.max(3),
+});
+
+export type Response = z.infer<typeof responseSchema>;
 
 export interface GenerateInput {
-	readonly instructions: string;
-	readonly messages: ModelMessage[];
-	readonly trace: Omit<Llm.TraceContext, "operation">;
+	readonly allowedUrls: readonly string[];
+	readonly messages: readonly Model.Message[];
+	readonly sessionId: string;
 }
 
-export interface GenerateResult {
-	readonly output: ChatResponse | null;
-	readonly messageParts: ToolResultPart[];
-}
+export type GenerateResult = Model.GenerationResult<Response>;
 
-export const generate = Effect.fn("ChatReply.generate")(function* generate(
-	input: GenerateInput,
-): Effect.fn.Return<GenerateResult, Llm.Error> {
-	const messageParts: ToolResultPart[] = [];
-	const tools: ToolSet = env.EXA_API_KEY
-		? { [WEB_LOOKUP_TOOL_ID]: createWebLookupTool(messageParts) }
-		: {};
+export const generate = Effect.fn("ChatReply.generate")(function* generate(input: GenerateInput) {
+	const model = yield* Model.Service;
+	const exa = yield* Exa.Service;
+	const tools = exa.isEnabled() ? [createWebLookupTool(exa, new Set(input.allowedUrls))] : [];
 
-	const output = yield* Llm.invoke(
-		{ ...input.trace, operation: "message-reply" },
-		async (model, generationOptions) => {
-			const result = await generateText({
-				model,
-				...generationOptions,
-				reasoning: "minimal",
-				output: Output.object({ schema: chatResponseSchema }),
-				instructions: input.instructions,
-				messages: input.messages,
-				tools,
-				stopWhen: isStepCount(MAX_WEB_LOOKUPS + 1),
-				prepareStep: (stepParams) => limitWebLookups(stepParams.steps),
-			});
-
-			return result.output;
-		},
-	);
-
-	return { output, messageParts };
+	return yield* model.generate({
+		instructions: SYSTEM_PROMPT,
+		maxOutputTokens: MAX_REPLY_OUTPUT_TOKENS,
+		maxToolCalls: tools.length > 0 ? 1 : 0,
+		messages: input.messages,
+		outputSchema: responseSchema,
+		sessionId: input.sessionId,
+		tools,
+	});
 });

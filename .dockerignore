@@ -638,6 +638,7 @@ AGENTS.md
 # Local tooling and unrelated app directories
 **/.git
 **/.opencode
+**/node_modules
 classification/
 **/.DS_Store
 **/.output

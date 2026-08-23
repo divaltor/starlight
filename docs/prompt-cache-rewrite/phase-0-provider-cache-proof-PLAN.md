@@ -1,10 +1,12 @@
 # Phase 0 PLAN — Prove Provider Cache Behavior
 
+Measured evidence: [Phase 0 RESULT — Gemini 3.7 Flash on Vertex Global](./phase-0-provider-cache-proof-RESULT.md)
+
 ## Purpose
 
 Prove the cache contract of the exact candidate model, OpenRouter route, AI SDK provider, tool schema, and media format before the PoC persistence and cost policy depend on cache savings.
 
-This phase is an isolated PoC harness and changes no existing application behavior.
+This phase is the first and only executable surface in the new `apps/starlight` PoC. The legacy bot source is removed before the probe is built; there is no old model path to preserve.
 
 ```text
 assumption ──▶ controlled request ──▶ provider usage ──▶ observed contract
@@ -16,12 +18,12 @@ no observed contract ──▶ choose a no-cache PoC profile or another provider
 
 Gemini and native DeepSeek normally use automatic prefix caching. They do not share one universal TTL, cache threshold, or accounting format.
 
-The current repository also names two model defaults:
+The removed runtime named two conflicting model defaults:
 
 ```text
-packages/utils/src/config.ts       google/gemini-3-flash-preview
-apps/starlight/.env.example        google/gemini-3.5-flash-lite
-candidate PoC environment          must be recorded before the experiment
+old shared config                 google/gemini-3-flash-preview
+old Starlight environment         google/gemini-3.5-flash-lite
+new Phase 0 environment           no default; exact model is required
 ```
 
 OpenRouter can route one model slug to different upstream providers. A valid stable prefix can miss when routing changes.
@@ -41,6 +43,7 @@ Treat documentation as the expected behavior. Treat measured requests through th
 ## Greenfield PoC assumptions
 
 - Build the cache probe against the new model profile and adapter contract.
+- Delete the old `apps/starlight/src` runtime before building the probe. Phase 0 does not compile Telegram, queue, database, memory, or observability code.
 - Do not call or preserve `withOpenRouterGeminiCacheControl` for compatibility.
 - Do not reproduce legacy prompt ordering as a control path.
 - Synthetic requests define the experiment. No legacy conversation backfill is required.
@@ -66,11 +69,20 @@ session/affinity identifier strategy
 
 One profile produces one result set. Do not merge results from two models or routes.
 
+For the current adapter profile, record exact installed versions rather than semver ranges:
+
+```text
+ai                              7.0.77
+@openrouter/ai-sdk-provider     3.0.0
+```
+
 ## Test harness requirements
 
-Build a narrow, deterministic script or test-only command. It must:
+This section records the temporary proof harness contract. The harness and commands were removed from `apps/starlight` after the measured result was captured; the package now starts the grammY bot runtime.
 
-- call the same model path as `apps/starlight`;
+Build a narrow, deterministic command. It is the complete `apps/starlight` executable for Phase 0 and must:
+
+- own the only model path in `apps/starlight`;
 - use fixed text instead of current date, random IDs, or generated labels;
 - print normalized per-step usage;
 - print OpenRouter request/generation IDs and upstream provider when available;
@@ -80,6 +92,36 @@ Build a narrow, deterministic script or test-only command. It must:
 - never write existing application conversation state.
 
 Use synthetic content. Do not upload real user chat history or media.
+
+Implementation boundary:
+
+```text
+apps/starlight/src/index.ts
+  → explicit Phase 0 command
+  → deterministic fixture
+  → OpenRouter AI SDK provider
+  → normalized observation
+  → ignored .artifacts/phase-0/<timestamp>.json
+```
+
+Commands:
+
+```text
+bun run phase0 profile
+bun run phase0 minimum-prefix
+bun run phase0 growth
+bun run phase0 idle
+bun run phase0 routing
+bun run phase0 tools
+bun run phase0 structured-output
+bun run phase0 media
+bun run phase0 explicit-cache
+bun run phase0 all
+```
+
+`profile` is local and makes no provider request. Every experiment command is an explicit paid external operation; do not run it during tests, lint, application start, or package install.
+
+Every live process reserves `PHASE0_REQUEST_COST_RESERVE_USD` before each physical provider step, disables AI SDK retries, bounds output tokens, and reconciles the reserve against reported cost. The initial measured limit is USD 10 with a USD 0.10 per-step reserve. OpenRouter does not expose a general pre-charge cap for one chat request, so the OpenRouter key or guardrail must also have a USD 10 hard limit.
 
 ## Experiment A — Minimum cacheable prefix
 
@@ -97,6 +139,8 @@ request 2  prefix P + suffix B  ──▶ inspect cache-read tokens
 request 3  prefix P + suffix C  ──▶ inspect repeatability
 ```
 
+Each size uses a distinct namespace in the first bytes of its prefix. A larger case must not begin with a smaller case that ran earlier.
+
 Pass condition:
 
 ```text
@@ -108,7 +152,7 @@ Record the smallest prefix with repeatable reads. Do not assume that a documente
 
 ## Experiment B — Growing append-only prefix
 
-Use deterministic turns:
+Use deterministic user turns and retain each real provider response:
 
 ```text
 R1  A + B                     + live C
@@ -126,7 +170,8 @@ R3  reuses a longer prefix than R2
 
 Verify:
 
-- the stable prefix hash extends instead of changing;
+- each longer prefix contains the prior prefix messages as its exact leading sequence;
+- the prefix hash changes deterministically and records the prior prefix hash as its parent;
 - cache-read tokens rise after the prefix passes the model threshold;
 - no explicit `cache_control` marker is required for the implicit profile;
 - removing or reordering an earlier turn causes the expected miss.
@@ -164,13 +209,15 @@ Do not convert an observed average into a correctness TTL.
 Compare:
 
 ```text
-stable affinity ID + stable route       ──▶ cache result
-stable affinity ID + fallback allowed   ──▶ cache result + upstream identity
-new affinity ID + same content          ──▶ cache result
+stable session ID + stable route        ──▶ cache result
+stable session ID + fallback allowed    ──▶ cache result + upstream identity
+new session ID + same content           ──▶ cache result
 changed provider order                  ──▶ cache result
 ```
 
-The affinity ID must be opaque. Do not expose raw Telegram chat IDs to the provider when a stable hash is sufficient.
+Use an opaque `x-session-id`. OpenRouter's `user` field is for end-user abuse monitoring and is not the cache-affinity mechanism. Do not expose raw Telegram chat IDs to the provider when a stable hash is sufficient.
+
+The current OpenRouter provider package has no typed `session_id` option. Prefer the documented `x-session-id` header over an untyped `extraBody.session_id` field.
 
 Decision output:
 
@@ -259,16 +306,15 @@ Run this only if the exact route documents or demonstrates an explicit mode.
 ```text
 implicit mode, no marker
 explicit mode, fixed marker
-explicit mode, moved marker
 ```
 
-Record cache reads, cache writes, storage/write pricing, and TTL behavior separately.
+Use isolated prefixes for two samples per mode. Warm each prefix to a confirmed hit, wait one minute, and retry. Record cache reads, cache writes, storage/write pricing, and TTL behavior separately.
 
-Do not add `providerOptions.openrouter.cacheControl` to Gemini or DeepSeek only because another provider family needs it.
+OpenRouter-managed Gemini caching uses one final `cache_control: { type: "ephemeral" }` breakpoint and an opaque five-minute cache. It is not a caller-owned native Vertex `cachedContents` resource. Do not send Anthropic-only TTL options to Gemini.
 
 ## Usage normalization contract
 
-Capture these fields when exposed:
+AI SDK normalized usage captures these fields when exposed:
 
 ```text
 inputTokens
@@ -281,6 +327,23 @@ actual upstream provider
 actual provider cost
 cache discount
 ```
+
+`@openrouter/ai-sdk-provider` 3.0.0 types provider metadata as:
+
+```text
+openrouter.provider
+openrouter.usage.promptTokens
+openrouter.usage.promptTokensDetails.cachedTokens
+openrouter.usage.completionTokens
+openrouter.usage.completionTokensDetails.reasoningTokens
+openrouter.usage.totalTokens
+openrouter.usage.cost
+openrouter.usage.costDetails.upstreamInferenceCost
+```
+
+The package maps OpenRouter `cache_write_tokens` into AI SDK `inputTokenDetails.cacheWriteTokens`. It does not expose a typed cache discount or upstream response ID. Enrich each successful step through `GET /api/v1/generation?id=<response.id>` and retain the redacted response in the local artifact. A failure to fetch enrichment must remain visible but does not replace the AI SDK cache-read or cache-write observation.
+
+`result.usage` aggregates all model steps. Always normalize `result.steps[*].usage` first. Use the sum of step inputs for billing and only the final step input for final context size.
 
 Derive only with explicit rules:
 
@@ -323,7 +386,7 @@ Treat the observation as invalid provider metadata. Preserve the raw record, emi
 
 ### Experiment cost or rate limit
 
-Use the smallest synthetic prefixes that cross the expected thresholds. Add delay and bounded retries. Never retry an unchanged permanent provider error.
+Use the smallest synthetic prefixes that cross the expected thresholds. Add delay between distinct warm attempts and disable AI SDK request retries. Never retry an unchanged permanent provider error.
 
 ### Preview model changes during experiment
 
@@ -356,6 +419,50 @@ Do not put credentials, prompts from real users, authorization headers, or raw p
 - Usage normalization handles absent and zero cache details.
 - Per-step billing totals are not used as final context size.
 - Synthetic media uses an immutable digest.
+
+Local validation must not need an API key. Live results are separate evidence:
+
+```text
+local gate  lint + deterministic tests + profile command
+live gate   explicit experiment command + paid provider requests + artifact review
+```
+
+## Current implementation status
+
+The completed proof is preserved in the result document. The temporary executable and its experiment-only environment variables are no longer part of the bot package.
+
+The removed harness had:
+
+- an isolated provider-proof executable;
+- explicit model with no default;
+- all eight experiment commands;
+- opaque `x-session-id` routing;
+- AI SDK per-step usage normalization;
+- OpenRouter generation-detail enrichment;
+- deterministic text, tool, schema, and image fixtures;
+- redacted ignored artifacts;
+- focused deterministic tests.
+
+Selected measured profile:
+
+```text
+model               google/gemini-3.7-flash
+provider only       google-vertex/global
+fallbacks           false
+require parameters  true
+reasoning effort    minimal
+cache strategy      fixed OpenRouter-managed explicit breakpoint
+```
+
+Measured explicit-cache contract:
+
+- explicit cache writes begin between 2,540 and 5,043 marked tokens, consistent with Vertex's documented 4,096-token Gemini 3 floor;
+- both one-minute explicit retries reused 10,305 tokens;
+- a fixed marker reused 10,301 tokens through exact append-only growth without moving the marker;
+- tools, structured output, inline media, and a new session retained fixed-base reuse;
+- tool-order or tool-step setting changes can cause a new explicit write;
+- DeepSeek automatic caching was cheaper, but named tool choice, strict schema output, and ZDR requirements rejected it as the chatbot profile;
+- the public media-URL variant remains optional and unmeasured.
 
 ## Exit gate
 

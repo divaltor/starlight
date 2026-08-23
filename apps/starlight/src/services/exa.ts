@@ -1,5 +1,4 @@
-import env from "@starlight/utils/config";
-import { Context, Duration, Effect, Layer, Schema } from "effect";
+import { Config, Context, Duration, Effect, Layer, Option, Redacted, Schema } from "effect";
 import {
 	FetchHttpClient,
 	HttpClient,
@@ -7,63 +6,71 @@ import {
 	HttpClientResponse,
 } from "effect/unstable/http";
 
-const EXA_LIVECRAWL_TIMEOUT_MS = 15_000;
-const EXA_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_BASE_URL = "https://api.exa.ai";
+const REQUEST_TIMEOUT_MS = 30_000;
 
-const ExaContentsResponse = Schema.Struct({
+const ContentsResponse = Schema.Struct({
 	results: Schema.Array(
 		Schema.Struct({
-			url: Schema.String,
 			text: Schema.optional(Schema.String),
+			url: Schema.String,
 		}),
-	),
-	statuses: Schema.optional(
-		Schema.Array(
-			Schema.Struct({
-				id: Schema.String,
-				status: Schema.String,
-			}),
-		),
 	),
 });
 
-const ExaSearchResponse = Schema.Struct({
+const SearchResponse = Schema.Struct({
 	results: Schema.Array(
 		Schema.Struct({
-			url: Schema.String,
-			title: Schema.optional(Schema.NullOr(Schema.String)),
+			highlights: Schema.optional(Schema.Array(Schema.String)),
 			publishedDate: Schema.optional(Schema.NullOr(Schema.String)),
 			text: Schema.optional(Schema.String),
-			highlights: Schema.optional(Schema.Array(Schema.String)),
+			title: Schema.optional(Schema.NullOr(Schema.String)),
+			url: Schema.String,
 		}),
 	),
 });
 
-export interface ExaPage {
+export interface Page {
 	readonly content: string;
-	readonly source: "exa";
 	readonly url: string;
 }
 
-export interface ExaSearchResult {
+export interface SearchResult {
 	readonly content: string;
 	readonly publishedDate?: string | null;
 	readonly title?: string | null;
 	readonly url: string;
 }
 
+interface ContentsRequest {
+	readonly text: { readonly maxCharacters: number };
+	readonly urls: readonly string[];
+}
+
+interface SearchRequest {
+	readonly contents: {
+		readonly highlights: { readonly maxCharacters: number; readonly query: string };
+		readonly text: { readonly maxCharacters: number };
+	};
+	readonly numResults: number;
+	readonly query: string;
+}
+
+type ExaRequestBody = ContentsRequest | SearchRequest;
+
 export class ExaError extends Schema.TaggedError<ExaError>()("ExaError", {
-	message: Schema.String,
 	cause: Schema.optional(Schema.Defect()),
+	message: Schema.String,
 }) {
 	static fromCause(message: string, cause: unknown) {
-		return new ExaError({ message, cause });
+		return new ExaError({ cause, message });
 	}
 }
 
 export interface Interface {
-	readonly lookup: (url: string) => Effect.Effect<ExaPage | null, ExaError>;
-	readonly search: (query: string) => Effect.Effect<ExaSearchResult[], ExaError>;
+	readonly isEnabled: () => boolean;
+	readonly lookup: (url: string) => Effect.Effect<Page | null, ExaError>;
+	readonly search: (query: string) => Effect.Effect<readonly SearchResult[], ExaError>;
 }
 
 export class Service extends Context.Service<Service, Interface>()("starlight/Exa") {}
@@ -72,10 +79,21 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 	Service,
 	Effect.gen(function* layer() {
 		const client = yield* HttpClient.HttpClient;
-		const apiKey = env.EXA_API_KEY;
+		const configuredApiKey = yield* Config.option(Config.redacted("EXA_API_KEY"));
+		const configuredBaseUrl = yield* Config.string("EXA_API_BASE_URL").pipe(
+			Config.withDefault(DEFAULT_BASE_URL),
+		);
+		const apiKey = configuredApiKey.pipe(
+			Option.flatMap((value) => {
+				const key = Redacted.value(value).trim();
+				return key ? Option.some(key) : Option.none();
+			}),
+		);
+		const baseUrl = configuredBaseUrl.trim() || DEFAULT_BASE_URL;
 
-		if (!apiKey) {
+		if (Option.isNone(apiKey)) {
 			return Service.of({
+				isEnabled: () => false,
 				lookup: () => Effect.succeed(null),
 				search: () => Effect.succeed([]),
 			});
@@ -83,89 +101,55 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 
 		const executeJson = Effect.fn("Exa.executeJson")(function* executeJson(
 			path: string,
-			// Outbound payload assembled internally from trusted literals, not untrusted input
-			// oxlint-disable-next-line anti-slop/no-unknown-parameters
-			body: unknown,
+			body: ExaRequestBody,
 		) {
-			const request = yield* HttpClientRequest.post(`${env.EXA_API_BASE_URL}${path}`).pipe(
+			const request = yield* HttpClientRequest.post(`${baseUrl}${path}`).pipe(
 				HttpClientRequest.acceptJson,
-				HttpClientRequest.setHeaders({ "x-api-key": apiKey }),
+				HttpClientRequest.setHeaders({ "x-api-key": apiKey.value }),
 				HttpClientRequest.bodyJson(body),
 				Effect.mapError((error) => ExaError.fromCause("Failed to encode Exa request", error)),
 			);
 			const response = yield* client.execute(request).pipe(
-				Effect.timeout(Duration.millis(EXA_REQUEST_TIMEOUT_MS)),
-				Effect.mapError((error) => ExaError.fromCause("Exa API request failed", error)),
+				Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
+				Effect.mapError((error) => ExaError.fromCause("Exa request failed", error)),
 			);
 			const okResponse = yield* HttpClientResponse.filterStatusOk(response).pipe(
-				Effect.catch(() =>
-					response.text.pipe(
-						Effect.orElseSucceed(() => ""),
-						Effect.flatMap((responseBody) => {
-							const details = responseBody.trim().slice(0, 2000);
-							const statusSuffix = details ? `: ${details}` : "";
-
-							return new ExaError({
-								message: `Exa API returned HTTP ${response.status}${statusSuffix}`,
-							});
-						}),
-					),
-				),
+				Effect.mapError((error) => ExaError.fromCause("Exa rejected the request", error)),
 			);
-			const raw = yield* okResponse.json.pipe(
+
+			return yield* okResponse.json.pipe(
 				Effect.mapError((error) => ExaError.fromCause("Failed to read Exa response", error)),
 			);
-
-			return raw;
 		});
 
 		const lookup = Effect.fn("Exa.lookup")(function* lookup(url: string) {
 			const raw = yield* executeJson("/contents", {
 				urls: [url],
-				text: {
-					maxCharacters: 6000,
-					verbosity: "compact",
-					includeSections: ["body"],
-				},
-				livecrawlTimeout: EXA_LIVECRAWL_TIMEOUT_MS,
+				text: { maxCharacters: 6000 },
 			});
-			const data = yield* Schema.decodeUnknownEffect(ExaContentsResponse)(raw).pipe(
+			const data = yield* Schema.decodeUnknownEffect(ContentsResponse)(raw).pipe(
 				Effect.mapError((error) => ExaError.fromCause("Failed to parse Exa response", error)),
 			);
+			const page = data.results.find((result) => result.url === url) ?? data.results[0];
 
-			if (data.statuses?.some((status) => status.id === url && status.status === "error")) {
-				return null;
-			}
-
-			const result = data.results.find((item) => item.url === url) ?? data.results[0];
-			if (!result?.text) {
-				return null;
-			}
-
-			return {
-				content: result.text,
-				source: "exa",
-				url: result.url,
-			} satisfies ExaPage;
+			return page?.text ? { content: page.text, url: page.url } : null;
 		});
 
 		const search = Effect.fn("Exa.search")(function* search(query: string) {
 			const raw = yield* executeJson("/search", {
-				query,
-				numResults: 5,
 				contents: {
-					highlights: { query, maxCharacters: 2000 },
+					highlights: { maxCharacters: 2000, query },
 					text: { maxCharacters: 4000 },
-					livecrawlTimeout: EXA_LIVECRAWL_TIMEOUT_MS,
 				},
+				numResults: 5,
+				query,
 			});
-			const data = yield* Schema.decodeUnknownEffect(ExaSearchResponse)(raw).pipe(
+			const data = yield* Schema.decodeUnknownEffect(SearchResponse)(raw).pipe(
 				Effect.mapError((error) => ExaError.fromCause("Failed to parse Exa response", error)),
 			);
 
 			return data.results.flatMap((result) => {
 				const content = (result.highlights?.join("\n\n") || result.text || "").trim();
-
 				return content
 					? [
 							{
@@ -173,13 +157,13 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 								publishedDate: result.publishedDate,
 								title: result.title,
 								url: result.url,
-							} satisfies ExaSearchResult,
+							},
 						]
 					: [];
 			});
 		});
 
-		return Service.of({ lookup, search });
+		return Service.of({ isEnabled: () => true, lookup, search });
 	}),
 );
 

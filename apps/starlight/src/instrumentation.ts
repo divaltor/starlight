@@ -1,83 +1,98 @@
-import type { Update } from "@grammyjs/types";
-import { SpanStatusCode, trace } from "@opentelemetry/api";
-import { registerInstrumentations } from "@opentelemetry/instrumentation";
-import { PinoInstrumentation } from "@opentelemetry/instrumentation-pino";
-import { resourceFromAttributes } from "@opentelemetry/resources";
-import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
-import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
-import type { MiddlewareFn } from "grammy";
-import { PrismaInstrumentation } from "@prisma/instrumentation";
 import { OpenTelemetry } from "@ai-sdk/otel";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
-import env from "@starlight/utils/config";
+import { metrics, SpanStatusCode, trace } from "@opentelemetry/api";
+import { logs } from "@opentelemetry/api-logs";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
+import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { resourceFromAttributes } from "@opentelemetry/resources";
+import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs";
+import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
+import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
+import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 import { registerTelemetry } from "ai";
-import type { Context } from "@/types";
-import { logger } from "@/logger";
+import type { LangfuseConfig, OtlpConfig } from "@starlight/utils/env";
+import type { Context, MiddlewareFn } from "grammy";
 
 let provider: NodeTracerProvider | undefined;
+let meterProvider: MeterProvider | undefined;
+let logProvider: LoggerProvider | undefined;
 let shutdownPromise: Promise<void> | undefined;
 
-export function initTelemetry() {
-	if (provider) {
-		return;
-	}
-
-	const hasLangfuse = !!(env.LANGFUSE_PUBLIC_KEY && env.LANGFUSE_SECRET_KEY);
-
-	if (!hasLangfuse) {
-		return;
-	}
-
-	logger.info("Telemetry is established");
-	registerTelemetry(new OpenTelemetry({ runtimeContext: true }));
-
-	const spanProcessors: SpanProcessor[] = [
-		new LangfuseSpanProcessor({
-			publicKey: env.LANGFUSE_PUBLIC_KEY!,
-			secretKey: env.LANGFUSE_SECRET_KEY!,
-			baseUrl: env.LANGFUSE_BASE_URL,
-			environment: env.LANGFUSE_TRACING_ENVIRONMENT,
-		}),
-	];
-
-	provider = new NodeTracerProvider({
-		resource: resourceFromAttributes({
-			[ATTR_SERVICE_NAME]: "starlight-bot",
-		}),
-		spanProcessors,
-	});
-
-	provider.register();
-
-	registerInstrumentations({
-		tracerProvider: provider,
-		instrumentations: [new PrismaInstrumentation(), new PinoInstrumentation()],
-	});
+export interface TelemetryConfig {
+	readonly langfuse?: LangfuseConfig;
+	readonly otlp?: OtlpConfig;
 }
 
-export function createUpdateTracer(
-	options: { attributes?: (ctx: Context) => Record<string, string | number | undefined> } = {},
-): MiddlewareFn<Context> {
-	return (ctx, next) =>
-		trace.getTracer("starlight-bot").startActiveSpan(updateSpanName(ctx.update), async (span) => {
+export function initTelemetry(backends: TelemetryConfig): void {
+	registerTelemetry(new OpenTelemetry({ runtimeContext: true }));
+
+	const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: "starlight-bot" });
+
+	const spanProcessors: SpanProcessor[] = [];
+	if (backends.langfuse) {
+		spanProcessors.push(new LangfuseSpanProcessor(backends.langfuse));
+	}
+	if (backends.otlp) {
+		spanProcessors.push(
+			new BatchSpanProcessor(
+				new OTLPTraceExporter({
+					url: signalEndpoint(backends.otlp.endpoint, "traces"),
+					headers: backends.otlp.headers,
+				}),
+			),
+		);
+	}
+
+	provider = new NodeTracerProvider({ resource, spanProcessors });
+	provider.register();
+
+	if (backends.otlp) {
+		meterProvider = new MeterProvider({
+			resource,
+			readers: [
+				new PeriodicExportingMetricReader({
+					exporter: new OTLPMetricExporter({
+						url: signalEndpoint(backends.otlp.endpoint, "metrics"),
+						headers: backends.otlp.headers,
+					}),
+				}),
+			],
+		});
+		metrics.setGlobalMeterProvider(meterProvider);
+
+		logProvider = new LoggerProvider({
+			resource,
+			processors: [
+				// sdk-logs 0.22x takes the exporter inside an options object.
+				new BatchLogRecordProcessor({
+					exporter: new OTLPLogExporter({
+						url: signalEndpoint(backends.otlp.endpoint, "logs"),
+						headers: backends.otlp.headers,
+					}),
+				}),
+			],
+		});
+		logs.setGlobalLoggerProvider(logProvider);
+	}
+}
+
+// OTLP/HTTP exporters want the signal path appended; mirrors what SDKs do for
+// the OTEL_EXPORTER_OTLP_ENDPOINT variable.
+function signalEndpoint(endpoint: string, signal: "traces" | "metrics" | "logs"): string {
+	return `${endpoint.replace(/\/+$/u, "")}/v1/${signal}`;
+}
+
+export function createUpdateTracer(): MiddlewareFn<Context> {
+	return (_ctx, next) =>
+		trace.getTracer("starlight-bot").startActiveSpan("Telegram update", async (span) => {
 			try {
-				for (const [key, value] of Object.entries({
-					"telegram.update.id": ctx.update.update_id,
-					...options.attributes?.(ctx),
-				})) {
-					if (value !== undefined) {
-						span.setAttribute(key, value);
-					}
-				}
 				await next();
 			} catch (error) {
 				span.setStatus({ code: SpanStatusCode.ERROR });
-				if (error instanceof Error) {
-					span.recordException(error);
-				} else {
-					span.recordException(String(error));
-				}
+				span.recordException(error instanceof Error ? error : String(error));
 				throw error;
 			} finally {
 				span.end();
@@ -85,17 +100,11 @@ export function createUpdateTracer(
 		});
 }
 
-function updateSpanName(update: Update): string {
-	const updateType = Object.keys(update).find((key) => key !== "update_id");
-	return `update.${updateType ?? "unknown"}`;
+export function shutdownTelemetry(): Promise<void> {
+	shutdownPromise ??= shutdownProviders();
+	return shutdownPromise;
 }
 
-export function shutdownTelemetry() {
-	if (!provider) {
-		return Promise.resolve();
-	}
-
-	shutdownPromise ??= provider.shutdown();
-
-	return shutdownPromise;
+async function shutdownProviders(): Promise<void> {
+	await Promise.all([provider?.shutdown(), meterProvider?.shutdown(), logProvider?.shutdown()]);
 }

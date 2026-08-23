@@ -1,30 +1,6 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod/v4";
-
-function parseTelegramIdList(
-	value: string,
-	envKey: string,
-	{ allowNegative = false }: { allowNegative?: boolean } = {},
-): number[] {
-	if (!value) {
-		return [];
-	}
-
-	const idPattern = allowNegative ? /^-?\d+$/u : /^\d+$/u;
-
-	return [...new Set(value.split(",").map((id) => id.trim()))].filter(Boolean).map((id) => {
-		if (!idPattern.test(id)) {
-			throw new Error(`${envKey} contains invalid Telegram ID: ${id}`);
-		}
-
-		const numericId = Number(id);
-		if (!Number.isSafeInteger(numericId)) {
-			throw new TypeError(`${envKey} contains unsafe integer ID: ${id}`);
-		}
-
-		return numericId;
-	});
-}
+import { telegramIdList } from "./telegram-ids";
 
 const env = createEnv({
 	server: {
@@ -78,16 +54,8 @@ const env = createEnv({
 		MESSAGE_PART_CONTEXT_RECENT_MESSAGE_LIMIT: z.number().default(5),
 		MAX_DIRECT_REPLY_URLS: z.number().default(2),
 		IGNORE_USER_CHANCE: z.number().gte(0).lte(1).default(0.75),
-		SUPERVISOR_IDS: z
-			.string()
-			.default("")
-			.transform((value) => parseTelegramIdList(value, "SUPERVISOR_IDS")),
-		WHITELIST_CHAT_IDS: z
-			.string()
-			.default("")
-			.transform((value) =>
-				parseTelegramIdList(value, "WHITELIST_CHAT_IDS", { allowNegative: true }),
-			),
+		SUPERVISOR_IDS: telegramIdList("SUPERVISOR_IDS"),
+		WHITELIST_CHAT_IDS: telegramIdList("WHITELIST_CHAT_IDS", { allowNegative: true }),
 
 		BASE_FRONTEND_URL: z.string().default(""),
 		BASE_CDN_URL: z

@@ -1,433 +1,133 @@
-import { env, prisma } from "@starlight/utils";
-import type { ModelMessage } from "ai";
-import { Effect, Schema } from "effect";
-import { Composer, GrammyError } from "grammy";
+import { Effect } from "effect";
+import { Composer } from "grammy";
+import type { Context } from "grammy";
 import * as ChatReply from "@/ai/chat-reply";
-import { bot } from "@/bot";
-import type { Context } from "@/bot";
-import { saveMessage } from "@/middlewares/message";
-import { buildChatMemoryPromptContext } from "@/services/chat-memory";
-import { buildRecentToolContextByMessageId } from "@/services/message-parts";
-import { ToolResultPart } from "@/types";
-import { loadAttachmentBase64Data } from "@/utils/attachment";
-import { History } from "@/utils/history";
-import {
-	getSystemPrompt,
-	openrouter,
-	shouldReplyToMessage,
-	stripBotAnnotations,
-	toConversationTurn,
-	toModelMessage,
-	withOpenRouterGeminiCacheControl,
-} from "@/utils/message";
-import type { ConversationTurn } from "@/utils/message";
-import { sleep } from "@/utils/tools";
+import type * as Model from "@/ai/model";
+import { extractAllowedUrls } from "@/ai/tools/web";
+import { runtime } from "@/services/runtime";
 
-const composer = new Composer<Context>();
-
-const WHITELISTED_CHAT_IDS = new Set(env.WHITELIST_CHAT_IDS);
-
-const groupChat = composer.chatType(["group", "supergroup"]);
-const whitelistedGroupChat = groupChat.filter((ctx) => WHITELISTED_CHAT_IDS.has(ctx.chat.id));
-
-const RESPONSE_DELAY_MS = 500;
-
-const Q_COMMAND_REGEX = /^\/q(?<botMention>@\w+)?(?<terminator>\s|$)/iu;
-
-type AiReply = NonNullable<ChatReply.GenerateResult["output"]>["replies"][number];
-
-interface AiReplyDispatchState {
-	allowedResponseTargetIds: Set<number>;
-	knownMessageIds: Set<number>;
-	savedMessageParts: boolean;
-	sentTextCount: number;
-}
-
-function enrichMessagesWithToolContext(
-	messages: ConversationTurn[],
-	recentToolContextByMessageId: Awaited<ReturnType<typeof buildRecentToolContextByMessageId>>,
-): ConversationTurn[] {
-	return messages.map((message) => {
-		if (message.role !== "assistant" || !recentToolContextByMessageId.has(message.messageId)) {
-			return message;
-		}
-
-		return {
-			...message,
-			context: [...message.context, recentToolContextByMessageId.get(message.messageId)!],
-		};
-	});
-}
-
-function buildModelMessages(params: {
-	currentConversationTurn: ConversationTurn;
-	memoryContext: string | null;
-	messages: ConversationTurn[];
-	recentToolContextByMessageId: Awaited<ReturnType<typeof buildRecentToolContextByMessageId>>;
-}): ModelMessage[] {
-	const { currentConversationTurn, memoryContext, messages, recentToolContextByMessageId } = params;
-
-	const messagesWithToolContext = enrichMessagesWithToolContext(
-		messages,
-		recentToolContextByMessageId,
+export function createMessageHandler(
+	affinitySecret: string,
+	whitelistedChatIds: readonly number[],
+): Composer<Context> {
+	const composer = new Composer<Context>();
+	const whitelist = new Set(whitelistedChatIds);
+	const privateChat = composer.chatType("private").filter((ctx) => whitelist.has(ctx.chat.id));
+	const groupChat = composer
+		.chatType(["group", "supergroup"])
+		.filter((ctx) => whitelist.has(ctx.chat.id));
+	const affinityKey = crypto.subtle.importKey(
+		"raw",
+		new TextEncoder().encode(affinitySecret),
+		{ hash: "SHA-256", name: "HMAC" },
+		false,
+		["sign"],
 	);
 
-	return withOpenRouterGeminiCacheControl(
-		[
-			// Memory changes slowly, so keep it before conversation turns where Gemini can cache it.
-			...(memoryContext
-				? [{ role: "user" as const, content: [{ type: "text" as const, text: memoryContext }] }]
-				: []),
-			...messagesWithToolContext.map((message) => toModelMessage(message)),
-			toModelMessage(currentConversationTurn, { isLiveTurn: true }),
-		],
-		env.OPENROUTER_MODEL,
-	);
+	privateChat.on("message:text", (ctx) => handleMessage(ctx, affinityKey));
+	groupChat
+		.on("message:text")
+		.filter((ctx) => isAddressedToBot(ctx))
+		.use((ctx) => handleMessage(ctx, affinityKey));
+
+	return composer;
 }
 
-async function runChatReplyGeneration(params: {
-	allMessages: ModelMessage[];
-	ctx: Context;
-	messageThreadId: number | null;
-	system: string;
-	triggerMessageId: number;
-}) {
-	const { allMessages, ctx, messageThreadId, system, triggerMessageId } = params;
-
-	return await Effect.runPromise(
+async function handleMessage(ctx: Context, affinityKey: Promise<CryptoKey>): Promise<void> {
+	const generated = await runtime.runPromise(
 		ChatReply.generate({
-			instructions: system,
-			messages: allMessages,
-			trace: {
-				sessionId: `${ctx.chat!.id}:${messageThreadId ?? "main"}`,
-				attributes: {
-					chatId: String(ctx.chat!.id),
-					messageId: String(triggerMessageId),
-					messageThreadId: String(messageThreadId ?? "main"),
-					userId: ctx.message!.from?.id ? String(ctx.message!.from.id) : "unknown",
-				},
-			},
+			allowedUrls: extractAllowedUrls(ctx.message!.text!),
+			messages: createMessages(ctx),
+			sessionId: await createAffinityId(ctx, affinityKey),
 		}).pipe(
-			Effect.catchTags({
-				LlmProviderError: (error) =>
-					Effect.sync(() => {
-						ctx.logger.error(
-							{
-								error: {
-									name: error.providerErrorName,
-									message: error.message,
-									statusCode: error.statusCode,
-									isRetryable: error.isRetryable,
-								},
-							},
-							"AI provider returned error",
-						);
-					}).pipe(Effect.as(null)),
-				LlmInvocationError: (error) =>
-					Effect.sync(() => {
-						ctx.logger.error(
-							{
-								error: {
-									message: error.message,
-									operation: error.operation,
-								},
-							},
-							"AI generation failed",
-						);
-					}).pipe(Effect.as(null)),
-			}),
+			Effect.catch((error) =>
+				Effect.logError("Chat reply failed").pipe(
+					Effect.annotateLogs({ errorTag: error._tag, retryable: error.retryable }),
+					Effect.as(null),
+				),
+			),
+			Effect.annotateLogs({ updateId: ctx.update.update_id }),
 		),
 	);
+
+	await (generated ? dispatchActions(ctx, generated.output) : Promise.resolve());
 }
 
-async function applyAiReaction(params: {
-	ctx: Context;
-	reply: Extract<AiReply, { type: "reaction" }>;
-	state: AiReplyDispatchState;
-}): Promise<void> {
-	const { ctx, reply, state } = params;
+function createMessages(ctx: Context): Model.Message[] {
+	const message = ctx.message!;
+	const sender = message.from?.first_name ?? message.sender_chat?.title ?? "unknown";
+	const repliedText = message.reply_to_message?.text ?? message.reply_to_message?.caption;
+	const previous = repliedText
+		? `Previous message #${message.reply_to_message!.message_id}: ${repliedText}\n`
+		: "";
 
-	if (
-		!state.knownMessageIds.has(reply.message_id) ||
-		!state.allowedResponseTargetIds.has(reply.message_id)
-	) {
-		ctx.logger.debug(
-			{ messageId: reply.message_id },
-			"Skipping AI reaction: message is not the live turn or its direct reply target",
-		);
-		return;
-	}
-
-	try {
-		await ctx.api.setMessageReaction(ctx.chat!.id, reply.message_id, [
-			{ type: "emoji", emoji: reply.emoji },
-		]);
-
-		ctx.logger.debug({ messageId: reply.message_id, emoji: reply.emoji }, "Sent AI reaction");
-	} catch (error) {
-		if (!(error instanceof GrammyError)) {
-			throw error;
-		}
-
-		ctx.logger.debug(
-			{ error: error.message, messageId: reply.message_id, emoji: reply.emoji },
-			"Could not send AI reaction",
-		);
-	}
+	return [
+		{
+			role: "user",
+			text: `${previous}Current date: ${new Date().toISOString().slice(0, 10)}\nLIVE MESSAGE #${message.message_id} from ${sender}: ${message.text!}`,
+		},
+	];
 }
 
-async function sendAiTextReply(params: {
-	chatId: bigint;
-	ctx: Context;
-	messageParts: ChatReply.GenerateResult["messageParts"];
-	reply: Exclude<AiReply, { type: "ignore" | "reaction" }>;
-	state: AiReplyDispatchState;
-}): Promise<number> {
-	const { chatId, ctx, messageParts, reply, state } = params;
+async function dispatchActions(ctx: Context, response: ChatReply.Response): Promise<void> {
+	await Promise.all(response.replies.map((action) => dispatchAction(ctx, action)));
+}
 
-	const replyText = stripBotAnnotations(reply.text);
+function dispatchAction(
+	ctx: Context,
+	action: ChatReply.Response["replies"][number],
+): Promise<void> {
+	if (action.type === "ignore") return Promise.resolve();
+	if (action.type === "reaction") return sendReaction(ctx, action);
+	return sendText(ctx, action);
+}
 
-	if (!replyText) {
-		return 0;
-	}
+async function sendReaction(
+	ctx: Context,
+	action: Extract<ChatReply.Response["replies"][number], { type: "reaction" }>,
+): Promise<void> {
+	if (!allowedTargetIds(ctx).has(action.messageId)) return;
 
-	// null/undefined → plain chat message; number → reply to that specific id
-	const replyToId = reply.reply_to ?? undefined;
-	if (replyToId !== undefined && !state.allowedResponseTargetIds.has(replyToId)) {
-		ctx.logger.debug(
-			{ messageId: replyToId },
-			"Skipping AI reply: target is not the live turn or its direct reply target",
-		);
-		return 0;
-	}
+	await ctx.api.setMessageReaction(ctx.chat!.id, action.messageId, [
+		{ emoji: action.emoji, type: "emoji" },
+	]);
+}
 
-	// Between burst messages, show typing and use a short human-like pause
-	if (state.sentTextCount > 0) {
-		await ctx.replyWithChatAction("typing").catch((error) => {
-			// Typing indicator failures are cosmetic; never block the reply on them.
-			ctx.logger.debug({ error }, "Could not show typing indicator");
-		});
-		await sleep(1500, { minMs: 1200, maxMs: 3500 });
-	}
+async function sendText(
+	ctx: Context,
+	action: Extract<ChatReply.Response["replies"][number], { type: "text" }>,
+): Promise<void> {
+	if (action.replyTo && !allowedTargetIds(ctx).has(action.replyTo)) return;
 
-	const sendMessageOptions: Parameters<typeof bot.api.sendMessage>[2] = {
+	await ctx.reply(action.text, {
 		message_thread_id: ctx.message!.message_thread_id,
-	};
-
-	if (replyToId !== undefined) {
-		sendMessageOptions.reply_parameters = { message_id: replyToId };
-	}
-
-	try {
-		// Use bot.api (not ctx.api) to bypass the autoQuote transformer that would
-		// otherwise force-inject reply_parameters pointing at the triggering message.
-		const sentMessage = await bot.api.sendMessage(ctx.chat!.id, replyText, sendMessageOptions);
-
-		ctx.logger.debug(
-			{
-				messageId: sentMessage.message_id,
-				replyLength: replyText.length,
-				replyToMessageId: replyToId,
-			},
-			"Sent AI reply",
-		);
-
-		await saveMessage({ ctx, msg: sentMessage });
-
-		if (messageParts.length > 0 && !state.savedMessageParts) {
-			await prisma.messagePart.createMany({
-				data: messageParts.map((part) => ({
-					chatId,
-					messageId: sentMessage.message_id,
-					type: part.type,
-					// Store the encoded plain object, not the Schema.Class instance with methods.
-					// Prisma JSON rejects functions while serializing raw class instances.
-					data: Schema.encodeSync(ToolResultPart)(part),
-				})),
-			});
-			state.savedMessageParts = true;
-		}
-
-		state.knownMessageIds.add(sentMessage.message_id);
-
-		return 1;
-	} catch (error) {
-		if (!(error instanceof GrammyError)) {
-			throw error;
-		}
-
-		ctx.logger.debug(
-			{ error: error.message, replyTo: replyToId },
-			"Could not send AI reply (message may have been deleted)",
-		);
-		return 0;
-	}
+		reply_parameters: action.replyTo ? { message_id: action.replyTo } : undefined,
+	});
 }
 
-whitelistedGroupChat
-	.on("message")
-	.filter(async (ctx) => {
-		if (!openrouter) {
-			ctx.logger.debug("OPENROUTER_API_KEY is not set, skipping AI reply");
-			return false;
-		}
+function allowedTargetIds(ctx: Context): ReadonlySet<number> {
+	return new Set([
+		ctx.message!.message_id,
+		...(ctx.message!.reply_to_message ? [ctx.message!.reply_to_message.message_id] : []),
+	]);
+}
 
-		const text = ctx.message.text ?? ctx.message.caption;
+function isAddressedToBot(ctx: Context): boolean {
+	const text = ctx.message!.text!;
+	return (
+		ctx.message!.reply_to_message?.from?.id === ctx.me.id ||
+		Boolean(ctx.me.username && text.toLowerCase().includes(`@${ctx.me.username.toLowerCase()}`)) ||
+		/\b(?:старка|зв[её]здочка)\b/iu.test(text)
+	);
+}
 
-		if (text && Q_COMMAND_REGEX.test(text)) {
-			ctx.logger.debug("Skipping AI reply for /q command");
-			return false;
-		}
+async function createAffinityId(ctx: Context, key: Promise<CryptoKey>): Promise<string> {
+	const thread = ctx.message!.message_thread_id ?? "main";
+	const signature = await crypto.subtle.sign(
+		"HMAC",
+		await key,
+		new TextEncoder().encode(`${ctx.chat!.id}:${thread}`),
+	);
 
-		// Intentional pacing delay before replying; middleware runs once per incoming message.
-		// Sequential by design: upstream rate limits (Telegram Bot API).
-		// oxlint-disable-next-line react-doctor/async-await-in-loop
-		await sleep(RESPONSE_DELAY_MS, { minMs: 1000, maxMs: 3500 });
-
-		// TODO: Revisit logic with waiting for new messages and should reply or not because now it tend to ignore even if it's direct mention because new messages appear
-		const hasNewerMessages = await prisma.message.hasNewerMessages({
-			chatId: ctx.chat.id,
-			messageId: ctx.message.message_id,
-			messageThreadId: ctx.message.message_thread_id ?? null,
-		});
-
-		if (hasNewerMessages) {
-			ctx.logger.debug(
-				{
-					chatId: ctx.chat.id,
-					messageId: ctx.message.message_id,
-					thread_id: ctx.message.message_thread_id,
-				},
-				"Skipping stale AI reply after response delay",
-			);
-			return false;
-		}
-
-		return shouldReplyToMessage(ctx, ctx.message);
-	})
-	.use(async (ctx) => {
-		const triggerMessageId = ctx.message.message_id;
-		const messageThreadId = ctx.message.message_thread_id ?? null;
-		const chatId = BigInt(ctx.chat.id);
-		const botId = ctx.me.id;
-
-		ctx.logger.debug(
-			{
-				attachmentCount: ctx.attachments.length,
-				chatId: ctx.chat.id,
-				hasCaption: Boolean(ctx.message.caption),
-				hasText: Boolean(ctx.message.text),
-				messageId: triggerMessageId,
-				messageThreadId,
-			},
-			"Processing AI reply",
-		);
-
-		await ctx.replyWithChatAction("typing");
-
-		const { messages, directReplyEntry, knownMessageIds } = await History.build(ctx);
-
-		ctx.logger.trace(
-			{ hasDirectReply: Boolean(directReplyEntry), messageCount: messages.length },
-			"Built conversation",
-		);
-
-		const memoryContext = await buildChatMemoryPromptContext({
-			chatId,
-			messageThreadId,
-		});
-		const recentToolContextMessageIds = [
-			...messages
-				.slice(-env.MESSAGE_PART_CONTEXT_RECENT_MESSAGE_LIMIT)
-				.map((message) => message.messageId),
-			...(directReplyEntry ? [directReplyEntry.messageId] : []),
-		];
-		const [recentToolContextByMessageId, liveTurnAttachments] = await Promise.all([
-			buildRecentToolContextByMessageId({
-				chatId,
-				messageThreadId,
-				messageIds: recentToolContextMessageIds,
-			}),
-			// Attachments are stored in S3 by middleware; only the reply path needs
-			// the bytes, so load them here instead of pinning base64 on every context.
-			Promise.all(
-				ctx.attachments.map(async (attachment) => ({
-					...attachment,
-					base64Data: await loadAttachmentBase64Data(attachment.s3Path),
-				})),
-			),
-		]);
-		const currentConversationTurn = toConversationTurn(
-			{
-				messageId: triggerMessageId,
-				replyToMessageId: ctx.message.reply_to_message?.message_id,
-				messageThreadId: ctx.message.message_thread_id,
-				fromId: ctx.message!.from?.id,
-				fromUsername: ctx.message.from?.username,
-				fromFirstName: ctx.message.from?.first_name,
-				text: ctx.message.text,
-				caption: ctx.message.caption,
-				attachments: liveTurnAttachments,
-			},
-			botId,
-			{
-				includeAttachmentData: true,
-			},
-		);
-
-		const allMessages = buildModelMessages({
-			currentConversationTurn,
-			memoryContext,
-			messages,
-			recentToolContextByMessageId,
-		});
-		const system = getSystemPrompt();
-
-		knownMessageIds.add(triggerMessageId);
-
-		ctx.logger.debug(
-			{ hasMemoryContext: Boolean(memoryContext), messageCount: allMessages.length },
-			"Sending messages to AI",
-		);
-
-		const generated = await runChatReplyGeneration({
-			allMessages,
-			ctx,
-			messageThreadId,
-			system,
-			triggerMessageId,
-		});
-
-		if (!generated?.output) {
-			ctx.logger.debug("No output from AI");
-			return;
-		}
-
-		const { output, messageParts } = generated;
-
-		ctx.logger.debug({ actionCount: output.replies.length }, "Received AI actions");
-
-		const state: AiReplyDispatchState = {
-			allowedResponseTargetIds: new Set([
-				triggerMessageId,
-				...(currentConversationTurn.replyToMessageId === null
-					? []
-					: [currentConversationTurn.replyToMessageId]),
-			]),
-			knownMessageIds,
-			savedMessageParts: false,
-			sentTextCount: 0,
-		};
-
-		for (const reply of output.replies) {
-			if (reply.type === "ignore") {
-				ctx.logger.debug("AI chose to ignore the live message");
-			} else if (reply.type === "reaction") {
-				await applyAiReaction({ ctx, reply, state });
-			} else {
-				state.sentTextCount += await sendAiTextReply({ chatId, ctx, messageParts, reply, state });
-			}
-		}
-	});
-
-export default composer;
+	return Buffer.from(signature).toString("hex").slice(0, 32);
+}

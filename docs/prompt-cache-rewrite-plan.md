@@ -4,6 +4,13 @@
 
 This is the master implementation plan for a greenfield `apps/starlight` conversation runtime proof of concept.
 
+```text
+COMPLETE  Phase 0 provider cache proof
+COMPLETE  Phase 1 Effect model boundary and telemetry
+NEXT      Phase 2 durable admission, lanes, and batching
+BLOCKED   Phases 3–7 wait for their dependencies
+```
+
 It replaces the earlier history-only proposal. Batching, distributed concurrency, durable retries, cross-chat memory, direct messages, and context checkpoints require changes beyond prompt selection.
 
 The PoC can create new domain abstractions, Effect services, queue contracts, and Prisma models directly. It does not preserve the old history builder, old memory semantics, handler-owned model flow, old cache-control behavior, or old database interfaces for compatibility.
@@ -35,26 +42,26 @@ No phase can weaken these rules:
 
 Each phase has its own implementation plan, edge-case flows, tests, acceptance gate, and PoC failure rules.
 
-| Phase | Plan                                                                                                  | Outcome                                                       |
-| ----: | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-|     0 | [Provider cache proof](./prompt-cache-rewrite/phase-0-provider-cache-proof-PLAN.md)                   | Prove the exact production model's cache contract             |
-|     1 | [Effect model boundary and telemetry](./prompt-cache-rewrite/phase-1-effect-model-boundary-PLAN.md)   | Put AI SDK behind Effect and retain complete usage/results    |
-|     2 | [Durable admission, lanes, and batching](./prompt-cache-rewrite/phase-2-conversation-lanes-PLAN.md)   | Serialize each topic and coalesce Telegram bursts safely      |
-|     3 | [Context generations](./prompt-cache-rewrite/phase-3-context-generations-PLAN.md)                     | Build the final immutable context model directly              |
-|     4 | [End-to-end context runtime](./prompt-cache-rewrite/phase-4-end-to-end-runtime-PLAN.md)               | Integrate the PoC from prepared run through finalized context |
-|     5 | [Checkpoints and compaction](./prompt-cache-rewrite/phase-5-checkpoints-PLAN.md)                      | Add soft cost and hard safety checkpoints                     |
-|     6 | [Scoped memory and direct messages](./prompt-cache-rewrite/phase-6-memory-and-dms-PLAN.md)            | Add privacy-aware user/chat/topic memory and DM continuity    |
-|     7 | [Hardening and runtime replacement](./prompt-cache-rewrite/phase-7-hardening-and-replacement-PLAN.md) | Prove the PoC, then replace and delete the legacy runtime     |
+| Phase | Document                                                                                              | Outcome                                                        |
+| ----: | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+|     0 | [Provider cache proof result](./prompt-cache-rewrite/phase-0-provider-cache-proof-RESULT.md)          | Complete: selected and measured the provider cache contract    |
+|     1 | [Effect model boundary result](./prompt-cache-rewrite/phase-1-effect-model-boundary-RESULT.md)        | Complete: AI SDK is behind Effect with safe complete telemetry |
+|     2 | [Durable admission, lanes, and batching](./prompt-cache-rewrite/phase-2-conversation-lanes-PLAN.md)   | Serialize each topic and coalesce Telegram bursts safely       |
+|     3 | [Context generations](./prompt-cache-rewrite/phase-3-context-generations-PLAN.md)                     | Build the final immutable context model directly               |
+|     4 | [End-to-end context runtime](./prompt-cache-rewrite/phase-4-end-to-end-runtime-PLAN.md)               | Integrate the PoC from prepared run through finalized context  |
+|     5 | [Checkpoints and compaction](./prompt-cache-rewrite/phase-5-checkpoints-PLAN.md)                      | Add soft cost and hard safety checkpoints                      |
+|     6 | [Scoped memory and direct messages](./prompt-cache-rewrite/phase-6-memory-and-dms-PLAN.md)            | Add privacy-aware user/chat/topic memory and DM continuity     |
+|     7 | [Hardening and runtime replacement](./prompt-cache-rewrite/phase-7-hardening-and-replacement-PLAN.md) | Prove the PoC, then replace and delete the legacy runtime      |
 
 ## Phase dependency map
 
 The phases are ordered to isolate failures inside the PoC. They create final abstractions directly instead of passing legacy types through compatibility layers.
 
 ```text
-Phase 0  provider proof
+Phase 0  provider proof ✓
    │
    ▼
-Phase 1  Effect model boundary + usage
+Phase 1  Effect model boundary + usage ✓
    │
    ▼
 Phase 2  durable input + lane serialization + batching
@@ -88,9 +95,9 @@ Phase 0 is a PoC architecture gate. If the actual model does not reuse a growing
 7. Once the PoC is accepted, remove replaced code instead of retaining fallback switches.
 8. Schema cleanup does not preserve obsolete memory or context APIs. Any production data migration is a separate deployment decision, not a PoC compatibility requirement.
 
-## Why the old plan is insufficient
+## Why the removed runtime was insufficient
 
-The current application does this:
+The runtime deleted at the start of Phase 0 did this:
 
 ```text
 Telegram message
@@ -102,15 +109,16 @@ Telegram message
   → send Telegram actions
 ```
 
-Current evidence:
+Removed owners:
 
-- Direct model execution: `apps/starlight/src/handlers/message.ts:308-430`
-- Delay and stale-message drop: `apps/starlight/src/handlers/message.ts:282-307`
-- Mutable history and memory reconstruction: `apps/starlight/src/handlers/message.ts:328-384`
-- Private-message storage skipped: `apps/starlight/src/middlewares/message.ts:140-145`
-- Model usage discarded: `apps/starlight/src/ai/chat-reply.ts:45-58`
-- Gemini cache behavior selected by model-name prefix: `apps/starlight/src/utils/message.ts:500-529`
-- Count-based memory only: `apps/starlight/src/queue/memory.ts`
+- handler-owned model execution, delay, and stale-message drop;
+- mutable 17-message history and memory reconstruction;
+- private-message storage skip;
+- output-only model result that discarded usage;
+- model-name cache-control helper;
+- count-based memory workers.
+
+Those source files no longer exist in `apps/starlight`. Their behavior is historical design evidence only.
 
 The old generation CAS protected only resets. It did not protect normal runs:
 
@@ -293,7 +301,9 @@ D  volatile current request
    current date + current batch + linked reply + sender memory + live media
 ```
 
-For Gemini and native DeepSeek implicit caching, there is no application-managed moving breakpoint. The provider matches a common prefix automatically.
+For the selected Gemini profile, an explicit breakpoint remains fixed at the end of the generation base in A + B. Finalized turns in C remain append-only and may receive additional implicit reuse, but the cost policy counts only the fixed explicit base. Moving the marker on every turn would create new explicit writes and is not part of the proven profile.
+
+At 25k–75k measured input tokens, current OpenRouter write-plus-read billing was cheaper than cold Gemini input, but new-cache calls averaged 6.8 seconds versus 3.1 seconds for cache reads. Phase 1 does not pay that latency on every turn. A future coarse rebase policy can advance the marker only after enough uncached tail accumulates and separate latency/cost evidence justifies it.
 
 Provider behavior belongs to a model profile:
 
@@ -317,6 +327,18 @@ media strategy
 context and output limits
 prices and cache accounting fields
 ```
+
+Phase 0 selected this measured profile:
+
+```text
+model              google/gemini-3.7-flash
+provider endpoint  google-vertex/global
+fallbacks          disabled
+cache strategy     fixed explicit base + best-effort implicit extension
+reasoning effort   minimal
+```
+
+`deepseek/deepseek-v4-flash-vision-exp` on the native `deepseek` endpoint showed automatic one-minute cache retention and 95–96% repeat-input savings at 18k–54k actual tokens. It is not selected because named tool choice and strict schema output failed the required endpoint contract, and the sole endpoint is not ZDR-compatible under OpenRouter.
 
 ### Cache expiry
 
@@ -546,16 +568,16 @@ Exit only when cached-input usage is observable and repeatable enough to choose 
 
 ### Phase 1 — Effect model boundary
 
-Return the complete model result instead of only structured output.
+Completed. The application-owned boundary returns the durable-domain data needed by later phases while provider details remain private to the adapter and telemetry.
 
 ```text
 AI SDK result
-  → output + provider transcript + tool states
-  → per-step usage + provider metadata
+  → decoded output + canonical transcript + immutable tool events
+  → normalized per-step and billing usage
   → typed Effect result
 ```
 
-Exit when the standalone PoC model boundary returns complete results and usage for the required structured reply and tool flows. Exact compatibility with the old adapter is not required.
+The accepted live trace contains AI SDK provider spans plus safe normalized step and generation summaries with no recorded prompt or output content. See the Phase 1 result document for evidence.
 
 ### Phase 2 — Durable admission, lanes, and batching
 
@@ -655,18 +677,18 @@ Exit when the PoC runtime passes acceptance, the legacy runtime is no longer rea
 
 These defaults allow implementation planning to continue. Change them before the owning phase starts if needed.
 
-| Decision                         | Proposed default                                     | Owning phase |
-| -------------------------------- | ---------------------------------------------------- | -----------: |
-| Who can use DMs?                 | Known group members plus explicit whitelist          |            6 |
-| Can DM facts appear in groups?   | No, unless explicitly shareable                      |            6 |
-| One call for a multi-user burst? | Yes, with separate source messages and reply targets |            2 |
-| Quiet and maximum batch delay    | 1 second quiet, 3 seconds maximum                    |            2 |
-| Ambiguous Telegram send          | Prefer possible duplicate over silent omission       |            2 |
-| New input during model call      | Queue for next run; no steering                      |            2 |
-| Soft checkpoint latency          | Deliver current reply, then block only that lane     |            5 |
-| AI SDK after Effect rewrite      | Keep it behind the new `Model.Service` initially     |            1 |
-| Initial cache profile            | Exact deployed Gemini model, implicit prefix         |            0 |
-| Initial cost cap                 | Compare 24k, 30k, and 48k from traces                |            5 |
+| Decision                         | Proposed default                                                                                                      | Owning phase |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- | -----------: |
+| Who can use DMs?                 | Known group members plus explicit whitelist                                                                           |            6 |
+| Can DM facts appear in groups?   | No, unless explicitly shareable                                                                                       |            6 |
+| One call for a multi-user burst? | Yes, with separate source messages and reply targets                                                                  |            2 |
+| Quiet and maximum batch delay    | 1 second quiet, 3 seconds maximum                                                                                     |            2 |
+| Ambiguous Telegram send          | Prefer possible duplicate over silent omission                                                                        |            2 |
+| New input during model call      | Queue for next run; no steering                                                                                       |            2 |
+| Soft checkpoint latency          | Deliver current reply, then block only that lane                                                                      |            5 |
+| AI SDK after Effect rewrite      | Keep it behind the new `Model.Service` initially                                                                      |            1 |
+| Initial cache profile            | `google/gemini-3.7-flash` on `google-vertex/global`, fixed explicit base, best-effort implicit extension, no fallback |            0 |
+| Initial cost cap                 | Compare 24k, 30k, and 48k from traces                                                                                 |            5 |
 
 ## Repository and validation rules
 
