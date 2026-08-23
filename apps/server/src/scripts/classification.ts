@@ -38,14 +38,14 @@ async function main() {
 	}
 
 	const photos = ALL_PICTURES
-		? await prisma.photo.findMany({
+		? await prisma.media.findMany({
 				where: { deletedAt: null, s3Path: { not: null } },
-				select: { id: true, userId: true },
+				select: { id: true, provider: true, userId: true },
 				orderBy: { id: "asc" },
 			})
-		: await prisma.$queryRaw<{ id: string; userId: string }[]>`
-			SELECT id, user_id as "userId"
-			FROM photos
+		: await prisma.$queryRaw<{ id: string; provider: string; userId: string }[]>`
+			SELECT external_id AS id, provider, user_id as "userId"
+			FROM media
 			WHERE deleted_at IS NULL
 			  AND s3_path IS NOT NULL
 			  AND (
@@ -64,11 +64,11 @@ async function main() {
 	if (!DRY_RUN && photos.length > 0) {
 		await classificationQueue.addBulk(
 			photos.map((photo) => {
-				const base = `classify-${photo.id}-${photo.userId}`;
+				const base = `classify-${photo.provider}-${photo.id}-${photo.userId}`;
 				const jobId = FORCE ? `${base}-${Date.now()}` : base;
 				return {
-					name: `classify-${photo.id}`,
-					data: { photoId: photo.id, userId: photo.userId },
+					name: `classify-${photo.provider}-${photo.id}`,
+					data: { photoId: photo.id, provider: photo.provider, userId: photo.userId },
 					opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
 				};
 			}),
@@ -103,7 +103,7 @@ main()
 		await prisma.$disconnect().catch((error) => {
 			logger.error({ error }, "Failed to disconnect from database");
 		});
-		await redis.quit().catch((error) => {
+		await redis.quit().catch((error: unknown) => {
 			logger.error({ error }, "Failed to quit Redis");
 		});
 	});

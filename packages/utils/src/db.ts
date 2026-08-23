@@ -2,8 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import Sqids from "sqids";
 import { parse as uuidParse } from "uuid";
 import env from "./config";
-import { PrismaClient } from "./generated/prisma/client";
-import type { Prisma as PrismaGenerated } from "./generated/prisma/client";
+import { PrismaClient, type Prisma as PrismaGenerated } from "./generated/prisma/client";
 
 const sqids = new Sqids({
 	minLength: 12,
@@ -22,28 +21,31 @@ const onlyNotDeletedMessages = <
 >(
 	args: T,
 ): T => {
-	if (args.where?.deletedAt !== undefined) {
+	const where = args.where as Record<string, unknown> | undefined;
+	if (where?.deletedAt !== undefined) {
 		return args;
 	}
 
 	args.where = {
 		...args.where,
 		deletedAt: null,
-	};
+	} as PrismaGenerated.MessageWhereInput;
 
 	return args;
 };
 
-const MESSAGE_READ_OPERATIONS = new Set([
-	"findUnique",
-	"findUniqueOrThrow",
-	"findMany",
-	"findFirst",
-	"findFirstOrThrow",
-	"count",
-	"aggregate",
-	"groupBy",
-]);
+const isMessageReadOperation = (operation: string) => {
+	return (
+		operation === "findUnique" ||
+		operation === "findUniqueOrThrow" ||
+		operation === "findMany" ||
+		operation === "findFirst" ||
+		operation === "findFirstOrThrow" ||
+		operation === "count" ||
+		operation === "aggregate" ||
+		operation === "groupBy"
+	);
+};
 
 export const prisma = new PrismaClient({
 	log: env.NODE_ENV === "production" ? ["warn", "error"] : ["info", "warn", "error"],
@@ -52,7 +54,7 @@ export const prisma = new PrismaClient({
 	query: {
 		message: {
 			$allOperations({ operation, args, query }) {
-				if (MESSAGE_READ_OPERATIONS.has(operation)) {
+				if (isMessageReadOperation(operation)) {
 					return query(
 						onlyNotDeletedMessages(
 							args as {
@@ -75,22 +77,26 @@ export const prisma = new PrismaClient({
 				},
 			},
 		},
-		photo: {
+		media: {
 			externalId: {
 				needs: {
 					id: true,
+					provider: true,
 					userId: true,
 				},
-				compute(data: { id: string; userId: string }) {
+				compute(data: { id: string; provider: string; userId: string }) {
+					if (data.provider !== "twitter") {
+						return `${data.provider}:${data.id}`;
+					}
 					// Split Twitter ID into 3 parts to handle large numbers that exceed bigint
-					const { id } = data;
+					const id = data.id;
 					const chunkSize = Math.ceil(id.length / 3);
 
 					const parts = [
 						id.slice(0, chunkSize),
 						id.slice(chunkSize, chunkSize * 2),
 						id.slice(chunkSize * 2),
-					].map((part) => Math.trunc(Number(part || "0")));
+					].map((part) => Number.parseInt(part || "0", 10));
 
 					const userId = uuidParse(data.userId);
 
@@ -138,22 +144,22 @@ export const prisma = new PrismaClient({
 		},
 	},
 	model: {
-		photo: {
-			available: (): PrismaGenerated.PhotoWhereInput => ({
+		media: {
+			available: () => ({
 				deletedAt: null,
 				s3Path: { not: null },
 			}),
-		},
-		tweet: {
-			available: (): PrismaGenerated.TweetWhereInput => ({
-				photos: {
+		} satisfies Record<string, (...args: any) => PrismaGenerated.MediaWhereInput>,
+		post: {
+			available: () => ({
+				media: {
 					some: {
 						deletedAt: null,
 						s3Path: { not: null },
 					},
 				},
 			}),
-		},
+		} satisfies Record<string, (...args: any) => PrismaGenerated.PostWhereInput>,
 		message: {
 			async hasNewerMessages(params: {
 				chatId: bigint | number;

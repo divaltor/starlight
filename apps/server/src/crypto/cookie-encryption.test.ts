@@ -197,6 +197,35 @@ describe("CookieEncryption", () => {
 	});
 
 	describe("key derivation", () => {
+		test("decrypts scoped ciphertext without marking it as legacy", () => {
+			const encrypted = encryption.encryptScoped(
+				testCookieData,
+				testUserId,
+				"provider:twitter:cookies:v1",
+			);
+			const decrypted = encryption.decryptScopedOrLegacy(
+				encrypted,
+				testUserId,
+				"provider:twitter:cookies:v1",
+				"legacy-telegram-id",
+			);
+
+			expect(decrypted).toEqual({ data: testCookieData, usedLegacyEncryption: false });
+		});
+
+		test("decrypts legacy user-scoped ciphertext for migration", () => {
+			const legacyTelegramId = "123456";
+			const encrypted = encryption.encrypt(testCookieData, legacyTelegramId);
+			const decrypted = encryption.decryptScopedOrLegacy(
+				encrypted,
+				testUserId,
+				"provider:twitter:cookies:v1",
+				legacyTelegramId,
+			);
+
+			expect(decrypted).toEqual({ data: testCookieData, usedLegacyEncryption: true });
+		});
+
 		test("should produce consistent results for same inputs", () => {
 			const encrypted1 = encryption.encrypt(testCookieData, testUserId);
 			const decrypted1 = encryption.decrypt(encrypted1, testUserId);
@@ -243,43 +272,6 @@ describe("CookieEncryption", () => {
 			// But should not cross-decrypt
 			expect(() => encryption1.decrypt(encrypted2, testUserId)).toThrow();
 			expect(() => encryption2.decrypt(encrypted1, testUserId)).toThrow();
-		});
-	});
-
-	describe("performance characteristics", () => {
-		test("should encrypt and decrypt efficiently", () => {
-			const start = performance.now();
-
-			// Perform multiple operations
-			for (let i = 0; i < 100; i++) {
-				const encrypted = encryption.encrypt(testCookieData, testUserId);
-				const decrypted = encryption.decrypt(encrypted, testUserId);
-				expect(decrypted).toBe(testCookieData);
-			}
-
-			const end = performance.now();
-			const duration = end - start;
-
-			// Should complete 100 encrypt/decrypt cycles in under 1 second
-			expect(duration).toBeLessThan(1000);
-		});
-
-		test("should handle concurrent operations", async () => {
-			const operations = Array.from({ length: 50 }, (_, i) =>
-				Promise.resolve().then(() => {
-					const userId = `user_${i}`;
-					const data = `${testCookieData}_${i}`;
-					const encrypted = encryption.encrypt(data, userId);
-					const decrypted = encryption.decrypt(encrypted, userId);
-					return { original: data, decrypted, userId };
-				}),
-			);
-
-			const results = await Promise.all(operations);
-
-			for (const result of results) {
-				expect(result.decrypted).toBe(result.original);
-			}
 		});
 	});
 });

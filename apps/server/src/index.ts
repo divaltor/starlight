@@ -5,14 +5,17 @@ import "@/services/runtime";
 import chatMemberHandler from "@/handlers/chat-member";
 import imageHandler from "@/handlers/image";
 import messageHandler from "@/handlers/message";
+import pixivHandler from "@/handlers/pixiv";
+import scrapperHandler from "@/handlers/scrapper";
 import startHandler from "@/handlers/start";
 import tweetImageHandler from "@/handlers/tweet-image";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
 import { classificationQueue, classificationWorker } from "@/queue/classification";
 import { embeddingsQueue, embeddingsWorker } from "@/queue/embeddings";
-import { imagesQueue, imagesWorker } from "@/queue/image-collector";
+import { mediaCollectorQueue, mediaCollectorWorker } from "@/queue/media-collector";
 import { memoryQueue, memoryWorker } from "@/queue/memory";
+import { pixivQueue, pixivWorker } from "@/queue/pixiv";
 import { scrapperQueue, scrapperWorker } from "@/queue/scrapper";
 import { redis } from "@/storage";
 
@@ -31,20 +34,30 @@ const boundary = bot.errorBoundary((error) => {
 });
 
 boundary.use(videoHandler);
+boundary.use(pixivHandler);
 boundary.use(tweetImageHandler);
+boundary.use(scrapperHandler);
 boundary.use(imageHandler);
 boundary.use(messageHandler);
 boundary.use(startHandler);
 boundary.use(chatMemberHandler);
 
 const workers = [
-	imagesWorker,
+	mediaCollectorWorker,
 	classificationWorker,
 	embeddingsWorker,
 	scrapperWorker,
 	memoryWorker,
+	pixivWorker,
 ];
-const queues = [imagesQueue, classificationQueue, embeddingsQueue, scrapperQueue, memoryQueue];
+const queues = [
+	mediaCollectorQueue,
+	classificationQueue,
+	embeddingsQueue,
+	scrapperQueue,
+	memoryQueue,
+	pixivQueue,
+];
 const runner = run(bot);
 
 for (const worker of workers) {

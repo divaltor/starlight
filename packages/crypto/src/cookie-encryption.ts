@@ -31,8 +31,10 @@ export class CookieEncryption {
 	/**
 	 * Derive a unique key for a specific user
 	 */
-	private deriveKey(userId: string): Uint8Array {
-		const info = utf8ToBytes(`cookie-encryption-${userId}`);
+	private deriveKey(userId: string, purpose?: string): Uint8Array {
+		const info = utf8ToBytes(
+			purpose ? `starlight-secret-v1:${purpose}:${userId}` : `cookie-encryption-${userId}`,
+		);
 		return hkdf(sha256, this.masterKey, this.salt, info, 32);
 	}
 
@@ -62,6 +64,12 @@ export class CookieEncryption {
 		return bytesToHex(ciphertext);
 	}
 
+	encryptScoped(data: string, userId: string, purpose: string): string {
+		const key = this.deriveKey(userId, purpose);
+		const cipher = managedNonce(xchacha20poly1305)(key);
+		return bytesToHex(cipher.encrypt(utf8ToBytes(data)));
+	}
+
 	/**
 	 * Decrypt cookie data for a specific user
 	 */
@@ -71,6 +79,31 @@ export class CookieEncryption {
 		const ciphertext = hexToBytes(encryptedHex);
 		const plaintext = cipher.decrypt(ciphertext);
 		return bytesToUtf8(plaintext);
+	}
+
+	decryptScoped(encryptedHex: string, userId: string, purpose: string): string {
+		const key = this.deriveKey(userId, purpose);
+		const cipher = managedNonce(xchacha20poly1305)(key);
+		return bytesToUtf8(cipher.decrypt(hexToBytes(encryptedHex)));
+	}
+
+	decryptScopedOrLegacy(
+		data: string,
+		userId: string,
+		purpose: string,
+		legacyUserId = userId,
+	): { data: string; usedLegacyEncryption: boolean } {
+		try {
+			return {
+				data: this.decryptScoped(data, userId, purpose),
+				usedLegacyEncryption: false,
+			};
+		} catch {
+			return {
+				data: this.safeDecrypt(data, legacyUserId),
+				usedLegacyEncryption: true,
+			};
+		}
 	}
 
 	/**

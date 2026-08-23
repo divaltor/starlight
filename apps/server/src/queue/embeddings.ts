@@ -5,13 +5,14 @@ import { logger } from "@/logger";
 import { runtime } from "@/services/runtime";
 import { redis } from "@/storage";
 
-interface ClassificationJobData {
+interface EmbeddingsJobData {
 	photoId: string;
+	provider?: string;
 	requestId?: string;
 	userId: string;
 }
 
-export const embeddingsQueue = new Queue<ClassificationJobData>("embeddings", {
+export const embeddingsQueue = new Queue<EmbeddingsJobData>("embeddings", {
 	connection: redis,
 	defaultJobOptions: {
 		attempts: 5,
@@ -21,7 +22,7 @@ export const embeddingsQueue = new Queue<ClassificationJobData>("embeddings", {
 	},
 });
 
-export const embeddingsWorker = new Worker<ClassificationJobData>(
+export const embeddingsWorker = new Worker<EmbeddingsJobData>(
 	"embeddings",
 	async (job) => {
 		if (!env.ENABLE_EMBEDDINGS) {
@@ -29,7 +30,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 			return;
 		}
 
-		const { photoId, userId, requestId: incomingRequestId } = job.data;
+		const { photoId, provider = "twitter", userId, requestId: incomingRequestId } = job.data;
 		const requestId = incomingRequestId || Bun.randomUUIDv7();
 
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
@@ -39,9 +40,9 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 
 		logger.info({ photoId, userId, requestId }, "Generating photo embeddings");
 
-		const photo = await prisma.photo.findUnique({
+		const photo = await prisma.media.findUnique({
 			where: {
-				photoId: { id: photoId, userId },
+				mediaId: { id: photoId, provider, userId },
 				classification: { not: DbNull },
 			},
 			select: {
@@ -82,7 +83,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 		const imageVecStr = `[${(result.image ?? []).join(",")}]`;
 
 		await prisma.$executeRaw(
-			Prisma.sql`UPDATE photos SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE id = ${photoId} AND user_id = ${userId}`,
+			Prisma.sql`UPDATE media SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE external_id = ${photoId} AND user_id = ${userId} AND provider = ${provider}`,
 		);
 
 		logger.info({ photoId, userId, requestId }, "Photo embeddings generated");

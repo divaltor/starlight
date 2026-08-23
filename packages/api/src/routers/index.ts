@@ -1,8 +1,9 @@
 import type { InferRouterInputs, InferRouterOutputs, RouterClient } from "@orpc/server";
 import { deleteCookies, saveCookies } from "./cookies";
 import { changeProfileVisibility, getUserProfile } from "./profiles";
+import { deletePixivCredential, savePixivCredential, setPixivPrivateBookmarks } from "./pixiv";
 import { randomImages, searchImages } from "./search";
-import { deletePhoto, listUserTweets } from "./tweets";
+import { deleteMedia, listUserPosts } from "./posts";
 
 export const appRouter = {
 	profiles: {
@@ -13,11 +14,18 @@ export const appRouter = {
 		save: saveCookies,
 		delete: deleteCookies,
 	},
-	tweets: {
-		list: listUserTweets,
-		delete: deletePhoto,
+	pixiv: {
+		save: savePixivCredential,
+		delete: deletePixivCredential,
+		privateBookmarks: setPixivPrivateBookmarks,
+	},
+	posts: {
+		list: listUserPosts,
 		search: searchImages,
 		random: randomImages,
+	},
+	media: {
+		delete: deleteMedia,
 	},
 };
 export type AppRouter = typeof appRouter;

@@ -1,28 +1,28 @@
-import type { TweetData, TweetsPageResult } from "@starlight/api/src/types/tweets";
+import type { PostData, PostsPageResult } from "@starlight/api/src/types/posts";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { lazy, Suspense } from "react";
 import { NotFound } from "@/components/not-found";
-import { useTweets } from "@/hooks/use-tweets";
+import { usePosts } from "@/hooks/use-posts";
 import { orpc } from "@/utils/orpc";
 
-const TweetImageGrid = lazy(() =>
-	import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
+const PostMediaGrid = lazy(() =>
+	import("@/components/post-media-grid").then((m) => ({ default: m.PostMediaGrid })),
 );
 
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
 
-const renderMasonryItem = ({ data, width }: { data: TweetData; width: number }) => (
+const renderMasonryItem = ({ data, width }: { data: PostData; width: number }) => (
 	<div className="mb-1" style={{ width }}>
-		<TweetImageGrid tweet={data} />
+		<PostMediaGrid post={data} />
 	</div>
 );
 
 function SharedProfileViewer() {
 	const { slug } = useParams({ from: "/profile/$slug" });
 
-	const { tweets, isLoading, isFetchingNextPage, hasNextPage, error, fetchNextPage } = useTweets({
+	const { posts, isLoading, isFetchingNextPage, hasNextPage, error, fetchNextPage } = usePosts({
 		username: slug,
 	});
 
@@ -58,7 +58,7 @@ function SharedProfileViewer() {
 
 	return (
 		<div className="flex min-h-dvh flex-col bg-base-100 p-4">
-			{!isLoading && tweets.length === 0 && (
+			{!isLoading && posts.length === 0 && (
 				<div className="flex flex-1 items-center justify-center">
 					<NotFound
 						description="This user hasn't shared any posts yet. Try again later."
@@ -67,15 +67,15 @@ function SharedProfileViewer() {
 				</div>
 			)}
 
-			{tweets.length > 0 && (
+			{posts.length > 0 && (
 				<div className="flex-1">
 					<div className="mx-auto max-w-7xl">
 						<Suspense fallback={null}>
 							<Masonry
 								columnGutter={16}
 								itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
-								itemKey={(tweet) => tweet.id}
-								items={tweets}
+								itemKey={(post) => post.id}
+								items={posts}
 								onRender={infiniteLoader}
 								overscanBy={MASONRY_OVERSCAN_BY}
 								render={renderMasonryItem}
@@ -96,14 +96,14 @@ export const Route = createFileRoute("/profile/$slug")({
 		}
 
 		await queryClient.fetchInfiniteQuery(
-			orpc.tweets.list.infiniteOptions({
-				input: (pageParam: string | null | undefined) => ({
-					cursor: pageParam ?? undefined,
+			orpc.posts.list.infiniteOptions({
+				input: (pageParam: string | undefined) => ({
+					cursor: pageParam,
 					limit: 30,
 				}),
-				queryKey: ["tweets", { username: slug }],
-				initialPageParam: null,
-				getNextPageParam: (lastPage: TweetsPageResult) => lastPage.nextCursor ?? undefined,
+				queryKey: ["posts", { username: slug }],
+				initialPageParam: undefined,
+				getNextPageParam: (lastPage: PostsPageResult) => lastPage.nextCursor ?? undefined,
 				retry: false,
 				gcTime: 10 * 60 * 1000,
 			}),

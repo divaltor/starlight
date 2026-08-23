@@ -8,6 +8,7 @@ import type { Classification } from "@/types";
 
 interface ClassificationJobData {
 	photoId: string;
+	provider?: string;
 	requestId?: string;
 	userId: string;
 }
@@ -30,7 +31,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			return;
 		}
 
-		const { photoId, userId, requestId: incomingRequestId } = job.data;
+		const { photoId, provider = "twitter", userId, requestId: incomingRequestId } = job.data;
 		const requestId = incomingRequestId || Bun.randomUUIDv7();
 
 		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
@@ -41,8 +42,8 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 		logger.info({ photoId, userId, requestId }, "Classifying photo");
 
 		// Fetch photo record to get URL
-		const photo = await prisma.photo.findUnique({
-			where: { photoId: { id: photoId, userId } },
+		const photo = await prisma.media.findUnique({
+			where: { mediaId: { id: photoId, provider, userId } },
 			select: {
 				id: true,
 				userId: true,
@@ -105,17 +106,17 @@ export const classificationWorker = new Worker<ClassificationJobData>(
 			throw error;
 		}
 
-		await prisma.photo.update({
-			where: { photoId: { id: photoId, userId } },
+		await prisma.media.update({
+			where: { mediaId: { id: photoId, provider, userId } },
 			data: { classification: data },
 		});
 
 		await embeddingsQueue.add(
-			`embed-${photoId}`,
-			{ photoId, userId, requestId },
+			`embed-${provider}-${photoId}`,
+			{ photoId, provider, userId, requestId },
 			{
-				jobId: `embed-${photoId}-${userId}`,
-				deduplication: { id: `embed-${photoId}-${userId}` },
+				jobId: `embed-${provider}-${photoId}-${userId}`,
+				deduplication: { id: `embed-${provider}-${photoId}-${userId}` },
 			},
 		);
 

@@ -32,9 +32,9 @@ async function main() {
 		logger.info("Embeddings queue drained");
 	}
 
-	const photos = await prisma.$queryRaw<{ id: string; userId: string }[]>`
-		SELECT id, user_id as "userId"
-		FROM photos
+	const photos = await prisma.$queryRaw<{ id: string; provider: string; userId: string }[]>`
+		SELECT external_id AS id, provider, user_id as "userId"
+		FROM media
 		WHERE deleted_at IS NULL
 		  AND s3_path IS NOT NULL
 		  AND (
@@ -49,11 +49,11 @@ async function main() {
 	if (!DRY_RUN && photos.length > 0) {
 		await embeddingsQueue.addBulk(
 			photos.map((photo) => {
-				const base = `embed-${photo.id}-${photo.userId}`;
+				const base = `embed-${photo.provider}-${photo.id}-${photo.userId}`;
 				const jobId = FORCE ? `${base}-${Date.now()}` : base;
 				return {
-					name: `embed-${photo.id}`,
-					data: { photoId: photo.id, userId: photo.userId },
+					name: `embed-${photo.provider}-${photo.id}`,
+					data: { photoId: photo.id, provider: photo.provider, userId: photo.userId },
 					opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
 				};
 			}),
@@ -87,7 +87,7 @@ main()
 		await prisma.$disconnect().catch((error) => {
 			logger.error({ error }, "Failed to disconnect from database");
 		});
-		await redis.quit().catch((error) => {
+		await redis.quit().catch((error: unknown) => {
 			logger.error({ error }, "Failed to quit Redis");
 		});
 	});

@@ -1,4 +1,4 @@
-import type { TweetData } from "@starlight/api/src/types/tweets";
+import type { PostData } from "@starlight/api/src/types/posts";
 import { X } from "lucide-react";
 import type { UIElementData } from "photoswipe";
 import type { PhotoSwipe } from "photoswipe/lightbox";
@@ -17,19 +17,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Carousel } from "@/components/ui/skiper-ui/carousel";
 
-interface TweetImageGridProps {
-	onDeleteImage?: (photoId: string) => void;
+interface PostMediaGridProps {
+	onDeleteMedia?: (mediaId: string) => void;
 	showActions?: boolean;
 	showArtistOnHover?: boolean;
-	tweet: TweetData;
+	post: PostData;
 }
 
-export function TweetImageGrid({
-	tweet,
+export function PostMediaGrid({
+	post,
 	showActions = false,
 	showArtistOnHover = false,
-	onDeleteImage,
-}: TweetImageGridProps) {
+	onDeleteMedia,
+}: PostMediaGridProps) {
 	const [isImageLoading, setIsImageLoading] = useState<{
 		[key: string]: boolean;
 	}>({});
@@ -42,7 +42,7 @@ export function TweetImageGrid({
 	const handleArtistClick = (e: React.MouseEvent) => {
 		e.stopPropagation();
 
-		window.open(tweet.sourceUrl, "_blank", "noopener,noreferrer");
+		window.open(post.sourceUrl, "_blank", "noopener,noreferrer");
 	};
 
 	const uiElements: UIElementData[] = [
@@ -98,8 +98,8 @@ export function TweetImageGrid({
 		},
 	];
 
-	if (tweet.photos.length === 1) {
-		const [photo] = tweet.photos;
+	if (post.media.length === 1) {
+		const media = post.media[0];
 
 		return (
 			<Gallery
@@ -110,11 +110,11 @@ export function TweetImageGrid({
 				withCaption={false}
 			>
 				<Item
-					alt={photo.alt}
-					height={photo.height}
-					original={photo.url}
-					thumbnail={photo.url}
-					width={photo.width}
+					alt={media.alt}
+					height={media.height}
+					original={media.url}
+					thumbnail={media.url}
+					width={media.width}
 				>
 					{({ ref, open }) => (
 						<div className="group relative overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md">
@@ -124,23 +124,23 @@ export function TweetImageGrid({
 								onClick={open}
 								type="button"
 							/>
-							{isImageLoading[photo.id] && (
+							{isImageLoading[media.id] && (
 								<div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
 									<div className="loading loading-spinner loading-sm" />
 								</div>
 							)}
 							{/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
 							<img
-								alt={photo.alt}
+								alt={media.alt}
 								className={`pointer-events-none ${
-									photo.is_nsfw ? "blur-sm" : ""
+									media.is_nsfw ? "blur-sm" : ""
 								} h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
-								height={photo.height || 400}
-								onLoad={() => handleImageLoad(photo.id, false)}
-								onLoadStart={() => handleImageLoad(photo.id, true)}
+								height={media.height || 400}
+								onLoad={() => handleImageLoad(media.id, false)}
+								onLoadStart={() => handleImageLoad(media.id, true)}
 								ref={ref}
-								src={photo.url}
-								width={photo.width || 400}
+								src={media.url}
+								width={media.width || 400}
 							/>
 							<div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
 							<div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
@@ -158,20 +158,20 @@ export function TweetImageGrid({
 												onClick={(e) => handleArtistClick(e)}
 												type="button"
 											>
-												{tweet.artist}
+												{post.artist}
 											</button>
 										</div>
-										{showActions && onDeleteImage && (
+										{showActions && onDeleteMedia && (
 											<Button
-												className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+											className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
 												onClick={(e) => {
 													e.stopPropagation();
-													setDeleteConfirm(photo.id);
+													setDeleteConfirm(media.id);
 												}}
 												size="sm"
 												variant="ghost"
 											>
-												<X className="size-3" />
+												<X className="h-3 w-3" />
 											</Button>
 										)}
 									</div>
@@ -183,7 +183,7 @@ export function TweetImageGrid({
 				<DeleteConfirmDialog
 					deleteConfirm={deleteConfirm}
 					onConfirm={() => {
-						if (deleteConfirm) onDeleteImage?.(deleteConfirm);
+						if (deleteConfirm) onDeleteMedia?.(deleteConfirm);
 						setDeleteConfirm(null);
 					}}
 					onOpenChange={(open) => !open && setDeleteConfirm(null)}
@@ -192,13 +192,13 @@ export function TweetImageGrid({
 		);
 	}
 
-	const convertedPhotos = tweet.photos.map((photo) => ({
-		src: photo.url,
-		alt: photo.alt,
-		id: photo.id,
-		height: photo.height,
-		width: photo.width,
-		is_nsfw: photo.is_nsfw,
+	const convertedMedia = post.media.map((media) => ({
+		src: media.url,
+		alt: media.alt,
+		id: media.id,
+		height: media.height,
+		width: media.width,
+		is_nsfw: media.is_nsfw,
 	}));
 
 	return (
@@ -210,7 +210,7 @@ export function TweetImageGrid({
 			withCaption={false}
 		>
 			<Carousel
-				images={convertedPhotos}
+				images={convertedMedia}
 				renderSlide={(item) => (
 					<Item
 						alt={item.alt}
@@ -235,25 +235,25 @@ export function TweetImageGrid({
 								{/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
 								<img
 									alt={item.alt}
-									className={`pointer-events-none ${
+								className={`pointer-events-none ${
 										item.is_nsfw ? "blur-sm" : ""
 									} block h-full w-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
 									height={item.height || 400}
-									onLoad={() => handleImageLoad(item.id || "", false)}
-									onLoadStart={() => handleImageLoad(item.id || "", true)}
-									ref={ref}
+								onLoad={() => handleImageLoad(item.id || "", false)}
+								onLoadStart={() => handleImageLoad(item.id || "", true)}
+								ref={ref}
 									src={item.src}
 									width={item.width || 400}
 								/>
-								<div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-								<div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
+							<div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+							<div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
 									<div className="w-full p-3 text-white">
 										<div className="flex items-center justify-between">
 											<div
 												className={
 													showArtistOnHover
 														? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
-														: "pointer-events-auto"
+													: "pointer-events-auto"
 												}
 											>
 												<button
@@ -261,12 +261,12 @@ export function TweetImageGrid({
 													onClick={(e) => handleArtistClick(e)}
 													type="button"
 												>
-													{tweet.artist}
+													{post.artist}
 												</button>
 											</div>
-											{showActions && onDeleteImage && (
+											{showActions && onDeleteMedia && (
 												<Button
-													className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+											className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
 													onClick={(e) => {
 														e.stopPropagation();
 														setDeleteConfirm(item.id || "");
@@ -274,7 +274,7 @@ export function TweetImageGrid({
 													size="sm"
 													variant="ghost"
 												>
-													<X className="size-3" />
+													<X className="h-3 w-3" />
 												</Button>
 											)}
 										</div>
@@ -288,7 +288,7 @@ export function TweetImageGrid({
 			<DeleteConfirmDialog
 				deleteConfirm={deleteConfirm}
 				onConfirm={() => {
-					if (deleteConfirm) onDeleteImage?.(deleteConfirm);
+					if (deleteConfirm) onDeleteMedia?.(deleteConfirm);
 					setDeleteConfirm(null);
 				}}
 				onOpenChange={(open) => !open && setDeleteConfirm(null)}

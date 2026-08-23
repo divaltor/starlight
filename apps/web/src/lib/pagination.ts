@@ -1,6 +1,6 @@
 export interface CursorData {
 	createdAt: string;
-	lastTweetId: string;
+	lastPostId: string;
 }
 
 export const CursorPagination = {
