@@ -5,13 +5,12 @@
 3. Treat Telegram IDs as JS safe integers (`number`) in app code; convert to `BigInt` only where required by Prisma/db types.
 4. Run `build` script only for changes in `apps/web` package.
 5. Don't run `test` command unless you change code related to these tests.
-6. Use pre-defined types from libraries\Prisma generated files where is possible. Use Pick, Omit and other Typescript type-helpers to extract required values instead of creating own types with same information.
-7. Align on pre-existing types from libraries and generated code; avoid creating redundant helper types or defensive type-safety checks for scenarios that cannot happen in trusted internal code.
-8. In Grammy handlers, `ctx.<obj>` is guaranteed by middleware; use `ctx.<obj>!` instead of defensive existence checks.
-9. When working on Effect TS code, load the local `effect` skill (`.opencode/skills/effect`); the global `effect-ts` skill remains the portable API reference.
-10. Use structured logging: keep messages stable and put object IDs and dynamic context in log fields (for example, `logger.info({ photoId }, "Photo embeddings generated")`), never interpolate them into the message.
-11. Don't use `git stash` mid-session; other agents or the user can edit files at the same time.
-12. **DO NOT WRITE A TEST UNTIL YOU IDENTIFY THE BUSINESS RULE OWNED BY THIS REPOSITORY.** Library behavior, framework behavior, schema-validator behavior, language/runtime behavior, and implementation details are not our business logic. If no product rule or regression in our code can be stated, do not write the test.
+6. Align on pre-existing types from libraries and generated code (Prisma included); use `Pick`, `Omit` and other TypeScript type-helpers instead of recreating the same information, and avoid defensive type-safety checks for scenarios that cannot happen in trusted internal code.
+7. In Grammy handlers, `ctx.<obj>` is guaranteed by middleware; use `ctx.<obj>!` instead of defensive existence checks.
+8. When working on Effect TS code, load the local `effect` skill (`.opencode/skills/effect`); the global `effect-ts` skill remains the portable API reference.
+9. Use structured logging: keep messages stable and put object IDs and dynamic context in log fields (for example, `logger.info({ photoId }, "Photo embeddings generated")`), never interpolate them into the message.
+10. Don't use `git stash` mid-session; other agents or the user can edit files at the same time.
+11. **Never write a test before the admission gate under # Testing passes.**
 
 ## Design Principles
 
@@ -25,6 +24,7 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 - No speculative safeguards or theoretical race handling. Fix the smallest real, observed failure at the boundary that owns it. Prefer fewer names, fewer branches, and net-negative diffs.
 - Before adding complexity for a speculative edge case, explain the concrete failure mode, its likelihood, and the cost; get the user's buy-in first.
 - Before adding code, confirm that a change is needed. Then understand and trace the real flow. Reuse an established local pattern, the standard library, platform features, or an installed dependency before writing custom code; search for a maintained third-party library before building one.
+- If the correct implementation is one line over the platform or an existing API, write that line — inline, unexported, unwrapped.
 - For a bug, check all callers and fix the root cause in the lowest shared owner. Do not patch each visible symptom separately.
 - For non-trivial business logic owned by this repository, add the smallest focused test or runnable check that proves the changed behavior.
 
@@ -33,14 +33,15 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 - Use guard clauses and early returns; avoid `else`.
 - Avoid `try`/`catch` where possible; in Effect code, put expected failures in the error channel.
 - Access properties with dot notation (`obj.a`) instead of destructuring.
-- Inline single-use variables; drop intermediate bindings.
+- Inline single-use variables and intermediate bindings.
 - Type-guard `filter` callbacks to preserve inference.
 - Rely on type inference; annotate only at exports and boundaries.
 - Avoid the `any` type.
 - Prefer `const`; use ternaries or early returns instead of reassignment.
 - Never alias imports (`import { x as y }`) and never use star imports.
 - Prefer functional array methods (`map`, `filter`, `flatMap`) over `for` loops.
-- Keep helpers below the code they support; do not extract logic used fewer than three times.
+- NEVER extract a one-liner, even a heavily used one: a body that is a single call or expression — `estimateTokens(value)` = `Math.ceil(value.length / 4)`, `hash(value)` = one `Bun.CryptoHasher` chain, `profileFingerprint(input)` = `hash(renderEnvelope(input))` — gets written inline at every call site. A wrapper name sends every human reader on a hop to find a line they already know; repetition is not complexity.
+- Keep helpers below the code they support; do not extract multi-line logic used fewer than three times.
 - Comments are rare and explain why, not what.
 
 ## Effect TS
@@ -111,20 +112,19 @@ Coverage, branch count, implementation complexity, and “this code was changed�
 ## Core rules
 
 - Tests verify e2e flows and extraordinary logic for our data flow, not that 2 + 2 = 4.
-- Don't test 3-rd party logic which already tested by library authors.
-- Don't verify data validation because it's tested by data validation library itself.
+- Don't test third-party logic or data validation — the library authors already did.
 - Test behavior, not implementation: assert observable outcomes; never assert internal calls, call order, intermediate values, or generated SQL text.
 - Every test must name the class of bug or the customer rule it protects. If you can't name it, delete it. Regressions are exempt: the fixed bug is their provenance.
-- A test must be able to fail. Prove it: break the behavior (by hand or with a mutant via `mutmut`) and watch it go red. If it stays green, it's a change-detector — rewrite or delete it.
-- Mock only the external boundary: Telegram API, Yandex, time, randomness. For flow tests use real collaborators — a real async SQLAlchemy session from the `session_factory` test database.
+- A test must be able to fail. Prove it: break the behavior and watch it go red. If it stays green, it's a change-detector — rewrite or delete it.
+- Mock only the external boundary (Telegram API, Yandex, time, randomness); flow tests use real collaborators. Patch real attributes, never string import paths — if everything is mocked you verify the mock, not the integration.
 - Every bug fix ships with the regression test that would have caught it first.
 - One behavior per test, one equivalence class per test.
 
 ## Levels (spend effort where it pays)
 
 - Most value is in integration tests: several real units together, only the external boundary mocked. Write mostly these.
-- Unit-test only genuinely tricky logic: recurrence expansion, ICS building, parsing, role priority.
-- Reserve full e2e (dispatcher feed) for critical journeys, not per-branch coverage.
+- Unit-test only genuinely tricky logic: parsing, format building, ordering rules.
+- Reserve full e2e for critical journeys, not per-branch coverage.
 - Test each rule once, at the cheapest level that can express it. Don't repeat the same behavior at unit, integration and e2e.
 
 ## Code rules
@@ -137,13 +137,11 @@ Coverage, branch count, implementation complexity, and “this code was changed�
 - No logic in tests: no loops or conditionals — parametrize instead.
 - Name tests as behavior sentences: `test_<behavior>_when_<condition>`.
 - Minimal test data: only what the scenario needs.
-- Patch real attributes; never mock by string import path.
-- Golden/snapshot assertions only for formats we own (ICS, callback data, rich-message rendering); never as a generic change detector.
+- Golden/snapshot assertions only for formats we own (callback data, rich-message rendering); never as a generic change detector.
 
 ## Design principles
 
 - Tests are code: they cost maintenance. Delete tests that stop earning their keep.
-- Mock-theater is worthless: if everything is mocked you verify the mock, not the integration. Reserve mocks for the boundary.
 - Coverage is a signal, not a goal: returns fall off past ~70%. Use it to find untested hot zones, not to chase 100%.
 - A test that fights you is the design talking: fix the seam, don't monkeypatch harder.
 - Keep the suite fast. Slow tests don't get run; flaky tests train people to ignore red.
