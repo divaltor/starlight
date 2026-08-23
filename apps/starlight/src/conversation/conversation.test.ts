@@ -1150,8 +1150,7 @@ function testLayer(
 
 const disabledExa: Exa.Interface = {
   isEnabled: () => false,
-  lookup: () => Effect.succeed(null),
-  search: () => Effect.succeed([]),
+  tools: {},
 };
 
 const unavailableModel: Model.Interface = {

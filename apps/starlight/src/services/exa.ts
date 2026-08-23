@@ -1,170 +1,90 @@
-import { Config, Context, Duration, Effect, Layer, Option, Redacted, Schema } from "effect";
-import {
-	FetchHttpClient,
-	HttpClient,
-	HttpClientRequest,
-	HttpClientResponse,
-} from "effect/unstable/http";
+import { createMCPClient } from "@ai-sdk/mcp";
+import type { ToolSet } from "ai";
+import { Config, Context, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { z } from "zod";
 
-const DEFAULT_BASE_URL = "https://api.exa.ai";
-const REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_MCP_URL = "https://mcp.exa.ai/mcp";
+const ENABLED_TOOLS = ["web_search_exa", "web_fetch_exa"] as const;
 
-const ContentsResponse = Schema.Struct({
-	results: Schema.Array(
-		Schema.Struct({
-			text: Schema.optional(Schema.String),
-			url: Schema.String,
-		}),
-	),
-});
-
-const SearchResponse = Schema.Struct({
-	results: Schema.Array(
-		Schema.Struct({
-			highlights: Schema.optional(Schema.Array(Schema.String)),
-			publishedDate: Schema.optional(Schema.NullOr(Schema.String)),
-			text: Schema.optional(Schema.String),
-			title: Schema.optional(Schema.NullOr(Schema.String)),
-			url: Schema.String,
-		}),
-	),
-});
-
-export interface Page {
-	readonly content: string;
-	readonly url: string;
-}
-
-export interface SearchResult {
-	readonly content: string;
-	readonly publishedDate?: string | null;
-	readonly title?: string | null;
-	readonly url: string;
-}
-
-interface ContentsRequest {
-	readonly text: { readonly maxCharacters: number };
-	readonly urls: readonly string[];
-}
-
-interface SearchRequest {
-	readonly contents: {
-		readonly highlights: { readonly maxCharacters: number; readonly query: string };
-		readonly text: { readonly maxCharacters: number };
-	};
-	readonly numResults: number;
-	readonly query: string;
-}
-
-type ExaRequestBody = ContentsRequest | SearchRequest;
+const toolSchemas = {
+  web_fetch_exa: {
+    inputSchema: z.object({
+      maxCharacters: z.number().int().positive().max(6000).optional(),
+      urls: z.array(z.url()).length(1),
+    }),
+  },
+  web_search_exa: {
+    inputSchema: z.object({
+      numResults: z.number().int().positive().max(5).optional(),
+      query: z.string().min(3).max(300),
+    }),
+  },
+};
 
 export class ExaError extends Schema.TaggedError<ExaError>()("ExaError", {
-	cause: Schema.optional(Schema.Defect()),
-	message: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+  message: Schema.String,
 }) {
-	static fromCause(message: string, cause: unknown) {
-		return new ExaError({ cause, message });
-	}
+  static fromCause(message: string, cause: unknown) {
+    return new ExaError({ cause, message });
+  }
 }
 
 export interface Interface {
-	readonly isEnabled: () => boolean;
-	readonly lookup: (url: string) => Effect.Effect<Page | null, ExaError>;
-	readonly search: (query: string) => Effect.Effect<readonly SearchResult[], ExaError>;
+  readonly isEnabled: () => boolean;
+  readonly tools: ToolSet;
 }
 
 export class Service extends Context.Service<Service, Interface>()("starlight/Exa") {}
 
-export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
-	Service,
-	Effect.gen(function* layer() {
-		const client = yield* HttpClient.HttpClient;
-		const configuredApiKey = yield* Config.option(Config.redacted("EXA_API_KEY"));
-		const configuredBaseUrl = yield* Config.string("EXA_API_BASE_URL").pipe(
-			Config.withDefault(DEFAULT_BASE_URL),
-		);
-		const apiKey = configuredApiKey.pipe(
-			Option.flatMap((value) => {
-				const key = Redacted.value(value).trim();
-				return key ? Option.some(key) : Option.none();
-			}),
-		);
-		const baseUrl = configuredBaseUrl.trim() || DEFAULT_BASE_URL;
+export const layer: Layer.Layer<Service, ExaError> = Layer.effect(
+  Service,
+  Effect.gen(function* layer() {
+    const enabled = yield* Config.boolean("EXA_MCP_ENABLED").pipe(Config.withDefault(true));
+    if (!enabled) return Service.of({ isEnabled: () => false, tools: {} });
 
-		if (Option.isNone(apiKey)) {
-			return Service.of({
-				isEnabled: () => false,
-				lookup: () => Effect.succeed(null),
-				search: () => Effect.succeed([]),
-			});
-		}
+    const configuredApiKey = yield* Config.option(Config.redacted("EXA_API_KEY"));
+    const configuredMcpUrl = yield* Config.string("EXA_MCP_URL").pipe(Config.withDefault(DEFAULT_MCP_URL));
+    const apiKey = configuredApiKey.pipe(
+      Option.flatMap((value) => {
+        const key = Redacted.value(value).trim();
+        return key ? Option.some(key) : Option.none();
+      }),
+    );
+    const mcpUrl = new URL(configuredMcpUrl.trim() || DEFAULT_MCP_URL);
+    mcpUrl.searchParams.set("tools", ENABLED_TOOLS.join(","));
 
-		const executeJson = Effect.fn("Exa.executeJson")(function* executeJson(
-			path: string,
-			body: ExaRequestBody,
-		) {
-			const request = yield* HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-				HttpClientRequest.acceptJson,
-				HttpClientRequest.setHeaders({ "x-api-key": apiKey.value }),
-				HttpClientRequest.bodyJson(body),
-				Effect.mapError((error) => ExaError.fromCause("Failed to encode Exa request", error)),
-			);
-			const response = yield* client.execute(request).pipe(
-				Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
-				Effect.mapError((error) => ExaError.fromCause("Exa request failed", error)),
-			);
-			const okResponse = yield* HttpClientResponse.filterStatusOk(response).pipe(
-				Effect.mapError((error) => ExaError.fromCause("Exa rejected the request", error)),
-			);
+    const client = yield* Effect.acquireRelease(
+      Effect.tryPromise({
+        try: () =>
+          createMCPClient({
+            transport: {
+              headers: Option.isSome(apiKey) ? { "x-api-key": apiKey.value } : undefined,
+              type: "http",
+              url: mcpUrl.toString(),
+            },
+          }),
+        catch: (cause) => ExaError.fromCause("Failed to connect to Exa MCP", cause),
+      }),
+      (mcpClient) => Effect.promise(() => mcpClient.close()),
+    );
+    const discoveredTools = yield* Effect.tryPromise({
+      try: () => client.tools({ schemas: toolSchemas }),
+      catch: (cause) => ExaError.fromCause("Failed to load Exa MCP tools", cause),
+    });
+    const tools: ToolSet = {
+      web_fetch_exa: {
+        ...discoveredTools.web_fetch_exa,
+        description: "Read one exact URL from the live user message, up to 6,000 characters.",
+      },
+      web_search_exa: {
+        ...discoveredTools.web_search_exa,
+        description: "Search for a current or externally verifiable fact, returning up to five results.",
+      },
+    };
 
-			return yield* okResponse.json.pipe(
-				Effect.mapError((error) => ExaError.fromCause("Failed to read Exa response", error)),
-			);
-		});
-
-		const lookup = Effect.fn("Exa.lookup")(function* lookup(url: string) {
-			const raw = yield* executeJson("/contents", {
-				urls: [url],
-				text: { maxCharacters: 6000 },
-			});
-			const data = yield* Schema.decodeUnknownEffect(ContentsResponse)(raw).pipe(
-				Effect.mapError((error) => ExaError.fromCause("Failed to parse Exa response", error)),
-			);
-			const page = data.results.find((result) => result.url === url) ?? data.results[0];
-
-			return page?.text ? { content: page.text, url: page.url } : null;
-		});
-
-		const search = Effect.fn("Exa.search")(function* search(query: string) {
-			const raw = yield* executeJson("/search", {
-				contents: {
-					highlights: { maxCharacters: 2000, query },
-					text: { maxCharacters: 4000 },
-				},
-				numResults: 5,
-				query,
-			});
-			const data = yield* Schema.decodeUnknownEffect(SearchResponse)(raw).pipe(
-				Effect.mapError((error) => ExaError.fromCause("Failed to parse Exa response", error)),
-			);
-
-			return data.results.flatMap((result) => {
-				const content = (result.highlights?.join("\n\n") || result.text || "").trim();
-				return content
-					? [
-							{
-								content,
-								publishedDate: result.publishedDate,
-								title: result.title,
-								url: result.url,
-							},
-						]
-					: [];
-			});
-		});
-
-		return Service.of({ isEnabled: () => true, lookup, search });
-	}),
+    return Service.of({ isEnabled: () => true, tools });
+  }),
 );
 
-export const defaultLayer: Layer.Layer<Service> = layer.pipe(Layer.provide(FetchHttpClient.layer));
+export const defaultLayer: Layer.Layer<Service, ExaError> = layer;

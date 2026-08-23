@@ -2,7 +2,6 @@ import type { ConversationRunStatus, Prisma } from "@starlight/utils/generated/p
 import { Context, Effect, Layer, Schema } from "effect";
 import * as ChatReply from "@/ai/chat-reply";
 import * as Model from "@/ai/model";
-import { extractAllowedUrls } from "@/ai/tools/web";
 import * as Prompt from "@/context/prompt";
 import * as ConversationContext from "@/context/context";
 import * as ConversationKey from "@/conversation/key";
@@ -393,7 +392,6 @@ interface ClaimedRun {
 
 interface PreparedRun {
   readonly allowedTargetIds: readonly number[];
-  readonly allowedUrls: readonly string[];
   readonly messages: readonly Model.Message[];
   readonly replyEligible: boolean;
   readonly sessionId: string;
@@ -558,7 +556,6 @@ function prepareRun(database: Database.Interface, claimed: ClaimedRun, options: 
     ]);
     const prepared = {
       allowedTargetIds: [...new Set(allowedTargetIds)],
-      allowedUrls: extractAllowedUrls(payloads.map((payload) => payload.text).join("\n")),
       messages,
       replyEligible: payloads.some((payload) => payload.addressed),
       sessionId: yield* Effect.promise(() => ConversationKey.affinity(claimed.key, options.affinitySecret)),
@@ -618,7 +615,6 @@ function invokeModel(
       .pipe(Effect.mapError(failed("Failed to start model attempt")));
 
     return yield* ChatReply.generate({
-      allowedUrls: prepared.allowedUrls,
       cacheBase: contextRequest.cacheBase,
       instructions: contextRequest.instructions,
       messages: contextRequest.messages,
@@ -1074,7 +1070,6 @@ function recordModelFailure(database: Database.Interface, claimed: ClaimedRun, e
 
 const PreparedRunSchema = Schema.Struct({
   allowedTargetIds: Schema.Array(Schema.Int),
-  allowedUrls: Schema.Array(Schema.String),
   messages: Schema.Array(
     Schema.Struct({
       role: Schema.Literals(["assistant", "user"]),

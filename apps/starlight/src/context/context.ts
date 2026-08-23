@@ -620,7 +620,7 @@ function summarizeCheckpoint(
         messages: [{ role: "user", text: prepared.summaryInput }],
         outputSchema: CheckpointSummary,
         sessionId: prepared.parentContextId,
-        tools: [],
+        tools: {},
       })
       .pipe(
         // Preserve the model's classification: resumeCheckpoint re-picks failed hardSafety

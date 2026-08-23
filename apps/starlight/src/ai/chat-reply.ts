@@ -1,12 +1,11 @@
 import { Effect } from "effect";
 import { z } from "zod";
 import * as Model from "@/ai/model";
-import { createWebLookupTool } from "@/ai/tools/web";
 import * as Exa from "@/services/exa";
 
 export const systemPrompt = await Bun.file(new URL("system-prompt.txt", import.meta.url)).text();
 export const outputSchemaVersion = "chat-reply-v1";
-export const toolsetVersion = "web-lookup-v1";
+export const toolsetVersion = "exa-mcp-v1";
 const MAX_REPLY_OUTPUT_TOKENS = 1024;
 
 const reactionEmojiSchema = z.enum([
@@ -47,7 +46,6 @@ export const responseSchema = z.object({
 export type Response = z.infer<typeof responseSchema>;
 
 export interface GenerateInput {
-  readonly allowedUrls: readonly string[];
   readonly cacheBase?: string;
   readonly instructions?: string;
   readonly messages: readonly Model.Message[];
@@ -61,14 +59,13 @@ export type GenerateResult = Model.GenerationResult<Response>;
 export const generate = Effect.fn("ChatReply.generate")(function* generate(input: GenerateInput) {
   const model = yield* Model.Service;
   const exa = yield* Exa.Service;
-  const tools =
-    exa.isEnabled() && input.webLookupEnabled !== false ? [createWebLookupTool(exa, new Set(input.allowedUrls))] : [];
+  const tools = exa.isEnabled() && input.webLookupEnabled !== false ? exa.tools : {};
 
   return yield* model.generate({
     cacheBase: input.cacheBase,
     instructions: input.instructions ?? systemPrompt,
     maxOutputTokens: MAX_REPLY_OUTPUT_TOKENS,
-    maxToolCalls: tools.length > 0 ? 1 : 0,
+    maxToolCalls: Object.keys(tools).length > 0 ? 1 : 0,
     messages: input.messages,
     outputSchema: responseSchema,
     promptCacheKey: input.promptCacheKey,

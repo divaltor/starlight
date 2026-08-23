@@ -5,7 +5,6 @@ import {
   isStepCount,
   NoOutputGeneratedError,
   Output,
-  tool,
   TypeValidationError,
 } from "ai";
 import type { ModelMessage, StepResult, ToolSet } from "ai";
@@ -39,21 +38,6 @@ export interface Message {
   readonly text: string;
 }
 
-export interface ToolInput {
-  readonly [name: string]: string | undefined;
-}
-
-export interface ToolExecution {
-  readonly signal?: AbortSignal;
-}
-
-export interface Tool {
-  readonly description: string;
-  readonly execute: (input: ToolInput, execution: ToolExecution) => Promise<object>;
-  readonly inputSchema: ZodType<ToolInput>;
-  readonly name: string;
-}
-
 export interface GenerateInput<OUTPUT> {
   readonly cacheBase?: string;
   readonly instructions: string;
@@ -64,7 +48,7 @@ export interface GenerateInput<OUTPUT> {
   // Rides on OpenRouter's body verbatim as prompt_cache_key for upstream cache routing.
   readonly promptCacheKey?: string;
   readonly sessionId: string;
-  readonly tools: readonly Tool[];
+  readonly tools: ToolSet;
 }
 
 export interface CompletedToolEvent {
@@ -135,7 +119,6 @@ export const layer: Layer.Layer<Service, never, ModelProvider.Service | ModelTel
 
       const completedSteps: StepResult<ToolSet>[] = [];
       const toolEvents: ToolEvent[] = [];
-      const tools = createTools(input.tools);
       const invocation = Effect.tryPromise({
         try: async (signal) => {
           const result = await generateText({
@@ -164,7 +147,7 @@ export const layer: Layer.Layer<Service, never, ModelProvider.Service | ModelTel
               recordInputs: false,
               recordOutputs: false,
             },
-            tools,
+            tools: input.tools,
           });
 
           return { output: result.output, result };
@@ -302,19 +285,6 @@ function prepareMessages(cacheBase: string | undefined, messages: readonly Messa
     },
     ...conversation,
   ];
-}
-
-function createTools(definitions: readonly Tool[]): ToolSet {
-  return Object.fromEntries(
-    definitions.map((definition) => [
-      definition.name,
-      tool({
-        description: definition.description,
-        execute: (input, options) => definition.execute(input, { signal: options.abortSignal }),
-        inputSchema: definition.inputSchema,
-      }),
-    ]),
-  );
 }
 
 function limitTools(steps: readonly StepResult<ToolSet>[], maximumCalls: number) {

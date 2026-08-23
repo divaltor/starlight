@@ -348,8 +348,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
 
 const disabledExa: Exa.Interface = {
   isEnabled: () => false,
-  lookup: () => Effect.succeed(null),
-  search: () => Effect.succeed([]),
+  tools: {},
 };
 
 const unavailableModel: Model.Interface = {

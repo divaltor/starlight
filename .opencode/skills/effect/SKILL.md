@@ -40,7 +40,7 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(Layer.provide(Fetch
 ```
 
 - Consumers import the whole module (`import * as Exa from "@/services/exa"`) and access `Exa.Service`, `Exa.defaultLayer`. Do not re-introduce `export namespace X { }` wrappers.
-- Missing optional config degrades at layer construction (see `Exa` returning empty results when `EXA_API_KEY` is unset).
+- Optional services degrade at layer construction (see `Exa` returning no tools when `EXA_MCP_ENABLED` is false).
 
 ## Errors
 
