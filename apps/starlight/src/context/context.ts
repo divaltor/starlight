@@ -39,6 +39,7 @@ export interface RunReference {
 }
 
 export interface CheckpointInput extends RunReference {
+  readonly leaseMs: number;
   readonly reason: ConversationCheckpointReason;
   readonly retainedTokenTarget: number;
 }
@@ -602,6 +603,12 @@ function summarizeCheckpoint(
         await transaction.conversationCheckpointAttempt.update({
           where: { id: prepared.attemptId },
           data: { attemptCount: { increment: 1 }, lastError: null, status: "summarizing" },
+        });
+        // The summary model call is the longest stage in a drain; renew the lane lease so
+        // no second worker reclaims the run while summarization is in flight.
+        await transaction.conversationLane.update({
+          where: { assistantId_chatId_threadKey: prepared.key },
+          data: { leaseUntil: new Date(Date.now() + checkpointInput.leaseMs) },
         });
       })
       .pipe(Effect.mapError(failed("Failed to start context summary")));

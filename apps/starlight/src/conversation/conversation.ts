@@ -243,6 +243,7 @@ export const layer = Layer.effect(
         yield* context
           .resumeCheckpoint({
             fencingToken: claimed.fencingToken,
+            leaseMs: options.leaseMs,
             retainedTokenTarget: options.contextRetainedTokenTarget,
             runId: claimed.runId,
           })
@@ -260,7 +261,7 @@ export const layer = Layer.effect(
             ),
           );
         if (claimed.status === "generated" || claimed.status === "dispatching") {
-          yield* dispatchRun(database, delivery, claimed);
+          yield* dispatchRun(database, delivery, claimed, options);
           yield* appendAndCheckpoint(context, claimed, options);
           yield* finalizeRun(database, claimed, options);
           return { kind: "completed" as const, runId: claimed.runId };
@@ -319,6 +320,7 @@ export const layer = Layer.effect(
           yield* context
             .checkpoint({
               fencingToken: claimed.fencingToken,
+              leaseMs: options.leaseMs,
               reason: "hardSafety",
               retainedTokenTarget: options.contextRetainedTokenTarget,
               runId: claimed.runId,
@@ -351,7 +353,7 @@ export const layer = Layer.effect(
           }
         }
 
-        const generated = yield* invokeModel(database, claimed, prepared, contextRequest, model, exa);
+        const generated = yield* invokeModel(database, claimed, prepared, contextRequest, model, exa, options);
         if (generated === null) {
           yield* appendAndCheckpoint(context, claimed, options);
           yield* finalizeRun(database, claimed, options);
@@ -590,6 +592,7 @@ function invokeModel(
   contextRequest: ConversationContext.PreparedContextRequest,
   model: Model.Interface,
   exa: Exa.Interface,
+  options: Options,
 ) {
   return Effect.gen(function* invoke() {
     if (contextRequest.webLookupEnabled && !exa.isEnabled()) {
@@ -604,6 +607,12 @@ function invokeModel(
         await transaction.conversationRun.update({
           where: { id: claimed.runId },
           data: { attemptCount: { increment: 1 }, invokingAt: new Date(), status: "invoking" },
+        });
+        // Lease renewal rides this stage boundary so the model call cannot outlive the
+        // lease and let a second worker re-invoke the same run.
+        await transaction.conversationLane.update({
+          where: { assistantId_chatId_threadKey: dbKey(claimed.key) },
+          data: { leaseUntil: new Date(Date.now() + options.leaseMs) },
         });
       })
       .pipe(Effect.mapError(failed("Failed to start model attempt")));
@@ -729,7 +738,12 @@ function persistGeneration(
     .pipe(Effect.mapError(failed("Failed to persist model generation")));
 }
 
-function dispatchRun(database: Database.Interface, delivery: TelegramDelivery.Interface, claimed: ClaimedRun) {
+function dispatchRun(
+  database: Database.Interface,
+  delivery: TelegramDelivery.Interface,
+  claimed: ClaimedRun,
+  options: Options,
+) {
   return Effect.gen(function* dispatch() {
     yield* database
       .transaction(async (transaction) => {
@@ -737,6 +751,12 @@ function dispatchRun(database: Database.Interface, delivery: TelegramDelivery.In
         await transaction.conversationRun.update({
           where: { id: claimed.runId },
           data: { status: "dispatching" },
+        });
+        // Same renewal contract as the model stage: Telegram delivery bursts must not
+        // outlive the lease while another worker waits on it.
+        await transaction.conversationLane.update({
+          where: { assistantId_chatId_threadKey: dbKey(claimed.key) },
+          data: { leaseUntil: new Date(Date.now() + options.leaseMs) },
         });
       })
       .pipe(Effect.mapError(failed("Failed to start action dispatch")));
@@ -915,6 +935,7 @@ function appendAndCheckpoint(context: ConversationContext.Interface, claimed: Cl
     yield* context
       .checkpoint({
         fencingToken: claimed.fencingToken,
+        leaseMs: options.leaseMs,
         reason: "softCost",
         retainedTokenTarget: options.contextRetainedTokenTarget,
         runId: claimed.runId,
