@@ -94,6 +94,37 @@ enum ConversationContextRole {
   tool
 }
 
+enum MemoryNamespaceKind {
+  user
+  chat
+  topic
+}
+
+enum MemoryObservationKind {
+  fact
+  preference
+  correction
+  forget
+  explicitRemember
+}
+
+enum MemoryVisibility {
+  privateUser
+  sameChat
+  sameTopic
+  publicProfile
+  explicitShareable
+}
+
+enum MemoryBuildStatus {
+  prepared
+  generating
+  generated
+  published
+  superseded
+  failed
+}
+
 model User {
   id         String  @id @default(uuid(7)) @db.Uuid
   telegramId BigInt  @unique @map("telegram_id")
@@ -112,6 +143,9 @@ model User {
   photos      Photo[]
   videos      Video[]
   chatMembers ChatMember[]
+  conversationInputs ConversationInput[]
+  memoryNamespaces MemoryNamespace[]
+  memoryObservations MemoryObservation[]
 
   @@map("users")
 }
@@ -135,6 +169,7 @@ model Chat {
   chatMembers   ChatMember[]
   memoryCursors ChatMemoryCursor[]
   memoryNotes   ChatMemoryNote[]
+  memoryNamespaces MemoryNamespace[]
 
   @@map("chats")
 }
@@ -413,6 +448,7 @@ model ConversationLane {
   leaseUntil    DateTime? @map("lease_until")
   firstPendingAt DateTime? @map("first_pending_at")
   nextWakeAt     DateTime? @map("next_wake_at")
+  contextResetPending Boolean @default(false) @map("context_reset_pending")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -451,7 +487,9 @@ model ConversationInput {
   createdAt DateTime @default(now()) @map("created_at")
 
   lane ConversationLane @relation(fields: [assistantId, chatId, threadKey], references: [assistantId, chatId, threadKey], onDelete: Cascade)
+  senderUser User? @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
   runInputs ConversationRunInput[]
+  memoryObservations MemoryObservation[]
 
   @@unique([assistantId, sourceUpdateId])
   @@unique([assistantId, chatId, sourceMessageId, sourceRevision])
@@ -693,4 +731,106 @@ model ConversationContextTurn {
   @@id([contextId, ordinal])
   @@unique([contextId, transcriptTurnId])
   @@map("conversation_context_turns")
+}
+
+model MemoryNamespace {
+  id String @id @default(uuid(7)) @db.Uuid
+  kind MemoryNamespaceKind
+  ownerKey String @unique @map("owner_key")
+  userId String? @map("user_id") @db.Uuid
+  chatId BigInt? @map("chat_id")
+  threadKey Int? @map("thread_key")
+  latestRevisionId String? @unique @map("latest_revision_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat Chat? @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  latestRevision MemoryRevision? @relation("LatestMemoryRevision", fields: [latestRevisionId], references: [id], onDelete: SetNull)
+  observations MemoryObservation[]
+  revisions MemoryRevision[] @relation("MemoryRevisionNamespace")
+  buildAttempts MemoryBuildAttempt[]
+
+  @@index([kind, userId])
+  @@index([kind, chatId, threadKey])
+  @@map("memory_namespaces")
+}
+
+model MemoryObservation {
+  id BigInt @id @default(autoincrement())
+  namespaceId String @map("namespace_id") @db.Uuid
+  subjectUserId String? @map("subject_user_id") @db.Uuid
+  sourceInputId BigInt? @map("source_input_id")
+  sourceRunId String? @map("source_run_id") @db.Uuid
+  sourceEventSequence BigInt? @map("source_event_sequence")
+  sourceChatId BigInt @map("source_chat_id")
+  sourceThreadKey Int @map("source_thread_key")
+  visibility MemoryVisibility
+  kind MemoryObservationKind
+  content Json
+  confidence Float?
+  sensitive Boolean @default(false)
+  processedRevisionId String? @map("processed_revision_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  namespace MemoryNamespace @relation(fields: [namespaceId], references: [id], onDelete: Cascade)
+  subjectUser User? @relation(fields: [subjectUserId], references: [id], onDelete: SetNull)
+  sourceInput ConversationInput? @relation(fields: [sourceInputId], references: [id], onDelete: Restrict)
+  processedRevision MemoryRevision? @relation(fields: [processedRevisionId], references: [id], onDelete: SetNull)
+
+  @@unique([namespaceId, sourceInputId, kind])
+  @@index([namespaceId, processedRevisionId, id])
+  @@index([subjectUserId, id])
+  @@index([sourceRunId])
+  @@map("memory_observations")
+}
+
+model MemoryRevision {
+  id String @id @default(uuid(7)) @db.Uuid
+  namespaceId String @map("namespace_id") @db.Uuid
+  version Int
+  parentRevisionId String? @map("parent_revision_id") @db.Uuid
+  sourceThrough BigInt @map("source_through")
+  content Json
+  schemaVersion String @map("schema_version")
+  builderProfileFingerprint String @map("builder_profile_fingerprint")
+  usage Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  supersededAt DateTime? @map("superseded_at")
+
+  namespace MemoryNamespace @relation("MemoryRevisionNamespace", fields: [namespaceId], references: [id], onDelete: Cascade)
+  parent MemoryRevision? @relation("MemoryRevisionParents", fields: [parentRevisionId], references: [id], onDelete: Restrict)
+  children MemoryRevision[] @relation("MemoryRevisionParents")
+  latestFor MemoryNamespace? @relation("LatestMemoryRevision")
+  processedObservations MemoryObservation[]
+
+  @@unique([namespaceId, version])
+  @@index([namespaceId, sourceThrough])
+  @@map("memory_revisions")
+}
+
+model MemoryBuildAttempt {
+  id String @id @default(uuid(7)) @db.Uuid
+  namespaceId String @map("namespace_id") @db.Uuid
+  parentRevisionId String? @map("parent_revision_id") @db.Uuid
+  sourceThrough BigInt @map("source_through")
+  frozenObservationIds Json @map("frozen_observation_ids")
+  status MemoryBuildStatus @default(prepared)
+  candidate Json?
+  usage Json?
+  attemptCount Int @default(0) @map("attempt_count")
+  lastError String? @map("last_error") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  completedAt DateTime? @map("completed_at")
+
+  namespace MemoryNamespace @relation(fields: [namespaceId], references: [id], onDelete: Cascade)
+
+  @@unique([namespaceId, sourceThrough])
+  @@index([namespaceId, status, updatedAt])
+  @@map("memory_build_attempts")
 }

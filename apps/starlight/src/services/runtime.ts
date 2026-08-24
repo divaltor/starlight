@@ -11,6 +11,8 @@ import { TelegramDelivery } from "@/conversation/delivery";
 import { WakeOutbox } from "@/conversation/wake-outbox";
 import { WakeQueue } from "@/conversation/wake-queue";
 import { ConversationContext } from "@/context/context";
+import { Memory } from "@/memory/memory";
+import { MemoryQueue } from "@/memory/queue";
 import { Database } from "@/services/database";
 import { Exa } from "@/services/exa";
 
@@ -80,6 +82,8 @@ const infrastructure = Layer.mergeAll(
   Model.defaultLayer,
   TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
   WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
+  MemoryQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
+  Memory.optionsLayer({ sensitiveConfidenceMin: env.MEMORY_SENSITIVE_CONFIDENCE_MIN }),
   Conversation.optionsLayer({
     affinitySecret: env.CONVERSATION_AFFINITY_SECRET,
     contextEstimateSafetyRatio: env.CONTEXT_ESTIMATE_SAFETY_RATIO,
@@ -91,13 +95,23 @@ const infrastructure = Layer.mergeAll(
     leaseMs: env.CONVERSATION_LANE_LEASE_MS,
     maxWaitMs: env.CONVERSATION_BATCH_MAX_WAIT_MS,
     quietMs: env.CONVERSATION_BATCH_QUIET_MS,
+    whitelistedDmUserIds: env.WHITELIST_DM_USER_IDS,
   }),
 );
+const memory = Memory.layer.pipe(Layer.provideMerge(infrastructure));
 const context = ConversationContext.layer.pipe(Layer.provideMerge(infrastructure));
-const domain = Layer.mergeAll(Conversation.layer, WakeOutbox.layer).pipe(Layer.provideMerge(context));
+const conversation = Conversation.layer.pipe(
+  Layer.provideMerge(context),
+  Layer.provideMerge(memory),
+  Layer.provideMerge(infrastructure),
+);
+const outbox = WakeOutbox.layer.pipe(Layer.provideMerge(infrastructure));
+const domain = Layer.mergeAll(infrastructure, memory, context, conversation, outbox);
 const background = Layer.mergeAll(
   WakeOutbox.publisherLayer,
   WakeQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
+  MemoryQueue.publisherLayer,
+  MemoryQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
 ).pipe(Layer.provideMerge(domain));
 
 export const runtime = ManagedRuntime.make(

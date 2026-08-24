@@ -9,6 +9,7 @@ import { Transcript } from "@/context/transcript";
 import { ConversationKey } from "@/conversation/key";
 import { Lane } from "@/conversation/lane";
 import { PreparedRequestSchema, StoredPayloadSchema } from "@/conversation/run-artifacts";
+import { Memory } from "@/memory/memory";
 import { Database } from "@/services/database";
 import { Exa } from "@/services/exa";
 
@@ -191,6 +192,7 @@ export namespace ConversationContext {
               where: { id: context.id },
               data: { estimatedStableTokens: estimatedTokens },
             });
+            await Memory.recordFinalized(transaction, run);
 
             return {
               appendedTurns: projections.length,
@@ -248,20 +250,30 @@ export namespace ConversationContext {
             const knownMessageIds = new Set(
               transcriptTurns.flatMap((turn) => (turn.sourceMessageId === null ? [] : [turn.sourceMessageId])),
             );
-            // Dot notation is the project convention; destructuring is intentionally disabled.
-            // oxlint-disable-next-line prefer-destructuring
-            const currentDate = Schema.decodeUnknownSync(PreparedRequestSchema)(run.preparedRequest).currentDate;
+            const frozen = Schema.decodeUnknownSync(PreparedRequestSchema)(run.preparedRequest);
+            const userMemory = await Memory.renderUserMemory(transaction, frozen.memoryRevisions ?? [], key);
+            const renderedMemoryUsers = new Set<string>();
             const current = [
               {
                 role: "user" as const,
-                text: `TRUSTED REQUEST METADATA\nCurrent date: ${currentDate}`,
+                text: `TRUSTED REQUEST METADATA\nCurrent date: ${frozen.currentDate}`,
               },
-              ...run.inputs.map((runInput) => {
+              ...run.inputs.flatMap((runInput) => {
                 const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
-                return {
-                  role: "user" as const,
-                  text: Prompt.renderLiveMessage(payload, Prompt.describeReplyTarget(payload, knownMessageIds)),
-                };
+                const memory =
+                  runInput.input.senderUserId === null || renderedMemoryUsers.has(runInput.input.senderUserId)
+                    ? []
+                    : userMemory.get(runInput.input.senderUserId);
+                if (runInput.input.senderUserId !== null) renderedMemoryUsers.add(runInput.input.senderUserId);
+                return [
+                  ...(memory === undefined
+                    ? []
+                    : [{ role: "user" as const, text: `${payload.senderFirstName}: ${memory}` }]),
+                  {
+                    role: "user" as const,
+                    text: Prompt.renderLiveMessage(payload, Prompt.describeReplyTarget(payload, knownMessageIds)),
+                  },
+                ];
               }),
             ];
             const finalized = turns.map((turn) => ({
@@ -424,10 +436,54 @@ export namespace ConversationContext {
             const key = ConversationKey.toDb(input.key);
             await Lane.lockLane(transaction, key);
             if (input.run) await Lane.assertFence(transaction, key, input.run);
+            const lane = await transaction.conversationLane.findUniqueOrThrow({
+              where: { assistantId_chatId_threadKey: key },
+            });
             const profileFingerprint = Prompt.profileFingerprint(input.webLookupEnabled);
             const run = input.run
               ? await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.run.runId } })
               : null;
+            const existing = await transaction.conversationContext.findFirst({
+              where: { ...key, status: "active" },
+            });
+            const parent = existing ?? (await ensureActiveContext(transaction, key, input.webLookupEnabled));
+            const envelope = Prompt.renderEnvelope({
+              webLookupEnabled: input.webLookupEnabled,
+            });
+            if (lane.contextResetPending) {
+              const memory = await Memory.renderContextMemory(transaction, key, "");
+              await transaction.conversationContext.update({
+                where: { id: parent.id },
+                data: { activeKey: null, sealedAt: new Date(), status: "invalid" },
+              });
+              const child = await transaction.conversationContext.create({
+                data: {
+                  ...key,
+                  activeKey: ConversationKey.format(input.key),
+                  generation: parent.generation + 1,
+                  modelProfileFingerprint: profileFingerprint,
+                  parentContextId: parent.id,
+                  resetReason: "memory-forget",
+                  ...Prompt.stableSeed(envelope, memory),
+                },
+              });
+              await transaction.conversationLane.update({
+                where: { assistantId_chatId_threadKey: key },
+                data: { activeContextId: child.id, contextResetPending: false },
+              });
+              if (input.run) {
+                const frozen = Schema.decodeUnknownSync(PreparedRequestSchema)(run!.preparedRequest);
+                await transaction.conversationRun.update({
+                  where: { id: input.run.runId },
+                  data: {
+                    contextId: child.id,
+                    preparedRequest: { ...frozen, memoryRevisions: [] },
+                    requestHash: null,
+                  },
+                });
+              }
+              return { generation: child.generation, id: child.id, profileFingerprint };
+            }
             if (run?.contextId) {
               const pinned = await transaction.conversationContext.findUniqueOrThrow({
                 where: { id: run.contextId },
@@ -447,13 +503,6 @@ export namespace ConversationContext {
                 profileFingerprint: pinned.modelProfileFingerprint,
               };
             }
-            const existing = await transaction.conversationContext.findFirst({
-              where: { ...key, status: "active" },
-            });
-            const parent = existing ?? (await ensureActiveContext(transaction, key, input.webLookupEnabled));
-            const envelope = Prompt.renderEnvelope({
-              webLookupEnabled: input.webLookupEnabled,
-            });
             if (parent.modelProfileFingerprint === profileFingerprint) {
               if (input.run) {
                 await transaction.conversationRun.update({
@@ -803,7 +852,7 @@ export namespace ConversationContext {
     if (!["checkpointing", "retryNeeded"].includes(parent.status)) {
       throw new Error("Checkpoint parent changed before publication");
     }
-    const memory = Prompt.renderMemory(summary);
+    const memory = await Memory.renderContextMemory(transaction, prepared.key, summary);
     await transaction.conversationContext.update({
       where: { id: parent.id },
       data: { activeKey: null },
@@ -879,12 +928,18 @@ export namespace ConversationContext {
     if (existing) return existing;
 
     const envelope = Prompt.renderEnvelope({ webLookupEnabled });
-    const memory = Prompt.renderMemory("");
+    const memory = await Memory.renderContextMemory(transaction, key, "");
+    // One Prisma transaction connection must execute its queries serially.
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await
+    const latest = await transaction.conversationContext.aggregate({
+      where: key,
+      _max: { generation: true },
+    });
     const created = await transaction.conversationContext.create({
       data: {
         ...key,
         activeKey: ConversationKey.format(key),
-        generation: 1,
+        generation: (latest._max.generation ?? 0) + 1,
         modelProfileFingerprint: Prompt.profileFingerprint(webLookupEnabled),
         ...Prompt.stableSeed(envelope, memory),
       },

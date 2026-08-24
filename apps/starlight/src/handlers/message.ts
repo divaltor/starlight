@@ -8,22 +8,37 @@ import { runtime } from "@/services/runtime";
 
 // 5 retries after the initial attempt; exponential delays 500ms → 8s.
 const ADMISSION_RETRIES = 5;
+const TEXT_MESSAGE = "message:text" as const;
 
-export function createMessageHandler(whitelistedChatIds: readonly number[]): Composer<Context> {
+export interface MessageHandlerOptions {
+  readonly whitelistedChatIds: readonly number[];
+  readonly whitelistedDmUserIds: readonly number[];
+}
+
+export function createMessageHandler(options: MessageHandlerOptions): Composer<Context> {
   const composer = new Composer<Context>();
-  const whitelist = new Set(whitelistedChatIds);
-  const groupChat = composer.chatType(["group", "supergroup"]).filter((ctx) => whitelist.has(ctx.chat.id));
+  const chatWhitelist = new Set(options.whitelistedChatIds);
+  const dmWhitelist = new Set(options.whitelistedDmUserIds);
+  const groupChat = composer.chatType(["group", "supergroup"]).filter((ctx) => chatWhitelist.has(ctx.chat.id));
+  const privateChat = composer.chatType("private");
+  const authorizedPrivateChat = privateChat.filter((ctx) => dmWhitelist.has(ctx.from.id));
+  const unauthorizedPrivateChat = privateChat.filter((ctx) => !dmWhitelist.has(ctx.from.id));
 
-  groupChat.on("message:text", (ctx) => admitMessage(ctx, ctx.message, isAddressedToBot(ctx, ctx.message)));
+  groupChat.on(TEXT_MESSAGE, (ctx) => admitMessage(ctx, ctx.message, isAddressedToBot(ctx, ctx.message)));
   groupChat.on("edited_message:text", (ctx) =>
     admitMessage(ctx, ctx.editedMessage, isAddressedToBot(ctx, ctx.editedMessage)),
   );
+  authorizedPrivateChat.on(TEXT_MESSAGE, (ctx) => admitMessage(ctx, ctx.message, true));
+  authorizedPrivateChat.on("edited_message:text", (ctx) => admitMessage(ctx, ctx.editedMessage, true));
+  unauthorizedPrivateChat.on(TEXT_MESSAGE, (ctx) => ctx.reply("Личные сообщения для этого аккаунта не разрешены."));
 
   return composer;
 }
 
 async function admitMessage(ctx: Context, message: Message.TextMessage, addressed: boolean) {
   await runtime.runPromise(
+    // Telegram message variants are normalized once at admission.
+    // oxlint-disable-next-line eslint/complexity
     Effect.gen(function* admit() {
       const conversation = yield* Conversation.Service;
       return yield* retryAdmission(
@@ -45,6 +60,8 @@ async function admitMessage(ctx: Context, message: Message.TextMessage, addresse
             replyToMessageId: message.reply_to_message?.message_id ?? null,
             senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
             senderId: message.from?.id ?? null,
+            senderIsBot: message.from?.is_bot ?? false,
+            senderLastName: message.from?.last_name ?? null,
             senderUsername: message.from?.username ?? null,
             text: message.text,
           },

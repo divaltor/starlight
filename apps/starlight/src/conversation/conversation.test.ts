@@ -3,6 +3,7 @@ import type { PrismaClient } from "@starlight/utils/generated/prisma/client";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { Model } from "@/ai/model";
 import { ConversationContext } from "@/context/context";
+import { Memory } from "@/memory/memory";
 import { Prompt } from "@/context/prompt";
 import { Conversation } from "@/conversation/conversation";
 import { TelegramDelivery } from "@/conversation/delivery";
@@ -433,6 +434,7 @@ test.skipIf(!databaseUrl)("hard checkpoint publishes a child before model invoca
         const database = yield* Database.Service;
         const runIds = yield* database.query(async (client) => {
           await resetLane(client, assistantId, chatId);
+          await client.chat.create({ data: { id: BigInt(chatId) } });
           await client.conversationLane.create({
             data: {
               assistantId: BigInt(assistantId),
@@ -924,6 +926,7 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
         const database = yield* Database.Service;
         yield* database.query(async (client) => {
           await resetLane(client, assistantId, chatId);
+          await client.chat.create({ data: { id: BigInt(chatId) } });
           await client.conversationLane.create({
             data: {
               assistantId: BigInt(assistantId),
@@ -1114,6 +1117,8 @@ async function resetLane(client: PrismaClient, assistantId: number, chatId: numb
   await client.conversationContext.deleteMany({ where });
   await client.conversationTranscriptTurn.deleteMany({ where });
   await client.conversationRun.deleteMany({ where });
+  await client.memoryObservation.deleteMany({ where: { sourceInput: where } });
+  await client.memoryNamespace.deleteMany({ where: { chatId: BigInt(chatId) } });
   await client.conversationInput.deleteMany({ where });
   await client.conversationLane.deleteMany({ where });
   await client.chat.deleteMany({ where: { id: BigInt(chatId) } });
@@ -1130,6 +1135,11 @@ function testLayer(
     Layer.succeed(Model.Service)(model),
     Layer.succeed(Exa.Service)(disabledExa),
     Layer.succeed(TelegramDelivery.Service)(delivery),
+    Layer.succeed(Memory.Service)({
+      build: () => Effect.die(new Error("Memory builder must not run in conversation tests")),
+      forget: () => Effect.die(new Error("Memory forget must not run in conversation tests")),
+      freezeUserRevisions: () => Effect.succeed([]),
+    }),
     Conversation.optionsLayer({
       affinitySecret: "test-affinity-secret-with-at-least-32-characters",
       contextEstimateSafetyRatio: 1.15,
@@ -1142,6 +1152,7 @@ function testLayer(
       maxWaitMs: 3000,
       quietMs: 1000,
       ...optionOverrides,
+      whitelistedDmUserIds: optionOverrides.whitelistedDmUserIds ?? [],
     }),
   );
   const context = ConversationContext.layer.pipe(Layer.provideMerge(infrastructure));

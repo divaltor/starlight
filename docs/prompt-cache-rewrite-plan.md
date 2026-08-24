@@ -5,10 +5,10 @@
 This is the master implementation plan for a greenfield `apps/starlight` conversation runtime proof of concept.
 
 ```text
-COMPLETE  Phase 0 provider cache proof
-COMPLETE  Phase 1 Effect model boundary and telemetry
-NEXT      Phase 2 durable admission, lanes, and batching
-BLOCKED   Phases 3–7 wait for their dependencies
+COMPLETE     Phases 0–1 provider proof and model boundary
+IMPLEMENTED  Core Phases 2–6 runtime through scoped memory and DMs
+GAPS         Media/album admission and bounded stable tool projection
+NEXT         Close known gaps, then Phase 7 live acceptance and hardening
 ```
 
 It replaces the earlier history-only proposal. Batching, distributed concurrency, durable retries, cross-chat memory, direct messages, and context checkpoints require changes beyond prompt selection.
@@ -50,7 +50,7 @@ Each phase has its own implementation plan, edge-case flows, tests, acceptance g
 |     3 | [Context generations](./prompt-cache-rewrite/phase-3-context-generations-PLAN.md)                     | Build the final immutable context model directly               |
 |     4 | [End-to-end context runtime](./prompt-cache-rewrite/phase-4-end-to-end-runtime-PLAN.md)               | Integrate the PoC from prepared run through finalized context  |
 |     5 | [Checkpoints and compaction](./prompt-cache-rewrite/phase-5-checkpoints-PLAN.md)                      | Add soft cost and hard safety checkpoints                      |
-|     6 | [Scoped memory and direct messages](./prompt-cache-rewrite/phase-6-memory-and-dms-PLAN.md)            | Add privacy-aware user/chat/topic memory and DM continuity     |
+|     6 | [Scoped memory and direct messages result](./prompt-cache-rewrite/phase-6-memory-and-dms-RESULT.md)   | Implemented; live privacy and memory-quality review remains    |
 |     7 | [Hardening and runtime replacement](./prompt-cache-rewrite/phase-7-hardening-and-replacement-PLAN.md) | Prove the PoC, then replace and delete the legacy runtime      |
 
 ## Phase dependency map
@@ -64,19 +64,19 @@ Phase 0  provider proof ✓
 Phase 1  Effect model boundary + usage ✓
    │
    ▼
-Phase 2  durable input + lane serialization + batching
+Phase 2  durable input + lane serialization + batching ✓
    │
    ▼
-Phase 3  immutable context generations
+Phase 3  immutable context generations ✓
    │
    ▼
-Phase 4  end-to-end context runtime
+Phase 4  end-to-end context runtime ✓
    │
    ▼
-Phase 5  checkpoints and compaction
+Phase 5  checkpoints and compaction ✓
    │
    ▼
-Phase 6  scoped memory + DMs
+Phase 6  scoped memory + DMs (implemented; acceptance pending)
    │
    ▼
 Phase 7  hardening + atomic legacy replacement
@@ -625,7 +625,7 @@ Exit when one parent creates one child, queued messages survive, and summary qua
 
 ### Phase 6 — Scoped memory and DMs
 
-Add user/chat/topic revisions, privacy projection, and direct-message ingestion.
+Implemented. User, chat, and topic observations now publish immutable revisions through a separate durable memory queue. Direct messages use an explicit user whitelist. Prepared runs freeze user-memory revision IDs, and context generations freeze chat/topic revisions. `/forget` waits for active user lanes, records durable tombstones, and resets affected context generations before later prompts.
 
 ```text
 finalized conversation events
@@ -634,7 +634,7 @@ finalized conversation events
   → privacy-filtered prompt projection
 ```
 
-Exit when group-to-DM continuity works without DM-to-group leakage.
+Static privacy checks and PostgreSQL integration tests pass. Exit still requires live builder-quality evaluation and an explicit privacy review; see the Phase 6 result document.
 
 ### Phase 7 — Hardening and runtime replacement
 

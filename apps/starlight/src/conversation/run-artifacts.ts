@@ -23,6 +23,8 @@ export const StoredPayloadSchema = Schema.Struct(ProjectedFields);
 export const InputPayloadSchema = Schema.Struct({
   ...ProjectedFields,
   addressed: Schema.Boolean,
+  senderIsBot: Schema.optional(Schema.Boolean),
+  senderLastName: Schema.optional(Schema.NullOr(Schema.String)),
   senderUsername: Schema.NullOr(Schema.String),
 });
 
@@ -34,5 +36,13 @@ export type InputPayload = typeof InputPayloadSchema.Type & Prisma.InputJsonObje
 // memory-revision ids, so it must stay decode-compatible with extra historical fields.
 export const PreparedRequestSchema = Schema.Struct({
   currentDate: Schema.String,
+  memoryRevisions: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        revisionId: Schema.String,
+        userId: Schema.String,
+      }),
+    ),
+  ),
   sessionId: Schema.String,
 });

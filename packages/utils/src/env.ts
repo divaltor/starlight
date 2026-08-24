@@ -25,6 +25,7 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
     server: {
       STARLIGHT_BOT_TOKEN: z.string(),
       WHITELIST_CHAT_IDS: telegramIdList("WHITELIST_CHAT_IDS", { allowNegative: true }),
+      WHITELIST_DM_USER_IDS: telegramIdList("WHITELIST_DM_USER_IDS"),
       DATABASE_URL: z.url({ protocol: /^postgresql$/u }),
       REDIS_URL: z.url({ protocol: /^rediss?$/u }),
       CONVERSATION_AFFINITY_SECRET: z.string().min(32),
@@ -38,6 +39,7 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       CONTEXT_OUTPUT_RESERVE_TOKENS: z.coerce.number().int().nonnegative().default(1024),
       CONTEXT_TOOL_RESERVE_TOKENS: z.coerce.number().int().nonnegative().default(4096),
       CONTEXT_ESTIMATE_SAFETY_RATIO: z.coerce.number().min(1).default(1.15),
+      MEMORY_SENSITIVE_CONFIDENCE_MIN: z.coerce.number().min(0).max(1).default(0.9),
 
       NODE_ENV: z.enum(["development", "production"]).default("development"),
       LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),

@@ -9,6 +9,7 @@ import { Lane } from "@/conversation/lane";
 import { PreparedRequestSchema } from "@/conversation/run-artifacts";
 import type { InputPayload } from "@/conversation/run-artifacts";
 import { TelegramDelivery } from "@/conversation/delivery";
+import { Memory } from "@/memory/memory";
 import { Database } from "@/services/database";
 import { Exa } from "@/services/exa";
 
@@ -73,6 +74,7 @@ export namespace Conversation {
     readonly leaseMs: number;
     readonly maxWaitMs: number;
     readonly quietMs: number;
+    readonly whitelistedDmUserIds: readonly number[];
   }
 
   export const layer = Layer.effect(
@@ -83,7 +85,9 @@ export namespace Conversation {
       const delivery = yield* TelegramDelivery.Service;
       const exa = yield* Exa.Service;
       const model = yield* Model.Service;
+      const memory = yield* Memory.Service;
       const options = yield* OptionsService;
+      const whitelistedDmUserIds = new Set(options.whitelistedDmUserIds);
 
       const admit = Effect.fn("Conversation.admit")(function* admit(input: AdmissionInput) {
         const admitted = yield* database
@@ -103,6 +107,25 @@ export namespace Conversation {
               },
               update: { title: input.chatTitle, username: input.chatUsername },
             });
+            const sender =
+              input.payload.senderId === null
+                ? null
+                : await transaction.user.upsert({
+                    where: { telegramId: BigInt(input.payload.senderId) },
+                    create: {
+                      firstName: input.payload.senderFirstName,
+                      isBot: input.payload.senderIsBot ?? false,
+                      lastName: input.payload.senderLastName ?? null,
+                      telegramId: BigInt(input.payload.senderId),
+                      username: input.payload.senderUsername,
+                    },
+                    update: {
+                      firstName: input.payload.senderFirstName,
+                      isBot: input.payload.senderIsBot ?? false,
+                      lastName: input.payload.senderLastName ?? null,
+                      username: input.payload.senderUsername,
+                    },
+                  });
             const rawMessage = {
               caption: null,
               chatId: BigInt(input.key.chatId),
@@ -178,6 +201,7 @@ export namespace Conversation {
                 payload: input.payload,
                 replyToMessageId: input.payload.replyToMessageId,
                 senderTelegramId: input.payload.senderId === null ? null : BigInt(input.payload.senderId),
+                senderUserId: sender?.id,
                 sourceMessageId: input.payload.messageId,
                 sourceRevision,
                 sourceUpdateId: input.updateId,
@@ -228,6 +252,44 @@ export namespace Conversation {
         if (claimed.kind !== "claimed") return { kind: claimed.kind };
 
         return yield* Effect.gen(function* drainClaimed() {
+          if (
+            claimed.key.chatId > 0 &&
+            claimed.inputs.some(
+              (entry) => entry.senderTelegramId === null || !whitelistedDmUserIds.has(Number(entry.senderTelegramId)),
+            )
+          ) {
+            yield* blockRun(
+              database,
+              claimed,
+              options,
+              "dm-authorization-revoked",
+              "Direct-message access is not allowed",
+            );
+            return { kind: "completed" as const, runId: claimed.runId };
+          }
+          if (
+            (claimed.status === "generated" || claimed.status === "dispatching") &&
+            (yield* database
+              .query((client) =>
+                client.conversationLane.findUniqueOrThrow({
+                  where: { assistantId_chatId_threadKey: claimed.dbKey },
+                  select: { contextResetPending: true },
+                }),
+              )
+              .pipe(
+                Effect.map((lane) => lane.contextResetPending),
+                Effect.mapError(failed("Failed to check pending context reset")),
+              ))
+          ) {
+            yield* blockRun(
+              database,
+              claimed,
+              options,
+              "memory-forget",
+              "Generated output was discarded after a memory forget request",
+            );
+            return { kind: "completed" as const, runId: claimed.runId };
+          }
           yield* context
             .resumeCheckpoint({
               fencingToken: claimed.fencingToken,
@@ -236,7 +298,7 @@ export namespace Conversation {
               runId: claimed.runId,
             })
             .pipe(
-              Effect.mapError(contextFailed),
+              Effect.mapError(domainFailed),
               // A permanent checkpoint failure (e.g. summarization that can never succeed) would
               // otherwise be redriven forever: failed hardSafety attempts are deliberately
               // resumable with no attempt bound.
@@ -270,7 +332,7 @@ export namespace Conversation {
             return { kind: "completed" as const, runId: claimed.runId };
           }
 
-          const prepared = yield* prepareRun(database, claimed, options, webLookupEnabled);
+          const prepared = yield* prepareRun(database, memory, claimed, options, webLookupEnabled);
           yield* context
             .transitionProfile({
               key: claimed.key,
@@ -279,7 +341,7 @@ export namespace Conversation {
               webLookupEnabled,
             })
             .pipe(
-              Effect.mapError(contextFailed),
+              Effect.mapError(domainFailed),
               Effect.catch((error) =>
                 error.retryable
                   ? Effect.fail(error)
@@ -297,7 +359,7 @@ export namespace Conversation {
           let contextRequest = yield* context
             .prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId })
             .pipe(
-              Effect.mapError(contextFailed),
+              Effect.mapError(domainFailed),
               Effect.catch((error) =>
                 error.retryable
                   ? Effect.fail(error)
@@ -316,7 +378,7 @@ export namespace Conversation {
                 runId: claimed.runId,
               })
               .pipe(
-                Effect.mapError(contextFailed),
+                Effect.mapError(domainFailed),
                 Effect.catch((error) =>
                   error.retryable
                     ? Effect.fail(error)
@@ -327,7 +389,7 @@ export namespace Conversation {
               );
             contextRequest = yield* context
               .prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId })
-              .pipe(Effect.mapError(contextFailed));
+              .pipe(Effect.mapError(domainFailed));
             if (projectedTokens(contextRequest, options) >= options.contextHardTokenCap) {
               yield* blockRun(
                 database,
@@ -347,6 +409,28 @@ export namespace Conversation {
           if (generated === null) {
             yield* appendAndCheckpoint(context, claimed, options);
             yield* finalizeRun(database, claimed, options);
+            return { kind: "completed" as const, runId: claimed.runId };
+          }
+          if (
+            yield* database
+              .query((client) =>
+                client.conversationLane.findUniqueOrThrow({
+                  where: { assistantId_chatId_threadKey: claimed.dbKey },
+                  select: { contextResetPending: true },
+                }),
+              )
+              .pipe(
+                Effect.map((lane) => lane.contextResetPending),
+                Effect.mapError(failed("Failed to check pending context reset")),
+              )
+          ) {
+            yield* blockRun(
+              database,
+              claimed,
+              options,
+              "memory-forget",
+              "Generated output was discarded after a memory forget request",
+            );
             return { kind: "completed" as const, runId: claimed.runId };
           }
 
@@ -373,6 +457,8 @@ export namespace Conversation {
     readonly inputs: readonly {
       readonly id: bigint;
       readonly payload: unknown;
+      readonly senderTelegramId: bigint | null;
+      readonly senderUserId: string | null;
     }[];
     readonly key: ConversationKey.Value;
     readonly kind: "claimed";
@@ -523,7 +609,13 @@ export namespace Conversation {
       .pipe(Effect.mapError(failed("Failed to claim conversation lane")));
   }
 
-  function prepareRun(database: Database.Interface, claimed: ClaimedRun, options: Options, webLookupEnabled: boolean) {
+  function prepareRun(
+    database: Database.Interface,
+    memory: Memory.Interface,
+    claimed: ClaimedRun,
+    options: Options,
+    webLookupEnabled: boolean,
+  ) {
     return Effect.gen(function* prepare() {
       const payloads = claimed.inputs.map((input) => input.payload as InputPayload);
       const allowedTargetIds = [
@@ -542,6 +634,11 @@ export namespace Conversation {
       // immutable batch in ConversationContext.prepare.
       const frozen = stored ?? {
         currentDate: new Date().toISOString().slice(0, 10),
+        memoryRevisions: yield* memory
+          .freezeUserRevisions(
+            claimed.inputs.flatMap((input) => (input.senderUserId === null ? [] : [input.senderUserId])),
+          )
+          .pipe(Effect.mapError(domainFailed)),
         sessionId: yield* Effect.promise(() => ConversationKey.affinity(claimed.key, options.affinitySecret)),
       };
       if (stored === null) {
@@ -909,7 +1006,7 @@ export namespace Conversation {
     return Effect.gen(function* appendContextAndCheckpoint() {
       const appended = yield* context
         .appendFinalized({ fencingToken: claimed.fencingToken, runId: claimed.runId })
-        .pipe(Effect.mapError(contextFailed));
+        .pipe(Effect.mapError(domainFailed));
       if (appended.estimatedStableTokens < options.contextSoftTokenCap) return;
 
       yield* context
@@ -921,7 +1018,7 @@ export namespace Conversation {
           runId: claimed.runId,
         })
         .pipe(
-          Effect.mapError(contextFailed),
+          Effect.mapError(domainFailed),
           Effect.catch((error) =>
             Effect.logWarning("Soft context checkpoint failed").pipe(
               Effect.annotateLogs({ errorTag: error._tag, runId: claimed.runId }),
@@ -939,7 +1036,7 @@ export namespace Conversation {
     );
   }
 
-  function contextFailed(error: ConversationContext.ContextError): ConversationError {
+  function domainFailed(error: ConversationContext.ContextError | Memory.MemoryError): ConversationError {
     return new ConversationError({
       cause: error,
       message: error.message,

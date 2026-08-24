@@ -18,8 +18,10 @@ async function clearConversation(client: PrismaClient, assistantId: bigint, chat
   await client.conversationContext.deleteMany({ where });
   await client.conversationTranscriptTurn.deleteMany({ where });
   await client.conversationRun.deleteMany({ where });
+  await client.memoryNamespace.deleteMany({ where: { chatId } });
   await client.conversationInput.deleteMany({ where });
   await client.conversationLane.deleteMany({ where });
+  await client.chat.deleteMany({ where: { id: chatId } });
 }
 
 test.skipIf(!databaseUrl)("repeated finalization appends one immutable context sequence", async () => {
@@ -45,6 +47,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable context s
         const database = yield* Database.Service;
         runId = yield* database.query(async (client) => {
           await clearConversation(client, assistantId, chatId);
+          await client.chat.create({ data: { id: chatId } });
           await client.conversationLane.create({
             data: {
               assistantId,
@@ -166,6 +169,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
         const database = yield* Database.Service;
         const runId = yield* database.query(async (client) => {
           await clearConversation(client, assistantId, chatId);
+          await client.chat.create({ data: { id: chatId } });
           await client.conversationLane.create({
             data: {
               assistantId,
@@ -265,6 +269,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
         const database = yield* Database.Service;
         runId = yield* database.query(async (client) => {
           await clearConversation(client, assistantId, chatId);
+          await client.chat.create({ data: { id: chatId } });
           await client.conversationLane.create({
             data: { assistantId, chatId, pendingRevision: 1, processedRevision: 1, threadKey: 0 },
           });
@@ -377,6 +382,7 @@ test.skipIf(!databaseUrl)(
           const database = yield* Database.Service;
           const runIds = yield* database.query(async (client) => {
             await clearConversation(client, assistantId, chatId);
+            await client.chat.create({ data: { id: chatId } });
             await client.conversationLane.create({
               data: { assistantId, chatId, pendingRevision: 2, processedRevision: 2, threadKey: 0 },
             });
