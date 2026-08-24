@@ -111,7 +111,9 @@ export namespace Memory {
                   namespace.observations.flatMap((observation) => {
                     if (
                       key.chatId > 0n &&
-                      !["privateUser", "publicProfile", "explicitShareable"].includes(observation.visibility)
+                      !["privateUser", "sameChat", "publicProfile", "explicitShareable"].includes(
+                        observation.visibility,
+                      )
                     )
                       return [];
                     if (key.chatId < 0n && observation.visibility === "privateUser") return [];

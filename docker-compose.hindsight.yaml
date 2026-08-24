@@ -15,6 +15,7 @@ services:
       HINDSIGHT_API_DATABASE_URL: postgresql://${POSTGRES_USER:-starlight-admin}:${POSTGRES_PASSWORD:-starlight}@postgresql:5432/${POSTGRES_DB:-starlight}
       HINDSIGHT_API_DATABASE_SCHEMA: hindsight
       HINDSIGHT_API_VECTOR_EXTENSION: pgvector
+      HINDSIGHT_API_WORKER_ID: hindsight
       HINDSIGHT_API_STORE_DOCUMENT_TEXT: "false"
       HINDSIGHT_API_TENANT_EXTENSION: hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension
       HINDSIGHT_API_TENANT_API_KEY: ${HINDSIGHT_API_KEY:?HINDSIGHT_API_KEY is required}

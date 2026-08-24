@@ -1,5 +1,5 @@
 import type { Prisma } from "@starlight/utils/generated/prisma/client";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 // Fields the transcript projection reads back from stored inputs.
 const ProjectedFields = {
@@ -42,5 +42,6 @@ export type FrozenUserMemory = typeof FrozenUserMemorySchema.Type;
 export const PreparedRequestSchema = Schema.Struct({
   currentDate: Schema.String,
   sessionId: Schema.String,
-  userMemory: Schema.Array(FrozenUserMemorySchema),
+  // Runs prepared before Hindsight have no userMemory; an empty snapshot resumes them without reading newer memory.
+  userMemory: Schema.Array(FrozenUserMemorySchema).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
 });

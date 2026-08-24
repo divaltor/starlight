@@ -42,17 +42,41 @@ Recovery paths in `drain`: `generated`/`dispatching` resumes at dispatch (delive
 
 **Lease renewal**: the transactions that open each long stage — model invocation (`invokeModel`), checkpoint summarization (`summarizeCheckpoint`), and dispatch (`dispatchRun`) — also rewrite `leaseUntil = now + leaseMs` on the lane. Every awaitable stage is bounded by the 120s model timeout or a short delivery burst, so gaps between renewals stay below one lease period without heartbeat timers. A crashed worker stops renewing, so crash-recovery latency stays at one lease period. Before this renewal, a worst-case drain (summary + generation ≈ 240s) outlived the 180s lease and let a second worker re-invoke the model on the same run — duplicate spend with no benefit.
 
+## Prepared request freeze and replay (`conversation/run-artifacts.ts`, `prepareRun`)
+
+`ConversationRun.preparedRequest` is the durable boundary between mutable external state and deterministic retries. A new run freezes only values that can change with time; immutable batch inputs remain normalized `ConversationInput` rows.
+
+```text
+claimed run ──▶ preparedRequest null? ── yes ──▶ freeze date + user profiles + affinity ──▶ persist JSONB
+                         │
+                         no
+                         ▼
+                PreparedRequestSchema.decode
+                         │
+                         ▼
+        prepareRun reads sessionId; Context.prepare renders date + userMemory
+                         │
+                         ▼
+             same stored values on every retry
+```
+
+The stored shape is `{ currentDate, sessionId, userMemory: [{ userId, text }] }`. `userMemory` contains rendered, audience-scoped Hindsight profiles, not live profile references. `Context.prepare` indexes the snapshots by `userId` and injects each sender's profile once before that sender's first live message.
+
+Reader compatibility is deliberate: runs prepared by the pre-Hindsight deployment contain `memoryRevisions` and no `userMemory`. `PreparedRequestSchema` drops the obsolete field and defaults only a missing `userMemory` key to `[]`; malformed present values still fail. The fallback omits personalization for that in-flight run instead of fetching newer memory and changing an already-frozen request. No data migration or deployment drain is required.
+
+The model receives two separately frozen inputs: `preparedRequest.userMemory` for per-sender personalization and `ConversationContext.frozenMemory` for chat/topic continuity. Generation persists actions before Telegram dispatch. Successful and terminal model-failure paths append available transcript/context turns. Every terminal path advances `processedRevision`, clears the lane lease and `activeRunId`, and schedules another wake if later revisions exist.
+
 ## Model invocation and the tool budget
 
 The reply generation allows at most `maxToolCalls` tool **rounds**, not individual calls. A round is one assistant message containing tool calls; all parallel calls inside a round execute together. Enforcement is two-sided in `ai/model.ts`: `stopWhen: isStepCount(maxToolCalls + 1)` ends the loop, and `prepareStep`/`limitTools` deactivates tools once completed rounds reach the cap.
 
 This is deliberate, not a missing guard: the product rule is "at most one web-research round per reply", because Exa cost per _round_ is what matters and models may legitimately fan a round into a few parallel lookups. Per-call atomic enforcement was considered and rejected — it would need an executor-side gate and would reject valid parallel fan-outs without reducing spend meaningfully. Do not "fix" the step-count check to count individual calls without revisiting that decision.
 
-## Context generations (`context/context.ts`)
+## Context generations (`context/context.ts`, `context/active-context.ts`)
 
 Per-lane chain of `ConversationContext` rows (generation N+1 supersedes N). Turns are global per lane (`ConversationTranscriptTurn`) and projected per context with a hash chain: `basePrefixHash = sha256(envelope + memory)`, each turn extends it (`Prompt.extendPrefix`). `verifyPrefix` re-walks the whole chain on every `prepare` — rendering drift or tampering fails the run permanently.
 
-Both context creation paths (`ensureActiveContext`, `transitionProfile`, `commitCheckpoint`) must produce byte-identical seeds via `stableSeed`; divergence breaks every later chain.
+All context creation paths (`ActiveContext.ensure`, `transitionProfile`, `commitCheckpoint`) must produce byte-identical seeds via `stableSeed`; divergence breaks every later chain.
 
 **Profile fingerprints**: `Prompt.profileFingerprint(webLookupEnabled)` pins the prompt/toolset pair. A mismatch forces `transitionProfile`, which seals the parent and copies retained turns into a fresh generation.
 

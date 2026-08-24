@@ -2,6 +2,7 @@ import type { ConversationCheckpointReason, Prisma } from "@starlight/utils/gene
 import { Context, Effect, Layer, Schema } from "effect";
 import { selected } from "@/ai/model-profile";
 import { Model } from "@/ai/model";
+import { ActiveContext } from "@/context/active-context";
 import { CacheDiagnostics } from "@/context/cache-diagnostics";
 import { Checkpoint } from "@/context/checkpoint";
 import { Prompt } from "@/context/prompt";
@@ -130,7 +131,7 @@ export namespace ConversationContext {
             // oxlint-disable-next-line react-doctor/server-sequential-independent-await
             const context = run.contextId
               ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ensureActiveContext(transaction, key, exa.isEnabled(), initialMemory);
+              : await ActiveContext.ensure(transaction, key, exa.isEnabled(), initialMemory);
             if (run.contextId === null) {
               await transaction.conversationRun.update({
                 where: { id: run.id },
@@ -251,7 +252,7 @@ export namespace ConversationContext {
             await Lane.assertFence(transaction, key, input);
             const context = run.contextId
               ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ensureActiveContext(transaction, key, exa.isEnabled(), initialMemory);
+              : await ActiveContext.ensure(transaction, key, exa.isEnabled(), initialMemory);
             if (context.status !== "active") throw new Error("Pinned context is not active");
             if (context.modelProfileFingerprint !== run.modelProfileFingerprint) {
               throw new Error("Active context profile does not match the prepared run");
@@ -501,11 +502,7 @@ export namespace ConversationContext {
             const run = input.run
               ? await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.run.runId } })
               : null;
-            const existing = await transaction.conversationContext.findFirst({
-              where: { ...key, status: "active" },
-            });
-            const parent =
-              existing ?? (await ensureActiveContext(transaction, key, input.webLookupEnabled, frozenMemory));
+            const parent = await ActiveContext.ensure(transaction, key, input.webLookupEnabled, frozenMemory);
             const envelope = Prompt.renderEnvelope({
               webLookupEnabled: input.webLookupEnabled,
             });
@@ -975,39 +972,5 @@ export namespace ConversationContext {
       });
     }
     return { childContextId: child.id, generation: child.generation, retainedTurns: prepared.tail.length };
-  }
-
-  async function ensureActiveContext(
-    transaction: Prisma.TransactionClient,
-    key: Lane.LaneKey,
-    webLookupEnabled: boolean,
-    frozenMemory: string,
-  ) {
-    const existing = await transaction.conversationContext.findFirst({
-      where: { ...key, status: "active" },
-    });
-    if (existing) return existing;
-
-    const envelope = Prompt.renderEnvelope({ webLookupEnabled });
-    // One Prisma transaction connection must execute its queries serially.
-    // oxlint-disable-next-line react-doctor/server-sequential-independent-await
-    const latest = await transaction.conversationContext.aggregate({
-      where: key,
-      _max: { generation: true },
-    });
-    const created = await transaction.conversationContext.create({
-      data: {
-        ...key,
-        activeKey: ConversationKey.format(key),
-        generation: (latest._max.generation ?? 0) + 1,
-        modelProfileFingerprint: Prompt.profileFingerprint(webLookupEnabled),
-        ...Prompt.stableSeed(envelope, frozenMemory),
-      },
-    });
-    await transaction.conversationLane.update({
-      where: { assistantId_chatId_threadKey: key },
-      data: { activeContextId: created.id },
-    });
-    return created;
   }
 }
