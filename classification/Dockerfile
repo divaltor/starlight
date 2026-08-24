@@ -63,4 +63,4 @@ COPY --from=build /code /code
 
 COPY . /code
 
-CMD ["/code/.venv/bin/granian", "--interface", "asgi", "--host", "0.0.0.0", "app.main:app"]
+CMD ["/code/.venv/bin/granian", "--interface", "asgi", "--workers", "1", "--host", "0.0.0.0", "app.main:app"]
