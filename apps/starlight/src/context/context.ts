@@ -1,16 +1,15 @@
 import type {
   ConversationCheckpointReason,
   ConversationContextRole,
-  ConversationTranscriptKind,
   Prisma,
 } from "@starlight/utils/generated/prisma/client";
 import { Context, Effect, Layer, Schema } from "effect";
-import { z } from "zod";
-import * as ChatReply from "@/ai/chat-reply";
 import { selected } from "@/ai/model-profile";
 import * as Model from "@/ai/model";
 import * as CacheDiagnostics from "@/context/cache-diagnostics";
+import * as Checkpoint from "@/context/checkpoint";
 import * as Prompt from "@/context/prompt";
+import * as Transcript from "@/context/transcript";
 import * as ConversationKey from "@/conversation/key";
 import * as Lane from "@/conversation/lane";
 import { PreparedRequestSchema, StoredPayloadSchema } from "@/conversation/run-artifacts";
@@ -150,8 +149,8 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
             where: key,
             orderBy: { ordinal: "asc" },
           });
-          const knownMessageIds = collectMessageIds(existingTurns.map((turn) => turn.content));
-          const projections = createProjections(run, knownMessageIds);
+          const knownMessageIds = Transcript.collectMessageIds(existingTurns.map((turn) => turn.content));
+          const projections = Transcript.projectRun(run, knownMessageIds);
           const firstOrdinal = (existingTurns.at(-1)?.ordinal ?? 0) + 1;
           const contextTurns = await transaction.conversationContextTurn.findMany({
             where: { contextId: context.id },
@@ -244,7 +243,7 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
             orderBy: { ordinal: "asc" },
             include: { transcriptTurn: true },
           });
-          const knownMessageIds = collectMessageIds(turns.map((turn) => turn.transcriptTurn.content));
+          const knownMessageIds = Transcript.collectMessageIds(turns.map((turn) => turn.transcriptTurn.content));
           // Dot notation is the project convention; destructuring is intentionally disabled.
           // oxlint-disable-next-line prefer-destructuring
           const currentDate = Schema.decodeUnknownSync(PreparedRequestSchema)(run.preparedRequest).currentDate;
@@ -498,7 +497,7 @@ export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service |
           let rollingHash = child.basePrefixHash;
           let estimatedTokens = child.estimatedStableTokens;
           for (const [index, turn] of retained.entries()) {
-            const role = ROLE_BY_KIND[turn.transcriptTurn.kind];
+            const role = Transcript.roleByKind[turn.transcriptTurn.kind];
             const rendered = Prompt.renderTurn({
               content: Prompt.canonicalEncode(turn.transcriptTurn.content),
               role,
@@ -572,11 +571,6 @@ interface ReadyCheckpoint {
   readonly tail: readonly CheckpointTailTurn[];
 }
 
-const CHECKPOINT_INSTRUCTIONS = `Summarize the conversation history for future continuity.
-Preserve speaker attribution, current decisions, corrections, open questions, tool-derived facts, media facts, and unfinished work.
-Remove obsolete intermediate wording and repeated greetings. Do not invent facts.`;
-const CheckpointSummary = z.object({ summary: z.string().min(1) });
-
 const failed =
   (message: string) =>
   (cause: unknown): ContextError => {
@@ -611,11 +605,11 @@ function summarizeCheckpoint(
       .pipe(Effect.mapError(failed("Failed to start context summary")));
     const generated = yield* model
       .generate({
-        instructions: CHECKPOINT_INSTRUCTIONS,
+        instructions: Checkpoint.summaryInstructions,
         maxOutputTokens: 2048,
         maxToolCalls: 0,
         messages: [{ role: "user", text: prepared.summaryInput }],
-        outputSchema: CheckpointSummary,
+        outputSchema: Checkpoint.Summary,
         sessionId: prepared.parentContextId,
         tools: {},
       })
@@ -726,7 +720,7 @@ async function prepareCheckpoint(
   if (existing && turns.at(-1)?.transcriptTurn.ordinal !== existing.sealedThroughTurnOrdinal) {
     throw new Error("Checkpoint parent changed after its boundary was sealed");
   }
-  const boundaries = resolveCheckpointBoundary(turns, existing, input.retainedTokenTarget);
+  const boundaries = Checkpoint.resolveBoundary(turns, existing, input.retainedTokenTarget);
   if (boundaries === null) {
     return { kind: "notPossible", message: "Context has no complete head unit to summarize" };
   }
@@ -771,7 +765,7 @@ async function prepareCheckpoint(
     where: { id: parent.id },
     data: { status: "checkpointing" },
   });
-  const storedSummary = attempt.summaryOutput ? CheckpointSummary.parse(attempt.summaryOutput).summary.trim() : null;
+  const storedSummary = attempt.summaryOutput ? Checkpoint.Summary.parse(attempt.summaryOutput).summary.trim() : null;
 
   return {
     kind: "ready",
@@ -880,118 +874,6 @@ async function commitCheckpoint(
   return { childContextId: child.id, generation: child.generation, retainedTurns: prepared.tail.length };
 }
 
-function selectCheckpointBoundary<
-  Turn extends {
-    readonly estimatedTokens: number;
-    readonly transcriptTurn: { readonly ordinal: number; readonly runId: string };
-  },
->(turns: readonly Turn[], retainedTokenTarget: number): { readonly head: Turn[]; readonly tail: Turn[] } | null {
-  const units: { runId: string; start: number; tokens: number }[] = [];
-  for (const [index, turn] of turns.entries()) {
-    const current = units.at(-1);
-    if (current?.runId === turn.transcriptTurn.runId) {
-      current.tokens += turn.estimatedTokens;
-      continue;
-    }
-    units.push({ runId: turn.transcriptTurn.runId, start: index, tokens: turn.estimatedTokens });
-  }
-  if (units.length < 2) return null;
-
-  let retainedTokens = 0;
-  let tailStart = turns.length;
-  for (const unit of units.slice(1).toReversed()) {
-    if (retainedTokens >= retainedTokenTarget) break;
-    tailStart = unit.start;
-    retainedTokens += unit.tokens;
-  }
-  return { head: turns.slice(0, tailStart), tail: turns.slice(tailStart) };
-}
-
-function resolveCheckpointBoundary<
-  Turn extends {
-    readonly estimatedTokens: number;
-    readonly transcriptTurn: { readonly ordinal: number; readonly runId: string };
-  },
->(
-  turns: readonly Turn[],
-  existing: {
-    readonly headEndTurnOrdinal: number;
-    readonly retainedStartTurnOrdinal: number | null;
-  } | null,
-  retainedTokenTarget: number,
-): { readonly head: Turn[]; readonly tail: Turn[] } | null {
-  if (!existing) return selectCheckpointBoundary(turns, retainedTokenTarget);
-  const retainedStart = existing.retainedStartTurnOrdinal;
-  return {
-    head: turns.filter((turn) => turn.transcriptTurn.ordinal <= existing.headEndTurnOrdinal),
-    tail: retainedStart === null ? [] : turns.filter((turn) => turn.transcriptTurn.ordinal >= retainedStart),
-  };
-}
-
-const ROLE_BY_KIND: Record<ConversationTranscriptKind, ConversationContextRole> = {
-  assistantIgnore: "assistant",
-  assistantMessage: "assistant",
-  editCorrection: "user",
-  linkedReplyContext: "user",
-  mediaProjection: "user",
-  systemEvent: "system",
-  toolCall: "assistant",
-  toolError: "tool",
-  toolResult: "tool",
-  userMessage: "user",
-};
-
-function collectMessageIds(contents: readonly unknown[]): Set<number> {
-  return new Set(
-    contents.flatMap((content) => {
-      if (!content || typeof content !== "object" || Array.isArray(content)) return [];
-      // Transcript contents are stored JSON objects with optional id fields.
-      const entry = content as { messageId?: unknown; telegramMessageId?: unknown };
-      return [
-        ...(typeof entry.messageId === "number" ? [entry.messageId] : []),
-        ...(typeof entry.telegramMessageId === "number" ? [entry.telegramMessageId] : []),
-      ];
-    }),
-  );
-}
-
-interface Projection {
-  readonly content: Prisma.InputJsonObject;
-  readonly key: string;
-  readonly kind: ConversationTranscriptKind;
-  readonly role: ConversationContextRole;
-  readonly sourceReferences: Prisma.InputJsonObject;
-  readonly visibility: string;
-}
-
-interface ProjectionRun {
-  readonly errorTag: string | null;
-  readonly id: string;
-  readonly status: string;
-  readonly actions: readonly {
-    readonly deliveryStatus: string;
-    readonly ordinal: number;
-    readonly payload: unknown;
-    readonly telegramMessageId: number | null;
-    readonly type: string;
-  }[];
-  readonly inputs: readonly {
-    readonly input: {
-      readonly id: bigint;
-      readonly mediaReferences: unknown;
-      readonly payload: unknown;
-    };
-  }[];
-  readonly toolCalls: readonly {
-    readonly errorMessage: string | null;
-    readonly input: unknown;
-    readonly providerCallId: string;
-    readonly result: unknown;
-    readonly status: string;
-    readonly toolName: string;
-  }[];
-}
-
 async function ensureActiveContext(
   transaction: Prisma.TransactionClient,
   key: Lane.LaneKey,
@@ -1018,127 +900,4 @@ async function ensureActiveContext(
     data: { activeContextId: created.id },
   });
   return created;
-}
-
-function createProjections(run: ProjectionRun, knownMessageIds: ReadonlySet<number>): Projection[] {
-  const seenMessageIds = new Set(knownMessageIds);
-  const userTurns = run.inputs.flatMap((runInput, index) => {
-    const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
-    // Dot notation is the project convention; destructuring is intentionally disabled.
-    // oxlint-disable-next-line prefer-destructuring, sonarjs/destructuring-assignment-syntax
-    const messageId = payload.messageId;
-    // oxlint-disable-next-line prefer-destructuring
-    const replyToMessageId = payload.replyToMessageId;
-    const linked =
-      replyToMessageId !== null && !seenMessageIds.has(replyToMessageId) && payload.repliedText
-        ? [
-            {
-              content: {
-                messageId: replyToMessageId,
-                text: payload.repliedText,
-              } as Prisma.InputJsonObject,
-              key: `input:${runInput.input.id}:linked`,
-              kind: "linkedReplyContext" as const,
-              role: "user" as const,
-              sourceReferences: { inputId: runInput.input.id.toString() },
-              visibility: "linked-context",
-            },
-          ]
-        : [];
-    if (linked.length > 0 && replyToMessageId !== null) seenMessageIds.add(replyToMessageId);
-    seenMessageIds.add(messageId);
-    const media = runInput.input.mediaReferences
-      ? [
-          {
-            content: {
-              references: runInput.input.mediaReferences as Prisma.InputJsonValue,
-            },
-            key: `input:${runInput.input.id}:media`,
-            kind: "mediaProjection" as const,
-            role: "user" as const,
-            sourceReferences: { inputId: runInput.input.id.toString() },
-            visibility: "conversation",
-          },
-        ]
-      : [];
-    return [
-      ...linked,
-      {
-        content: {
-          date: payload.date,
-          forwardOrigin: payload.forwardOrigin,
-          messageId,
-          replyToMessageId,
-          replyTargetUnavailable: replyToMessageId !== null && payload.repliedText === null,
-          senderFirstName: payload.senderFirstName,
-          senderId: payload.senderId,
-          text: payload.text,
-        },
-        key: `input:${runInput.input.id}`,
-        kind: payload.editDate === null ? ("userMessage" as const) : ("editCorrection" as const),
-        role: "user" as const,
-        sourceReferences: {
-          inputId: runInput.input.id.toString(),
-          messageId,
-        },
-        visibility: "conversation",
-      },
-      ...media,
-    ].map((projection, projectionIndex) => ({
-      ...projection,
-      key: `${index}:${projectionIndex}:${projection.key}`,
-    }));
-  });
-  const toolTurns = run.toolCalls.flatMap((tool, index) => [
-    {
-      content: { input: tool.input, name: tool.toolName } as Prisma.InputJsonObject,
-      key: `tool:${index}:call:${tool.providerCallId}`,
-      kind: "toolCall" as const,
-      role: "assistant" as const,
-      sourceReferences: { providerCallId: tool.providerCallId },
-      visibility: "conversation",
-    },
-    {
-      content: (tool.status === "completed"
-        ? { name: tool.toolName, result: tool.result }
-        : { error: tool.errorMessage, name: tool.toolName }) as Prisma.InputJsonObject,
-      key: `tool:${index}:result:${tool.providerCallId}`,
-      kind: tool.status === "completed" ? ("toolResult" as const) : ("toolError" as const),
-      role: "tool" as const,
-      sourceReferences: { providerCallId: tool.providerCallId },
-      visibility: "conversation",
-    },
-  ]);
-  const assistantTurns = run.actions.flatMap((action) => {
-    if (action.deliveryStatus !== "delivered") return [];
-    const content = ChatReply.actionSchema.parse(action.payload);
-    return [
-      {
-        content: {
-          action: content as Prisma.InputJsonObject,
-          telegramMessageId: action.telegramMessageId,
-        },
-        key: `action:${action.ordinal}`,
-        kind: action.type === "ignore" ? ("assistantIgnore" as const) : ("assistantMessage" as const),
-        role: "assistant" as const,
-        sourceReferences: { actionOrdinal: action.ordinal },
-        visibility: action.type === "ignore" ? "internal" : "delivered",
-      },
-    ];
-  });
-  const failureTurns: Projection[] =
-    run.status === "failed"
-      ? [
-          {
-            content: { category: run.errorTag ?? "model-failure" },
-            key: "terminal-failure",
-            kind: "systemEvent",
-            role: "system",
-            sourceReferences: { runId: run.id },
-            visibility: "internal",
-          },
-        ]
-      : [];
-
-  return [...userTurns, ...toolTurns, ...assistantTurns, ...failureTurns];
 }
