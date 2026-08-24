@@ -28,6 +28,7 @@ export namespace Transcript {
     readonly key: string;
     readonly kind: ConversationTranscriptKind;
     readonly role: ConversationContextRole;
+    readonly sourceMessageId: number | null;
     readonly sourceReferences: Prisma.InputJsonObject;
     readonly visibility: string;
   }
@@ -60,20 +61,6 @@ export namespace Transcript {
     }[];
   }
 
-  export function collectMessageIds(contents: readonly unknown[]): Set<number> {
-    return new Set(
-      contents.flatMap((content) => {
-        if (!content || typeof content !== "object" || Array.isArray(content)) return [];
-        // Transcript contents are stored JSON objects with optional id fields.
-        const entry = content as { messageId?: unknown; telegramMessageId?: unknown };
-        return [
-          ...(typeof entry.messageId === "number" ? [entry.messageId] : []),
-          ...(typeof entry.telegramMessageId === "number" ? [entry.telegramMessageId] : []),
-        ];
-      }),
-    );
-  }
-
   export function projectRun(run: ProjectionRun, knownMessageIds: ReadonlySet<number>): Projection[] {
     const seenMessageIds = new Set(knownMessageIds);
     const userTurns = run.inputs.flatMap((runInput, index) => {
@@ -94,6 +81,7 @@ export namespace Transcript {
                 key: `input:${runInput.input.id}:linked`,
                 kind: "linkedReplyContext" as const,
                 role: "user" as const,
+                sourceMessageId: replyToMessageId,
                 sourceReferences: { inputId: runInput.input.id.toString() },
                 visibility: "linked-context",
               },
@@ -110,6 +98,7 @@ export namespace Transcript {
               key: `input:${runInput.input.id}:media`,
               kind: "mediaProjection" as const,
               role: "user" as const,
+              sourceMessageId: null,
               sourceReferences: { inputId: runInput.input.id.toString() },
               visibility: "conversation",
             },
@@ -131,6 +120,7 @@ export namespace Transcript {
           key: `input:${runInput.input.id}`,
           kind: payload.editDate === null ? ("userMessage" as const) : ("editCorrection" as const),
           role: "user" as const,
+          sourceMessageId: messageId,
           sourceReferences: {
             inputId: runInput.input.id.toString(),
             messageId,
@@ -149,6 +139,7 @@ export namespace Transcript {
         key: `tool:${index}:call:${tool.providerCallId}`,
         kind: "toolCall" as const,
         role: "assistant" as const,
+        sourceMessageId: null,
         sourceReferences: { providerCallId: tool.providerCallId },
         visibility: "conversation",
       },
@@ -159,6 +150,7 @@ export namespace Transcript {
         key: `tool:${index}:result:${tool.providerCallId}`,
         kind: tool.status === "completed" ? ("toolResult" as const) : ("toolError" as const),
         role: "tool" as const,
+        sourceMessageId: null,
         sourceReferences: { providerCallId: tool.providerCallId },
         visibility: "conversation",
       },
@@ -175,6 +167,7 @@ export namespace Transcript {
           key: `action:${action.ordinal}`,
           kind: action.type === "ignore" ? ("assistantIgnore" as const) : ("assistantMessage" as const),
           role: "assistant" as const,
+          sourceMessageId: action.type === "ignore" ? null : action.telegramMessageId,
           sourceReferences: { actionOrdinal: action.ordinal },
           visibility: action.type === "ignore" ? "internal" : "delivered",
         },
@@ -188,6 +181,7 @@ export namespace Transcript {
               key: "terminal-failure",
               kind: "systemEvent",
               role: "system",
+              sourceMessageId: null,
               sourceReferences: { runId: run.id },
               visibility: "internal",
             },

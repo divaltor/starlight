@@ -661,6 +661,7 @@ model ConversationTranscriptTurn {
   runId String @map("run_id") @db.Uuid
   kind ConversationTranscriptKind
   content Json
+  sourceMessageId Int? @map("source_message_id")
   sourceReferences Json @map("source_references")
   visibility String
   idempotencyKey String @unique @map("idempotency_key")

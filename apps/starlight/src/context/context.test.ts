@@ -303,7 +303,14 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
               inputStartRevision: 1,
               inputs: { create: { inputId: input.id, ordinal: 0 } },
               modelProfileFingerprint: Prompt.profileFingerprint(false),
-              preparedRequest: { currentDate: "2026-08-24" },
+              preparedRequest: {
+                allowedTargetIds: [61],
+                currentDate: "2026-08-24",
+                messages: [],
+                profileFingerprint: Prompt.profileFingerprint(false),
+                replyEligible: true,
+                sessionId: "frozen-hash-session",
+              },
               replyEligible: true,
               status: "invoking",
               threadKey: 0,
@@ -345,6 +352,178 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
     await runtime.dispose();
   }
 });
+
+test.skipIf(!databaseUrl)(
+  "test_projects_linked_reply_context_once_when_two_runs_reply_to_the_same_unadmitted_target",
+  async () => {
+    const runtime = ManagedRuntime.make(
+      ConversationContext.layer.pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(
+            Database.layer(databaseUrl!),
+            Layer.succeed(Exa.Service)(disabledExa),
+            Layer.succeed(Model.Service)(unavailableModel),
+          ),
+        ),
+      ),
+    );
+    const assistantId = 8_000_000_101n;
+    const chatId = -8_000_000_101n;
+
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* verifyLinkedReplyDedup() {
+          const context = yield* ConversationContext.Service;
+          const database = yield* Database.Service;
+          const runIds = yield* database.query(async (client) => {
+            await clearConversation(client, assistantId, chatId);
+            await client.conversationLane.create({
+              data: { assistantId, chatId, pendingRevision: 2, processedRevision: 2, threadKey: 0 },
+            });
+            const replyPayloadA = {
+              addressed: true,
+              date: 1_700_000_100,
+              editDate: null,
+              forwardOrigin: null,
+              messageId: 71,
+              repliedText: "sunset photo",
+              replyToMessageId: 70,
+              senderFirstName: "Alice",
+              senderId: 42,
+              senderUsername: "alice",
+              text: "what is this?",
+            };
+            const replyPayloadB = { ...replyPayloadA, messageId: 72, text: "and now this?" };
+            const inputA = await client.conversationInput.create({
+              data: {
+                admittedRevision: 1,
+                assistantId,
+                chatId,
+                payload: replyPayloadA,
+                senderTelegramId: 42n,
+                sourceMessageId: 71,
+                sourceRevision: "original:71",
+                sourceUpdateId: 171,
+                threadKey: 0,
+              },
+            });
+            const inputB = await client.conversationInput.create({
+              data: {
+                admittedRevision: 2,
+                assistantId,
+                chatId,
+                payload: replyPayloadB,
+                senderTelegramId: 42n,
+                sourceMessageId: 72,
+                sourceRevision: "original:72",
+                sourceUpdateId: 172,
+                threadKey: 0,
+              },
+            });
+            const runA = await client.conversationRun.create({
+              data: {
+                actions: {
+                  create: {
+                    deliveryStatus: "delivered",
+                    ordinal: 0,
+                    payload: { replyTo: 71, text: "A sunset", type: "text" },
+                    targetMessageId: 71,
+                    type: "text",
+                  },
+                },
+                assistantId,
+                chatId,
+                eligibilityReason: "direct",
+                fencingToken: 1n,
+                finalizedAt: new Date(),
+                inputEndRevision: 1,
+                inputStartRevision: 1,
+                inputs: { create: { inputId: inputA.id, ordinal: 0 } },
+                modelProfileFingerprint: Prompt.profileFingerprint(false),
+                replyEligible: true,
+                status: "finalized",
+                threadKey: 0,
+              },
+            });
+            const runB = await client.conversationRun.create({
+              data: {
+                actions: {
+                  create: {
+                    deliveryStatus: "delivered",
+                    ordinal: 0,
+                    payload: { replyTo: 72, text: "Also a sunset", type: "text" },
+                    targetMessageId: 72,
+                    type: "text",
+                  },
+                },
+                assistantId,
+                chatId,
+                eligibilityReason: "direct",
+                fencingToken: 2n,
+                finalizedAt: new Date(),
+                inputEndRevision: 2,
+                inputStartRevision: 2,
+                inputs: { create: { inputId: inputB.id, ordinal: 0 } },
+                modelProfileFingerprint: Prompt.profileFingerprint(false),
+                replyEligible: true,
+                status: "finalized",
+                threadKey: 0,
+              },
+            });
+            return { runA: runA.id, runB: runB.id };
+          });
+
+          yield* database.query(async (client) => {
+            await client.conversationLane.update({
+              where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
+              data: { activeRunId: runIds.runA, fencingToken: 1n },
+            });
+          });
+          const first = yield* context.appendFinalized({ fencingToken: 1n, runId: runIds.runA });
+          yield* database.query(async (client) => {
+            await client.conversationLane.update({
+              where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
+              data: { activeRunId: runIds.runB, fencingToken: 2n },
+            });
+          });
+          const second = yield* context.appendFinalized({ fencingToken: 2n, runId: runIds.runB });
+          const turns = yield* database.query(async (client) => ({
+            linkedCount: await client.conversationTranscriptTurn.count({
+              where: { assistantId, chatId, kind: "linkedReplyContext" },
+            }),
+            runATurns: await client.conversationTranscriptTurn.findMany({
+              where: { runId: runIds.runA },
+              orderBy: { ordinal: "asc" },
+            }),
+            runBTurns: await client.conversationTranscriptTurn.findMany({
+              where: { runId: runIds.runB },
+              orderBy: { ordinal: "asc" },
+            }),
+          }));
+
+          expect(first.appendedTurns).toBe(3);
+          expect(second.appendedTurns).toBe(2);
+          expect(turns.runATurns.map((turn) => turn.kind)).toEqual([
+            "linkedReplyContext",
+            "userMessage",
+            "assistantMessage",
+          ]);
+          expect(turns.runATurns.at(0)?.sourceMessageId).toBe(70);
+          expect(turns.runBTurns.map((turn) => turn.kind)).toEqual(["userMessage", "assistantMessage"]);
+          expect(turns.linkedCount).toBe(1);
+        }),
+      );
+    } finally {
+      await runtime.runPromise(
+        Effect.gen(function* cleanup() {
+          const database = yield* Database.Service;
+          yield* database.query((client) => clearConversation(client, assistantId, chatId));
+        }),
+      );
+      await runtime.dispose();
+    }
+  },
+);
 
 const disabledExa: Exa.Interface = {
   isEnabled: () => false,

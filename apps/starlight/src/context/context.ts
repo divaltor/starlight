@@ -145,8 +145,11 @@ export namespace ConversationContext {
             const existingTurns = await transaction.conversationTranscriptTurn.findMany({
               where: key,
               orderBy: { ordinal: "asc" },
+              select: { ordinal: true, sourceMessageId: true },
             });
-            const knownMessageIds = Transcript.collectMessageIds(existingTurns.map((turn) => turn.content));
+            const knownMessageIds = new Set(
+              existingTurns.flatMap((turn) => (turn.sourceMessageId === null ? [] : [turn.sourceMessageId])),
+            );
             const projections = Transcript.projectRun(run, knownMessageIds);
             const firstOrdinal = (existingTurns.at(-1)?.ordinal ?? 0) + 1;
             const contextTurns = await transaction.conversationContextTurn.findMany({
@@ -166,6 +169,7 @@ export namespace ConversationContext {
                   kind: projection.kind,
                   ordinal,
                   runId: input.runId,
+                  sourceMessageId: projection.sourceMessageId,
                   sourceReferences: projection.sourceReferences,
                   visibility: projection.visibility,
                 },
@@ -240,7 +244,11 @@ export namespace ConversationContext {
               orderBy: { ordinal: "asc" },
               include: { transcriptTurn: true },
             });
-            const knownMessageIds = Transcript.collectMessageIds(turns.map((turn) => turn.transcriptTurn.content));
+            const knownMessageIds = new Set(
+              turns.flatMap((turn) =>
+                turn.transcriptTurn.sourceMessageId === null ? [] : [turn.transcriptTurn.sourceMessageId],
+              ),
+            );
             // Dot notation is the project convention; destructuring is intentionally disabled.
             // oxlint-disable-next-line prefer-destructuring
             const currentDate = Schema.decodeUnknownSync(PreparedRequestSchema)(run.preparedRequest).currentDate;
