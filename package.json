@@ -23,6 +23,7 @@
   },
   "scripts": {
     "lint": "oxlint --fix && ast-grep scan -c script/ast-grep/sgconfig.yml apps/server/src apps/starlight/src packages/api/src && turbo lint",
+    "typecheck": "turbo typecheck",
     "test:ast-grep-rules": "ast-grep test -c script/ast-grep/sgconfig.yml",
     "format": "turbo format",
     "build": "turbo build",

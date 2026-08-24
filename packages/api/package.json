@@ -14,6 +14,7 @@
   "scripts": {
     "build": "bun run -b tsdown",
     "lint": "tsc -b",
+    "typecheck": "tsc -b",
     "format": "oxfmt"
   },
   "devDependencies": {

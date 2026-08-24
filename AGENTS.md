@@ -81,8 +81,7 @@ export const defaultLayer = layer.pipe(Layer.provide(FetchHttpClient.layer));
 ## Maintenance & Tasks
 
 - MUST use `bun` for package management.
-- DON'T use `tsc` or `typecheck` or `check-types`.
-- Run `lint` command to check for linting errors. DON'T run `format` — it's triggered automatically by other pipelines.
+- Run `lint` command to check for linting errors, then run `typecheck` for type errors. DON'T use bare `tsc` from the repo root and DON'T run `format` — it's triggered automatically by other pipelines.
 - ALWAYS use scripts from package.json to create and apply migrations via Prisma. Never write migration files manually.
 - Never hand-edit `packages/utils/src/generated/prisma`; regenerate with `bun run db:generate`.
 - Follow conventional commits: `type(scope): summary` with types `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
