@@ -5,9 +5,9 @@ import { MockLanguageModelV3 } from "ai/test";
 import { ConfigProvider, Effect, Fiber, Layer, Logger } from "effect";
 import { TestClock } from "effect/testing";
 import { z } from "zod";
-import * as Model from "@/ai/model";
-import * as ModelProvider from "@/ai/model-provider";
-import * as ModelTelemetry from "@/ai/model-telemetry";
+import { Model } from "@/ai/model";
+import { ModelProvider } from "@/ai/model-provider";
+import { ModelTelemetry } from "@/ai/model-telemetry";
 
 test.each([{}, { OPENROUTER_API_KEY: "   " }])(
   "returns Unavailable without usable provider configuration",

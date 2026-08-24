@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import type { LanguageModel } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { Effect, Layer } from "effect";
-import * as ChatReply from "@/ai/chat-reply";
-import * as Model from "@/ai/model";
-import * as ModelProvider from "@/ai/model-provider";
-import * as ModelTelemetry from "@/ai/model-telemetry";
-import * as Exa from "@/services/exa";
+import { ChatReply } from "@/ai/chat-reply";
+import { Model } from "@/ai/model";
+import { ModelProvider } from "@/ai/model-provider";
+import { ModelTelemetry } from "@/ai/model-telemetry";
+import { Exa } from "@/services/exa";
 
 test("caps a chatbot reply at 1,024 provider output tokens", async () => {
   const model = textModel('{"replies":[{"type":"ignore"}]}');

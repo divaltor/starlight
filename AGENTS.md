@@ -43,7 +43,7 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 - Rely on type inference; annotate only at exports and boundaries.
 - Avoid the `any` type.
 - Prefer `const`; use ternaries or early returns instead of reassignment.
-- Never alias imports (`import { x as y }`) and never use star imports.
+- Never alias imports (`import { x as y }`) and never use star imports. Group module exports in one `export namespace <CanonicalName>` block (name declared once at the source); consumers use named imports of that namespace.
 - Prefer functional array methods (`map`, `filter`, `flatMap`) over `for` loops.
 - NEVER extract a one-liner, even a heavily used one: a body that is a single call or expression — `estimateTokens(value)` = `Math.ceil(value.length / 4)`, `hash(value)` = one `Bun.CryptoHasher` chain, `profileFingerprint(input)` = `hash(renderEnvelope(input))` — gets written inline at every call site. A wrapper name sends every human reader on a hop to find a line they already know; repetition is not complexity.
 - Keep helpers below the code they support; do not extract multi-line logic used fewer than three times.
@@ -53,23 +53,26 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 
 ## Effect TS
 
-Services follow the flat module anatomy (no `export namespace` wrapper) — see `.opencode/skills/effect/SKILL.md` for the full pattern:
+Services follow the namespace-wrapped module anatomy — all exports live inside one `export namespace <CanonicalName>` block; see `.opencode/skills/effect/SKILL.md` for the full pattern:
 
 ```ts
-export interface Interface {
-  readonly method: (input: Input) => Effect.Effect<Output, ServiceError>;
-}
-export class Service extends Context.Service<Service, Interface>()("starlight/Thing") {}
+export namespace Thing {
+  export interface Interface {
+    readonly method: (input: Input) => Effect.Effect<Output, ServiceError>;
+  }
+  export class Service extends Context.Service<Service, Interface>()("starlight/Thing") {}
 
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    /* bind deps once */
-  }),
-);
-export const defaultLayer = layer.pipe(Layer.provide(FetchHttpClient.layer));
+  const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      /* bind deps once */
+    }),
+  );
+  export const defaultLayer = layer.pipe(Layer.provide(FetchHttpClient.layer));
+}
 ```
 
+- Consumers import the namespace by name (`import { Thing } from "@/..."`) and read `Thing.Service`, `Thing.defaultLayer`. Star imports are forbidden (`import/no-namespace`).
 - Bind services while constructing a layer; never nest `(yield* Service).method(...)`.
 - Name workflows `Effect.fn("Module.method")`.
 - Model expected failures as `Schema.TaggedError` with a `static fromCause(...)` helper.

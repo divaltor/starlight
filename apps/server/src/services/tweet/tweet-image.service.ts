@@ -3,8 +3,7 @@ import { Effect } from "effect";
 import { renderTweetImage } from "@/services/render";
 import type { TweetData, RenderResult } from "@/services/render";
 import type { FxEmbedTweet, FxEmbedMosaicPhoto } from "@/services/fxembed/types";
-import type { TwitterApiError } from "@/services/twitter-api";
-import * as TwitterApi from "@/services/twitter-api";
+import { TwitterApi } from "@/services/twitter-api";
 import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";
@@ -116,7 +115,7 @@ function fetchReplyChain(
   tweetId: string,
   depth = 0,
   childReplyingTo?: string,
-): Effect.Effect<ReplyChainResult, TwitterApiError, TwitterApi.Service> {
+): Effect.Effect<ReplyChainResult, TwitterApi.TwitterApiError, TwitterApi.Service> {
   return Effect.gen(function* () {
     if (depth >= MAX_REPLY_CHAIN_DEPTH) {
       return { chain: [], hasMore: true };
@@ -146,7 +145,7 @@ function fetchReplyChain(
 }
 
 export const prepareTweetData = Effect.fn("prepareTweetData")(
-  (tweetId: string): Effect.Effect<TweetData, TwitterApiError | Error, TwitterApi.Service> =>
+  (tweetId: string): Effect.Effect<TweetData, TwitterApi.TwitterApiError | Error, TwitterApi.Service> =>
     Effect.gen(function* () {
       const twitterApi = yield* TwitterApi.Service;
       const tweet = yield* twitterApi.getFxTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE);
@@ -183,7 +182,10 @@ export const prepareTweetData = Effect.fn("prepareTweetData")(
 export type TweetImageResult = RenderResult;
 
 export const generateTweetImage = Effect.fn("generateTweetImage")(
-  (tweetId: string, theme: Theme = "light"): Effect.Effect<RenderResult, TwitterApiError | Error, TwitterApi.Service> =>
+  (
+    tweetId: string,
+    theme: Theme = "light",
+  ): Effect.Effect<RenderResult, TwitterApi.TwitterApiError | Error, TwitterApi.Service> =>
     Effect.gen(function* () {
       const s3Path = `tweets/${tweetId}/${theme}.jpg`;
       const s3File = s3.file(s3Path);

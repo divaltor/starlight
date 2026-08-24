@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "@starlight/utils/generated/prisma/client";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import * as Model from "@/ai/model";
-import * as ConversationContext from "@/context/context";
-import * as Prompt from "@/context/prompt";
-import * as Database from "@/services/database";
-import * as Exa from "@/services/exa";
+import { Model } from "@/ai/model";
+import { ConversationContext } from "@/context/context";
+import { Prompt } from "@/context/prompt";
+import { Database } from "@/services/database";
+import { Exa } from "@/services/exa";
 
 const databaseUrl = process.env.DATABASE_URL;
 

@@ -1,4 +1,4 @@
 import { ManagedRuntime } from "effect";
-import * as EmbeddingsService from "./embeddings";
+import { EmbeddingsService } from "./embeddings";
 
 export const runtime = ManagedRuntime.make(EmbeddingsService.defaultLayer);

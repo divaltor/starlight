@@ -1,4 +1,4 @@
-import * as EmbeddingsService from "@starlight/api/services/embeddings";
+import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { DbNull, env, Prisma, prisma } from "@starlight/utils";
 import { Queue, Worker } from "bullmq";
 import { logger } from "@/logger";

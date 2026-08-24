@@ -1,9 +1,9 @@
-import * as EmbeddingsService from "@starlight/api/services/embeddings";
+import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import env from "@starlight/utils/config";
 import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
 import type { LogLevel } from "effect/LogLevel";
 import { logger } from "@/logger";
-import * as TwitterApi from "@/services/twitter-api";
+import { TwitterApi } from "@/services/twitter-api";
 
 // Derived from Logger.formatStructured's output; effect does not export this structural type.
 type StructuredLogOutput = ReturnType<(typeof Logger.formatStructured)["log"]>;

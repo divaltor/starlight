@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { LanguageModelUsage, ProviderMetadata } from "ai";
 import { selected } from "@/ai/model-profile";
-import * as Usage from "@/ai/usage";
+import { Usage } from "@/ai/usage";
 
 test("keeps missing cache detail unknown", () => {
   expect(Usage.normalizeStep(createUsage({}), undefined, selected.prices)).toMatchObject({

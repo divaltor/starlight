@@ -1,7 +1,7 @@
 import { FormattedString } from "@grammyjs/parse-mode";
 import { CookieEncryption } from "@starlight/crypto";
 import { resolveQueryEmbedding } from "@starlight/api/services/embedding-cache";
-import * as EmbeddingsService from "@starlight/api/services/embeddings";
+import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { env, isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import { webAppKeyboard } from "@/bot";

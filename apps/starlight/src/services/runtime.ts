@@ -5,14 +5,14 @@ import type { LogRecord } from "@opentelemetry/api-logs";
 import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
 import type { LogLevel } from "effect/LogLevel";
 import { createBotEnv } from "@starlight/utils/env";
-import * as Model from "@/ai/model";
-import * as Conversation from "@/conversation/conversation";
-import * as TelegramDelivery from "@/conversation/delivery";
-import * as WakeOutbox from "@/conversation/wake-outbox";
-import * as WakeQueue from "@/conversation/wake-queue";
-import * as ConversationContext from "@/context/context";
-import * as Database from "@/services/database";
-import * as Exa from "@/services/exa";
+import { Model } from "@/ai/model";
+import { Conversation } from "@/conversation/conversation";
+import { TelegramDelivery } from "@/conversation/delivery";
+import { WakeOutbox } from "@/conversation/wake-outbox";
+import { WakeQueue } from "@/conversation/wake-queue";
+import { ConversationContext } from "@/context/context";
+import { Database } from "@/services/database";
+import { Exa } from "@/services/exa";
 
 const env = createBotEnv();
 
