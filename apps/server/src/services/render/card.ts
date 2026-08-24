@@ -76,7 +76,7 @@ export function buildTweetCard(params: BuildCardParams): Node {
     statsRow(params.colors, CARD_WIDTH_INNER, params.tweet),
   ];
 
-  return box({
+  const card = box({
     children: [...dots, ...chainNodes, ...tail],
     style: {
       backgroundColor: params.colors.cardBackground,
@@ -87,6 +87,11 @@ export function buildTweetCard(params: BuildCardParams): Node {
       padding: LAYOUT.PADDING,
       width: LAYOUT.WIDTH,
     },
+  });
+
+  return box({
+    children: [card],
+    style: { backgroundColor: params.colors.background, width: LAYOUT.WIDTH },
   });
 }
 
