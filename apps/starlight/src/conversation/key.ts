@@ -9,7 +9,13 @@ export namespace ConversationKey {
 
   export type Value = typeof Value.Type;
 
-  export function format(key: Value): string {
+  // Interpolation renders bigint and number identically, so one formatter serves both the
+  // app-side Value and Prisma's BigInt identity columns.
+  export function format(key: {
+    readonly assistantId: bigint | number;
+    readonly chatId: bigint | number;
+    readonly threadKey: number;
+  }): string {
     return `v1/${key.assistantId}/${key.chatId}/${key.threadKey}`;
   }
 
@@ -23,6 +29,7 @@ export namespace ConversationKey {
     };
   }
 
+  // Sole remaining use: BullMQ job payloads are JSON, so BigInt rows must become numbers.
   export function fromDb(row: {
     readonly assistantId: bigint;
     readonly chatId: bigint;

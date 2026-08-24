@@ -28,17 +28,11 @@ export const InputPayloadSchema = Schema.Struct({
 
 export type InputPayload = typeof InputPayloadSchema.Type & Prisma.InputJsonObject;
 
-// The frozen request written by Conversation.prepareRun and replayed on resume.
+// The frozen request written by Conversation.prepareRun and replayed on resume. Only
+// values that time erodes are persisted: everything else re-derives deterministically
+// from the immutable batch inputs. Phase 6 extends this artifact with frozen
+// memory-revision ids, so it must stay decode-compatible with extra historical fields.
 export const PreparedRequestSchema = Schema.Struct({
-  allowedTargetIds: Schema.Array(Schema.Int),
   currentDate: Schema.String,
-  messages: Schema.Array(
-    Schema.Struct({
-      role: Schema.Literals(["assistant", "user"]),
-      text: Schema.String,
-    }),
-  ),
-  profileFingerprint: Schema.String,
-  replyEligible: Schema.Boolean,
   sessionId: Schema.String,
 });

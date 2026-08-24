@@ -16,17 +16,9 @@ export namespace ConversationContext {
   export interface PreparedContextRequest {
     readonly cacheBase: string;
     readonly contextId: string;
-    readonly estimatedTokens: {
-      readonly base: number;
-      readonly current: number;
-      readonly finalized: number;
-      readonly total: number;
-    };
+    readonly estimatedTokens: number;
     readonly instructions: string;
     readonly messages: readonly Model.Message[];
-    readonly profileFingerprint: string;
-    readonly requestHash: string;
-    readonly terminalPrefixHash: string;
     readonly webLookupEnabled: boolean;
   }
 
@@ -242,12 +234,19 @@ export namespace ConversationContext {
             const turns = await transaction.conversationContextTurn.findMany({
               where: { contextId: context.id },
               orderBy: { ordinal: "asc" },
-              include: { transcriptTurn: true },
+            });
+            // Reply-target membership must not depend on the active generation: a hard
+            // checkpoint can summarize a target out of the retained tail mid-run. The lane
+            // transcript is append-only and stays stable across retries, so D renders
+            // byte-identically before and after a checkpoint.
+            // One Prisma transaction connection must execute its queries serially.
+            // oxlint-disable-next-line react-doctor/server-sequential-independent-await
+            const transcriptTurns = await transaction.conversationTranscriptTurn.findMany({
+              where: key,
+              select: { sourceMessageId: true },
             });
             const knownMessageIds = new Set(
-              turns.flatMap((turn) =>
-                turn.transcriptTurn.sourceMessageId === null ? [] : [turn.transcriptTurn.sourceMessageId],
-              ),
+              transcriptTurns.flatMap((turn) => (turn.sourceMessageId === null ? [] : [turn.sourceMessageId])),
             );
             // Dot notation is the project convention; destructuring is intentionally disabled.
             // oxlint-disable-next-line prefer-destructuring
@@ -276,31 +275,25 @@ export namespace ConversationContext {
             const currentTokens = current.reduce((total, message) => total + Math.ceil(message.text.length / 4), 0);
             const baseTokens = Math.ceil(context.stableEnvelope.length / 4) + Math.ceil(cacheBase.length / 4);
             const terminalPrefixHash = Prompt.verifyPrefix(context.basePrefixHash, turns);
+            const requestHash = new Bun.CryptoHasher("sha256")
+              .update(
+                Prompt.canonicalEncode({
+                  cacheBase,
+                  instructions: envelope.instructions,
+                  messages,
+                  profileFingerprint: context.modelProfileFingerprint,
+                  terminalPrefixHash,
+                  webLookupEnabled: envelope.tools.length > 0,
+                }),
+              )
+              .digest("hex");
+            // Region estimates stay local so calibration recording can split A/B/C/D later.
             const prepared = {
               cacheBase,
               contextId: context.id,
-              estimatedTokens: {
-                base: baseTokens,
-                current: currentTokens,
-                finalized: finalizedTokens,
-                total: baseTokens + finalizedTokens + currentTokens,
-              },
+              estimatedTokens: baseTokens + finalizedTokens + currentTokens,
               instructions: envelope.instructions,
               messages,
-              profileFingerprint: context.modelProfileFingerprint,
-              requestHash: new Bun.CryptoHasher("sha256")
-                .update(
-                  Prompt.canonicalEncode({
-                    cacheBase,
-                    instructions: envelope.instructions,
-                    messages,
-                    profileFingerprint: context.modelProfileFingerprint,
-                    terminalPrefixHash,
-                    webLookupEnabled: envelope.tools.length > 0,
-                  }),
-                )
-                .digest("hex"),
-              terminalPrefixHash,
               webLookupEnabled: envelope.tools.length > 0,
             };
             const snapshot: CacheDiagnostics.PrefixSnapshot = {
@@ -311,7 +304,7 @@ export namespace ConversationContext {
                 new Bun.CryptoHasher("sha256").update(cacheBase).digest("hex"),
               ],
             };
-            if (run.requestHash !== null && run.requestHash !== prepared.requestHash) {
+            if (run.requestHash !== null && run.requestHash !== requestHash) {
               // Rendering changed between freeze and replay (typically a deploy). Retrying cannot
               // succeed because attemptCount only advances during model invocation, so surface a
               // permanent error for the caller to block the run instead of redriving forever.
@@ -322,7 +315,7 @@ export namespace ConversationContext {
             }
             await transaction.conversationRun.update({
               where: { id: run.id },
-              data: { contextId: context.id, requestHash: prepared.requestHash },
+              data: { contextId: context.id, requestHash },
             });
             return { prepared, snapshot };
           })
@@ -820,7 +813,7 @@ export namespace ConversationContext {
         assistantId: parent.assistantId,
         chatId: parent.chatId,
         threadKey: parent.threadKey,
-        activeKey: ConversationKey.format(ConversationKey.fromDb(parent)),
+        activeKey: ConversationKey.format(parent),
         generation: parent.generation + 1,
         modelProfileFingerprint: parent.modelProfileFingerprint,
         parentContextId: parent.id,
@@ -890,7 +883,7 @@ export namespace ConversationContext {
     const created = await transaction.conversationContext.create({
       data: {
         ...key,
-        activeKey: ConversationKey.format(ConversationKey.fromDb(key)),
+        activeKey: ConversationKey.format(key),
         generation: 1,
         modelProfileFingerprint: Prompt.profileFingerprint(webLookupEnabled),
         ...Prompt.stableSeed(envelope, memory),

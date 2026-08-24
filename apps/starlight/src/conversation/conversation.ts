@@ -288,7 +288,7 @@ export namespace Conversation {
                     ),
               ),
             );
-          if (!prepared.replyEligible) {
+          if (!claimed.replyEligible) {
             yield* appendAndCheckpoint(context, claimed, options);
             yield* finalizeRun(database, claimed, options);
             return { kind: "completed" as const, runId: claimed.runId };
@@ -367,6 +367,7 @@ export namespace Conversation {
   export const optionsLayer = Layer.succeed(OptionsService);
 
   interface ClaimedRun {
+    readonly dbKey: Lane.LaneKey;
     readonly fencingToken: bigint;
     readonly inputEndRevision: number;
     readonly inputs: readonly {
@@ -377,14 +378,13 @@ export namespace Conversation {
     readonly kind: "claimed";
     readonly attemptCount: number;
     readonly preparedRequest: unknown;
+    readonly replyEligible: boolean;
     readonly runId: string;
     readonly status: ConversationRunStatus;
   }
 
   interface PreparedRun {
     readonly allowedTargetIds: readonly number[];
-    readonly messages: readonly Model.Message[];
-    readonly replyEligible: boolean;
     readonly sessionId: string;
   }
 
@@ -452,10 +452,12 @@ export namespace Conversation {
             fencingToken,
             inputEndRevision: active.inputEndRevision,
             inputs: active.inputs.map((runInput) => runInput.input),
+            dbKey: where,
             key,
             kind: "claimed",
             attemptCount: active.attemptCount,
             preparedRequest: active.preparedRequest,
+            replyEligible: active.replyEligible,
             runId: active.id,
             status: active.status,
           };
@@ -473,6 +475,9 @@ export namespace Conversation {
           take: MAX_BATCH_MESSAGES,
         });
         const lastInput = inputs.at(-1)!;
+        // The eligibility decision is persisted once at freeze time; retries must not
+        // recompute (and a future probabilistic policy must not re-roll) it.
+        const replyEligible = inputs.some((item) => (item.payload as InputPayload).addressed);
         const run = await transaction.conversationRun.create({
           data: {
             ...where,
@@ -481,7 +486,7 @@ export namespace Conversation {
             inputEndRevision: lastInput.admittedRevision,
             inputStartRevision: inputs[0]!.admittedRevision,
             modelProfileFingerprint: Prompt.profileFingerprint(webLookupEnabled),
-            replyEligible: inputs.some((item) => (item.payload as InputPayload).addressed),
+            replyEligible,
             inputs: {
               create: inputs.map((item, ordinal) => ({ inputId: item.id, ordinal })),
             },
@@ -505,10 +510,12 @@ export namespace Conversation {
           fencingToken,
           inputEndRevision: lastInput.admittedRevision,
           inputs,
+          dbKey: where,
           key,
           kind: "claimed",
           attemptCount: 0,
           preparedRequest: null,
+          replyEligible,
           runId: run.id,
           status: "prepared",
         };
@@ -518,50 +525,40 @@ export namespace Conversation {
 
   function prepareRun(database: Database.Interface, claimed: ClaimedRun, options: Options, webLookupEnabled: boolean) {
     return Effect.gen(function* prepare() {
-      if (claimed.preparedRequest !== null) {
-        return Schema.decodeUnknownSync(PreparedRequestSchema)(claimed.preparedRequest);
-      }
       const payloads = claimed.inputs.map((input) => input.payload as InputPayload);
-      const currentDate = new Date().toISOString().slice(0, 10);
-      const messages = [
-        {
-          role: "user" as const,
-          text: `TRUSTED REQUEST METADATA\nCurrent date: ${currentDate}`,
-        },
-        ...payloads.map((payload) => ({
-          role: "user" as const,
-          text: Prompt.renderLiveMessage(payload, Prompt.describeReplyTarget(payload)),
-        })),
+      const allowedTargetIds = [
+        ...new Set(
+          payloads.flatMap((payload) => [
+            payload.messageId,
+            ...(payload.replyToMessageId === null ? [] : [payload.replyToMessageId]),
+          ]),
+        ),
       ];
-      const allowedTargetIds = payloads.flatMap((payload) => [
-        payload.messageId,
-        ...(payload.replyToMessageId === null ? [] : [payload.replyToMessageId]),
-      ]);
-      const prepared = {
-        allowedTargetIds: [...new Set(allowedTargetIds)],
-        messages,
-        replyEligible: payloads.some((payload) => payload.addressed),
+      const stored =
+        claimed.preparedRequest === null
+          ? null
+          : Schema.decodeUnknownSync(PreparedRequestSchema)(claimed.preparedRequest);
+      // Only what time erodes is frozen; rendering rebuilds deterministically from the
+      // immutable batch in ConversationContext.prepare.
+      const frozen = stored ?? {
+        currentDate: new Date().toISOString().slice(0, 10),
         sessionId: yield* Effect.promise(() => ConversationKey.affinity(claimed.key, options.affinitySecret)),
-      } satisfies PreparedRun;
-      const request = {
-        ...prepared,
-        currentDate,
-        profileFingerprint: Prompt.profileFingerprint(webLookupEnabled),
       };
-
-      yield* database
-        .transaction(async (transaction) => {
-          await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
-          await transaction.conversationRun.update({
-            where: { id: claimed.runId },
-            data: {
-              modelProfileFingerprint: request.profileFingerprint,
-              preparedRequest: request,
-            },
-          });
-        })
-        .pipe(Effect.mapError(failed("Failed to prepare conversation run")));
-      return prepared;
+      if (stored === null) {
+        yield* database
+          .transaction(async (transaction) => {
+            await Lane.assertFence(transaction, claimed.dbKey, claimed);
+            await transaction.conversationRun.update({
+              where: { id: claimed.runId },
+              data: {
+                modelProfileFingerprint: Prompt.profileFingerprint(webLookupEnabled),
+                preparedRequest: frozen,
+              },
+            });
+          })
+          .pipe(Effect.mapError(failed("Failed to prepare conversation run")));
+      }
+      return { allowedTargetIds, sessionId: frozen.sessionId } satisfies PreparedRun;
     });
   }
 
@@ -583,7 +580,7 @@ export namespace Conversation {
       }
       yield* database
         .transaction(async (transaction) => {
-          await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
+          await Lane.assertFence(transaction, claimed.dbKey, claimed);
           await transaction.conversationRun.update({
             where: { id: claimed.runId },
             data: { attemptCount: { increment: 1 }, invokingAt: new Date(), status: "invoking" },
@@ -591,7 +588,7 @@ export namespace Conversation {
           // Lease renewal rides this stage boundary so the model call cannot outlive the
           // lease and let a second worker re-invoke the same run.
           await transaction.conversationLane.update({
-            where: { assistantId_chatId_threadKey: ConversationKey.toDb(claimed.key) },
+            where: { assistantId_chatId_threadKey: claimed.dbKey },
             data: { leaseUntil: new Date(Date.now() + options.leaseMs) },
           });
         })
@@ -649,7 +646,7 @@ export namespace Conversation {
     };
     return database
       .transaction(async (transaction) => {
-        await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
+        await Lane.assertFence(transaction, claimed.dbKey, claimed);
         const run = await transaction.conversationRun.findUniqueOrThrow({
           where: { id: claimed.runId },
           select: { contextId: true },
@@ -730,7 +727,7 @@ export namespace Conversation {
     return Effect.gen(function* dispatch() {
       yield* database
         .transaction(async (transaction) => {
-          await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
+          await Lane.assertFence(transaction, claimed.dbKey, claimed);
           await transaction.conversationRun.update({
             where: { id: claimed.runId },
             data: { status: "dispatching" },
@@ -738,7 +735,7 @@ export namespace Conversation {
           // Same renewal contract as the model stage: Telegram delivery bursts must not
           // outlive the lease while another worker waits on it.
           await transaction.conversationLane.update({
-            where: { assistantId_chatId_threadKey: ConversationKey.toDb(claimed.key) },
+            where: { assistantId_chatId_threadKey: claimed.dbKey },
             data: { leaseUntil: new Date(Date.now() + options.leaseMs) },
           });
         })
@@ -760,7 +757,7 @@ export namespace Conversation {
           if (stored.deliveryStatus === "unknown" && stored.unknownRetryCount > 0) {
             return database
               .transaction(async (transaction) => {
-                await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
+                await Lane.assertFence(transaction, claimed.dbKey, claimed);
                 await transaction.conversationRunAction.update({
                   where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
                   data: {
@@ -798,7 +795,7 @@ export namespace Conversation {
   ): Effect.Effect<void, ConversationError> {
     return database
       .transaction(async (transaction) => {
-        await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
+        await Lane.assertFence(transaction, claimed.dbKey, claimed);
         await transaction.conversationRunAction.update({
           where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
           data: {
@@ -819,7 +816,7 @@ export namespace Conversation {
         ),
         Effect.flatMap((receipt) =>
           database.transaction(async (transaction) => {
-            await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
+            await Lane.assertFence(transaction, claimed.dbKey, claimed);
             await transaction.conversationRunAction.update({
               where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
               data: {
@@ -890,7 +887,7 @@ export namespace Conversation {
   ) {
     return database
       .transaction(async (transaction) => {
-        await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
+        await Lane.assertFence(transaction, claimed.dbKey, claimed);
         await transaction.conversationRunAction.update({
           where: { runId_ordinal: { ordinal: stored.ordinal, runId: claimed.runId } },
           data: {
@@ -936,7 +933,7 @@ export namespace Conversation {
 
   function projectedTokens(request: ConversationContext.PreparedContextRequest, options: Options) {
     return (
-      Math.ceil(request.estimatedTokens.total * options.contextEstimateSafetyRatio) +
+      Math.ceil(request.estimatedTokens * options.contextEstimateSafetyRatio) +
       options.contextOutputReserveTokens +
       options.contextToolReserveTokens
     );
@@ -961,7 +958,7 @@ export namespace Conversation {
   ) {
     return database
       .transaction(async (transaction) => {
-        await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
+        await Lane.assertFence(transaction, claimed.dbKey, claimed);
         await transaction.conversationRun.update({
           where: { id: claimed.runId },
           data: { errorMessage: message, errorTag, finalizedAt: new Date(), status: "blocked" },
@@ -979,7 +976,7 @@ export namespace Conversation {
   ) {
     return database
       .transaction(async (transaction) => {
-        await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
+        await Lane.assertFence(transaction, claimed.dbKey, claimed);
         const run = await transaction.conversationRun.findUniqueOrThrow({
           where: { id: claimed.runId },
           select: { status: true },
@@ -998,7 +995,7 @@ export namespace Conversation {
   // Shared tail of every terminal run transition: clears the lease, advances processedRevision
   // past this run's batch, and schedules the successor wake when newer inputs are waiting.
   async function releaseLane(transaction: Prisma.TransactionClient, claimed: ClaimedRun, options: Options) {
-    const where = ConversationKey.toDb(claimed.key);
+    const where = claimed.dbKey;
     const lane = await transaction.conversationLane.findUniqueOrThrow({
       where: { assistantId_chatId_threadKey: where },
     });
@@ -1042,7 +1039,7 @@ export namespace Conversation {
   ) {
     return database
       .transaction(async (transaction) => {
-        await Lane.assertFence(transaction, ConversationKey.toDb(claimed.key), claimed);
+        await Lane.assertFence(transaction, claimed.dbKey, claimed);
         await transaction.conversationRun.update({
           where: { id: claimed.runId },
           data: {
@@ -1054,7 +1051,7 @@ export namespace Conversation {
         });
         if (!terminal) {
           await transaction.conversationLane.update({
-            where: { assistantId_chatId_threadKey: ConversationKey.toDb(claimed.key) },
+            where: { assistantId_chatId_threadKey: claimed.dbKey },
             data: { leaseUntil: new Date() },
           });
         }
@@ -1067,7 +1064,7 @@ export namespace Conversation {
       .query((client) =>
         client.conversationLane.updateMany({
           where: {
-            ...ConversationKey.toDb(claimed.key),
+            ...claimed.dbKey,
             activeRunId: claimed.runId,
             fencingToken: claimed.fencingToken,
           },
