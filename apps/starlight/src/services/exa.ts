@@ -72,19 +72,12 @@ export const layer: Layer.Layer<Service, ExaError> = Layer.effect(
       try: () => client.tools({ schemas: toolSchemas }),
       catch: (cause) => ExaError.fromCause("Failed to load Exa MCP tools", cause),
     });
-    const tools: ToolSet = {
-      web_fetch_exa: {
-        ...discoveredTools.web_fetch_exa,
-        description: "Read one exact URL from the live user message, up to 6,000 characters.",
-      },
-      web_search_exa: {
-        ...discoveredTools.web_search_exa,
-        description: "Search for a current or externally verifiable fact, returning up to five results.",
-      },
-    };
 
-    return Service.of({ isEnabled: () => true, tools });
-  }),
+    return Service.of({ isEnabled: () => true, tools: discoveredTools });
+  }).pipe(
+    // Config failures join the service error channel as typed ExaErrors.
+    Effect.catchTag("ConfigError", (cause) => Effect.fail(ExaError.fromCause("Invalid Exa configuration", cause))),
+  ),
 );
 
 export const defaultLayer: Layer.Layer<Service, ExaError> = layer;
