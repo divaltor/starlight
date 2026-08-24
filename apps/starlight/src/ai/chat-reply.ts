@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { z } from "zod";
 import * as Model from "@/ai/model";
+import { reactionEmojis } from "@/conversation/delivery";
 import * as Exa from "@/services/exa";
 
 export const systemPrompt = await Bun.file(new URL("system-prompt.txt", import.meta.url)).text();
@@ -8,22 +9,7 @@ export const outputSchemaVersion = "chat-reply-v1";
 export const toolsetVersion = "exa-mcp-v1";
 const MAX_REPLY_OUTPUT_TOKENS = 1024;
 
-const reactionEmojiSchema = z.enum([
-  "😁",
-  "🤮",
-  "🤡",
-  "🤔",
-  "😭",
-  "🥰",
-  "😡",
-  "🔥",
-  "👏",
-  "👌",
-  "👎",
-  "👍",
-  "💔",
-  "💯",
-]);
+const reactionEmojiSchema = z.enum(reactionEmojis);
 
 export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ignore") }),
