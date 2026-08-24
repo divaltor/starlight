@@ -1,6 +1,6 @@
 services:
   valkey:
-    image: reg.mini.dev/valkey:v9.1.1
+    image: valkey/valkey:9.1.1-alpine
     ports:
       - 6379:6379
     volumes:
