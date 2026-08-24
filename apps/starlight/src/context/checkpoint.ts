@@ -1,3 +1,4 @@
+import type { Prisma } from "@starlight/utils/generated/prisma/client";
 import { z } from "zod";
 
 export const summaryInstructions = `Summarize the conversation history for future continuity.
@@ -7,15 +8,26 @@ Remove obsolete intermediate wording and repeated greetings. Do not invent facts
 // Contract for the summarizer output persisted on checkpoint attempts.
 export const Summary = z.object({ summary: z.string().min(1) });
 
+// A parent-context turn sealed with its transcript source; boundary math needs only
+// ordinals, token estimates, and run grouping.
+export type SealedTurn = Prisma.ConversationContextTurnGetPayload<{ include: { transcriptTurn: true } }>;
+
+// Fields republished from parent turns onto the child context after a commit.
+export type TailTurn = Pick<SealedTurn, "renderedContent" | "role" | "transcriptTurnId">;
+
+// Attempt columns that freeze a boundary between attempts.
+export type Attempt = Pick<
+  Prisma.ConversationCheckpointAttemptGetPayload<object>,
+  "headEndTurnOrdinal" | "retainedStartTurnOrdinal"
+>;
+
 // Splits sealed context turns into a summarized head and a retained tail. Turns are
 // grouped into run units so a conversation is never cut mid-run; the oldest unit always
 // stays in the head, and the tail grows newest-first until it reaches the token target.
-export function selectBoundary<
-  Turn extends {
-    readonly estimatedTokens: number;
-    readonly transcriptTurn: { readonly ordinal: number; readonly runId: string };
-  },
->(turns: readonly Turn[], retainedTokenTarget: number): { readonly head: Turn[]; readonly tail: Turn[] } | null {
+export function selectBoundary(
+  turns: readonly SealedTurn[],
+  retainedTokenTarget: number,
+): { readonly head: SealedTurn[]; readonly tail: SealedTurn[] } | null {
   const units: { runId: string; start: number; tokens: number }[] = [];
   for (const [index, turn] of turns.entries()) {
     const current = units.at(-1);
@@ -39,19 +51,11 @@ export function selectBoundary<
 
 // Retries resolve against the ordinals sealed on the existing attempt instead of
 // re-selecting, so every attempt summarizes the exact same head input.
-export function resolveBoundary<
-  Turn extends {
-    readonly estimatedTokens: number;
-    readonly transcriptTurn: { readonly ordinal: number; readonly runId: string };
-  },
->(
-  turns: readonly Turn[],
-  existing: {
-    readonly headEndTurnOrdinal: number;
-    readonly retainedStartTurnOrdinal: number | null;
-  } | null,
+export function resolveBoundary(
+  turns: readonly SealedTurn[],
+  existing: Attempt | null,
   retainedTokenTarget: number,
-): { readonly head: Turn[]; readonly tail: Turn[] } | null {
+): { readonly head: SealedTurn[]; readonly tail: SealedTurn[] } | null {
   if (!existing) return selectBoundary(turns, retainedTokenTarget);
   const retainedStart = existing.retainedStartTurnOrdinal;
   return {

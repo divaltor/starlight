@@ -1,8 +1,4 @@
-import type {
-  ConversationCheckpointReason,
-  ConversationContextRole,
-  Prisma,
-} from "@starlight/utils/generated/prisma/client";
+import type { ConversationCheckpointReason, Prisma } from "@starlight/utils/generated/prisma/client";
 import { Context, Effect, Layer, Schema } from "effect";
 import { selected } from "@/ai/model-profile";
 import * as Model from "@/ai/model";
@@ -556,19 +552,13 @@ type PreparedCheckpoint =
   | { readonly kind: "notPossible"; readonly message: string }
   | ({ readonly kind: "ready" } & ReadyCheckpoint);
 
-interface CheckpointTailTurn {
-  readonly renderedContent: string;
-  readonly role: ConversationContextRole;
-  readonly transcriptTurnId: bigint;
-}
-
 interface ReadyCheckpoint {
   readonly attemptId: string;
   readonly key: Lane.LaneKey;
   readonly parentContextId: string;
   readonly summary: string | null;
   readonly summaryInput: string;
-  readonly tail: readonly CheckpointTailTurn[];
+  readonly tail: readonly Checkpoint.TailTurn[];
 }
 
 const failed =

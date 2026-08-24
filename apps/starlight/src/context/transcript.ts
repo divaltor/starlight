@@ -31,33 +31,11 @@ export interface Projection {
   readonly visibility: string;
 }
 
-export interface ProjectionRun {
-  readonly errorTag: string | null;
-  readonly id: string;
-  readonly status: string;
-  readonly actions: readonly {
-    readonly deliveryStatus: string;
-    readonly ordinal: number;
-    readonly payload: unknown;
-    readonly telegramMessageId: number | null;
-    readonly type: string;
-  }[];
-  readonly inputs: readonly {
-    readonly input: {
-      readonly id: bigint;
-      readonly mediaReferences: unknown;
-      readonly payload: unknown;
-    };
-  }[];
-  readonly toolCalls: readonly {
-    readonly errorMessage: string | null;
-    readonly input: unknown;
-    readonly providerCallId: string;
-    readonly result: unknown;
-    readonly status: string;
-    readonly toolName: string;
-  }[];
-}
+// The finalized run row projected into turns; mirrors the include used by
+// ConversationContext.appendFinalized so callers pass query results unmodified.
+export type Run = Prisma.ConversationRunGetPayload<{
+  include: { actions: true; inputs: { include: { input: true } }; toolCalls: true };
+}>;
 
 export function collectMessageIds(contents: readonly unknown[]): Set<number> {
   return new Set(
@@ -73,7 +51,7 @@ export function collectMessageIds(contents: readonly unknown[]): Set<number> {
   );
 }
 
-export function projectRun(run: ProjectionRun, knownMessageIds: ReadonlySet<number>): Projection[] {
+export function projectRun(run: Run, knownMessageIds: ReadonlySet<number>): Projection[] {
   const seenMessageIds = new Set(knownMessageIds);
   const userTurns = run.inputs.flatMap((runInput, index) => {
     const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
