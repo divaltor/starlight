@@ -267,29 +267,6 @@ export namespace Conversation {
             );
             return { kind: "completed" as const, runId: claimed.runId };
           }
-          if (
-            (claimed.status === "generated" || claimed.status === "dispatching") &&
-            (yield* database
-              .query((client) =>
-                client.conversationLane.findUniqueOrThrow({
-                  where: { assistantId_chatId_threadKey: claimed.dbKey },
-                  select: { contextResetPending: true },
-                }),
-              )
-              .pipe(
-                Effect.map((lane) => lane.contextResetPending),
-                Effect.mapError(failed("Failed to check pending context reset")),
-              ))
-          ) {
-            yield* blockRun(
-              database,
-              claimed,
-              options,
-              "memory-forget",
-              "Generated output was discarded after a memory forget request",
-            );
-            return { kind: "completed" as const, runId: claimed.runId };
-          }
           yield* context
             .resumeCheckpoint({
               fencingToken: claimed.fencingToken,
@@ -409,28 +386,6 @@ export namespace Conversation {
           if (generated === null) {
             yield* appendAndCheckpoint(context, claimed, options);
             yield* finalizeRun(database, claimed, options);
-            return { kind: "completed" as const, runId: claimed.runId };
-          }
-          if (
-            yield* database
-              .query((client) =>
-                client.conversationLane.findUniqueOrThrow({
-                  where: { assistantId_chatId_threadKey: claimed.dbKey },
-                  select: { contextResetPending: true },
-                }),
-              )
-              .pipe(
-                Effect.map((lane) => lane.contextResetPending),
-                Effect.mapError(failed("Failed to check pending context reset")),
-              )
-          ) {
-            yield* blockRun(
-              database,
-              claimed,
-              options,
-              "memory-forget",
-              "Generated output was discarded after a memory forget request",
-            );
             return { kind: "completed" as const, runId: claimed.runId };
           }
 

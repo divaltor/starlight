@@ -1,4 +1,5 @@
-import type { MemoryNamespaceKind, MemoryVisibility, Prisma } from "@starlight/utils/generated/prisma/client";
+import { MemoryVisibility } from "@starlight/utils/generated/prisma/client";
+import type { MemoryNamespaceKind, Prisma } from "@starlight/utils/generated/prisma/client";
 import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect";
 import { z } from "zod";
 import { selected } from "@/ai/model-profile";
@@ -6,6 +7,7 @@ import { Model } from "@/ai/model";
 import { Prompt } from "@/context/prompt";
 import { Lane } from "@/conversation/lane";
 import { StoredPayloadSchema } from "@/conversation/run-artifacts";
+import type { FrozenMemoryRevision } from "@/conversation/run-artifacts";
 import { Database } from "@/services/database";
 
 export namespace Memory {
@@ -34,14 +36,9 @@ Rules:
   const StoredItem = GeneratedItem.extend({
     sourceChatIds: z.array(z.string()),
     subjectUserIds: z.array(z.string()),
-    visibility: z.enum(["privateUser", "sameChat", "sameTopic", "publicProfile", "explicitShareable"]),
+    visibility: z.enum(MemoryVisibility),
   });
   const StoredRevision = z.object({ items: z.array(StoredItem).max(100) });
-
-  export interface FrozenUserRevision {
-    readonly revisionId: string;
-    readonly userId: string;
-  }
 
   export interface ForgetInput {
     readonly firstName: string;
@@ -68,7 +65,7 @@ Rules:
     readonly forget: (input: ForgetInput) => Effect.Effect<ForgetResult, MemoryError>;
     readonly freezeUserRevisions: (
       userIds: readonly string[],
-    ) => Effect.Effect<readonly FrozenUserRevision[], MemoryError>;
+    ) => Effect.Effect<readonly FrozenMemoryRevision[], MemoryError>;
   }
 
   export interface Options {
@@ -140,20 +137,34 @@ Rules:
               where: {
                 OR: [{ id: userNamespace.id }, { observations: { some: { subjectUserId: user.id } } }],
               },
-              select: { id: true },
+              select: { chatId: true, id: true },
             });
             const namespaces = [...new Set(relatedNamespaces.map((namespace) => namespace.id))];
+            // Shared chat memory reaches contexts of lanes where the user never posted,
+            // so the reset scope follows namespace scope, not just lanes with user inputs.
+            const affectedChatIds = [
+              ...new Set(
+                relatedNamespaces.flatMap((namespace) => (namespace.chatId === null ? [] : [namespace.chatId])),
+              ),
+            ];
             const lanes = await transaction.conversationLane.findMany({
-              where: { inputs: { some: { senderUserId: user.id } } },
+              where: {
+                OR: [
+                  { inputs: { some: { senderUserId: user.id } } },
+                  ...(affectedChatIds.length === 0 ? [] : [{ chatId: { in: affectedChatIds } }]),
+                ],
+              },
               orderBy: [{ assistantId: "asc" }, { chatId: "asc" }, { threadKey: "asc" }],
             });
+            const lockedLanes: { readonly activeRunId: string | null }[] = [];
             for (const lane of lanes) {
               // The user row and every existing lane stay locked until the forget request
               // commits, so no admission, claim, or dispatch can cross its confirmation.
+              // activeRunId is re-read under the lock; a pre-lock snapshot would race a claim.
               // oxlint-disable-next-line react-doctor/async-await-in-loop
-              await Lane.lockLane(transaction, lane);
+              lockedLanes.push(await Lane.lockLane(transaction, lane));
             }
-            if (lanes.some((lane) => lane.activeRunId !== null)) throw new ForgetBusyError();
+            if (lockedLanes.some((lane) => lane.activeRunId !== null)) throw new ForgetBusyError();
             await transaction.memoryObservation.createMany({
               data: namespaces.map((namespaceId) => ({
                 content: { request: input.request },
@@ -399,7 +410,7 @@ Rules:
 
   export async function renderUserMemory(
     transaction: Prisma.TransactionClient,
-    revisions: readonly FrozenUserRevision[],
+    revisions: readonly FrozenMemoryRevision[],
     key: Lane.LaneKey,
   ): Promise<ReadonlyMap<string, string>> {
     if (revisions.length === 0) return new Map();
@@ -484,17 +495,26 @@ Rules:
               sourceThrough,
             },
           }));
-        if (attempt.parentRevisionId !== namespace.latestRevisionId) {
+        // A concurrent publication can advance the parent between attempt creation and
+        // publication. The unique (namespaceId, sourceThrough) key blocks a replacement
+        // attempt, so rebase this one onto the current parent instead of stranding the
+        // watermark behind a superseded row forever.
+        const rebased = attempt.parentRevisionId !== namespace.latestRevisionId;
+        if (rebased) {
           await transaction.memoryBuildAttempt.update({
             where: { id: attempt.id },
-            data: { completedAt: new Date(), status: "superseded" },
+            data: {
+              candidate: null,
+              completedAt: null,
+              parentRevisionId: namespace.latestRevisionId,
+              status: "prepared",
+            },
           });
-          return null;
         }
         return {
           attemptId: attempt.id,
           candidate:
-            attempt.candidate === null
+            rebased || attempt.candidate === null
               ? null
               : // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- validated Prisma Json boundary
                 (StoredRevision.parse(attempt.candidate) as unknown as Prisma.InputJsonObject),

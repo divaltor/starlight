@@ -472,12 +472,13 @@ export namespace ConversationContext {
                 data: { activeContextId: child.id, contextResetPending: false },
               });
               if (input.run) {
-                const frozen = Schema.decodeUnknownSync(PreparedRequestSchema)(run!.preparedRequest);
                 await transaction.conversationRun.update({
                   where: { id: input.run.runId },
                   data: {
                     contextId: child.id,
-                    preparedRequest: { ...frozen, memoryRevisions: [] },
+                    // Frozen revisions stay: rendering drops any whose namespace still
+                    // carries an unprocessed forget observation, so other senders keep
+                    // their memory instead of losing it until a rebuild republishes.
                     requestHash: null,
                   },
                 });

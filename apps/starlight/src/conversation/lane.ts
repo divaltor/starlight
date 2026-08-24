@@ -5,14 +5,19 @@ export namespace Lane {
 
   // Every lane mutation serializes on this row lock for the duration of its transaction;
   // holding it is what keeps revisions, fences, and context publication linear per thread.
-  export async function lockLane(transaction: Prisma.TransactionClient, key: LaneKey) {
-    await transaction.$queryRaw`
-			SELECT 1 FROM conversation_lanes
+  // Returns the row state read under the lock so callers never act on a pre-lock snapshot.
+  export async function lockLane(
+    transaction: Prisma.TransactionClient,
+    key: LaneKey,
+  ): Promise<{ readonly activeRunId: string | null }> {
+    const rows = await transaction.$queryRaw<{ readonly active_run_id: string | null }[]>`
+			SELECT active_run_id FROM conversation_lanes
 			WHERE assistant_id = ${key.assistantId}
 				AND chat_id = ${key.chatId}
 				AND thread_key = ${key.threadKey}
 			FOR UPDATE
 		`;
+    return { activeRunId: rows[0]!.active_run_id };
   }
 
   // Rejects work whose claim was superseded by a newer fenced claim (different active run or
