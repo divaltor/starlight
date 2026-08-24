@@ -589,9 +589,10 @@ export namespace Conversation {
       // immutable batch in ConversationContext.prepare.
       const frozen = stored ?? {
         currentDate: new Date().toISOString().slice(0, 10),
-        memoryRevisions: yield* memory
-          .freezeUserRevisions(
+        userMemory: yield* memory
+          .freezeUserMemory(
             claimed.inputs.flatMap((input) => (input.senderUserId === null ? [] : [input.senderUserId])),
+            claimed.dbKey,
           )
           .pipe(Effect.mapError(domainFailed)),
         sessionId: yield* Effect.promise(() => ConversationKey.affinity(claimed.key, options.affinitySecret)),

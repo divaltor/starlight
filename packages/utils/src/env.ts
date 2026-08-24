@@ -39,7 +39,10 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       CONTEXT_OUTPUT_RESERVE_TOKENS: z.coerce.number().int().nonnegative().default(1024),
       CONTEXT_TOOL_RESERVE_TOKENS: z.coerce.number().int().nonnegative().default(4096),
       CONTEXT_ESTIMATE_SAFETY_RATIO: z.coerce.number().min(1).default(1.15),
-      MEMORY_SENSITIVE_CONFIDENCE_MIN: z.coerce.number().min(0).max(1).default(0.9),
+      // Internal Docker service discovery does not terminate TLS.
+      // oxlint-disable-next-line sonarjs/no-clear-text-protocols
+      HINDSIGHT_BASE_URL: z.url().default("http://hindsight:8888"),
+      HINDSIGHT_API_KEY: z.string(),
 
       NODE_ENV: z.enum(["development", "production"]).default("development"),
       LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),
@@ -61,7 +64,6 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
     emptyStringAsUndefined: true,
     skipValidation: false,
   });
-
   return {
     ...raw,
     langfuse: resolveLangfuse(raw),

@@ -30,20 +30,17 @@ export const InputPayloadSchema = Schema.Struct({
 
 export type InputPayload = typeof InputPayloadSchema.Type & Prisma.InputJsonObject;
 
-// One frozen user-memory revision referenced by the request artifact. Memory freezes
-// these at prepare time and ConversationContext serializes them back into rendering.
-export const FrozenMemoryRevisionSchema = Schema.Struct({
-  revisionId: Schema.String,
+export const FrozenUserMemorySchema = Schema.Struct({
+  text: Schema.String,
   userId: Schema.String,
 });
-export type FrozenMemoryRevision = typeof FrozenMemoryRevisionSchema.Type;
+export type FrozenUserMemory = typeof FrozenUserMemorySchema.Type;
 
 // The frozen request written by Conversation.prepareRun and replayed on resume. Only
 // values that time erodes are persisted: everything else re-derives deterministically
-// from the immutable batch inputs. Phase 6 extends this artifact with frozen
-// memory-revision ids, so it must stay decode-compatible with extra historical fields.
+// from the immutable batch inputs.
 export const PreparedRequestSchema = Schema.Struct({
   currentDate: Schema.String,
-  memoryRevisions: Schema.optional(Schema.Array(FrozenMemoryRevisionSchema)),
   sessionId: Schema.String,
+  userMemory: Schema.Array(FrozenUserMemorySchema),
 });

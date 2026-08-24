@@ -23,6 +23,25 @@ Review state: Agnes consulted (all decisions followed), Bellno reviewed — 3 fi
 all fixed (auth precedence, blank query → now `QueryText` validator, `top_n` coercion →
 `StrictInt`). Background benchmark research completed (session `ses_fcb8f7db0ffejAQNjy2MFuKPzt`).
 
+Phase 2 — complete Hindsight memory replacement (implemented 2026-08-24):
+
+| Area        | Change                                                                                                                                                                                                         |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment  | Hindsight server/client pinned to `0.9.1`; Compose service uses the existing pgvector Postgres, OpenRouter `google/gemini-3.7-flash`, and classification embedding/rerank routes                               |
+| App client  | `Hindsight` Effect service wraps async batch retain, profile reads, deterministic document deletion, and profile refresh                                                                                       |
+| Retention   | The single long-polling bot process scans at most 100 observations per namespace; reads synchronously drain relevant namespaces before snapshotting profiles                                                   |
+| Isolation   | User banks are audience-scoped (`private`, per-chat, per-topic, `public`); chat/topic banks keep their namespace keys                                                                                          |
+| Durability  | `MemoryNamespace.retentionWatermark` advances only after deterministic retain/delete/profile-refresh operations complete; retries resume the same retain operation                                             |
+| Privacy     | Memory Defense explicitly redacts Hindsight's recognized secret/structured-PII patterns; `/forget` deletes every pre-request source document attributed to the requester instead of relying on semantic recall |
+| Corrections | Hindsight document IDs use Telegram chat/message identity, so edits replace the original retained document                                                                                                     |
+| Reads       | Rendered user profiles are frozen in `preparedRequest`; chat/topic profiles are frozen in `ConversationContext.frozenMemory`; retries never reread mutable profiles                                            |
+| Removal     | `MemoryRevision`, `MemoryBuildAttempt`, `MemoryQueue`, builder configuration, and revision rendering were removed; Hindsight is mandatory                                                                      |
+
+Real-data preflight used a recent production Langfuse Starlight trace: a 50-message Russian
+topic window with corrections, repeated entities, financial facts, dates, and hard-negative
+banter. The active Starlight model trace confirms `google/gemini-3.7-flash`. No trace payloads
+are copied into the repository.
+
 ## Locked decisions
 
 - **PoC pair**: embedder `sergeyzh/BERTA` (`914c8c8aed14042ed890fc2c662d5e9e66b2faa7`),
@@ -36,12 +55,16 @@ all fixed (auth precedence, blank query → now `QueryText` validator, `top_n` c
   `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (`1427fd652930e4ba29e8149678df786c240d8825`).
 - Contracts: Hindsight OpenAI provider base URL must include `/v1/openai` (client appends
   `/embeddings`); Hindsight Cohere reranker treats `COHERE_BASE_URL` as the exact endpoint.
+- Memory Defense is explicitly enabled with `sensitive_data → redact`; upstream defaults it off.
 - Architecture per Agnes: eager singletons, sync `def` endpoints, lock per model, fp16 only
   on cuda device, no vLLM/TEI/split-service unless measured need appears.
 
 ## Remaining work
 
 ### B. Runtime smoke test on the GPU box (do first)
+
+Blocked 2026-08-24: both `divaltor@homelab.local` and `ssh@homelab.local` reject the
+available key in batch mode. Resume when SSH access is available.
 
 1. `docker build` + `docker run` with `ENABLE_TEXT_EMBEDDINGS=true ENABLE_RERANKER=true`.
 2. Confirm first boot downloads both pinned revisions into the HF cache volume.
@@ -58,6 +81,9 @@ all fixed (auth precedence, blank query → now `QueryText` validator, `top_n` c
 
 ### C. Deploy Hindsight beside it
 
+Required Compose configuration is prepared in `docker-compose.hindsight.yaml` but has not
+been started. Exact release: `0.9.1`.
+
 - Postgres 15+ with pgvector (pre-flight: confirm extension installable on our DB host).
 - Pin an exact 0.9.x release (changelog shows weekly churn; do not track latest).
 - Server env:
@@ -67,9 +93,9 @@ all fixed (auth precedence, blank query → now `QueryText` validator, `top_n` c
   - `HINDSIGHT_API_EMBEDDINGS_PROVIDER=openai` + base URL
     `http://classification:<port>/v1/openai` (+ our API token as the key).
   - Reranker: provider `cohere` + `COHERE_BASE_URL=http://classification:<port>/v1/rerank`.
-  - Decide Memory Defense mode per bank (redact vs block) during PoC.
-- Retain cadence stays app-driven: existing BullMQ batching (≤100 observations per
-  namespace wake-up) → one async retain per batch. Never retain-per-message.
+  - Memory Defense is fixed to redact recognized secrets and structured PII.
+- Retain cadence stays app-driven: the single bot process scans in batches (≤100 observations
+  per namespace wake-up) → one async retain per bank batch. Never retain-per-message.
 
 ### D. Embedder bake-off evals (settles "keep jina-clip-v2 or not")
 
@@ -86,38 +112,27 @@ Build a small eval script (MTEB-style, offline, CPU/GPU either fine):
   re-embedding of stored facts, so decide once, early.
 - Reranker side-compare: jina-v2 vs mmarco-MiniLMv2 on the Russian strata.
 
-### E. Licensing decision (blocking for production, not PoC)
+### E. Licensing decision (not required)
 
-`jina-reranker-v2` is CC-BY-NC-4.0 (non-commercial). If Starlight ships commercially:
-swap to mmarco-MiniLMv2 (Apache-2.0) via env, or negotiate license. BERTA/bge-m3/e5 are
-Apache/MIT-friendly — verify each card before prod.
+Licensing is explicitly out of scope for this deployment. Keep the selected models.
 
 ### F. Starlight app integration (`apps/starlight`)
 
-Behind the existing seam, in this order:
+Hindsight is the only memory backend. PostgreSQL keeps `MemoryNamespace` and
+`MemoryObservation` as the transactional provenance/outbox ledger.
 
-1. `Hindsight` Effect namespace module (`@/memory/hindsight`): `retain`, `profile`
-   (mental-model read), `invalidateAbout`; wraps `@vectorize-io/hindsight-client`;
-   typed error `HindsightError` (Schema.TaggedError).
-2. Bank mapping 1:1 with namespaces: `user:{id}` / `chat:{id}` / `topic:{chatId}:{threadKey}`;
-   one mental model named `profile` per bank replaces `latestRevision`.
-3. `Memory.hindsightLayer` implementing `Memory.Interface`: `build` → async retain with
-   `document_id: obs:{sourceThrough}`; `renderContextMemory`/`renderUserMemory` → profile
-   reads + existing `isPermitted` projection; `forget` → ledger observation (unchanged) +
-   fact invalidation + lane reset. Sensitive/confidence gate moves read-time — keep it.
-4. `runtime.ts`: add `Hindsight.defaultLayer` to infrastructure; swap `Memory.layer` →
-   `Memory.hindsightLayer`. Builder LLM dependency drops out.
-5. Prisma migration: retire `MemoryRevision` + `MemoryBuildAttempt` (keep data), add
-   `retentionWatermark BigInt?` to `MemoryNamespace` via package.json scripts only.
-6. Update `/forget` reply text only after invalidation actually evicts stored facts.
-7. Load the local `effect` skill before writing any of this code (repo rule).
+- User profile text is synchronized and frozen before `preparedRequest` is persisted.
+- Chat/topic profile text is synchronized outside Prisma transactions and frozen at context
+  creation, reset, and checkpoint boundaries.
+- `/forget` writes ordered markers under lane locks, drains every affected namespace through
+  those markers, deletes requester-authored pre-marker documents, refreshes profiles, and only
+  then confirms to the user.
+- The destructive replacement migration was generated and applied to the local development DB.
 
 ### G. Later / ops
 
-- Mental-model refresh policy tuning (after-consolidation vs cron) once traffic exists.
+- Mental-model refresh cost tuning once traffic exists; correctness currently uses explicit refresh.
 - Monitoring: Hindsight operations lag, extraction token spend per batch, recall latency.
-- Rollback path: `Memory.layer` (revision-based) kept compilable until bake-off verdict;
-  revert = one layer swap + migration down-plan.
 
 ## Reference
 

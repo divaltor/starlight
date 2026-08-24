@@ -116,15 +116,6 @@ enum MemoryVisibility {
   explicitShareable
 }
 
-enum MemoryBuildStatus {
-  prepared
-  generating
-  generated
-  published
-  superseded
-  failed
-}
-
 model User {
   id         String  @id @default(uuid(7)) @db.Uuid
   telegramId BigInt  @unique @map("telegram_id")
@@ -674,6 +665,7 @@ model ConversationCheckpointAttempt {
   summaryInputHash String @map("summary_input_hash")
   summaryOutput Json? @map("summary_output")
   summaryUsage Json? @map("summary_usage")
+  frozenMemory String? @map("frozen_memory") @db.Text
   attemptCount Int @default(0) @map("attempt_count")
   lastError String? @map("last_error") @db.Text
   childContextId String? @map("child_context_id") @db.Uuid
@@ -740,17 +732,14 @@ model MemoryNamespace {
   userId String? @map("user_id") @db.Uuid
   chatId BigInt? @map("chat_id")
   threadKey Int? @map("thread_key")
-  latestRevisionId String? @unique @map("latest_revision_id") @db.Uuid
+  retentionWatermark BigInt? @map("retention_watermark")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
   chat Chat? @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  latestRevision MemoryRevision? @relation("LatestMemoryRevision", fields: [latestRevisionId], references: [id], onDelete: SetNull)
   observations MemoryObservation[]
-  revisions MemoryRevision[] @relation("MemoryRevisionNamespace")
-  buildAttempts MemoryBuildAttempt[]
 
   @@index([kind, userId])
   @@index([kind, chatId, threadKey])
@@ -769,68 +758,16 @@ model MemoryObservation {
   visibility MemoryVisibility
   kind MemoryObservationKind
   content Json
-  confidence Float?
-  sensitive Boolean @default(false)
-  processedRevisionId String? @map("processed_revision_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at")
 
   namespace MemoryNamespace @relation(fields: [namespaceId], references: [id], onDelete: Cascade)
   subjectUser User? @relation(fields: [subjectUserId], references: [id], onDelete: SetNull)
   sourceInput ConversationInput? @relation(fields: [sourceInputId], references: [id], onDelete: Restrict)
-  processedRevision MemoryRevision? @relation(fields: [processedRevisionId], references: [id], onDelete: SetNull)
 
   @@unique([namespaceId, sourceInputId, kind])
-  @@index([namespaceId, processedRevisionId, id])
+  @@index([namespaceId, id])
   @@index([subjectUserId, id])
   @@index([sourceRunId])
   @@map("memory_observations")
-}
-
-model MemoryRevision {
-  id String @id @default(uuid(7)) @db.Uuid
-  namespaceId String @map("namespace_id") @db.Uuid
-  version Int
-  parentRevisionId String? @map("parent_revision_id") @db.Uuid
-  sourceThrough BigInt @map("source_through")
-  content Json
-  schemaVersion String @map("schema_version")
-  builderProfileFingerprint String @map("builder_profile_fingerprint")
-  usage Json?
-
-  createdAt DateTime @default(now()) @map("created_at")
-  supersededAt DateTime? @map("superseded_at")
-
-  namespace MemoryNamespace @relation("MemoryRevisionNamespace", fields: [namespaceId], references: [id], onDelete: Cascade)
-  parent MemoryRevision? @relation("MemoryRevisionParents", fields: [parentRevisionId], references: [id], onDelete: Restrict)
-  children MemoryRevision[] @relation("MemoryRevisionParents")
-  latestFor MemoryNamespace? @relation("LatestMemoryRevision")
-  processedObservations MemoryObservation[]
-
-  @@unique([namespaceId, version])
-  @@index([namespaceId, sourceThrough])
-  @@map("memory_revisions")
-}
-
-model MemoryBuildAttempt {
-  id String @id @default(uuid(7)) @db.Uuid
-  namespaceId String @map("namespace_id") @db.Uuid
-  parentRevisionId String? @map("parent_revision_id") @db.Uuid
-  sourceThrough BigInt @map("source_through")
-  frozenObservationIds Json @map("frozen_observation_ids")
-  status MemoryBuildStatus @default(prepared)
-  candidate Json?
-  usage Json?
-  attemptCount Int @default(0) @map("attempt_count")
-  lastError String? @map("last_error") @db.Text
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  completedAt DateTime? @map("completed_at")
-
-  namespace MemoryNamespace @relation(fields: [namespaceId], references: [id], onDelete: Cascade)
-
-  @@unique([namespaceId, sourceThrough])
-  @@index([namespaceId, status, updatedAt])
-  @@map("memory_build_attempts")
 }

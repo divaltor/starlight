@@ -4,6 +4,7 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import { Model } from "@/ai/model";
 import { ConversationContext } from "@/context/context";
 import { Prompt } from "@/context/prompt";
+import { Memory } from "@/memory/memory";
 import { Database } from "@/services/database";
 import { Exa } from "@/services/exa";
 
@@ -32,6 +33,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable context s
           Database.layer(databaseUrl!),
           Layer.succeed(Exa.Service)(disabledExa),
           Layer.succeed(Model.Service)(unavailableModel),
+          memoryLayer,
         ),
       ),
     ),
@@ -155,6 +157,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
           Database.layer(databaseUrl!),
           Layer.succeed(Exa.Service)(disabledExa),
           Layer.succeed(Model.Service)(unavailableModel),
+          memoryLayer,
         ),
       ),
     ),
@@ -254,6 +257,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
           Database.layer(databaseUrl!),
           Layer.succeed(Exa.Service)(disabledExa),
           Layer.succeed(Model.Service)(unavailableModel),
+          memoryLayer,
         ),
       ),
     ),
@@ -315,6 +319,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
                 profileFingerprint: Prompt.profileFingerprint(false),
                 replyEligible: true,
                 sessionId: "frozen-hash-session",
+                userMemory: [],
               },
               replyEligible: true,
               status: "invoking",
@@ -368,6 +373,7 @@ test.skipIf(!databaseUrl)(
             Database.layer(databaseUrl!),
             Layer.succeed(Exa.Service)(disabledExa),
             Layer.succeed(Model.Service)(unavailableModel),
+            memoryLayer,
           ),
         ),
       ),
@@ -535,6 +541,12 @@ const disabledExa: Exa.Interface = {
   isEnabled: () => false,
   tools: {},
 };
+
+const memoryLayer = Layer.succeed(Memory.Service)({
+  forget: () => Effect.die(new Error("Memory forget must not run in context tests")),
+  freezeContextMemory: () => Effect.succeed(""),
+  freezeUserMemory: () => Effect.succeed([]),
+});
 
 const unavailableModel: Model.Interface = {
   generate: () => Effect.die(new Error("Model must not run while appending context")),

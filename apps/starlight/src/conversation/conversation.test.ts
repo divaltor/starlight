@@ -1136,9 +1136,9 @@ function testLayer(
     Layer.succeed(Exa.Service)(disabledExa),
     Layer.succeed(TelegramDelivery.Service)(delivery),
     Layer.succeed(Memory.Service)({
-      build: () => Effect.die(new Error("Memory builder must not run in conversation tests")),
       forget: () => Effect.die(new Error("Memory forget must not run in conversation tests")),
-      freezeUserRevisions: () => Effect.succeed([]),
+      freezeContextMemory: () => Effect.succeed(""),
+      freezeUserMemory: () => Effect.succeed([]),
     }),
     Conversation.optionsLayer({
       affinitySecret: "test-affinity-secret-with-at-least-32-characters",

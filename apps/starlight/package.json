@@ -29,10 +29,12 @@
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "@prisma/adapter-pg": "catalog:",
     "@starlight/utils": "workspace:*",
+    "@vectorize-io/hindsight-client": "0.9.1",
     "ai": "^7.0.77",
     "bullmq": "^6.2.0",
     "effect": "4.0.0-rc.111",
     "grammy": "catalog:",
+    "uuid": "14.0.2",
     "zod": "catalog:"
   },
   "devDependencies": {

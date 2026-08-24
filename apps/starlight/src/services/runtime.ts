@@ -11,8 +11,9 @@ import { TelegramDelivery } from "@/conversation/delivery";
 import { WakeOutbox } from "@/conversation/wake-outbox";
 import { WakeQueue } from "@/conversation/wake-queue";
 import { ConversationContext } from "@/context/context";
+import { Hindsight } from "@/memory/hindsight";
+import { HindsightRetention } from "@/memory/hindsight-retention";
 import { Memory } from "@/memory/memory";
-import { MemoryQueue } from "@/memory/queue";
 import { Database } from "@/services/database";
 import { Exa } from "@/services/exa";
 
@@ -82,8 +83,7 @@ const infrastructure = Layer.mergeAll(
   Model.defaultLayer,
   TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
   WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
-  MemoryQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
-  Memory.optionsLayer({ sensitiveConfidenceMin: env.MEMORY_SENSITIVE_CONFIDENCE_MIN }),
+  Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),
   Conversation.optionsLayer({
     affinitySecret: env.CONVERSATION_AFFINITY_SECRET,
     contextEstimateSafetyRatio: env.CONTEXT_ESTIMATE_SAFETY_RATIO,
@@ -98,20 +98,20 @@ const infrastructure = Layer.mergeAll(
     whitelistedDmUserIds: env.WHITELIST_DM_USER_IDS,
   }),
 );
-const memory = Memory.layer.pipe(Layer.provideMerge(infrastructure));
-const context = ConversationContext.layer.pipe(Layer.provideMerge(infrastructure));
+const hindsightRetention = HindsightRetention.layer.pipe(Layer.provideMerge(infrastructure));
+const memory = Memory.layer.pipe(Layer.provideMerge(hindsightRetention), Layer.provideMerge(infrastructure));
+const context = ConversationContext.layer.pipe(Layer.provideMerge(memory), Layer.provideMerge(infrastructure));
 const conversation = Conversation.layer.pipe(
   Layer.provideMerge(context),
   Layer.provideMerge(memory),
   Layer.provideMerge(infrastructure),
 );
 const outbox = WakeOutbox.layer.pipe(Layer.provideMerge(infrastructure));
-const domain = Layer.mergeAll(infrastructure, memory, context, conversation, outbox);
+const domain = Layer.mergeAll(infrastructure, memory, hindsightRetention, context, conversation, outbox);
 const background = Layer.mergeAll(
   WakeOutbox.publisherLayer,
   WakeQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
-  MemoryQueue.publisherLayer,
-  MemoryQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
+  HindsightRetention.workerLayer,
 ).pipe(Layer.provideMerge(domain));
 
 export const runtime = ManagedRuntime.make(

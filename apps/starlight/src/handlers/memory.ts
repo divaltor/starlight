@@ -29,7 +29,7 @@ export function createMemoryHandler(whitelistedDmUserIds: readonly number[]): Co
           });
         }),
       );
-      await ctx.reply("Запрос сохранён. Эта информация не будет добавляться в будущую память.");
+      await ctx.reply("Память о вас удалена.");
     });
   privateChat
     .command("forget")

@@ -78,17 +78,32 @@ export namespace ConversationContext {
 
   export class Service extends Context.Service<Service, Interface>()("starlight/ConversationContext") {}
 
-  export const layer: Layer.Layer<Service, never, Database.Service | Exa.Service | Model.Service> = Layer.effect(
+  export const layer = Layer.effect(
     Service,
     Effect.gen(function* layer() {
       const database = yield* Database.Service;
       const exa = yield* Exa.Service;
+      const memoryService = yield* Memory.Service;
       const model = yield* Model.Service;
       const prefixSnapshots = new Map<string, CacheDiagnostics.PrefixSnapshot>();
 
       const appendFinalized = Effect.fn("ConversationContext.appendFinalized")(function* appendFinalized(
         input: RunReference,
       ) {
+        const runContext = yield* database
+          .query((client) =>
+            client.conversationRun.findUniqueOrThrow({
+              where: { id: input.runId },
+              select: { assistantId: true, chatId: true, contextId: true, threadKey: true },
+            }),
+          )
+          .pipe(Effect.mapError(failed("Failed to find finalized run context")));
+        const initialMemory =
+          runContext.contextId === null
+            ? yield* memoryService
+                .freezeContextMemory(runContext, "")
+                .pipe(Effect.mapError(failed("Failed to freeze initial context memory")))
+            : "";
         return yield* database
           .transaction(async (transaction) => {
             const run = await transaction.conversationRun.findUniqueOrThrow({
@@ -115,7 +130,7 @@ export namespace ConversationContext {
             // oxlint-disable-next-line react-doctor/server-sequential-independent-await
             const context = run.contextId
               ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ensureActiveContext(transaction, key, exa.isEnabled());
+              : await ensureActiveContext(transaction, key, exa.isEnabled(), initialMemory);
             if (run.contextId === null) {
               await transaction.conversationRun.update({
                 where: { id: run.id },
@@ -205,6 +220,20 @@ export namespace ConversationContext {
       });
 
       const prepare = Effect.fn("ConversationContext.prepare")(function* prepare(input: RunReference) {
+        const runContext = yield* database
+          .query((client) =>
+            client.conversationRun.findUniqueOrThrow({
+              where: { id: input.runId },
+              select: { assistantId: true, chatId: true, contextId: true, threadKey: true },
+            }),
+          )
+          .pipe(Effect.mapError(failed("Failed to find prepared run context")));
+        const initialMemory =
+          runContext.contextId === null
+            ? yield* memoryService
+                .freezeContextMemory(runContext, "")
+                .pipe(Effect.mapError(failed("Failed to freeze initial context memory")))
+            : "";
         const outcome = yield* database
           .transaction(async (transaction) => {
             const run = await transaction.conversationRun.findUniqueOrThrow({
@@ -222,7 +251,7 @@ export namespace ConversationContext {
             await Lane.assertFence(transaction, key, input);
             const context = run.contextId
               ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ensureActiveContext(transaction, key, exa.isEnabled());
+              : await ensureActiveContext(transaction, key, exa.isEnabled(), initialMemory);
             if (context.status !== "active") throw new Error("Pinned context is not active");
             if (context.modelProfileFingerprint !== run.modelProfileFingerprint) {
               throw new Error("Active context profile does not match the prepared run");
@@ -251,7 +280,7 @@ export namespace ConversationContext {
               transcriptTurns.flatMap((turn) => (turn.sourceMessageId === null ? [] : [turn.sourceMessageId])),
             );
             const frozen = Schema.decodeUnknownSync(PreparedRequestSchema)(run.preparedRequest);
-            const userMemory = await Memory.renderUserMemory(transaction, frozen.memoryRevisions ?? [], key);
+            const userMemory = new Map(frozen.userMemory.map((snapshot) => [snapshot.userId, snapshot.text]));
             const renderedMemoryUsers = new Set<string>();
             const current = [
               {
@@ -365,9 +394,24 @@ export namespace ConversationContext {
         if (prepared.kind === "committed") return prepared.result;
 
         const summarized = prepared.summary ?? (yield* summarizeCheckpoint(database, model, prepared, checkpointInput));
+        const frozenMemory =
+          prepared.frozenMemory ??
+          (yield* memoryService
+            .freezeContextMemory(prepared.key, summarized)
+            .pipe(Effect.mapError(failed("Failed to freeze checkpoint memory"))));
+        if (prepared.frozenMemory === null) {
+          yield* database
+            .query((client) =>
+              client.conversationCheckpointAttempt.update({
+                where: { id: prepared.attemptId },
+                data: { frozenMemory },
+              }),
+            )
+            .pipe(Effect.mapError(failed("Failed to persist checkpoint memory")));
+        }
 
         const result = yield* database
-          .transaction((client) => commitCheckpoint(client, checkpointInput, prepared, summarized))
+          .transaction((client) => commitCheckpoint(client, checkpointInput, prepared, frozenMemory))
           .pipe(Effect.mapError(failed("Failed to commit context checkpoint")));
         yield* Effect.logInfo("Context checkpoint committed").pipe(
           Effect.annotateLogs({
@@ -431,9 +475,23 @@ export namespace ConversationContext {
       const transitionProfile = Effect.fn("ConversationContext.transitionProfile")(function* transitionProfile(
         input: ProfileTransitionInput,
       ) {
+        const key = ConversationKey.toDb(input.key);
+        const state = yield* database
+          .query((client) =>
+            client.conversationLane.findUniqueOrThrow({
+              where: { assistantId_chatId_threadKey: key },
+              select: { activeContextId: true, contextResetPending: true },
+            }),
+          )
+          .pipe(Effect.mapError(failed("Failed to inspect transitioned context")));
+        const frozenMemory =
+          state.activeContextId === null || state.contextResetPending
+            ? yield* memoryService
+                .freezeContextMemory(key, "")
+                .pipe(Effect.mapError(failed("Failed to freeze transitioned context memory")))
+            : "";
         return yield* database
           .transaction(async (transaction) => {
-            const key = ConversationKey.toDb(input.key);
             await Lane.lockLane(transaction, key);
             if (input.run) await Lane.assertFence(transaction, key, input.run);
             const lane = await transaction.conversationLane.findUniqueOrThrow({
@@ -446,12 +504,12 @@ export namespace ConversationContext {
             const existing = await transaction.conversationContext.findFirst({
               where: { ...key, status: "active" },
             });
-            const parent = existing ?? (await ensureActiveContext(transaction, key, input.webLookupEnabled));
+            const parent =
+              existing ?? (await ensureActiveContext(transaction, key, input.webLookupEnabled, frozenMemory));
             const envelope = Prompt.renderEnvelope({
               webLookupEnabled: input.webLookupEnabled,
             });
             if (lane.contextResetPending) {
-              const memory = await Memory.renderContextMemory(transaction, key, "");
               await transaction.conversationContext.update({
                 where: { id: parent.id },
                 data: { activeKey: null, sealedAt: new Date(), status: "invalid" },
@@ -464,7 +522,7 @@ export namespace ConversationContext {
                   modelProfileFingerprint: profileFingerprint,
                   parentContextId: parent.id,
                   resetReason: "memory-forget",
-                  ...Prompt.stableSeed(envelope, memory),
+                  ...Prompt.stableSeed(envelope, frozenMemory),
                 },
               });
               await transaction.conversationLane.update({
@@ -608,6 +666,7 @@ export namespace ConversationContext {
 
   interface ReadyCheckpoint {
     readonly attemptId: string;
+    readonly frozenMemory: string | null;
     readonly key: Lane.LaneKey;
     readonly parentContextId: string;
     readonly summary: string | null;
@@ -814,6 +873,7 @@ export namespace ConversationContext {
     return {
       kind: "ready",
       attemptId: attempt.id,
+      frozenMemory: attempt.frozenMemory,
       key,
       parentContextId: parent.id,
       summary: storedSummary,
@@ -830,7 +890,7 @@ export namespace ConversationContext {
     transaction: Prisma.TransactionClient,
     input: CheckpointInput,
     prepared: ReadyCheckpoint,
-    summary: string,
+    frozenMemory: string,
   ): Promise<CheckpointResult> {
     await Lane.assertFence(transaction, prepared.key, input);
     const attempt = await transaction.conversationCheckpointAttempt.findUniqueOrThrow({
@@ -853,7 +913,6 @@ export namespace ConversationContext {
     if (!["checkpointing", "retryNeeded"].includes(parent.status)) {
       throw new Error("Checkpoint parent changed before publication");
     }
-    const memory = await Memory.renderContextMemory(transaction, prepared.key, summary);
     await transaction.conversationContext.update({
       where: { id: parent.id },
       data: { activeKey: null },
@@ -870,7 +929,7 @@ export namespace ConversationContext {
         resetReason: input.reason,
         retainedFromTurnOrdinal: attempt.retainedStartTurnOrdinal,
         summaryThroughInputSequence: BigInt(attempt.headEndTurnOrdinal),
-        ...Prompt.stableSeed(parent.stableEnvelope, memory),
+        ...Prompt.stableSeed(parent.stableEnvelope, frozenMemory),
       },
     });
     let rollingHash = child.basePrefixHash;
@@ -922,6 +981,7 @@ export namespace ConversationContext {
     transaction: Prisma.TransactionClient,
     key: Lane.LaneKey,
     webLookupEnabled: boolean,
+    frozenMemory: string,
   ) {
     const existing = await transaction.conversationContext.findFirst({
       where: { ...key, status: "active" },
@@ -929,7 +989,6 @@ export namespace ConversationContext {
     if (existing) return existing;
 
     const envelope = Prompt.renderEnvelope({ webLookupEnabled });
-    const memory = await Memory.renderContextMemory(transaction, key, "");
     // One Prisma transaction connection must execute its queries serially.
     // oxlint-disable-next-line react-doctor/server-sequential-independent-await
     const latest = await transaction.conversationContext.aggregate({
@@ -942,7 +1001,7 @@ export namespace ConversationContext {
         activeKey: ConversationKey.format(key),
         generation: (latest._max.generation ?? 0) + 1,
         modelProfileFingerprint: Prompt.profileFingerprint(webLookupEnabled),
-        ...Prompt.stableSeed(envelope, memory),
+        ...Prompt.stableSeed(envelope, frozenMemory),
       },
     });
     await transaction.conversationLane.update({
