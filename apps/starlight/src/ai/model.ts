@@ -115,7 +115,8 @@ export const layer: Layer.Layer<Service, never, ModelProvider.Service | ModelTel
           retryable: false,
         });
       }
-
+      // Narrowing does not cross into the tryPromise closure below.
+      const selectedModel = provider.model;
       const completedSteps: StepResult<ToolSet>[] = [];
       const toolEvents: ToolEvent[] = [];
       const invocation = Effect.tryPromise({
@@ -127,7 +128,7 @@ export const layer: Layer.Layer<Service, never, ModelProvider.Service | ModelTel
             maxOutputTokens: clampOutputTokens(input.maxOutputTokens),
             maxRetries: 0,
             messages: prepareMessages(input.cacheBase, input.messages),
-            model: provider.model.value,
+            model: selectedModel.value,
             onStepEnd: (step) => {
               completedSteps.push(step);
             },

@@ -96,8 +96,11 @@ export function extendPrefix(previousHash: string, renderedTurn: string): Segmen
   };
 }
 
-export function canonicalEncode(value: Prisma.InputJsonValue): string {
-  return JSON.stringify(canonicalize(value));
+// Stored Prisma Json columns are typed `unknown`; every value written here was
+// JSON-serialized, so the boundary casts once before structural canonicalization.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- raw Json column values are the domain input
+export function canonicalEncode(value: unknown): string {
+  return JSON.stringify(canonicalize(value as Prisma.InputJsonValue));
 }
 
 function canonicalize(value: Prisma.InputJsonValue): Prisma.InputJsonValue {

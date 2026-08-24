@@ -641,8 +641,12 @@ function summarizeCheckpoint(
             status: "summarized",
             summaryOutput: { summary },
             summaryUsage: {
-              generation: structuredClone(generated.usage) as Prisma.InputJsonObject,
-              steps: structuredClone(generated.steps) as Prisma.InputJsonArray,
+              // TS7 demands index signatures Json columns don't have; the chain
+              // is the boundary escape.
+              // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- deliberate
+              generation: structuredClone(generated.usage) as unknown as Prisma.InputJsonObject,
+              // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- deliberate
+              steps: structuredClone(generated.steps) as unknown as Prisma.InputJsonArray,
             },
           },
         });
@@ -937,13 +941,15 @@ const ROLE_BY_KIND: Record<ConversationTranscriptKind, ConversationContextRole> 
   userMessage: "user",
 };
 
-function collectMessageIds(contents: readonly Prisma.JsonValue[]): Set<number> {
+function collectMessageIds(contents: readonly unknown[]): Set<number> {
   return new Set(
     contents.flatMap((content) => {
       if (!content || typeof content !== "object" || Array.isArray(content)) return [];
+      // Transcript contents are stored JSON objects with optional id fields.
+      const entry = content as { messageId?: unknown; telegramMessageId?: unknown };
       return [
-        ...(typeof content.messageId === "number" ? [content.messageId] : []),
-        ...(typeof content.telegramMessageId === "number" ? [content.telegramMessageId] : []),
+        ...(typeof entry.messageId === "number" ? [entry.messageId] : []),
+        ...(typeof entry.telegramMessageId === "number" ? [entry.telegramMessageId] : []),
       ];
     }),
   );
@@ -965,22 +971,22 @@ interface ProjectionRun {
   readonly actions: readonly {
     readonly deliveryStatus: string;
     readonly ordinal: number;
-    readonly payload: Prisma.JsonValue;
+    readonly payload: unknown;
     readonly telegramMessageId: number | null;
     readonly type: string;
   }[];
   readonly inputs: readonly {
     readonly input: {
       readonly id: bigint;
-      readonly mediaReferences: Prisma.JsonValue | null;
-      readonly payload: Prisma.JsonValue;
+      readonly mediaReferences: unknown;
+      readonly payload: unknown;
     };
   }[];
   readonly toolCalls: readonly {
     readonly errorMessage: string | null;
-    readonly input: Prisma.JsonValue;
+    readonly input: unknown;
     readonly providerCallId: string;
-    readonly result: Prisma.JsonValue | null;
+    readonly result: unknown;
     readonly status: string;
     readonly toolName: string;
   }[];

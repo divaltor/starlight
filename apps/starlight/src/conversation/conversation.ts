@@ -348,7 +348,7 @@ export const layer = Layer.effect(
         }
 
         yield* persistGeneration(database, claimed, generated, prepared.allowedTargetIds);
-        yield* dispatchRun(database, delivery, claimed);
+        yield* dispatchRun(database, delivery, claimed, options);
         yield* appendAndCheckpoint(context, claimed, options);
         yield* finalizeRun(database, claimed, options);
         return { kind: "completed" as const, runId: claimed.runId };
@@ -368,12 +368,12 @@ interface ClaimedRun {
   readonly inputEndRevision: number;
   readonly inputs: readonly {
     readonly id: bigint;
-    readonly payload: Prisma.JsonValue;
+    readonly payload: unknown;
   }[];
   readonly key: ConversationKey.Value;
   readonly kind: "claimed";
   readonly attemptCount: number;
-  readonly preparedRequest: Prisma.JsonValue | null;
+  readonly preparedRequest: unknown;
   readonly runId: string;
   readonly status: ConversationRunStatus;
 }
@@ -637,8 +637,12 @@ function persistGeneration(
     type: event.type,
   }));
   const usage: Prisma.InputJsonObject = {
-    generation: structuredClone(generated.usage) as Prisma.InputJsonObject,
-    steps: structuredClone(generated.steps) as Prisma.InputJsonArray,
+    // TS7 demands index signatures Json columns don't have; the chain is the
+    // boundary escape.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- deliberate
+    generation: structuredClone(generated.usage) as unknown as Prisma.InputJsonObject,
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- deliberate
+    steps: structuredClone(generated.steps) as unknown as Prisma.InputJsonArray,
   };
   return database
     .transaction(async (transaction) => {
@@ -665,8 +669,6 @@ function persistGeneration(
       });
       await transaction.conversationRunAction.createMany({
         data: generated.output.replies.map((action, ordinal) => {
-          const target = action.type === "reaction" ? action.messageId : action.replyTo;
-          const invalidTarget = target !== null && target !== undefined && !allowedTargets.has(target);
           if (action.type === "ignore") {
             return {
               deliveryStatus: "delivered" as const,
@@ -678,6 +680,8 @@ function persistGeneration(
               type: action.type,
             };
           }
+          const target = action.type === "reaction" ? action.messageId : action.replyTo;
+          const invalidTarget = target !== null && target !== undefined && !allowedTargets.has(target);
           return {
             deliveryStatus: invalidTarget ? ("failed" as const) : ("pending" as const),
             lastError: invalidTarget ? "Model selected a target outside the frozen batch" : null,
