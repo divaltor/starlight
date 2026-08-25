@@ -13,9 +13,8 @@ services:
       retries: 12
 
   postgresql:
-    image: pgvector/pgvector:pg17-trixie
+    image: supabase/postgres:17.6.1.165
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
     volumes:
@@ -23,7 +22,7 @@ services:
     networks:
       - starlight
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -35,7 +34,7 @@ services:
     env_file:
       - apps/server/.env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       ML_API_TOKEN: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
       REDIS_URL: redis://:${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}@valkey:6379
     depends_on:
@@ -53,7 +52,7 @@ services:
     env_file:
       - apps/starlight/.env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       REDIS_URL: redis://:${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}@valkey:6379
     depends_on:
       valkey:
@@ -72,7 +71,7 @@ services:
     env_file:
       - apps/web/.env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
     ports:
       - 3000:3000
     depends_on:
@@ -111,7 +110,7 @@ services:
   hindsight:
     image: ghcr.io/vectorize-io/hindsight:0.9.1
     environment:
-      HINDSIGHT_API_DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      HINDSIGHT_API_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       HINDSIGHT_API_DATABASE_SCHEMA: hindsight
       HINDSIGHT_API_VECTOR_EXTENSION: pgvector
       HINDSIGHT_API_WORKER_ID: hindsight
@@ -156,7 +155,7 @@ services:
     env_file:
       - apps/server/.env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
     depends_on:
       postgresql:
         condition: service_healthy
