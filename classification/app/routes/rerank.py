@@ -8,6 +8,7 @@ from sentence_transformers import CrossEncoder
 from app.config import config
 from app.device import resolve_model_device
 from app.models import CohereRerankRequest, CohereRerankResponse, CohereRerankResult
+from app.otel import pipeline_span
 
 logger = structlog.get_logger()
 model_device = resolve_model_device()
@@ -31,7 +32,7 @@ RANK_BATCH_SIZE = 16
 def rerank(payload: CohereRerankRequest) -> CohereRerankResponse:
     top_n = payload.top_n if payload.top_n is not None else len(payload.documents)
 
-    with reranker_lock:
+    with pipeline_span('rerank', config.RERANKER_MODEL), reranker_lock:
         ranked = reranker_model.rank(
             payload.query,
             payload.documents,

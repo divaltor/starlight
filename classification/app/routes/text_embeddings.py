@@ -15,6 +15,7 @@ from app.models import (
     OpenAIEmbeddingResponse,
     OpenAIEmbeddingUsage,
 )
+from app.otel import pipeline_span
 
 logger = structlog.get_logger()
 model_device = resolve_model_device()
@@ -42,7 +43,7 @@ def create_text_embeddings(payload: OpenAIEmbeddingRequest) -> OpenAIEmbeddingRe
             detail=f'unsupported dimensions {payload.dimensions}, model serves {expected_dimensions}',
         )
 
-    with text_embedding_lock:
+    with pipeline_span('text_embedding', config.TEXT_EMBEDDING_MODEL), text_embedding_lock:
         vectors = text_embedding_model.encode(
             inputs,
             normalize_embeddings=True,
