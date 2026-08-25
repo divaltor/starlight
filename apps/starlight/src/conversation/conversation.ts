@@ -12,11 +12,14 @@ import { TelegramDelivery } from "@/conversation/delivery";
 import { Memory } from "@/memory/memory";
 import { Database } from "@/services/database";
 import { Exa } from "@/services/exa";
+import { OperationalTelemetry } from "@/operational-telemetry";
 
 export namespace Conversation {
   const MAX_BATCH_MESSAGES = 20;
+  const MAX_ALBUM_MESSAGES = 10;
   const MAX_DELIVERY_ATTEMPTS = 5;
   const MAX_MODEL_ATTEMPTS = 5;
+  const ALBUM_SETTLE_MS = 35_000;
 
   export interface AdmissionInput {
     readonly chatTitle: string | null;
@@ -90,6 +93,12 @@ export namespace Conversation {
       const whitelistedDmUserIds = new Set(options.whitelistedDmUserIds);
 
       const admit = Effect.fn("Conversation.admit")(function* admit(input: AdmissionInput) {
+        const batchQuietMs = input.payload.mediaGroupId === null ? options.quietMs : ALBUM_SETTLE_MS;
+        const batchMaxWaitMs = input.payload.mediaGroupId === null ? options.maxWaitMs : ALBUM_SETTLE_MS;
+        const mediaReferences =
+          input.payload.media.length > 0 || input.payload.repliedMedia.length > 0
+            ? { current: input.payload.media, replied: input.payload.repliedMedia }
+            : undefined;
         const admitted = yield* database
           .transaction(async (transaction) => {
             const key = ConversationKey.toDb(input.key);
@@ -127,7 +136,7 @@ export namespace Conversation {
                     },
                   });
             const rawMessage = {
-              caption: null,
+              caption: input.payload.media.length > 0 ? input.payload.text : null,
               chatId: BigInt(input.key.chatId),
               date: new Date(input.payload.date * 1000),
               editDate: input.payload.editDate === null ? null : new Date(input.payload.editDate * 1000),
@@ -139,7 +148,7 @@ export namespace Conversation {
               messageThreadId: input.key.threadKey === 0 ? null : input.key.threadKey,
               rawData: input.payload,
               replyToMessageId: input.payload.replyToMessageId,
-              text: input.payload.text,
+              text: input.payload.media.length > 0 ? null : input.payload.text,
             };
             await transaction.message.upsert({
               where: {
@@ -190,14 +199,13 @@ export namespace Conversation {
             const now = new Date();
             const firstPendingAt = lane.firstPendingAt ?? now;
             const pendingRevision = lane.pendingRevision + 1;
-            const wakeAt = new Date(
-              Math.min(now.getTime() + options.quietMs, firstPendingAt.getTime() + options.maxWaitMs),
-            );
+            const wakeAt = new Date(Math.min(now.getTime() + batchQuietMs, firstPendingAt.getTime() + batchMaxWaitMs));
             const created = await transaction.conversationInput.create({
               data: {
                 ...key,
                 admittedRevision: pendingRevision,
                 forwardMetadata: input.payload.forwardOrigin,
+                mediaReferences,
                 payload: input.payload,
                 replyToMessageId: input.payload.replyToMessageId,
                 senderTelegramId: input.payload.senderId === null ? null : BigInt(input.payload.senderId),
@@ -235,6 +243,7 @@ export namespace Conversation {
             ),
           );
 
+        OperationalTelemetry.recordEvent("admission", admitted.duplicate ? "duplicate" : "created");
         yield* Effect.logInfo("Conversation input admitted").pipe(
           Effect.annotateLogs({
             conversationKey: ConversationKey.format(input.key),
@@ -258,6 +267,7 @@ export namespace Conversation {
               (entry) => entry.senderTelegramId === null || !whitelistedDmUserIds.has(Number(entry.senderTelegramId)),
             )
           ) {
+            OperationalTelemetry.recordEvent("dm-authorization", "revoked");
             yield* blockRun(
               database,
               claimed,
@@ -504,7 +514,7 @@ export namespace Conversation {
           };
         }
 
-        const inputs = await transaction.conversationInput.findMany({
+        const pendingInputs = await transaction.conversationInput.findMany({
           where: {
             ...where,
             admittedRevision: {
@@ -513,8 +523,16 @@ export namespace Conversation {
             },
           },
           orderBy: { admittedRevision: "asc" },
-          take: MAX_BATCH_MESSAGES,
+          take: MAX_BATCH_MESSAGES + MAX_ALBUM_MESSAGES,
         });
+        const initialInputs = pendingInputs.slice(0, MAX_BATCH_MESSAGES);
+        const finalMediaGroupId = (initialInputs.at(-1)?.payload as InputPayload | undefined)?.mediaGroupId ?? null;
+        const mediaGroupTail = pendingInputs.slice(initialInputs.length);
+        const mediaGroupEnd = mediaGroupTail.findIndex(
+          (item) => (item.payload as InputPayload).mediaGroupId !== finalMediaGroupId,
+        );
+        const mediaGroupBatchEnd = mediaGroupEnd === -1 ? pendingInputs.length : initialInputs.length + mediaGroupEnd;
+        const inputs = finalMediaGroupId === null ? initialInputs : pendingInputs.slice(0, mediaGroupBatchEnd);
         const lastInput = inputs.at(-1)!;
         // The eligibility decision is persisted once at freeze time; retries must not
         // recompute (and a future probabilistic policy must not re-roll) it.

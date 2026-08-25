@@ -14,6 +14,7 @@ import { ConversationContext } from "@/context/context";
 import { Hindsight } from "@/memory/hindsight";
 import { HindsightRetention } from "@/memory/hindsight-retention";
 import { Memory } from "@/memory/memory";
+import { Media } from "@/media/media";
 import { Database } from "@/services/database";
 import { Exa } from "@/services/exa";
 
@@ -84,6 +85,12 @@ const infrastructure = Layer.mergeAll(
   TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
   WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
   Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),
+  Media.layer({
+    accessKeyId: env.AWS_ACCESS_KEY_ID,
+    endpoint: env.AWS_ENDPOINT,
+    secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+    telegramToken: env.STARLIGHT_BOT_TOKEN,
+  }),
   Conversation.optionsLayer({
     affinitySecret: env.CONVERSATION_AFFINITY_SECRET,
     contextEstimateSafetyRatio: env.CONTEXT_ESTIMATE_SAFETY_RATIO,

@@ -3,6 +3,7 @@ import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect";
 import { ConversationKey } from "@/conversation/key";
 import { Database } from "@/services/database";
 import { WakeQueue } from "@/conversation/wake-queue";
+import { OperationalTelemetry } from "@/operational-telemetry";
 
 export namespace WakeOutbox {
   const STRANDED_WAKE_MS = 300_000;
@@ -88,6 +89,9 @@ export namespace WakeOutbox {
             }),
           )
           .pipe(Effect.mapError(failed("Failed to load wake outbox")));
+        if (rows[0]) {
+          OperationalTelemetry.recordAge("wake-outbox", Math.max(0, now.getTime() - rows[0].desiredWakeAt.getTime()));
+        }
         const published = yield* Effect.all(
           rows.map((row) => {
             const where = {
@@ -137,10 +141,15 @@ export namespace WakeOutbox {
           { concurrency: 5 },
         );
 
-        return {
+        const result = {
           attempted: rows.length,
           published: published.filter((value) => value === 1).length,
         };
+        OperationalTelemetry.recordEvent(
+          "wake-publication",
+          result.published === result.attempted ? "published" : "failed",
+        );
+        return result;
       });
 
       return Service.of({ publishAvailable });

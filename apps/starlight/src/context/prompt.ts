@@ -1,10 +1,13 @@
 import { ChatReply } from "@/ai/chat-reply";
 import { selected } from "@/ai/model-profile";
-import type { ConversationContextRole, Prisma } from "@starlight/utils/generated/prisma/client";
+import type { ConversationContextRole } from "@starlight/utils/generated/prisma/client";
 import { Schema } from "effect";
+import { CanonicalJson } from "@/context/canonical-json";
+import type { Media } from "@/media/media";
 
 export namespace Prompt {
-  export const renderVersion = "conversation-context-v1";
+  export const renderVersion = "conversation-context-v2";
+  export const canonicalEncode = CanonicalJson.encode;
   export const FrozenEnvelope = Schema.fromJsonString(
     Schema.Struct({
       instructions: Schema.String,
@@ -24,8 +27,10 @@ export namespace Prompt {
   export interface LiveMessagePayload {
     readonly forwardOrigin: string | null;
     readonly messageId: number;
+    readonly media: readonly Media.Reference[];
     readonly repliedText: string | null;
     readonly replyToMessageId: number | null;
+    readonly repliedMedia: readonly Media.Reference[];
     readonly senderFirstName: string;
     readonly text: string;
   }
@@ -40,7 +45,7 @@ export namespace Prompt {
     return canonicalEncode({
       cacheStrategy: "explicit-fixed-base",
       instructions: ChatReply.systemPrompt,
-      mediaStrategy: "stable-metadata-v1",
+      mediaStrategy: "stable-metadata-v2-live-bytes",
       model: selected.model,
       outputSchemaVersion: ChatReply.outputSchemaVersion,
       reasoning: selected.reasoning,
@@ -85,7 +90,13 @@ export namespace Prompt {
   ): string {
     const forwardOrigin = payload.forwardOrigin === null ? "" : `FORWARD ORIGIN: ${payload.forwardOrigin}\n`;
     const reply = payload.replyToMessageId === null ? "" : resolveTarget(payload.replyToMessageId);
-    return `${forwardOrigin}${reply}LIVE MESSAGE #${payload.messageId} from ${payload.senderFirstName}: ${payload.text}`;
+    const repliedMedia = payload.repliedMedia.map((reference) => reference.stableDescription).join("\n");
+    const media = payload.media.map((reference) => reference.stableDescription).join("\n");
+    const repliedMediaBlock = repliedMedia ? `REPLIED MEDIA:\n${repliedMedia}\n` : "";
+    const mediaBlock = media ? `\nMEDIA:\n${media}` : "";
+    return `${forwardOrigin}${reply}${repliedMediaBlock}LIVE MESSAGE #${payload.messageId} from ${
+      payload.senderFirstName
+    }: ${payload.text}${mediaBlock}`;
   }
 
   export function extendPrefix(previousHash: string, renderedTurn: string): Segment {
@@ -95,25 +106,6 @@ export namespace Prompt {
       rollingPrefixHash: new Bun.CryptoHasher("sha256").update(`${previousHash}:${segmentHash}`).digest("hex"),
       segmentHash,
     };
-  }
-
-  // Stored Prisma Json columns are typed `unknown`; every value written here was
-  // JSON-serialized, so the boundary casts once before structural canonicalization.
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- raw Json column values are the domain input
-  export function canonicalEncode(value: unknown): string {
-    return JSON.stringify(canonicalize(value as Prisma.InputJsonValue));
-  }
-
-  function canonicalize(value: Prisma.InputJsonValue): Prisma.InputJsonValue {
-    if (Array.isArray(value)) return value.map(canonicalize);
-    if (value === null || typeof value !== "object") return value;
-
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter((entry) => entry[1] !== undefined)
-        .toSorted((left, right) => left[0].localeCompare(right[0]))
-        .map((entry) => [entry[0], canonicalize(entry[1])]),
-    );
   }
 
   export function verifyPrefix(

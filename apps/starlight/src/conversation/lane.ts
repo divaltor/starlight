@@ -1,4 +1,5 @@
 import type { Prisma } from "@starlight/utils/generated/prisma/client";
+import { OperationalTelemetry } from "@/operational-telemetry";
 
 export namespace Lane {
   export type LaneKey = Pick<Prisma.ConversationLaneGetPayload<object>, "assistantId" | "chatId" | "threadKey">;
@@ -33,6 +34,7 @@ export namespace Lane {
       select: { activeRunId: true, fencingToken: true },
     });
     if (lane.activeRunId !== claim.runId || lane.fencingToken !== claim.fencingToken) {
+      OperationalTelemetry.recordEvent("lane-fence", "stale");
       throw new Error("Conversation lane fence is stale");
     }
   }

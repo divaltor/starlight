@@ -5,6 +5,7 @@ import { Model } from "@/ai/model";
 import { ConversationContext } from "@/context/context";
 import { Prompt } from "@/context/prompt";
 import { Memory } from "@/memory/memory";
+import { Media } from "@/media/media";
 import { Database } from "@/services/database";
 import { Exa } from "@/services/exa";
 
@@ -34,6 +35,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable context s
           Layer.succeed(Exa.Service)(disabledExa),
           Layer.succeed(Model.Service)(unavailableModel),
           memoryLayer,
+          mediaLayer,
         ),
       ),
     ),
@@ -158,6 +160,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
           Layer.succeed(Exa.Service)(disabledExa),
           Layer.succeed(Model.Service)(unavailableModel),
           memoryLayer,
+          mediaLayer,
         ),
       ),
     ),
@@ -258,6 +261,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
           Layer.succeed(Exa.Service)(disabledExa),
           Layer.succeed(Model.Service)(unavailableModel),
           memoryLayer,
+          mediaLayer,
         ),
       ),
     ),
@@ -374,6 +378,7 @@ test.skipIf(!databaseUrl)(
             Layer.succeed(Exa.Service)(disabledExa),
             Layer.succeed(Model.Service)(unavailableModel),
             memoryLayer,
+            mediaLayer,
           ),
         ),
       ),
@@ -541,6 +546,20 @@ const disabledExa: Exa.Interface = {
   isEnabled: () => false,
   tools: {},
 };
+
+const mediaLayer = Layer.succeed(Media.Service)({
+  ingest: (source) =>
+    Effect.succeed({
+      availability: "unavailable",
+      mimeType: source.mimeType,
+      reason: "not used in context tests",
+      stableDescription: "media unavailable in context tests",
+      telegramFileId: source.telegramFileId,
+      telegramFileUniqueId: source.telegramFileUniqueId,
+      type: source.type,
+    }),
+  load: () => Effect.succeed(null),
+});
 
 const memoryLayer = Layer.succeed(Memory.Service)({
   forget: () => Effect.die(new Error("Memory forget must not run in context tests")),

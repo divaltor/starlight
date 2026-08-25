@@ -6,6 +6,7 @@ import { StoredPayloadSchema } from "@/conversation/run-artifacts";
 import type { FrozenUserMemory } from "@/conversation/run-artifacts";
 import { Hindsight } from "@/memory/hindsight";
 import { HindsightRetention } from "@/memory/hindsight-retention";
+import { OperationalTelemetry } from "@/operational-telemetry";
 import { Database } from "@/services/database";
 
 export namespace Memory {
@@ -133,6 +134,9 @@ export namespace Memory {
                   }),
                 ),
               ].toSorted();
+              if (bankIds.length < namespace.observations.length) {
+                OperationalTelemetry.recordEvent("memory-projection", "privacy-filtered");
+              }
               return readProfiles(bankIds).pipe(
                 Effect.map((profiles): FrozenUserMemory | null => {
                   // oxlint-disable-next-line sonarjs/no-nested-functions -- Effect projection remains local to one user
@@ -197,6 +201,7 @@ export namespace Memory {
         });
 
         const forget = Effect.fn("Memory.forget")(function* forget(input: ForgetInput) {
+          const startedAt = performance.now();
           const result = yield* database
             .transaction(async (transaction) => {
               const user = await transaction.user.upsert({
@@ -302,6 +307,7 @@ export namespace Memory {
           yield* Effect.logInfo("Memory forget completed").pipe(
             Effect.annotateLogs({ affectedLanes: result.affectedLanes, observations: result.markers.length }),
           );
+          OperationalTelemetry.recordDuration("forget", "completed", performance.now() - startedAt);
           return { affectedLanes: result.affectedLanes, observations: result.markers.length };
         });
 

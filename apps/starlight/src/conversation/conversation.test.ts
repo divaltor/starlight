@@ -9,6 +9,7 @@ import { Conversation } from "@/conversation/conversation";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { Database } from "@/services/database";
 import { Exa } from "@/services/exa";
+import { Media } from "@/media/media";
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -38,6 +39,9 @@ test.skipIf(!databaseUrl)("duplicate Telegram delivery creates one immutable inp
             senderFirstName: "Alice",
             senderId: 42,
             senderUsername: "alice",
+            media: [],
+            mediaGroupId: null,
+            repliedMedia: [],
             text: "@starlight hello",
           },
           updateId: 91,
@@ -159,6 +163,9 @@ test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating th
             senderFirstName: "Alice",
             senderId: 42,
             senderUsername: "alice",
+            media: [],
+            mediaGroupId: null,
+            repliedMedia: [],
             text: "@starlight hello",
           },
           updateId: 111,
@@ -291,6 +298,9 @@ test.skipIf(!databaseUrl)(
               senderFirstName: "Alice",
               senderId: 42,
               senderUsername: "alice",
+              media: [],
+              mediaGroupId: null,
+              repliedMedia: [],
               text: "First",
             },
             updateId: 131,
@@ -323,6 +333,9 @@ test.skipIf(!databaseUrl)(
               senderFirstName: "Alice",
               senderId: 42,
               senderUsername: "alice",
+              media: [],
+              mediaGroupId: null,
+              repliedMedia: [],
               text: "Second",
             },
             updateId: 132,
@@ -599,6 +612,9 @@ test.skipIf(!databaseUrl)("hard checkpoint publishes a child before model invoca
             senderFirstName: "Alice",
             senderId: 42,
             senderUsername: "alice",
+            media: [],
+            mediaGroupId: null,
+            repliedMedia: [],
             text,
           },
           updateId: 143,
@@ -718,6 +734,9 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
             senderFirstName: "Alice",
             senderId: 42,
             senderUsername: "alice",
+            media: [],
+            mediaGroupId: null,
+            repliedMedia: [],
             text: "oversized ".repeat(20_000),
           },
           updateId: 144,
@@ -774,6 +793,9 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
             senderFirstName: "Alice",
             senderId: 42,
             senderUsername: "alice",
+            media: [],
+            mediaGroupId: null,
+            repliedMedia: [],
             text: "a normal follow-up message must still flow",
           },
           updateId: 145,
@@ -865,6 +887,9 @@ test.skipIf(!databaseUrl)("an edit in the original message second creates a corr
             senderFirstName: "Alice",
             senderId: 42,
             senderUsername: "alice",
+            media: [],
+            mediaGroupId: null,
+            repliedMedia: [],
             text: "Original",
           },
           updateId: 121,
@@ -874,6 +899,9 @@ test.skipIf(!databaseUrl)("an edit in the original message second creates a corr
           payload: {
             ...original.payload,
             editDate: 1_700_000_000,
+            media: [],
+            mediaGroupId: null,
+            repliedMedia: [],
             text: "Corrected",
           },
           updateId: 122,
@@ -1135,6 +1163,19 @@ function testLayer(
     Layer.succeed(Model.Service)(model),
     Layer.succeed(Exa.Service)(disabledExa),
     Layer.succeed(TelegramDelivery.Service)(delivery),
+    Layer.succeed(Media.Service)({
+      ingest: (source) =>
+        Effect.succeed({
+          availability: "unavailable",
+          mimeType: source.mimeType,
+          reason: "not used in conversation tests",
+          stableDescription: "media unavailable in conversation tests",
+          telegramFileId: source.telegramFileId,
+          telegramFileUniqueId: source.telegramFileUniqueId,
+          type: source.type,
+        }),
+      load: () => Effect.succeed(null),
+    }),
     Layer.succeed(Memory.Service)({
       forget: () => Effect.die(new Error("Memory forget must not run in conversation tests")),
       freezeContextMemory: () => Effect.succeed(""),

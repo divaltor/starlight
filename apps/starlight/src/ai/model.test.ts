@@ -60,12 +60,53 @@ test("returns an immutable completed tool event", async () => {
     {
       durationMs: expect.any(Number),
       input: { query: "current fact" },
-      output: { value: "before" },
+      output: {
+        projection: { value: { value: "before" } },
+        projectionMetadata: {
+          originalBytes: 28,
+          sha256: "207b4c63b6b42148076df446206c86d78b4bc8f16785aadabda35a185c9035d3",
+          truncated: false,
+          version: "tool-result-v2",
+        },
+      },
       state: "completed",
       toolCallId: "call-1",
       toolName: "web_lookup",
     },
   ]);
+});
+
+test("bounds tool output before the next model step", async () => {
+  const result = await runModel(
+    new MockLanguageModelV3({
+      doGenerate: [toolCallResult("call-1"), textResult('{"answer":"done"}')],
+    }),
+    {
+      maxToolCalls: 2,
+      outputSchema: z.object({ answer: z.string() }),
+      tools: {
+        web_lookup: {
+          description: "Return an oversized fixture",
+          execute: () => Promise.resolve({ text: "x".repeat(100_000) }),
+          inputSchema: z.object({ query: z.string() }),
+        },
+      },
+    },
+  );
+  const output = z
+    .object({
+      projection: z.string(),
+      projectionMetadata: z.object({
+        originalBytes: z.number(),
+        sha256: z.string(),
+        truncated: z.literal(true),
+        version: z.literal("tool-result-v2"),
+      }),
+    })
+    .parse(result.toolEvents[0]?.state === "completed" ? result.toolEvents[0].output : null);
+
+  expect(output.projection.length).toBeLessThanOrEqual(16 * 1024);
+  expect(output.projectionMetadata.originalBytes).toBe(100_021);
 });
 
 test("returns a failed tool event when generation recovers", async () => {

@@ -74,7 +74,10 @@ export namespace Exa {
         catch: (cause) => ExaError.fromCause("Failed to load Exa MCP tools", cause),
       });
 
-      return Service.of({ isEnabled: () => true, tools: discoveredTools });
+      return Service.of({
+        isEnabled: () => true,
+        tools: discoveredTools,
+      });
     }).pipe(
       // Config failures join the service error channel as typed ExaErrors.
       Effect.catchTag("ConfigError", (cause) => Effect.fail(ExaError.fromCause("Invalid Exa configuration", cause))),

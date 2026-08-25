@@ -33,8 +33,8 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       CONVERSATION_BATCH_QUIET_MS: z.coerce.number().int().positive().default(1000),
       CONVERSATION_BATCH_MAX_WAIT_MS: z.coerce.number().int().positive().default(3000),
       CONVERSATION_LANE_LEASE_MS: z.coerce.number().int().positive().default(180_000),
-      CONTEXT_SOFT_TOKEN_CAP: z.coerce.number().int().positive().default(30_000),
-      CONTEXT_HARD_TOKEN_CAP: z.coerce.number().int().positive().default(900_000),
+      CONTEXT_SOFT_TOKEN_CAP: z.coerce.number().int().positive().default(24_000),
+      CONTEXT_HARD_TOKEN_CAP: z.coerce.number().int().positive().default(48_000),
       CONTEXT_RETAINED_TOKEN_TARGET: z.coerce.number().int().positive().default(8000),
       CONTEXT_OUTPUT_RESERVE_TOKENS: z.coerce.number().int().nonnegative().default(1024),
       CONTEXT_TOOL_RESERVE_TOKENS: z.coerce.number().int().nonnegative().default(4096),
@@ -43,6 +43,10 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       // oxlint-disable-next-line sonarjs/no-clear-text-protocols
       HINDSIGHT_BASE_URL: z.url().default("http://hindsight:8888"),
       HINDSIGHT_API_KEY: z.string(),
+
+      AWS_ACCESS_KEY_ID: z.string(),
+      AWS_SECRET_ACCESS_KEY: z.string(),
+      AWS_ENDPOINT: z.string().optional(),
 
       NODE_ENV: z.enum(["development", "production"]).default("development"),
       LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),

@@ -1,5 +1,5 @@
 import type { ConversationCheckpointReason, Prisma } from "@starlight/utils/generated/prisma/client";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Number, Predicate, Schema } from "effect";
 import { selected } from "@/ai/model-profile";
 import { Model } from "@/ai/model";
 import { ActiveContext } from "@/context/active-context";
@@ -11,10 +11,13 @@ import { ConversationKey } from "@/conversation/key";
 import { Lane } from "@/conversation/lane";
 import { PreparedRequestSchema, StoredPayloadSchema } from "@/conversation/run-artifacts";
 import { Memory } from "@/memory/memory";
+import { Media } from "@/media/media";
+import { OperationalTelemetry } from "@/operational-telemetry";
 import { Database } from "@/services/database";
 import { Exa } from "@/services/exa";
 
 export namespace ConversationContext {
+  const MAX_REQUEST_MEDIA_BYTES = 20 * 1024 * 1024;
   export interface PreparedContextRequest {
     readonly cacheBase: string;
     readonly contextId: string;
@@ -85,6 +88,7 @@ export namespace ConversationContext {
       const database = yield* Database.Service;
       const exa = yield* Exa.Service;
       const memoryService = yield* Memory.Service;
+      const media = yield* Media.Service;
       const model = yield* Model.Service;
       const prefixSnapshots = new Map<string, CacheDiagnostics.PrefixSnapshot>();
 
@@ -229,6 +233,45 @@ export namespace ConversationContext {
             }),
           )
           .pipe(Effect.mapError(failed("Failed to find prepared run context")));
+        const mediaInputs = yield* database
+          .query((client) =>
+            client.conversationRunInput.findMany({
+              where: { runId: input.runId },
+              include: { input: { select: { id: true, payload: true } } },
+              orderBy: { ordinal: "asc" },
+            }),
+          )
+          .pipe(Effect.mapError(failed("Failed to find prepared run media")));
+        const mediaBytes = Number.sumAll(
+          mediaInputs.flatMap((runInput) => {
+            const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
+            return [...payload.repliedMedia, ...payload.media].map((reference) =>
+              reference.availability === "stored" ? reference.size : 0,
+            );
+          }),
+        );
+        if (mediaBytes > MAX_REQUEST_MEDIA_BYTES) {
+          return yield* new ContextError({
+            message: "Prepared request media exceeds the 20 MiB aggregate boundary",
+            retryable: false,
+          });
+        }
+        const loadedMedia = new Map(
+          yield* Effect.all(
+            mediaInputs.map((runInput) => {
+              const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
+              return Effect.all([...payload.repliedMedia, ...payload.media].map(media.load), {
+                concurrency: "unbounded",
+              }).pipe(
+                Effect.map((items) => [runInput.input.id, items.filter(Predicate.isNotNull)] as const),
+                Effect.mapError(
+                  (error) => new ContextError({ cause: error, message: error.message, retryable: error.retryable }),
+                ),
+              );
+            }),
+            { concurrency: "unbounded" },
+          ),
+        );
         const initialMemory =
           runContext.contextId === null
             ? yield* memoryService
@@ -283,7 +326,7 @@ export namespace ConversationContext {
             const frozen = Schema.decodeUnknownSync(PreparedRequestSchema)(run.preparedRequest);
             const userMemory = new Map(frozen.userMemory.map((snapshot) => [snapshot.userId, snapshot.text]));
             const renderedMemoryUsers = new Set<string>();
-            const current = [
+            const current: Model.Message[] = [
               {
                 role: "user" as const,
                 text: `TRUSTED REQUEST METADATA\nCurrent date: ${frozen.currentDate}`,
@@ -300,13 +343,14 @@ export namespace ConversationContext {
                     ? []
                     : [{ role: "user" as const, text: `${payload.senderFirstName}: ${memory}` }]),
                   {
+                    media: loadedMedia.get(runInput.input.id) ?? [],
                     role: "user" as const,
                     text: Prompt.renderLiveMessage(payload, Prompt.describeReplyTarget(payload, knownMessageIds)),
                   },
                 ];
               }),
             ];
-            const finalized = turns.map((turn) => ({
+            const finalized: Model.Message[] = turns.map((turn) => ({
               role: turn.role === "assistant" ? ("assistant" as const) : ("user" as const),
               text: turn.renderedContent,
             }));
@@ -314,15 +358,18 @@ export namespace ConversationContext {
             const cacheBase = context.frozenMemory;
             const envelope = Schema.decodeUnknownSync(Prompt.FrozenEnvelope)(context.stableEnvelope);
             const finalizedTokens = turns.reduce((total, turn) => total + turn.estimatedTokens, 0);
-            const currentTokens = current.reduce((total, message) => total + Math.ceil(message.text.length / 4), 0);
+            const currentTokens =
+              current.reduce((total, message) => total + Math.ceil(message.text.length / 4), 0) +
+              Math.ceil(mediaBytes / 1024);
             const baseTokens = Math.ceil(context.stableEnvelope.length / 4) + Math.ceil(cacheBase.length / 4);
             const terminalPrefixHash = Prompt.verifyPrefix(context.basePrefixHash, turns);
+            const messageIdentities = messages.map(messageIdentity);
             const requestHash = new Bun.CryptoHasher("sha256")
               .update(
                 Prompt.canonicalEncode({
                   cacheBase,
                   instructions: envelope.instructions,
-                  messages,
+                  messages: messageIdentities,
                   profileFingerprint: context.modelProfileFingerprint,
                   terminalPrefixHash,
                   webLookupEnabled: envelope.tools.length > 0,
@@ -339,7 +386,9 @@ export namespace ConversationContext {
               webLookupEnabled: envelope.tools.length > 0,
             };
             const snapshot: CacheDiagnostics.PrefixSnapshot = {
-              messages: messages.map((message) => new Bun.CryptoHasher("sha256").update(message.text).digest("hex")),
+              messages: messageIdentities.map((identity) =>
+                new Bun.CryptoHasher("sha256").update(Prompt.canonicalEncode(identity)).digest("hex"),
+              ),
               settings: `${selected.model}:${selected.reasoning}:${envelope.tools.length > 0}`,
               system: [
                 new Bun.CryptoHasher("sha256").update(context.stableEnvelope).digest("hex"),
@@ -384,15 +433,20 @@ export namespace ConversationContext {
       const checkpoint = Effect.fn("ConversationContext.checkpoint")(function* checkpoint(
         checkpointInput: CheckpointInput,
       ) {
+        const startedAt = performance.now();
         const prepared = yield* database
           .transaction((client) =>
             prepareCheckpoint(client, checkpointInput, Prompt.profileFingerprint(exa.isEnabled())),
           )
           .pipe(Effect.mapError(failed("Failed to prepare context checkpoint")));
         if (prepared.kind === "notPossible") {
+          OperationalTelemetry.recordDuration("checkpoint", "not-possible", performance.now() - startedAt);
           return yield* new ContextError({ message: prepared.message, retryable: false });
         }
-        if (prepared.kind === "committed") return prepared.result;
+        if (prepared.kind === "committed") {
+          OperationalTelemetry.recordDuration("checkpoint", "already-committed", performance.now() - startedAt);
+          return prepared.result;
+        }
 
         const summarized = prepared.summary ?? (yield* summarizeCheckpoint(database, model, prepared, checkpointInput));
         const frozenMemory =
@@ -423,6 +477,7 @@ export namespace ConversationContext {
             retainedTurns: result.retainedTurns,
           }),
         );
+        OperationalTelemetry.recordDuration("checkpoint", "committed", performance.now() - startedAt);
         return result;
       });
 
@@ -972,5 +1027,17 @@ export namespace ConversationContext {
       });
     }
     return { childContextId: child.id, generation: child.generation, retainedTurns: prepared.tail.length };
+  }
+
+  function messageIdentity(message: Model.Message) {
+    return {
+      media: message.media?.map((item) => ({
+        mimeType: item.mimeType,
+        sha256: item.sha256,
+        type: item.type,
+      })),
+      role: message.role,
+      text: message.text,
+    };
   }
 }

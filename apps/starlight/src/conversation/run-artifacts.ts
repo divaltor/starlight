@@ -1,5 +1,6 @@
 import type { Prisma } from "@starlight/utils/generated/prisma/client";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { Media } from "@/media/media";
 
 // Fields the transcript projection reads back from stored inputs.
 const ProjectedFields = {
@@ -12,6 +13,9 @@ const ProjectedFields = {
   senderFirstName: Schema.String,
   senderId: Schema.NullOr(Schema.Int),
   text: Schema.String,
+  media: Schema.Array(Media.ReferenceSchema).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  mediaGroupId: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  repliedMedia: Schema.Array(Media.ReferenceSchema).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
 };
 
 // Reader-side view: validates exactly what projections consume, so input rows written

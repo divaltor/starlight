@@ -89,21 +89,29 @@ export namespace Transcript {
           : [];
       if (linked.length > 0 && replyToMessageId !== null) seenMessageIds.add(replyToMessageId);
       seenMessageIds.add(messageId);
-      const media = runInput.input.mediaReferences
-        ? [
-            {
-              content: {
-                references: runInput.input.mediaReferences as Prisma.InputJsonValue,
+      const projectedMedia = [...payload.repliedMedia, ...payload.media].map((reference) => ({
+        availability: reference.availability,
+        description: reference.stableDescription,
+        mimeType: reference.mimeType,
+        sha256: reference.availability === "stored" ? reference.sha256 : null,
+        type: reference.type,
+      }));
+      const media =
+        projectedMedia.length > 0
+          ? [
+              {
+                content: {
+                  references: projectedMedia,
+                },
+                key: `input:${runInput.input.id}:media`,
+                kind: "mediaProjection" as const,
+                role: "user" as const,
+                sourceMessageId: null,
+                sourceReferences: { inputId: runInput.input.id.toString() },
+                visibility: "conversation",
               },
-              key: `input:${runInput.input.id}:media`,
-              kind: "mediaProjection" as const,
-              role: "user" as const,
-              sourceMessageId: null,
-              sourceReferences: { inputId: runInput.input.id.toString() },
-              visibility: "conversation",
-            },
-          ]
-        : [];
+            ]
+          : [];
       return [
         ...linked,
         {
