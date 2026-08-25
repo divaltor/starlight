@@ -10,7 +10,7 @@ without maintaining another converted model artifact.
 from __future__ import annotations
 
 from math import isqrt
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import timm
 import torch
@@ -28,12 +28,12 @@ class ViTWrapper(nn.Module):
     def forward(self, inputs: Tensor) -> tuple[Tensor, Tensor]:
         batch_size = inputs.shape[0]
         tokens = self.vit.patch_embed(inputs)
-        cls_token = self.vit.cls_token.expand(batch_size, -1, -1)
+        cls_token = cast('Tensor', self.vit.cls_token).expand(batch_size, -1, -1)
         tokens = torch.cat((cls_token, tokens), dim=1)
-        tokens += self.vit.pos_embed[:, : tokens.shape[1]]
+        tokens += cast('Tensor', self.vit.pos_embed)[:, : tokens.shape[1]]
         tokens = self.vit.pos_drop(tokens)
 
-        for block in self.vit.blocks:
+        for block in self.vit.blocks.children():
             tokens = block(tokens)
 
         tokens = self.vit.norm(tokens)
@@ -62,11 +62,14 @@ class ImageTagger(nn.Module):
         img_size: int = 512,
     ) -> None:
         super().__init__()
-        vit = timm.create_model(
-            model_name,
-            pretrained=False,
-            img_size=img_size,
-            num_classes=0,
+        vit = cast(
+            'VisionTransformer',
+            timm.create_model(
+                model_name,
+                pretrained=False,
+                img_size=img_size,
+                num_classes=0,
+            ),
         )
         self.backbone = ViTWrapper(vit)
         self.tag_context_size = tag_context_size

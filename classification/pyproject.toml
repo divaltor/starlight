@@ -179,7 +179,7 @@ reportPrivateLocalImportUsage = "warning"
 reportImplicitAbstractClass = "warning"
 
 [dependency-groups]
-dev = ["ruff>=0.14.0"]
+dev = ["ruff>=0.14.0", "ty>=0.0.74"]
 otel = [
   "opentelemetry-api>=1.40.0",
   "opentelemetry-exporter-otlp-proto-http>=1.40.0",

@@ -17,7 +17,7 @@ import os
 import pathlib
 from collections import defaultdict
 from operator import itemgetter
-from typing import TYPE_CHECKING, Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO, overload
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -54,9 +54,15 @@ def _get_metadata_file() -> Mapping[str, Any]:
         return json.load(f)
 
 
-def drop_overlap_tags(
-    tags: list[str] | Mapping[str, float],
-) -> list[str] | Mapping[str, float]:
+@overload
+def drop_overlap_tags(tags: list[str]) -> list[str]: ...
+
+
+@overload
+def drop_overlap_tags(tags: Mapping[str, float]) -> Mapping[str, float]: ...
+
+
+def drop_overlap_tags(tags: list[str] | Mapping[str, float]) -> list[str] | Mapping[str, float]:
     overlap_tags_dict = _get_overlap_tags()
     result_tags: list[str] = []
     origin_tags = copy.deepcopy(tags)

@@ -1,8 +1,7 @@
 from typing import TYPE_CHECKING, Annotated
 
-import structlog
 import torch
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, Body, Request
 from sentence_transformers import SentenceTransformer
 
 from app.device import resolve_model_device
@@ -13,7 +12,6 @@ from app.utils import preprocess_image
 if TYPE_CHECKING:
     from numpy import ndarray
 
-logger = structlog.get_logger()
 model_device = resolve_model_device()
 
 
@@ -47,34 +45,27 @@ async def embeddings(
         ),
     ],
 ) -> EmbeddingResponse:
-    try:
-        # Always encode text
-        with pipeline_span('text_embedding', 'jinaai/jina-clip-v2', payload.encoding_mode):
-            emb_text_vec: ndarray = embedding_model.encode(
-                [payload.text],
-                prompt_name=payload.encoding_mode.value,
-                normalize_embeddings=True,
-            )
-
-        emb_image: ndarray | None = None  # pyright: ignore[reportAssignmentType]
-
-        if payload.image:
-            with torch.no_grad():
-                img = await preprocess_image(payload.image.strip(), request.app.state.http_session)
-
-                with pipeline_span('image_embedding', 'jinaai/jina-clip-v2', payload.encoding_mode):
-                    emb_image: ndarray = embedding_model.encode(
-                        [img],
-                        prompt_name=payload.encoding_mode.value,
-                        normalize_embeddings=True,
-                    )  # pyright: ignore[reportCallIssue, reportArgumentType]
-
-        return EmbeddingResponse(
-            image=emb_image[0].tolist() if emb_image is not None else None,
-            text=emb_text_vec[0].tolist(),
+    with pipeline_span('text_embedding', 'jinaai/jina-clip-v2', payload.encoding_mode):
+        emb_text_vec: ndarray = embedding_model.encode(
+            [payload.text],
+            prompt_name=payload.encoding_mode.value,
+            normalize_embeddings=True,
         )
-    except HTTPException:
-        raise
-    except Exception as e:  # pragma: no cover
-        logger.exception('Embedding generation failed')
-        raise HTTPException(status_code=500, detail=f'Embedding generation failed: {e}') from e
+
+    emb_image: ndarray | None = None
+
+    if payload.image:
+        with torch.no_grad():
+            img = await preprocess_image(payload.image.strip(), request.app.state.http_session)
+
+            with pipeline_span('image_embedding', 'jinaai/jina-clip-v2', payload.encoding_mode):
+                emb_image = embedding_model.encode(  # ty: ignore[no-matching-overload]
+                    [img],
+                    prompt_name=payload.encoding_mode.value,
+                    normalize_embeddings=True,
+                )
+
+    return EmbeddingResponse(
+        image=emb_image[0].tolist() if emb_image is not None else None,
+        text=emb_text_vec[0].tolist(),
+    )

@@ -1,6 +1,11 @@
 import copy
 import io
+from collections.abc import Callable
 from textwrap import indent
+from typing import Any
+
+type PillowTransform = Callable[[Any], Any]
+type PillowTransformConfig = list[PillowTransformConfig] | dict[str, Any]
 
 
 class PillowCompose:
@@ -11,10 +16,10 @@ class PillowCompose:
     :type transforms: list
     """
 
-    def __init__(self, transforms):
+    def __init__(self, transforms: list[PillowTransform]) -> None:
         self.transforms = transforms
 
-    def __call__(self, image):
+    def __call__(self, image: Any) -> Any:
         """
         Apply the composed transformations to an image.
 
@@ -28,7 +33,7 @@ class PillowCompose:
             x = trans(x)
         return x
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
         String representation of the PillowCompose instance.
 
@@ -43,10 +48,12 @@ class PillowCompose:
             return sf.getvalue()
 
 
-_PTRANS_CREATORS = {}
+_PTRANS_CREATORS: dict[str, Callable[..., PillowTransform]] = {}
 
 
-def register_pillow_transform(name: str):
+def register_pillow_transform(
+    name: str,
+) -> Callable[[Callable[..., PillowTransform]], Callable[..., PillowTransform]]:
     """
     Decorator to register a function as a creator for a specific type of Pillow transform.
 
@@ -54,14 +61,14 @@ def register_pillow_transform(name: str):
     :type name: str
     """
 
-    def _fn(func):
+    def _fn(func: Callable[..., PillowTransform]) -> Callable[..., PillowTransform]:
         _PTRANS_CREATORS[name] = func
         return func
 
     return _fn
 
 
-def create_pillow_transforms(tvalue: list | dict):
+def create_pillow_transforms(tvalue: PillowTransformConfig) -> PillowTransform:
     """
     Create a transformation or a composition of transformations based on the input value.
 
