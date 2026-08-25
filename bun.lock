@@ -142,6 +142,7 @@
     "packages/api": {
       "name": "@starlight/api",
       "dependencies": {
+        "@opentelemetry/api": "1.9.1",
         "@orpc/client": "catalog:",
         "@orpc/server": "catalog:",
         "@starlight/crypto": "workspace:*",

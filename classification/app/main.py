@@ -13,7 +13,7 @@ from opentelemetry.context import attach, detach
 
 from app.config import config
 from app.logger import configure_logger
-from app.otel import setup_otel
+from app.otel import setup_otel, shutdown_otel
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Coroutine
@@ -31,6 +31,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await application.state.http_session.close()
+        shutdown_otel()
 
 
 app = FastAPI(

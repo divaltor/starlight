@@ -22,6 +22,7 @@ class Config(BaseSettings):
 
     LOG_LEVEL: str = 'DEBUG'
     DISABLE_OPENAPI: bool = False
+    OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
 
     class Config:
         env_file = '.env'

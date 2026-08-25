@@ -1,4 +1,5 @@
 import env from "@starlight/utils/config";
+import { context, propagation } from "@opentelemetry/api";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
@@ -54,11 +55,14 @@ export namespace EmbeddingsService {
       ) {
         yield* Effect.logInfo(`EmbeddingsService: Generating embeddings for ${image}`);
 
+        const headers = {
+          "X-API-Token": env.ML_API_TOKEN!,
+          "X-Request-Id": requestId ?? Bun.randomUUIDv7(),
+        };
+        propagation.inject(context.active(), headers);
+
         const request = yield* HttpClientRequest.post(`${env.ML_BASE_URL}/v1/embeddings`).pipe(
-          HttpClientRequest.setHeaders({
-            "X-API-Token": env.ML_API_TOKEN!,
-            "X-Request-Id": requestId ?? Bun.randomUUIDv7(),
-          }),
+          HttpClientRequest.setHeaders(headers),
           HttpClientRequest.bodyJson({
             image,
             tags,
@@ -110,11 +114,14 @@ export namespace EmbeddingsService {
       ) {
         yield* Effect.logInfo("EmbeddingsService: Generating text embeddings");
 
+        const headers = {
+          "X-API-Token": env.ML_API_TOKEN!,
+          "X-Request-Id": requestId ?? Bun.randomUUIDv7(),
+        };
+        propagation.inject(context.active(), headers);
+
         const request = yield* HttpClientRequest.post(`${env.ML_BASE_URL}/v1/embeddings`).pipe(
-          HttpClientRequest.setHeaders({
-            "X-API-Token": env.ML_API_TOKEN!,
-            "X-Request-Id": requestId ?? Bun.randomUUIDv7(),
-          }),
+          HttpClientRequest.setHeaders(headers),
           HttpClientRequest.bodyJson({
             tags: query,
             encoding_mode: "retrieval.query",
