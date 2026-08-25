@@ -2,8 +2,8 @@
 
 Continuation plan for serving memory-retrieval models from `classification/` and wiring
 them into the Starlight bot via Hindsight. Written 2026-08-24 after implementing phase 1.
-Resume from section B (runtime smoke test) — nothing below has been executed against real
-hardware or a live Hindsight instance.
+The model endpoints were smoke-tested on the homelab ROCm host on 2026-08-25; live
+Hindsight integration remains pending.
 
 ## Status: done
 
@@ -44,14 +44,17 @@ are copied into the repository.
 
 ## Locked decisions
 
-- **PoC pair**: embedder `sergeyzh/BERTA` (`914c8c8aed14042ed890fc2c662d5e9e66b2faa7`),
-  reranker `jinaai/jina-reranker-v2-base-multilingual`
-  (`9cfeff2df7d40d1b78e75e5e9cebec92a99813c9`).
+- **Selected pair**: embedder `BAAI/bge-m3`
+  (`5617a9f61b028005a4858fdac845db406aefb181`), reranker
+  `BAAI/bge-reranker-v2-m3` (`953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e`).
 - **Keep `jina-clip-v2`** for image route untouched; research verdict: its ru retrieval
   (64.73 MTEB-multi) is defensible, but dedicated challengers need local shadow-eval before
   any switch. `truncate_dim=1024` is native — zero truncation loss.
-- **Fallback models** (pinned, one-env-var swaps): embedder `BAAI/bge-m3`
-  (`5617a9f61b028005a4858fdac845db406aefb181`); reranker
+- **BERTA is evaluation-only with a role-aware provider**: its retrieval contract requires
+  different `search_query:` and `search_document:` prompts, while Hindsight 0.9.1 sends both
+  through the same OpenAI embeddings request. Its model default is the unrelated
+  `categorize_entailment:` prompt, so serving it unchanged produces the wrong embeddings.
+- **Fallback reranker** (pinned, one-env-var swap):
   `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (`1427fd652930e4ba29e8149678df786c240d8825`).
 - Contracts: Hindsight OpenAI provider base URL must include `/v1/openai` (client appends
   `/embeddings`); Hindsight Cohere reranker treats `COHERE_BASE_URL` as the exact endpoint.
@@ -61,28 +64,26 @@ are copied into the repository.
 
 ## Remaining work
 
-### B. Runtime smoke test on the GPU box (do first)
+### B. Runtime smoke test on the GPU box — complete for model endpoints
 
-Blocked 2026-08-24: both `divaltor@homelab.local` and `ssh@homelab.local` reject the
-available key in batch mode. Resume when SSH access is available.
+The production Dockerfile built and ran on the Radeon 890M ROCm host. With bge-m3 and
+BGE reranker v2 M3 loaded, startup took 20 seconds and resident memory was 3.83 GiB.
 
-1. `docker build` + `docker run` with `ENABLE_TEXT_EMBEDDINGS=true ENABLE_RERANKER=true`.
-2. Confirm first boot downloads both pinned revisions into the HF cache volume.
-3. Curl checks:
-   - embeddings: float response, 768 dims, normalized (~unit norm), ordered indices;
-     repeat with `encoding_format:"base64"` and decode to compare;
-   - rerank: descending scores, original indices preserved, `top_n` honored;
-   - auth matrix: valid Bearer ✓, stale `X-API-Token` + valid Bearer ✓ (must pass),
-     invalid both ✗ 401.
-4. Measure resident UMA/GPU memory with all three models loaded (CLIP + BERTA + Jina v2);
-   record number here and in README when known.
-5. Watch for jina-reranker custom-code issues under ROCm (flash-attn import fallback);
-   if it fails, flip `RERANKER_MODEL` to the mmarco-MiniLMv2 pin and re-test.
+- embeddings: 1024 dimensions, normalized vectors, ordered indices, float/base64 parity;
+- batch limit: 64 inputs accepted in 246 ms; 65 rejected with 422;
+- rerank: Russian semantic ordering, descending scores, original indices, and `top_n` passed
+  in 103 ms;
+- auth: valid Bearer passed, stale `X-API-Token` plus valid Bearer passed, invalid both
+  returned 401;
+- 100 short reranker documents completed in 654 ms.
+
+The existing CLIP service stayed live concurrently. A single-process all-model restart and
+live Hindsight retain/recall remain deployment smoke checks.
 
 ### C. Deploy Hindsight beside it
 
-Required Compose configuration is prepared in `docker-compose.hindsight.yaml` but has not
-been started. Exact release: `0.9.1`.
+Required Compose configuration is prepared in `docker-compose.yaml` but has not been
+started. Exact release: `0.9.1`.
 
 - Postgres 15+ with pgvector (pre-flight: confirm extension installable on our DB host).
 - Pin an exact 0.9.x release (changelog shows weekly churn; do not track latest).
@@ -97,20 +98,16 @@ been started. Exact release: `0.9.1`.
 - Retain cadence stays app-driven: the single bot process scans in batches (≤100 observations
   per namespace wake-up) → one async retain per bank batch. Never retain-per-message.
 
-### D. Embedder bake-off evals (settles "keep jina-clip-v2 or not")
+### D. Memory retrieval bake-off — complete
 
-Build a small eval script (MTEB-style, offline, CPU/GPU either fine):
+Evaluation used 30 synthetic conversational-memory queries and a fixed 300-query RuBQ
+subset. Production remained untouched.
 
-- Data: 200–500 real lane transcripts → query/fact pairs, stratified: RU→RU, EN→EN,
-  RU→EN, EN→RU, code-switched, entity/date-heavy, same-chat hard negatives.
-- Metrics: Recall@10/20 pre-rerank; MRR@10 / nDCG@10 post-rerank; p50/p95 latency;
-  peak shared-memory footprint.
-- Candidates: jina-clip-v2 text tower (1024d) vs BERTA (768d) vs bge-m3 (1024d) vs
-  multilingual-e5-large (needs `query:`/`passage:` prefixes).
-- Switch bar (from research): dedicated model wins only with **≥3 absolute points**
-  overall without degrading either cross-language stratum; switching costs a full
-  re-embedding of stored facts, so decide once, early.
-- Reranker side-compare: jina-v2 vs mmarco-MiniLMv2 on the Russian strata.
+- BGE-M3 led embeddings at .791 nDCG@10 and .720 MRR@10.
+- BGE reranker v2 M3 led rerankers at .872 RuBQ nDCG and .803 Hit@1.
+- BERTA's role-specific prompt contract is incompatible with Hindsight's identical
+  query/document payloads.
+- MiniLM requires `max_length=512`, unlike the selected model's current 1024-token contract.
 
 ### E. Licensing decision (not required)
 
@@ -139,5 +136,5 @@ Hindsight is the only memory backend. PostgreSQL keeps `MemoryNamespace` and
 - Research sessions: benchmarks `ses_fcb8f7db0ffejAQNjy2MFuKPzt`; vendor deep-dives
   earlier in this thread (Hindsight internals, Mem0 rejection rationale).
 - Key sources: RusBEIR arXiv 2504.12879, ruMTEB NAACL 2025, jina-clip-v2 paper
-  (arXiv 2412.08802, Table 3/5), HF cards for BERTA / USER-bge-m3 / jina-reranker-v2,
-  Hindsight docs (models/configuration/retain/recall/mental-models).
+  (arXiv 2412.08802, Table 3/5), HF cards for BERTA, USER-bge-m3, BGE-M3, and BGE
+  reranker v2 M3, Hindsight docs (models/configuration/retain/recall/mental-models).

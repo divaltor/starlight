@@ -17,7 +17,6 @@ reranker_model = CrossEncoder(
     config.RERANKER_MODEL,
     revision=config.RERANKER_MODEL_REVISION,
     device=model_device,
-    trust_remote_code=True,
     max_length=1024,
     model_kwargs={'torch_dtype': model_dtype},
 )

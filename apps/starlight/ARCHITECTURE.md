@@ -60,9 +60,7 @@ claimed run ──▶ preparedRequest null? ── yes ──▶ freeze date + u
              same stored values on every retry
 ```
 
-The stored shape is `{ currentDate, sessionId, userMemory: [{ userId, text }] }`. `userMemory` contains rendered, audience-scoped Hindsight profiles, not live profile references. `Context.prepare` indexes the snapshots by `userId` and injects each sender's profile once before that sender's first live message.
-
-Reader compatibility is deliberate: runs prepared by the pre-Hindsight deployment contain `memoryRevisions` and no `userMemory`. `PreparedRequestSchema` drops the obsolete field and defaults only a missing `userMemory` key to `[]`; malformed present values still fail. The fallback omits personalization for that in-flight run instead of fetching newer memory and changing an already-frozen request. No data migration or deployment drain is required.
+The stored shape is `{ currentDate, sessionId, userMemory: [{ userId, text }] }`. `userMemory` contains rendered, audience-scoped Hindsight profiles, not live profile references. `Context.prepare` indexes the snapshots by `userId` and injects each sender's profile once before that sender's first live message. No memory is represented explicitly as `userMemory: []`; missing or malformed fields fail decoding.
 
 The model receives two separately frozen inputs: `preparedRequest.userMemory` for per-sender personalization and `ConversationContext.frozenMemory` for chat/topic continuity. Generation persists actions before Telegram dispatch. Successful and terminal model-failure paths append available transcript/context turns. Every terminal path advances `processedRevision`, clears the lane lease and `activeRunId`, and schedules another wake if later revisions exist.
 

@@ -10,10 +10,7 @@ For local development in a git clone, install hooks manually once with `bunx lef
 
 ```bash
 # Start all services with Docker Compose
-docker-compose up -d
-
-# Initialize database
-bun db:deploy
+docker compose --env-file hindsight/.env up -d
 ```
 
 Alternative deployment: Dokploy, Fly.io, Railway, or manual Docker. Generate encryption key with `openssl rand -hex 32`.

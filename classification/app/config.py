@@ -14,12 +14,11 @@ class Config(BaseSettings):
     ENABLE_RERANKER: bool = False
     MODEL_DEVICE: Literal['auto', 'cpu', 'cuda'] = 'auto'
 
-    # Memory-retrieval models served to Hindsight. Revisions are pinned because
-    # the reranker executes repository code (trust_remote_code=True).
-    TEXT_EMBEDDING_MODEL: str = 'sergeyzh/BERTA'
-    TEXT_EMBEDDING_MODEL_REVISION: str = '914c8c8aed14042ed890fc2c662d5e9e66b2faa7'
-    RERANKER_MODEL: str = 'jinaai/jina-reranker-v2-base-multilingual'
-    RERANKER_MODEL_REVISION: str = '9cfeff2df7d40d1b78e75e5e9cebec92a99813c9'
+    # Memory-retrieval models served to Hindsight at pinned revisions.
+    TEXT_EMBEDDING_MODEL: str = 'BAAI/bge-m3'
+    TEXT_EMBEDDING_MODEL_REVISION: str = '5617a9f61b028005a4858fdac845db406aefb181'
+    RERANKER_MODEL: str = 'BAAI/bge-reranker-v2-m3'
+    RERANKER_MODEL_REVISION: str = '953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e'
 
     LOG_LEVEL: str = 'DEBUG'
     DISABLE_OPENAPI: bool = False
