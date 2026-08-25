@@ -90,15 +90,12 @@ def verify_api_token(
     x_api_token: Annotated[str | None, Header(alias='X-API-Token')] = None,
     authorization: Annotated[str | None, Header()] = None,
 ) -> None:
-    if config.DEBUG:
-        return
-
     # Either credential independently proves the caller: Hindsight's OpenAI/Cohere
     # clients send Authorization: Bearer, existing clients send X-API-Token. A
     # stale value in one header must not veto the valid one in the other.
     bearer = authorization.removeprefix('Bearer ') if authorization else ''
 
-    if config.API_TOKEN and config.API_TOKEN in {x_api_token, bearer}:
+    if config.CLASSIFICATION_API_TOKEN in {x_api_token, bearer}:
         return
 
     raise HTTPException(status_code=401, detail='Invalid API token')

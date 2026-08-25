@@ -33,6 +33,7 @@ export namespace ModelProvider {
               }).chat(selected.model, {
                 provider: {
                   allow_fallbacks: selected.route.allowFallbacks,
+                  data_collection: "deny",
                   only: [...selected.route.only],
                   order: [...selected.route.only],
                   require_parameters: selected.route.requireParameters,

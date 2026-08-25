@@ -4,9 +4,7 @@ from pydantic_settings import BaseSettings
 
 
 class Config(BaseSettings):
-    DEBUG: bool = False
-
-    API_TOKEN: str
+    CLASSIFICATION_API_TOKEN: str
 
     ENABLE_EMBEDDINGS: bool = False
     ENABLE_CLASSIFICATION: bool = False
@@ -20,7 +18,7 @@ class Config(BaseSettings):
     RERANKER_MODEL: str = 'BAAI/bge-reranker-v2-m3'
     RERANKER_MODEL_REVISION: str = '953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e'
 
-    LOG_LEVEL: str = 'DEBUG'
+    LOG_LEVEL: str = 'INFO'
     DISABLE_OPENAPI: bool = False
     OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
 

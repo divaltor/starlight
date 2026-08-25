@@ -35,6 +35,8 @@ RUN bun install --production --ignore-scripts --filter server
 
 COPY . .
 
+RUN bun run --cwd packages/utils db:generate
+
 # Build tooling can leak back via peers; the runtime never uses it
 RUN rm -rf node_modules/typescript node_modules/@typescript node_modules/@babel bun.lock
 
@@ -60,4 +62,4 @@ COPY --from=ffmpeg /usr/share/fonts /usr/share/fonts
 COPY --from=base /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
 COPY --from=base /code /code
 
-CMD ["sh", "-c", "bun run --cwd packages/utils db:generate && bun run --cwd packages/utils db:deploy && bun run --cwd apps/server start"]
+CMD ["bun", "run", "--cwd", "apps/server", "start"]

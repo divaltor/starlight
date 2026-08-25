@@ -20,6 +20,8 @@ RUN bun install --production --ignore-scripts --filter @starlight/bot
 
 COPY . .
 
+RUN bun run --cwd packages/utils db:generate
+
 RUN rm -rf node_modules/typescript node_modules/@typescript node_modules/@babel bun.lock
 
-CMD ["sh", "-c", "bun run --cwd packages/utils db:generate && bun run --cwd packages/utils db:deploy && bun run --cwd apps/starlight start"]
+CMD ["bun", "run", "--cwd", "apps/starlight", "start"]

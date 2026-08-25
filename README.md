@@ -4,12 +4,13 @@ Telegram bot system for collecting, classifying, and managing Twitter content wi
 
 ## Deployment
 
-Configure environment variables in `apps/server/.env` and `apps/web/.env` including BOT_TOKEN from @BotFather, DATABASE_URL, and S3 credentials.
+Configure service env files and copy `hindsight/.env.example` to `hindsight/.env`. Use URL-safe generated secrets because PostgreSQL and Valkey credentials are interpolated into internal URLs.
 
 For local development in a git clone, install hooks manually once with `bunx lefthook install`.
 
 ```bash
-# Start all services with Docker Compose
+# Apply reviewed migrations once, then start services
+docker compose --env-file hindsight/.env --profile operations run --rm migrate
 docker compose --env-file hindsight/.env up -d
 ```
 
