@@ -123,13 +123,13 @@ services:
       HINDSIGHT_API_LLM_MODEL: google/gemini-3.7-flash
       HINDSIGHT_API_LLM_EXTRA_BODY: '{"provider":{"allow_fallbacks":false,"data_collection":"deny","only":["google-vertex/global"],"order":["google-vertex/global"],"require_parameters":true}}'
       HINDSIGHT_API_EMBEDDINGS_PROVIDER: openai
-      HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL: http://classification:8000/v1/openai
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL: ${CLASSIFICATION_URL:-http://classification:8000}/v1/openai
       HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
       HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL: BAAI/bge-m3
       HINDSIGHT_API_EMBEDDINGS_OPENAI_BATCH_SIZE: "64"
       HINDSIGHT_API_RERANKER_PROVIDER: cohere
       HINDSIGHT_API_COHERE_API_KEY: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
-      HINDSIGHT_API_RERANKER_COHERE_BASE_URL: http://classification:8000/v1/rerank
+      HINDSIGHT_API_RERANKER_COHERE_BASE_URL: ${CLASSIFICATION_URL:-http://classification:8000}/v1/rerank
       HINDSIGHT_API_RERANKER_COHERE_MODEL: BAAI/bge-reranker-v2-m3
     depends_on:
       postgresql:
