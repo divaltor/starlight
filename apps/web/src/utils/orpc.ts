@@ -65,6 +65,10 @@ const getORPCClient = createIsomorphicFn()
         headers: {
           Authorization: rawInitData,
         },
+        fetch: async (request, init) => {
+          const telemetry = await import("@/telemetry.client");
+          return telemetry.traceRpcRequest(request, init);
+        },
       }),
     );
   });

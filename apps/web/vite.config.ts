@@ -10,6 +10,7 @@ export default defineConfig({
       compatibilityDate: "2025-10-17",
       preset: "bun",
       minify: true,
+      plugins: ["./src/telemetry.plugin.ts"],
       sourceMap: false,
     }),
     tailwindcss(),

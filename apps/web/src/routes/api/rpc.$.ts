@@ -6,13 +6,14 @@ import { createContext } from "@starlight/api/context";
 import { appRouter } from "@starlight/api/routers/index";
 import { env } from "@starlight/utils";
 import { createFileRoute } from "@tanstack/react-router";
+import { traceRpcRequest } from "@/telemetry.server";
 
 const rpcHandler = new RPCHandler(appRouter, {
   plugins: [
     new CORSPlugin({
       origin: env.CORS_ORIGIN,
       allowMethods: ["GET", "POST", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
+      allowHeaders: ["Content-Type", "Authorization", "X-Request-Id", "traceparent", "tracestate", "baggage"],
       credentials: true,
     }),
   ],
@@ -23,19 +24,21 @@ const rpcHandler = new RPCHandler(appRouter, {
   ],
 });
 
-async function handleRPC({ request }: { request: Request }) {
-  const context = await createContext({ request });
+function handleRPC({ request }: { request: Request }) {
+  return traceRpcRequest(request, async () => {
+    const context = await createContext({ request });
 
-  const { matched, response } = await rpcHandler.handle(request, {
-    prefix: "/api/rpc",
-    context,
+    const { matched, response } = await rpcHandler.handle(request, {
+      prefix: "/api/rpc",
+      context,
+    });
+
+    if (matched) {
+      return response;
+    }
+
+    return new Response("Not Found", { status: 404 });
   });
-
-  if (matched) {
-    return response;
-  }
-
-  return new Response("Not Found", { status: 404 });
 }
 
 export const Route = createFileRoute("/api/rpc/$")({
