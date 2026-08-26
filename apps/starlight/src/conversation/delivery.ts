@@ -48,6 +48,11 @@ export namespace TelegramDelivery {
     readonly threadKey: number;
   }
 
+  export interface TypingInput {
+    readonly chatId: number;
+    readonly threadKey: number;
+  }
+
   export interface Receipt {
     readonly telegramMessageId: number | null;
   }
@@ -61,6 +66,7 @@ export namespace TelegramDelivery {
 
   export interface Interface {
     readonly deliver: (input: DeliveryInput) => Effect.Effect<Receipt, DeliveryError>;
+    readonly indicateTyping: (input: TypingInput) => Effect.Effect<void, DeliveryError>;
   }
 
   export class Service extends Context.Service<Service, Interface>()("starlight/TelegramDelivery") {}
@@ -68,6 +74,15 @@ export namespace TelegramDelivery {
   export function layer(token: string): Layer.Layer<Service> {
     return Layer.sync(Service, () => {
       const api = new Api(token);
+      const indicateTyping = Effect.fn("TelegramDelivery.indicateTyping")(function* indicateTyping(input) {
+        yield* Effect.tryPromise({
+          try: () =>
+            api.sendChatAction(input.chatId, "typing", {
+              message_thread_id: input.threadKey === 0 ? undefined : input.threadKey,
+            }),
+          catch: mapDeliveryError,
+        });
+      });
       const deliver = Effect.fn("TelegramDelivery.deliver")(function* deliver(input: DeliveryInput) {
         const { action } = input;
         if (action.type === "ignore") return { telegramMessageId: null };
@@ -114,7 +129,7 @@ export namespace TelegramDelivery {
         );
       });
 
-      return Service.of({ deliver });
+      return Service.of({ deliver, indicateTyping });
     });
   }
 

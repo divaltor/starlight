@@ -137,6 +137,7 @@ test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating th
   ];
   const delivery: TelegramDelivery.Interface = {
     deliver: () => deliveryResults.shift()!,
+    indicateTyping: () => Effect.void,
   };
   const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
   const assistantId = 8_000_000_094;
@@ -270,6 +271,7 @@ test.skipIf(!databaseUrl)(
         telegramMessageId += 1;
         return Effect.succeed(receipt);
       },
+      indicateTyping: () => Effect.void,
     };
     const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
     const assistantId = 8_000_000_096;
@@ -425,6 +427,7 @@ test.skipIf(!databaseUrl)("provider context overflow checkpoints and retries onc
   };
   const delivery: TelegramDelivery.Interface = {
     deliver: () => Effect.succeed({ telegramMessageId: 901 }),
+    indicateTyping: () => Effect.void,
   };
   const runtime = ManagedRuntime.make(
     testLayer(databaseUrl!, model, delivery, {
@@ -696,6 +699,7 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
   };
   const delivery: TelegramDelivery.Interface = {
     deliver: () => Effect.succeed({ telegramMessageId: 950 }),
+    indicateTyping: () => Effect.void,
   };
   const runtime = ManagedRuntime.make(
     testLayer(databaseUrl!, model, delivery, {
@@ -1200,4 +1204,5 @@ const unavailableModel: Model.Interface = {
 
 const unavailableDelivery: TelegramDelivery.Interface = {
   deliver: () => Effect.die(new Error("Telegram must not run during admission")),
+  indicateTyping: () => Effect.void,
 };

@@ -1,5 +1,5 @@
 import type { ConversationRunStatus, Prisma } from "@starlight/utils/generated/prisma/client";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect";
 import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";
 import type { Model } from "@/ai/model";
@@ -411,6 +411,7 @@ export namespace Conversation {
             prepared,
             contextRequest,
             chatReply,
+            delivery,
             toolset,
             options,
             {
@@ -420,7 +421,16 @@ export namespace Conversation {
           );
           const invocation =
             attempted.kind === "contextOverflow"
-              ? yield* recoverContextOverflow(context, database, claimed, prepared, chatReply, chatTools, options)
+              ? yield* recoverContextOverflow(
+                  context,
+                  database,
+                  claimed,
+                  prepared,
+                  chatReply,
+                  chatTools,
+                  delivery,
+                  options,
+                )
               : attempted;
           if (invocation.kind === "failed") {
             yield* context
@@ -688,6 +698,7 @@ export namespace Conversation {
     prepared: PreparedRun,
     contextRequest: ConversationContext.PreparedContextRequest,
     chatReply: ChatReply.Interface,
+    delivery: TelegramDelivery.Interface,
     toolset: ChatTools.Resolved,
     options: Options,
     invocation: InvocationOptions,
@@ -708,6 +719,20 @@ export namespace Conversation {
           });
         })
         .pipe(Effect.mapError(failed("Failed to start model attempt")));
+
+      yield* delivery.indicateTyping({ chatId: claimed.key.chatId, threadKey: claimed.key.threadKey }).pipe(
+        Effect.repeat(Schedule.spaced(Duration.seconds(4))),
+        Effect.catch((error) =>
+          Effect.logWarning("Failed to send Telegram typing action").pipe(
+            Effect.annotateLogs({
+              chatId: claimed.key.chatId,
+              errorTag: error._tag,
+              threadKey: claimed.key.threadKey,
+            }),
+          ),
+        ),
+        Effect.forkScoped,
+      );
 
       return yield* chatReply
         .generate({
@@ -747,7 +772,7 @@ export namespace Conversation {
             );
           }),
         );
-    });
+    }).pipe(Effect.scoped);
   }
 
   function recoverContextOverflow(
@@ -757,6 +782,7 @@ export namespace Conversation {
     prepared: PreparedRun,
     chatReply: ChatReply.Interface,
     chatTools: ChatTools.Interface,
+    delivery: TelegramDelivery.Interface,
     options: Options,
   ) {
     return context
@@ -786,7 +812,7 @@ export namespace Conversation {
             return chatTools.resolve(contextRequest.toolProfile).pipe(
               Effect.mapError(domainFailed),
               Effect.flatMap((toolset) =>
-                invokeModel(database, claimed, prepared, contextRequest, chatReply, toolset, options, {
+                invokeModel(database, claimed, prepared, contextRequest, chatReply, delivery, toolset, options, {
                   allowContextOverflowRecovery: false,
                   attemptNumber: claimed.attemptCount + 2,
                 }),
