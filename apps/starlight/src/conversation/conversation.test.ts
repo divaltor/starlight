@@ -104,8 +104,7 @@ test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating th
             reasoningTokens: 0,
           },
           contextInputTokens: 10,
-          steps: [],
-          validForCostThresholds: true,
+          stepCount: 0,
         },
       }),
   };
@@ -258,8 +257,7 @@ test.skipIf(!databaseUrl)(
               reasoningTokens: 0,
             },
             contextInputTokens: 10,
-            steps: [],
-            validForCostThresholds: true,
+            stepCount: 0,
           },
         });
       },
@@ -415,8 +413,7 @@ test.skipIf(!databaseUrl)("hard checkpoint publishes a child before model invoca
             reasoningTokens: 0,
           },
           contextInputTokens: 10,
-          steps: [],
-          validForCostThresholds: true,
+          stepCount: 0,
         },
       });
     },
@@ -691,8 +688,7 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
             reasoningTokens: 0,
           },
           contextInputTokens: 10,
-          steps: [],
-          validForCostThresholds: true,
+          stepCount: 0,
         },
       });
     },

@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { LanguageModel, ToolSet } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { ConfigProvider, Effect, Fiber, Layer, Logger } from "effect";
@@ -7,7 +6,6 @@ import { TestClock } from "effect/testing";
 import { z } from "zod";
 import { Model } from "@/ai/model";
 import { ModelProvider } from "@/ai/model-provider";
-import { ModelTelemetry } from "@/ai/model-telemetry";
 
 test.each([{}, { OPENROUTER_API_KEY: "   " }])(
   "returns Unavailable without usable provider configuration",
@@ -205,7 +203,6 @@ test("does not put prompt or tool-result content in model logs", async () => {
 
 test("aborts provider work and returns TimedOut at the total deadline", async () => {
   let aborted = false;
-  let failedGeneration: ModelTelemetry.GenerationInput | undefined;
   const model = new MockLanguageModelV3({
     doGenerate: ({ abortSignal }) => {
       const pending = Promise.withResolvers<never>();
@@ -219,18 +216,7 @@ test("aborts provider work and returns TimedOut at the total deadline", async ()
   const error = await Effect.runPromise(
     Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(
-        runModelEffect(
-          model,
-          { outputSchema: z.object({ answer: z.string() }) },
-          Layer.succeed(ModelTelemetry.Service)(
-            ModelTelemetry.Service.of({
-              recordGeneration: (input) => {
-                failedGeneration = input;
-              },
-              recordStep: () => {},
-            }),
-          ),
-        ).pipe(Effect.flip),
+        runModelEffect(model, { outputSchema: z.object({ answer: z.string() }) }).pipe(Effect.flip),
       );
       yield* TestClock.adjust("120 seconds");
       return yield* Fiber.join(fiber);
@@ -239,8 +225,6 @@ test("aborts provider work and returns TimedOut at the total deadline", async ()
 
   expect(error._tag).toBe("TimedOut");
   expect(aborted).toBe(true);
-  expect(failedGeneration?.usage.billing.costUsd).toBeNull();
-  expect(failedGeneration?.usage.validForCostThresholds).toBe(false);
 });
 
 test("aborts an active tool when the total deadline expires", async () => {
@@ -276,48 +260,6 @@ test("aborts an active tool when the total deadline expires", async () => {
   expect(toolAborted).toBe(true);
 });
 
-test("exports safe normalized step and billing trace fields", async () => {
-  const exporter = new InMemorySpanExporter();
-  const provider = new BasicTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
-  });
-  const result = await runModel(
-    new MockLanguageModelV3({ doGenerate: textResult('{"answer":"TRACE_SECRET_OUTPUT"}') }),
-    {
-      instructions: "TRACE_SECRET_INSTRUCTIONS",
-      messages: [{ role: "user", text: "TRACE_SECRET_MESSAGE" }],
-      outputSchema: z.object({ answer: z.string() }),
-    },
-    ModelTelemetry.fromTracer(provider.getTracer("model-test")),
-  );
-  await provider.forceFlush();
-  const spans = exporter.getFinishedSpans();
-  await provider.shutdown();
-
-  expect(result.output).toEqual({ answer: "TRACE_SECRET_OUTPUT" });
-  expect(spans.find((span) => span.name === "Model step")?.attributes).toMatchObject({
-    "gen_ai.operation.name": "chat",
-    "gen_ai.request.model": "google/gemini-3.7-flash",
-    "gen_ai.response.model": "mock-model",
-    "starlight.model.actual": "mock-model",
-    "starlight.model.cache.result": "confirmed-miss",
-    "starlight.model.configured": "google/gemini-3.7-flash",
-    "starlight.model.tokens.input": 10,
-    "starlight.model.tokens.output": 5,
-  });
-  expect(spans.find((span) => span.name === "Model generation")?.attributes).toMatchObject({
-    "gen_ai.operation.name": "chat",
-    "gen_ai.request.model": "google/gemini-3.7-flash",
-    "starlight.model.billing.input_tokens": 10,
-    "starlight.model.billing.output_tokens": 5,
-    "starlight.model.step_count": 1,
-  });
-  const serializedSpans = JSON.stringify(spans.map((span) => ({ attributes: span.attributes, name: span.name })));
-  expect(serializedSpans).not.toContain("TRACE_SECRET_INSTRUCTIONS");
-  expect(serializedSpans).not.toContain("TRACE_SECRET_MESSAGE");
-  expect(serializedSpans).not.toContain("TRACE_SECRET_OUTPUT");
-});
-
 interface ModelTestInput<OUTPUT> {
   readonly instructions?: string;
   readonly maxToolCalls?: number;
@@ -326,19 +268,11 @@ interface ModelTestInput<OUTPUT> {
   readonly tools?: ToolSet;
 }
 
-function runModel<OUTPUT>(
-  model: LanguageModel,
-  input: ModelTestInput<OUTPUT>,
-  telemetry = ModelTelemetry.defaultLayer,
-) {
-  return runModelEffect(model, input, telemetry).pipe(Effect.runPromise);
+function runModel<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTPUT>) {
+  return runModelEffect(model, input).pipe(Effect.runPromise);
 }
 
-function runModelEffect<OUTPUT>(
-  model: LanguageModel,
-  input: ModelTestInput<OUTPUT>,
-  telemetry = ModelTelemetry.defaultLayer,
-) {
+function runModelEffect<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTPUT>) {
   return Effect.gen(function* () {
     const service = yield* Model.Service;
     return yield* service.generate({
@@ -349,7 +283,7 @@ function runModelEffect<OUTPUT>(
       sessionId: "model-test",
       tools: input.tools ?? {},
     });
-  }).pipe(Effect.provide(Model.layer.pipe(Layer.provide(Layer.merge(ModelProvider.testLayer(model), telemetry)))));
+  }).pipe(Effect.provide(Model.layer.pipe(Layer.provide(ModelProvider.testLayer(model)))));
 }
 
 function textResult(text: string) {

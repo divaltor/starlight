@@ -1,39 +1,32 @@
 import { expect, test } from "bun:test";
 import type { LanguageModelUsage, ProviderMetadata } from "ai";
-import { selected } from "@/ai/model-profile";
 import { Usage } from "@/ai/usage";
 
 test("keeps missing cache detail unknown", () => {
-  expect(Usage.normalizeStep(createUsage({}), undefined, selected.prices)).toMatchObject({
+  expect(Usage.normalizeStep(createUsage({}))).toMatchObject({
     cacheReadTokens: null,
     cacheResult: "unknown",
-    estimatedCostUsd: null,
     uncachedInputTokens: null,
   });
 });
 
-test("uses provider-reported cost before a local estimate", () => {
+test("uses provider-reported cost", () => {
   const usage = Usage.normalizeStep(
     createUsage({ cacheReadTokens: 80, cacheWriteTokens: 0 }),
     createProviderMetadata(0.0031),
-    selected.prices,
   );
 
   expect(usage.reportedCostUsd).toBe(0.0031);
-  expect(usage.estimatedCostUsd).not.toBeNull();
-  expect(usage.selectedCostUsd).toBe(0.0031);
 });
 
 test("sums billing input but keeps final context input separate", () => {
   const first = Usage.normalizeStep(
     createUsage({ cacheReadTokens: 0, cacheWriteTokens: 0, inputTokens: 100 }),
     createProviderMetadata(0.001),
-    selected.prices,
   );
   const second = Usage.normalizeStep(
     createUsage({ cacheReadTokens: 80, cacheWriteTokens: 0, inputTokens: 140 }),
     createProviderMetadata(0.002),
-    selected.prices,
   );
 
   expect(Usage.aggregate([first, second])).toMatchObject({
@@ -42,20 +35,18 @@ test("sums billing input but keeps final context input separate", () => {
       inputTokens: 240,
     },
     contextInputTokens: 140,
-    validForCostThresholds: true,
+    stepCount: 2,
   });
 });
 
-test("excludes inconsistent cache usage from cost thresholds", () => {
+test("marks inconsistent cache usage invalid", () => {
   const usage = Usage.normalizeStep(
     createUsage({ cacheReadTokens: 101, cacheWriteTokens: 0, inputTokens: 100 }),
     createProviderMetadata(0.001),
-    selected.prices,
   );
 
   expect(usage.cacheResult).toBe("invalid");
   expect(usage.uncachedInputTokens).toBeNull();
-  expect(Usage.aggregate([usage]).validForCostThresholds).toBe(false);
 });
 
 test("keeps usage unknown when an invocation records no provider step", () => {
@@ -69,8 +60,7 @@ test("keeps usage unknown when an invocation records no provider step", () => {
       reasoningTokens: null,
     },
     contextInputTokens: null,
-    steps: [],
-    validForCostThresholds: false,
+    stepCount: 0,
   });
 });
 

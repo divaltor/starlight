@@ -12,7 +12,6 @@ import { Context, Duration, Effect, Layer, Option, Predicate, Schema } from "eff
 import type { ZodType } from "zod";
 import { selected } from "@/ai/model-profile";
 import { ModelProvider } from "@/ai/model-provider";
-import { ModelTelemetry } from "@/ai/model-telemetry";
 import { Usage } from "@/ai/usage";
 import { CanonicalJson } from "@/context/canonical-json";
 import type { Media } from "@/media/media";
@@ -21,6 +20,7 @@ export namespace Model {
   const MODEL_TIMEOUT_MS = 120_000;
   const MAX_TOOL_RESULT_BYTES = 50 * 1024;
   const MAX_GENERATION_TOOL_RESULT_BYTES = 16 * 1024;
+  const INVOCATION_FAILED_MESSAGE = "Model invocation failed";
 
   const errorFields = {
     cause: Schema.optional(Schema.Defect()),
@@ -112,11 +112,10 @@ export namespace Model {
 
   export class Service extends Context.Service<Service, Interface>()("starlight/Model") {}
 
-  export const layer: Layer.Layer<Service, never, ModelProvider.Service | ModelTelemetry.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, ModelProvider.Service> = Layer.effect(
     Service,
     Effect.gen(function* layer() {
       const provider = yield* ModelProvider.Service;
-      const telemetry = yield* ModelTelemetry.Service;
 
       const generate = Effect.fn("Model.generate")(function* generate<OUTPUT>(input: GenerateInput<OUTPUT>) {
         if (Option.isNone(provider.model)) {
@@ -175,44 +174,34 @@ export namespace Model {
               }),
             ),
           ),
-          Effect.tapError((error) => logFailure(error, completedSteps, toolEvents, telemetry)),
+          Effect.tapError((error) => logFailure(error, completedSteps, toolEvents)),
         );
         const generated = yield* invocation;
         // Dot notation is the project convention; destructuring is intentionally disabled.
         // oxlint-disable-next-line prefer-destructuring
         const result = generated.result;
-        const stepUsage = result.steps.map((step) =>
-          Usage.normalizeStep(step.usage, step.providerMetadata, selected.prices),
-        );
+        const stepUsage = result.steps.map((step) => Usage.normalizeStep(step.usage, step.providerMetadata));
 
         yield* Effect.all(
           result.steps.map((step, index) =>
-            Effect.sync(() => {
-              recordStep(telemetry, step, stepUsage[index]!);
-            }).pipe(
-              Effect.andThen(
-                Effect.logInfo("Model step completed").pipe(
-                  Effect.annotateLogs({
-                    actualModel: step.response.modelId,
-                    cacheReadTokens: stepUsage[index]?.cacheReadTokens ?? null,
-                    cacheWriteTokens: stepUsage[index]?.cacheWriteTokens ?? null,
-                    configuredModel: selected.model,
-                    estimatedCostUsd: stepUsage[index]?.estimatedCostUsd ?? null,
-                    finishReason: step.finishReason,
-                    inputTokens: stepUsage[index]?.inputTokens ?? null,
-                    latencyMs: step.performance.stepTimeMs,
-                    outputTokens: stepUsage[index]?.outputTokens ?? null,
-                    providerRequestId: step.response.id,
-                    reasoningTokens: stepUsage[index]?.reasoningTokens ?? null,
-                    reportedCostUsd: stepUsage[index]?.reportedCostUsd ?? null,
-                    selectedCostUsd: stepUsage[index]?.selectedCostUsd ?? null,
-                    stepIndex: step.stepNumber,
-                    toolCallCount: step.toolCalls.length,
-                    uncachedInputTokens: stepUsage[index]?.uncachedInputTokens ?? null,
-                    upstreamProvider: Usage.upstreamProvider(step.providerMetadata),
-                  }),
-                ),
-              ),
+            Effect.logInfo("Model step completed").pipe(
+              Effect.annotateLogs({
+                actualModel: step.response.modelId,
+                cacheReadTokens: stepUsage[index]?.cacheReadTokens ?? null,
+                cacheWriteTokens: stepUsage[index]?.cacheWriteTokens ?? null,
+                configuredModel: selected.model,
+                finishReason: step.finishReason,
+                inputTokens: stepUsage[index]?.inputTokens ?? null,
+                latencyMs: step.performance.stepTimeMs,
+                outputTokens: stepUsage[index]?.outputTokens ?? null,
+                providerRequestId: step.response.id,
+                reasoningTokens: stepUsage[index]?.reasoningTokens ?? null,
+                reportedCostUsd: stepUsage[index]?.reportedCostUsd ?? null,
+                stepIndex: step.stepNumber,
+                toolCallCount: step.toolCalls.length,
+                uncachedInputTokens: stepUsage[index]?.uncachedInputTokens ?? null,
+                upstreamProvider: Usage.upstreamProvider(step.providerMetadata),
+              }),
             ),
           ),
         );
@@ -228,7 +217,6 @@ export namespace Model {
         }
 
         const usage = Usage.aggregate(stepUsage);
-        telemetry.recordGeneration({ finishReason: result.finishReason, usage });
 
         yield* Effect.logInfo("Model generation completed").pipe(
           Effect.annotateLogs({
@@ -270,9 +258,7 @@ export namespace Model {
     }),
   );
 
-  export const defaultLayer: Layer.Layer<Service> = layer.pipe(
-    Layer.provide(Layer.merge(ModelProvider.defaultLayer, ModelTelemetry.defaultLayer)),
-  );
+  export const defaultLayer: Layer.Layer<Service> = layer.pipe(Layer.provide(ModelProvider.defaultLayer));
 
   function prepareMessages(cacheBase: string | undefined, messages: readonly Message[]): ModelMessage[] {
     const conversation: ModelMessage[] = messages.map((message) => {
@@ -425,7 +411,15 @@ export namespace Model {
       });
     }
 
-    if (APICallError.isInstance(cause) && cause.statusCode === 429) {
+    if (!APICallError.isInstance(cause)) {
+      return new InvocationFailed({
+        cause,
+        message: INVOCATION_FAILED_MESSAGE,
+        retryable: AISDKError.isInstance(cause),
+      });
+    }
+
+    if (cause.statusCode === 429) {
       return new RateLimited({
         cause,
         message: "Model provider rate limit exceeded",
@@ -433,12 +427,7 @@ export namespace Model {
       });
     }
 
-    if (
-      APICallError.isInstance(cause) &&
-      cause.statusCode !== undefined &&
-      cause.statusCode >= 400 &&
-      cause.statusCode < 500
-    ) {
+    if (cause.statusCode !== undefined && cause.statusCode >= 400 && cause.statusCode < 500) {
       return new ProviderRejected({
         cause,
         message: "Model provider rejected the request",
@@ -448,58 +437,30 @@ export namespace Model {
 
     return new InvocationFailed({
       cause,
-      message: "Model invocation failed",
-      retryable: APICallError.isInstance(cause) ? cause.isRetryable : AISDKError.isInstance(cause),
+      message: INVOCATION_FAILED_MESSAGE,
+      retryable: cause.isRetryable,
     });
   }
 
-  function logFailure(
-    error: Error,
-    steps: readonly StepResult<ToolSet>[],
-    toolEvents: readonly ToolEvent[],
-    telemetry: ModelTelemetry.Interface,
-  ) {
-    const stepUsage = steps.map((step) => Usage.normalizeStep(step.usage, step.providerMetadata, selected.prices));
+  function logFailure(error: Error, steps: readonly StepResult<ToolSet>[], toolEvents: readonly ToolEvent[]) {
+    const stepUsage = steps.map((step) => Usage.normalizeStep(step.usage, step.providerMetadata));
     const usage = Usage.aggregate(stepUsage);
     // Dot notation is the project convention; destructuring is intentionally disabled.
     // oxlint-disable-next-line prefer-destructuring
     const cause = error.cause;
 
-    return Effect.all([
-      ...steps.map((step, index) => Effect.sync(() => recordStep(telemetry, step, stepUsage[index]!))),
-      Effect.sync(() =>
-        telemetry.recordGeneration({
-          errorTag: error._tag,
-          finishReason: steps.at(-1)?.finishReason ?? "error",
-          usage,
-        }),
-      ),
-      Effect.logError("Model invocation failed").pipe(
-        Effect.annotateLogs({
-          billingCostUsd: usage.billing.costUsd,
-          billingInputTokens: usage.billing.inputTokens,
-          completedStepCount: steps.length,
-          contextInputTokens: usage.contextInputTokens,
-          errorTag: error._tag,
-          providerErrorName: Predicate.isError(cause) ? cause.name : "UnknownError",
-          retryable: error.retryable,
-          statusCode: APICallError.isInstance(cause) ? cause.statusCode : undefined,
-          toolEventCount: toolEvents.length,
-        }),
-      ),
-    ]).pipe(Effect.asVoid);
-  }
-
-  function recordStep(telemetry: ModelTelemetry.Interface, step: StepResult<ToolSet>, usage: Usage.StepUsage): void {
-    telemetry.recordStep({
-      actualModel: step.response.modelId,
-      finishReason: step.finishReason,
-      latencyMs: step.performance.stepTimeMs,
-      providerRequestId: step.response.id,
-      stepIndex: step.stepNumber,
-      toolCallCount: step.toolCalls.length,
-      upstreamProvider: Usage.upstreamProvider(step.providerMetadata),
-      usage,
-    });
+    return Effect.logError(INVOCATION_FAILED_MESSAGE).pipe(
+      Effect.annotateLogs({
+        billingCostUsd: usage.billing.costUsd,
+        billingInputTokens: usage.billing.inputTokens,
+        completedStepCount: steps.length,
+        contextInputTokens: usage.contextInputTokens,
+        errorTag: error._tag,
+        providerErrorName: Predicate.isError(cause) ? cause.name : "UnknownError",
+        retryable: error.retryable,
+        statusCode: APICallError.isInstance(cause) ? cause.statusCode : undefined,
+        toolEventCount: toolEvents.length,
+      }),
+    );
   }
 }

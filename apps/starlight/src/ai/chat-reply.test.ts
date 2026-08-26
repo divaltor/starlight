@@ -5,7 +5,6 @@ import { Effect, Layer } from "effect";
 import { ChatReply } from "@/ai/chat-reply";
 import { Model } from "@/ai/model";
 import { ModelProvider } from "@/ai/model-provider";
-import { ModelTelemetry } from "@/ai/model-telemetry";
 import { Exa } from "@/services/exa";
 
 test("caps a chatbot reply at 1,024 provider output tokens", async () => {
@@ -16,7 +15,7 @@ test("caps a chatbot reply at 1,024 provider output tokens", async () => {
 });
 
 function modelLayer(model: LanguageModel) {
-  return Model.layer.pipe(Layer.provide(Layer.merge(ModelProvider.testLayer(model), ModelTelemetry.defaultLayer)));
+  return Model.layer.pipe(Layer.provide(ModelProvider.testLayer(model)));
 }
 
 function textModel(text: string) {
