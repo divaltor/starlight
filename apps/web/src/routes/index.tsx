@@ -100,6 +100,7 @@ export default function DiscoverPage() {
   const randomImages = randomQuery.data || [];
   // Positions come from Math.random(); compute once per dataset so unrelated
   // re-renders (e.g. search input keystrokes) don't shuffle the collage.
+  // oxlint-disable-next-line react-doctor/react-compiler-no-manual-memoization
   const placedData = useMemo(() => placeRandomImages(randomQuery.data ?? []), [randomQuery.data]);
 
   const isHomeIdle = !isLoading && results.length === 0;
