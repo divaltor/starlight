@@ -41,9 +41,6 @@ export namespace Exa {
   export const layer: Layer.Layer<Service, ExaError> = Layer.effect(
     Service,
     Effect.gen(function* layer() {
-      const enabled = yield* Config.boolean("EXA_MCP_ENABLED").pipe(Config.withDefault(true));
-      if (!enabled) return Service.of({ isEnabled: () => false, tools: {} });
-
       const configuredApiKey = yield* Config.option(Config.redacted("EXA_API_KEY"));
       const configuredMcpUrl = yield* Config.string("EXA_MCP_URL").pipe(Config.withDefault(DEFAULT_MCP_URL));
       const apiKey = configuredApiKey.pipe(

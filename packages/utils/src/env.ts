@@ -52,7 +52,6 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),
 
       OPENROUTER_API_KEY: z.string().optional(),
-      EXA_MCP_ENABLED: z.enum(["true", "false"]).default("true"),
       EXA_MCP_URL: z.url().default("https://mcp.exa.ai/mcp"),
       EXA_API_KEY: z.string().optional(),
 

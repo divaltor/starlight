@@ -33,7 +33,6 @@ const env = createEnv({
 
     OPENROUTER_API_KEY: z.string().optional(),
     OPENROUTER_MODEL: z.string().default("google/gemini-3-flash-preview"),
-    EXA_MCP_ENABLED: z.enum(["true", "false"]).default("true"),
     EXA_MCP_URL: z.url().default("https://mcp.exa.ai/mcp"),
     EXA_API_KEY: z.string().optional(),
 

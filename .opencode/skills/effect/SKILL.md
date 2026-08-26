@@ -43,7 +43,6 @@ export namespace Name {
 
 - Consumers import the exported namespace by name (`import { Exa } from "@/services/exa"`) and access `Exa.Service`, `Exa.defaultLayer`. Star imports (`import * as X from "..."`) are forbidden and rejected by the oxlint `import/no-namespace` rule.
 - Top-level `await` cannot live inside a namespace body; keep such bindings as module-scope private consts above the namespace and re-export them through it (`ChatReply.systemPrompt`).
-- Optional services degrade at layer construction (see `Exa` returning no tools when `EXA_MCP_ENABLED` is false).
 
 ## Errors
 
