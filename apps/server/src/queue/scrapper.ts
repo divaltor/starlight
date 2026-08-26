@@ -4,6 +4,7 @@ import { env, prisma } from "@starlight/utils";
 import { Scraper } from "@the-convocation/twitter-scraper";
 import type { QueryTweetsResponse, Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, Worker } from "bullmq";
+import { Schema } from "effect";
 import { bot } from "@/bot";
 import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";
@@ -11,13 +12,14 @@ import { Cookies, redis } from "@/storage";
 
 const cookieEncryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY, env.COOKIE_ENCRYPTION_SALT);
 
-export interface ScrapperJobData {
-  count: number;
-  cursor?: string;
-  force?: boolean;
-  limit: number;
-  userId: string;
-}
+export const ScrapperJobData = Schema.Struct({
+  count: Schema.Int,
+  cursor: Schema.optional(Schema.String),
+  force: Schema.optional(Schema.Boolean),
+  limit: Schema.Int,
+  userId: Schema.String,
+});
+export type ScrapperJobData = typeof ScrapperJobData.Type;
 
 export const FEED_SCRAPPER_QUEUE = "feed-scrapper";
 
@@ -106,7 +108,7 @@ function collectTimelineTweets(
 export const scrapperWorker = new Worker<ScrapperJobData>(
   FEED_SCRAPPER_QUEUE,
   async (job) => {
-    const { data } = job;
+    const data = Schema.decodeUnknownSync(ScrapperJobData)(job.data);
     const { userId } = data;
 
     logger.info({ userId, cursor: data.cursor, jobData: data }, "Scraping timeline");
@@ -242,18 +244,14 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
       );
     }
 
-    data.count += timeline.tweets.length;
+    const count = data.count + timeline.tweets.length;
 
     // Stop if we hit consecutive threshold or other limits
-    if (
-      (!data.force && consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) ||
-      data.count >= data.limit ||
-      !timeline.next
-    ) {
+    if ((!data.force && consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) || count >= data.limit || !timeline.next) {
       let reason: string;
       if (!data.force && consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) {
         reason = "consecutive_threshold";
-      } else if (data.count >= data.limit) {
+      } else if (count >= data.limit) {
         reason = "count_limit";
       } else {
         reason = "no_next_cursor";
@@ -262,7 +260,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
       logger.info(
         {
           userId,
-          count: data.count,
+          count,
           limit: data.limit,
           consecutiveKnownTweets,
           newTweetsInBatch,
@@ -278,7 +276,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
       FEED_SCRAPPER_QUEUE,
       {
         userId,
-        count: data.count,
+        count,
         limit: data.limit,
         cursor: timeline.next,
         force: data.force,
@@ -289,7 +287,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
       },
     );
 
-    logger.info({ userId, count: data.count, limit: data.limit }, "Scraping next page");
+    logger.info({ userId, count, limit: data.limit }, "Scraping next page");
   },
   {
     connection: redis,

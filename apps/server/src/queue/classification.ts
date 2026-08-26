@@ -1,23 +1,19 @@
 import { env, prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import { Queue, Worker } from "bullmq";
+import { Schema } from "effect";
 import { logger } from "@/logger";
 import { embeddingsQueue } from "@/queue/embeddings";
+import { PhotoJobData } from "@/queue/photo-job";
 import { redis } from "@/storage";
-import type { Classification } from "@/types";
-
-interface ClassificationJobData {
-  photoId: string;
-  requestId?: string;
-  userId: string;
-}
+import { Classification } from "@/types";
 
 // Bounds the classification request including the response body (ky's
 // `timeout` only covers time-to-headers), so a stalled ML service fails the
 // job for retry instead of hanging the worker.
 const CLASSIFICATION_TIMEOUT_MS = 10_000;
 
-export const classificationQueue = new Queue<ClassificationJobData>("classification", {
+export const classificationQueue = new Queue<PhotoJobData>("classification", {
   connection: redis,
   defaultJobOptions: {
     attempts: 5,
@@ -27,7 +23,7 @@ export const classificationQueue = new Queue<ClassificationJobData>("classificat
   },
 });
 
-export const classificationWorker = new Worker<ClassificationJobData>(
+export const classificationWorker = new Worker<PhotoJobData>(
   "classification",
   async (job) => {
     if (!env.ENABLE_CLASSIFICATION) {
@@ -35,7 +31,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
       return;
     }
 
-    const { photoId, userId, requestId: incomingRequestId } = job.data;
+    const { photoId, userId, requestId: incomingRequestId } = Schema.decodeUnknownSync(PhotoJobData)(job.data);
     const requestId = incomingRequestId || Bun.randomUUIDv7();
 
     if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
@@ -96,7 +92,7 @@ export const classificationWorker = new Worker<ClassificationJobData>(
     let data: Classification;
 
     try {
-      data = await response.json();
+      data = Schema.decodeUnknownSync(Classification)(await response.json());
     } catch (error) {
       logger.error({ err: error, photoId, userId, requestId }, "Failed to parse classification response");
       throw error;

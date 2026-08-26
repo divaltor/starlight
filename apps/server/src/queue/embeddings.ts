@@ -1,17 +1,13 @@
 import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { DbNull, env, Prisma, prisma } from "@starlight/utils";
 import { Queue, Worker } from "bullmq";
+import { Schema } from "effect";
 import { logger } from "@/logger";
+import { PhotoJobData } from "@/queue/photo-job";
 import { runtime } from "@/services/runtime";
 import { redis } from "@/storage";
 
-interface ClassificationJobData {
-  photoId: string;
-  requestId?: string;
-  userId: string;
-}
-
-export const embeddingsQueue = new Queue<ClassificationJobData>("embeddings", {
+export const embeddingsQueue = new Queue<PhotoJobData>("embeddings", {
   connection: redis,
   defaultJobOptions: {
     attempts: 5,
@@ -21,7 +17,7 @@ export const embeddingsQueue = new Queue<ClassificationJobData>("embeddings", {
   },
 });
 
-export const embeddingsWorker = new Worker<ClassificationJobData>(
+export const embeddingsWorker = new Worker<PhotoJobData>(
   "embeddings",
   async (job) => {
     if (!env.ENABLE_EMBEDDINGS) {
@@ -29,7 +25,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
       return;
     }
 
-    const { photoId, userId, requestId: incomingRequestId } = job.data;
+    const { photoId, userId, requestId: incomingRequestId } = Schema.decodeUnknownSync(PhotoJobData)(job.data);
     const requestId = incomingRequestId || Bun.randomUUIDv7();
 
     if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
@@ -65,7 +61,7 @@ export const embeddingsWorker = new Worker<ClassificationJobData>(
 
     const result = await runtime.runPromise(
       EmbeddingsService.Service.use((s) =>
-        s.generate(photo.s3Url!, characters.length === 0 ? tags : [...characters, ...tags], requestId),
+        s.generate(photo.s3Url!, characters.length === 0 ? [...tags] : [...characters, ...tags], requestId),
       ),
     );
 

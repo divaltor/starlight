@@ -1,6 +1,7 @@
 import path from "node:path";
 import { env } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
+import { Schema } from "effect";
 import { create } from "youtube-dl-exec";
 import { logger } from "@/logger";
 
@@ -11,10 +12,11 @@ const filesGlob = new Bun.Glob("*.mp4");
 // update context forever.
 const VIDEO_DOWNLOAD_TIMEOUT_MS = 180_000;
 
-interface VideoMetadata {
-  height?: number;
-  width?: number;
-}
+export const VideoMetadata = Schema.Struct({
+  height: Schema.optional(Schema.Number),
+  width: Schema.optional(Schema.Number),
+});
+export type VideoMetadata = typeof VideoMetadata.Type;
 
 export interface VideoInformation {
   filePath: string;
@@ -31,7 +33,7 @@ async function createVideoInformation(filePath: string): Promise<VideoInformatio
   let metadata: VideoMetadata = {};
 
   try {
-    metadata = (await Bun.file(infoJsonPath).json()) as VideoMetadata;
+    metadata = Schema.decodeUnknownSync(VideoMetadata)(await Bun.file(infoJsonPath).json());
   } catch (error) {
     logger.error({ error, filePath }, "Failed to create video information");
   }
