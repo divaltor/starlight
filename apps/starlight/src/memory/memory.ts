@@ -79,25 +79,6 @@ export namespace Memory {
               }),
             )
             .pipe(Effect.mapError(failed("Failed to find user memory namespaces")));
-          yield* Effect.all(
-            namespaces.map((namespace) =>
-              database
-                .query((client) =>
-                  client.memoryObservation.findFirst({
-                    where: { namespaceId: namespace.id },
-                    orderBy: { id: "desc" },
-                    select: { id: true },
-                  }),
-                )
-                .pipe(
-                  Effect.flatMap((latest) =>
-                    latest === null ? Effect.void : retention.retainThrough(namespace.id, latest.id),
-                  ),
-                  Effect.mapError(failed("Failed to synchronize user memory")),
-                ),
-            ),
-            { concurrency: 3, discard: true },
-          );
           const byUserId = new Map(
             namespaces.flatMap((namespace) =>
               namespace.userId === null ? [] : [[namespace.userId, namespace] as const],

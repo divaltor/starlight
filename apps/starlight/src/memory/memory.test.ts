@@ -10,7 +10,7 @@ import { Database } from "@/services/database";
 
 const databaseUrl = process.env.DATABASE_URL;
 
-test.skipIf(!databaseUrl)("a user's DM includes that user's attributed same-chat memory", async () => {
+test.skipIf(!databaseUrl)("freezes completed user memory without waiting for pending retention", async () => {
   const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl! }) });
   const telegramId = 8_100_000_101n;
   const groupChatId = -8_100_000_101n;
@@ -19,7 +19,7 @@ test.skipIf(!databaseUrl)("a user's DM includes that user's attributed same-chat
     deleteDocuments: () => Effect.void,
     profile: () => Effect.succeed("group continuity"),
     refreshProfile: () => Effect.void,
-    retain: () => Effect.void,
+    retain: () => Effect.die(new Error("User memory reads must not retain pending observations")),
   });
   const retentionLayer = HindsightRetention.layer.pipe(Layer.provide(Layer.merge(databaseLayer, hindsightLayer)));
   const runtime = ManagedRuntime.make(

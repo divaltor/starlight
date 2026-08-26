@@ -1,6 +1,7 @@
 import { createClient, createConfig, HindsightClient, sdk } from "@vectorize-io/hindsight-client";
 import type { MemoryItemInput } from "@vectorize-io/hindsight-client";
 import { Context, Effect, Layer, Schema } from "effect";
+import { traceAsync } from "@/instrumentation";
 
 export namespace Hindsight {
   const PROFILE_ID = "profile";
@@ -113,35 +114,39 @@ export namespace Hindsight {
 
     const retain = Effect.fn("Hindsight.retain")(function* retain(input: RetainInput) {
       yield* Effect.tryPromise({
-        try: async (signal) => {
-          await ensureBank(input.bankId, signal);
-          const submission = await client.retainBatch(input.bankId, [...input.items], {
-            async: true,
-            operationId: input.operationId,
-            signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
-          });
-          const operationIds =
-            submission.operation_ids ??
-            (submission.operation_id === null || submission.operation_id === undefined
-              ? []
-              : [submission.operation_id]);
-          if (operationIds.length === 0) throw new Error("Hindsight async retain returned no operation ID");
-          await Promise.all(operationIds.map((operationId) => waitForOperation(input.bankId, operationId, signal)));
-        },
+        try: (signal) =>
+          traceAsync("Hindsight retain", { "memory.item_count": input.items.length }, async () => {
+            await ensureBank(input.bankId, signal);
+            const submission = await client.retainBatch(input.bankId, [...input.items], {
+              async: true,
+              operationId: input.operationId,
+              signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+            });
+            const operationIds =
+              submission.operation_ids ??
+              (submission.operation_id === null || submission.operation_id === undefined
+                ? []
+                : [submission.operation_id]);
+            if (operationIds.length === 0) throw new Error("Hindsight async retain returned no operation ID");
+            // Parallel operation polling belongs to the traced retain request.
+            // oxlint-disable-next-line sonarjs/no-nested-functions
+            await Promise.all(operationIds.map((operationId) => waitForOperation(input.bankId, operationId, signal)));
+          }),
         catch: (cause) => HindsightError.fromCause("Failed to retain Hindsight memories", cause),
       });
     });
 
     const profile = Effect.fn("Hindsight.profile")(function* profile(bankId: string) {
       return yield* Effect.tryPromise({
-        try: async (signal) => {
-          await ensureBank(bankId, signal);
-          const model = await client.getMentalModel(bankId, PROFILE_ID, {
-            detail: "content",
-            signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
-          });
-          return model.content ?? null;
-        },
+        try: (signal) =>
+          traceAsync("Hindsight profile read", {}, async () => {
+            await ensureBank(bankId, signal);
+            const model = await client.getMentalModel(bankId, PROFILE_ID, {
+              detail: "content",
+              signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+            });
+            return model.content ?? null;
+          }),
         catch: (cause) => HindsightError.fromCause("Failed to read Hindsight profile", cause),
       });
     });
@@ -176,13 +181,14 @@ export namespace Hindsight {
 
     const refreshProfile = Effect.fn("Hindsight.refreshProfile")(function* refreshProfile(bankId: string) {
       yield* Effect.tryPromise({
-        try: async (signal) => {
-          await ensureBank(bankId, signal);
-          const submission = await client.refreshMentalModel(bankId, PROFILE_ID, {
-            signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
-          });
-          await waitForOperation(bankId, submission.operation_id, signal);
-        },
+        try: (signal) =>
+          traceAsync("Hindsight profile refresh", {}, async () => {
+            await ensureBank(bankId, signal);
+            const submission = await client.refreshMentalModel(bankId, PROFILE_ID, {
+              signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+            });
+            await waitForOperation(bankId, submission.operation_id, signal);
+          }),
         catch: (cause) => HindsightError.fromCause("Failed to refresh Hindsight profile", cause),
       });
     });
