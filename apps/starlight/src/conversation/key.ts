@@ -41,17 +41,4 @@ export namespace ConversationKey {
       threadKey: row.threadKey,
     };
   }
-
-  export async function affinity(key: Value, secret: string): Promise<string> {
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { hash: "SHA-256", name: "HMAC" },
-      false,
-      ["sign"],
-    );
-    const signature = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(format(key)));
-
-    return Buffer.from(signature).toString("hex").slice(0, 32);
-  }
 }

@@ -1178,7 +1178,6 @@ function testLayer(
       freezeUserMemory: () => Effect.succeed([]),
     }),
     Conversation.optionsLayer({
-      affinitySecret: "test-affinity-secret-with-at-least-32-characters",
       contextEstimateSafetyRatio: 1.15,
       contextHardTokenCap: 900_000,
       contextOutputReserveTokens: 1024,

@@ -67,7 +67,6 @@ export namespace Conversation {
   export class Service extends Context.Service<Service, Interface>()("starlight/Conversation") {}
 
   export interface Options {
-    readonly affinitySecret: string;
     readonly contextEstimateSafetyRatio: number;
     readonly contextHardTokenCap: number;
     readonly contextOutputReserveTokens: number;
@@ -319,7 +318,7 @@ export namespace Conversation {
             return { kind: "completed" as const, runId: claimed.runId };
           }
 
-          const prepared = yield* prepareRun(database, memory, claimed, options, webLookupEnabled);
+          const prepared = yield* prepareRun(database, memory, claimed, webLookupEnabled);
           yield* context
             .transitionProfile({
               key: claimed.key,
@@ -586,7 +585,6 @@ export namespace Conversation {
     database: Database.Interface,
     memory: Memory.Interface,
     claimed: ClaimedRun,
-    options: Options,
     webLookupEnabled: boolean,
   ) {
     return Effect.gen(function* prepare() {
@@ -613,7 +611,10 @@ export namespace Conversation {
             claimed.dbKey,
           )
           .pipe(Effect.mapError(domainFailed)),
-        sessionId: yield* Effect.promise(() => ConversationKey.affinity(claimed.key, options.affinitySecret)),
+        sessionId: new Bun.CryptoHasher("sha256")
+          .update(ConversationKey.format(claimed.key))
+          .digest("hex")
+          .slice(0, 32),
       };
       if (stored === null) {
         yield* database

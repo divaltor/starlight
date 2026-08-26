@@ -92,7 +92,6 @@ const infrastructure = Layer.mergeAll(
     telegramToken: env.STARLIGHT_BOT_TOKEN,
   }),
   Conversation.optionsLayer({
-    affinitySecret: env.CONVERSATION_AFFINITY_SECRET,
     contextEstimateSafetyRatio: env.CONTEXT_ESTIMATE_SAFETY_RATIO,
     contextHardTokenCap: env.CONTEXT_HARD_TOKEN_CAP,
     contextOutputReserveTokens: env.CONTEXT_OUTPUT_RESERVE_TOKENS,
