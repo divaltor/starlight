@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
-import { useEffect, useState, lazy, Suspense } from "react";
+import { useEffect, useState, lazy, Suspense, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSearch } from "@/hooks/use-search";
@@ -98,7 +98,9 @@ export default function DiscoverPage() {
   );
 
   const randomImages = randomQuery.data || [];
-  const placedData = placeRandomImages(randomImages);
+  // Positions come from Math.random(); compute once per dataset so unrelated
+  // re-renders (e.g. search input keystrokes) don't shuffle the collage.
+  const placedData = useMemo(() => placeRandomImages(randomQuery.data ?? []), [randomQuery.data]);
 
   const isHomeIdle = !isLoading && results.length === 0;
   const showHeroCollage = isLargeScreen && randomQuery.isSuccess && placedData.length > 0 && isHomeIdle;
