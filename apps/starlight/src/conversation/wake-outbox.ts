@@ -104,6 +104,8 @@ export namespace WakeOutbox {
             return queue
               .publish({
                 key: ConversationKey.fromDb(row),
+                traceparent: row.traceparent ?? undefined,
+                tracestate: row.tracestate ?? undefined,
                 wakeAt: row.desiredWakeAt,
               })
               .pipe(

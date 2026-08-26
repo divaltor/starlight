@@ -90,6 +90,7 @@ export namespace Conversation {
       const whitelistedDmUserIds = new Set(options.whitelistedDmUserIds);
 
       const admit = Effect.fn("Conversation.admit")(function* admit(input: AdmissionInput) {
+        const traceContext = OperationalTelemetry.currentTraceContext();
         const batchQuietMs = input.payload.mediaGroupId === null ? options.quietMs : ALBUM_SETTLE_MS;
         const batchMaxWaitMs = input.payload.mediaGroupId === null ? options.maxWaitMs : ALBUM_SETTLE_MS;
         const mediaReferences =
@@ -218,12 +219,20 @@ export namespace Conversation {
             });
             await transaction.conversationWakeOutbox.upsert({
               where: { assistantId_chatId_threadKey: key },
-              create: { ...key, desiredWakeAt: wakeAt, pendingRevision },
+              create: {
+                ...key,
+                desiredWakeAt: wakeAt,
+                pendingRevision,
+                traceparent: traceContext.traceparent,
+                tracestate: traceContext.tracestate,
+              },
               update: {
                 desiredWakeAt: wakeAt,
                 lastError: null,
                 pendingRevision,
                 publishedAt: null,
+                traceparent: traceContext.traceparent,
+                tracestate: traceContext.tracestate,
               },
             });
 

@@ -500,6 +500,8 @@ model ConversationWakeOutbox {
   publishedAt      DateTime? @map("published_at")
   attemptCount     Int      @default(0) @map("attempt_count")
   lastError        String?  @map("last_error") @db.Text
+  traceparent      String?
+  tracestate       String?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

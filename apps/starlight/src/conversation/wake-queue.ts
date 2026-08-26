@@ -1,5 +1,7 @@
 import { RedisClient } from "bun";
 import { createBunRedisClient, Queue, UnrecoverableError, Worker } from "bullmq";
+import { context, propagation, ROOT_CONTEXT, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
+import type { Span } from "@opentelemetry/api";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
 import { Conversation } from "@/conversation/conversation";
 import { ConversationKey } from "@/conversation/key";
@@ -7,12 +9,16 @@ import { ConversationKey } from "@/conversation/key";
 export namespace WakeQueue {
   const JobData = Schema.Struct({
     key: ConversationKey.Value,
+    traceparent: Schema.optional(Schema.String),
+    tracestate: Schema.optional(Schema.String),
   });
 
   type JobData = typeof JobData.Type;
 
   export interface LaneWake {
     readonly key: ConversationKey.Value;
+    readonly traceparent?: string;
+    readonly tracestate?: string;
     readonly wakeAt: Date;
   }
 
@@ -68,7 +74,11 @@ export namespace WakeQueue {
             try: () =>
               queue.add(
                 "lane-wake",
-                { key: wake.key },
+                {
+                  key: wake.key,
+                  traceparent: wake.traceparent,
+                  tracestate: wake.tracestate,
+                },
                 {
                   delay,
                   deduplication: {
@@ -99,17 +109,7 @@ export namespace WakeQueue {
         const redis = createBunRedisClient(new RedisClient(redisUrl));
         const worker = new Worker<JobData>(
           `${prefix}-lane-wake`,
-          async (job, _token, signal) => {
-            const data = Schema.decodeUnknownSync(JobData)(job.data);
-            try {
-              return await Effect.runPromise(conversation.drain(data), { signal });
-            } catch (error) {
-              if (error instanceof Conversation.ConversationError && !error.retryable) {
-                throw new UnrecoverableError(error.message);
-              }
-              throw error;
-            }
-          },
+          (job, _token, signal) => processJob(conversation, Schema.decodeUnknownSync(JobData)(job.data), signal),
           {
             connection: redis,
             concurrency: 10,
@@ -138,6 +138,38 @@ export namespace WakeQueue {
         );
       }),
     );
+  }
+
+  function processJob(conversation: Conversation.Interface, data: JobData, signal?: AbortSignal) {
+    return context.with(propagation.extract(ROOT_CONTEXT, data), () =>
+      trace
+        .getTracer("starlight-bot")
+        .startActiveSpan("Conversation lane wake", { kind: SpanKind.CONSUMER }, (span) =>
+          drainConversation(conversation, data, signal, span),
+        ),
+    );
+  }
+
+  async function drainConversation(
+    conversation: Conversation.Interface,
+    data: JobData,
+    signal: AbortSignal | undefined,
+    span: Span,
+  ) {
+    try {
+      return await (signal
+        ? Effect.runPromise(conversation.drain(data), { signal })
+        : Effect.runPromise(conversation.drain(data)));
+    } catch (error) {
+      span.setStatus({ code: SpanStatusCode.ERROR });
+      span.recordException(error instanceof Error ? error : String(error));
+      if (error instanceof Conversation.ConversationError && !error.retryable) {
+        throw new UnrecoverableError(error.message);
+      }
+      throw error;
+    } finally {
+      span.end();
+    }
   }
 
   function closeQueue(queue: Queue<JobData>, redis: ReturnType<typeof createBunRedisClient>) {

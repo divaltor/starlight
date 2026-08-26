@@ -1,6 +1,11 @@
-import { metrics } from "@opentelemetry/api";
+import { context, metrics, propagation } from "@opentelemetry/api";
 
 export namespace OperationalTelemetry {
+  export interface TraceContext {
+    readonly traceparent: string | null;
+    readonly tracestate: string | null;
+  }
+
   const meter = metrics.getMeter("starlight-conversation");
   const events = meter.createCounter("starlight.conversation.events");
   const durations = meter.createHistogram("starlight.conversation.duration_ms", { unit: "ms" });
@@ -16,5 +21,14 @@ export namespace OperationalTelemetry {
 
   export function recordAge(queue: string, ageMs: number): void {
     ages.record(ageMs, { queue });
+  }
+
+  export function currentTraceContext(): TraceContext {
+    const carrier: Record<string, string> = {};
+    propagation.inject(context.active(), carrier);
+    return {
+      traceparent: carrier.traceparent ?? null,
+      tracestate: carrier.tracestate ?? null,
+    };
   }
 }
