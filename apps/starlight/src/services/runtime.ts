@@ -4,6 +4,8 @@ import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import type { LogRecord } from "@opentelemetry/api-logs";
 import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
 import type { LogLevel } from "effect/LogLevel";
+import { ChatReply } from "@/ai/chat-reply";
+import { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
 import { Conversation } from "@/conversation/conversation";
 import { TelegramDelivery } from "@/conversation/delivery";
@@ -77,11 +79,13 @@ function activeTraceContext(): Context | undefined {
 }
 
 const production = env.NODE_ENV === "production";
+const chatTools = ChatTools.layer.pipe(Layer.provideMerge(Exa.defaultLayer));
+const chatReply = ChatReply.layer.pipe(Layer.provideMerge(Model.defaultLayer));
 
 const infrastructure = Layer.mergeAll(
   Database.layer(env.DATABASE_URL),
-  Exa.defaultLayer,
-  Model.defaultLayer,
+  chatTools,
+  chatReply,
   TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
   WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
   Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),
@@ -92,12 +96,8 @@ const infrastructure = Layer.mergeAll(
     telegramToken: env.STARLIGHT_BOT_TOKEN,
   }),
   Conversation.optionsLayer({
-    contextEstimateSafetyRatio: env.CONTEXT_ESTIMATE_SAFETY_RATIO,
     contextHardTokenCap: env.CONTEXT_HARD_TOKEN_CAP,
-    contextOutputReserveTokens: env.CONTEXT_OUTPUT_RESERVE_TOKENS,
     contextRetainedTokenTarget: env.CONTEXT_RETAINED_TOKEN_TARGET,
-    contextSoftTokenCap: env.CONTEXT_SOFT_TOKEN_CAP,
-    contextToolReserveTokens: env.CONTEXT_TOOL_RESERVE_TOKENS,
     leaseMs: env.CONVERSATION_LANE_LEASE_MS,
     maxWaitMs: env.CONVERSATION_BATCH_MAX_WAIT_MS,
     quietMs: env.CONVERSATION_BATCH_QUIET_MS,

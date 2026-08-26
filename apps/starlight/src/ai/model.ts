@@ -28,12 +28,20 @@ export namespace Model {
 
   export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable", errorFields) {}
   export class ProviderRejected extends Schema.TaggedError<ProviderRejected>()("ProviderRejected", errorFields) {}
+  export class ContextOverflow extends Schema.TaggedError<ContextOverflow>()("ContextOverflow", errorFields) {}
   export class RateLimited extends Schema.TaggedError<RateLimited>()("RateLimited", errorFields) {}
   export class TimedOut extends Schema.TaggedError<TimedOut>()("TimedOut", errorFields) {}
   export class InvalidOutput extends Schema.TaggedError<InvalidOutput>()("InvalidOutput", errorFields) {}
   export class InvocationFailed extends Schema.TaggedError<InvocationFailed>()("InvocationFailed", errorFields) {}
 
-  export type Error = InvalidOutput | InvocationFailed | ProviderRejected | RateLimited | TimedOut | Unavailable;
+  export type Error =
+    | ContextOverflow
+    | InvalidOutput
+    | InvocationFailed
+    | ProviderRejected
+    | RateLimited
+    | TimedOut
+    | Unavailable;
 
   export interface Message {
     readonly media?: readonly Media.Loaded[];
@@ -45,6 +53,7 @@ export namespace Model {
     readonly cacheBase?: string;
     readonly instructions: string;
     readonly maxOutputTokens?: number;
+    readonly maxToolOutputBytes: number;
     readonly maxToolSteps: number;
     readonly messages: readonly Message[];
     readonly outputSchema: ZodType<OUTPUT>;
@@ -122,6 +131,7 @@ export namespace Model {
         const selectedModel = provider.model;
         const completedSteps: StepResult<ToolSet>[] = [];
         const toolEvents: ToolEvent[] = [];
+        const tools = boundTools(input.tools, input.maxToolOutputBytes);
         const invocation = Effect.tryPromise({
           try: async (signal) => {
             const result = await generateText({
@@ -150,12 +160,12 @@ export namespace Model {
                 recordInputs: false,
                 recordOutputs: false,
               },
-              tools: input.tools,
+              tools,
             });
 
             return { output: result.output, result };
           },
-          catch: mapInvocationError,
+          catch: (cause) => mapInvocationError(cause, completedSteps.length === 0 && toolEvents.length === 0),
         }).pipe(
           Effect.timeout(Duration.millis(MODEL_TIMEOUT_MS)),
           Effect.catchTag("TimeoutError", (cause) =>
@@ -302,6 +312,69 @@ export namespace Model {
     ];
   }
 
+  function boundTools(tools: ToolSet, maximumBytes: number): ToolSet {
+    let remainingBytes = Math.max(0, maximumBytes);
+    return Object.fromEntries(
+      Object.entries(tools).map(([name, definition]) => {
+        const { execute } = definition;
+        if (!execute) return [name, definition];
+        return [
+          name,
+          {
+            ...definition,
+            execute: async (...parameters: Parameters<typeof execute>) => {
+              const output = await execute(...parameters);
+              const serialized = JSON.stringify(output) ?? String(output);
+              const encoded = new TextEncoder().encode(serialized);
+              if (encoded.byteLength <= remainingBytes) {
+                remainingBytes -= encoded.byteLength;
+                return output;
+              }
+
+              const bounded = boundToolOutput(serialized, encoded, remainingBytes);
+              remainingBytes = Math.max(
+                0,
+                remainingBytes - new TextEncoder().encode(JSON.stringify(bounded)).byteLength,
+              );
+              return bounded;
+            },
+          },
+        ];
+      }),
+    );
+  }
+
+  function boundToolOutput(serialized: string, encoded: Uint8Array, maximumBytes: number) {
+    const metadata = {
+      originalBytes: encoded.byteLength,
+      sha256: new Bun.CryptoHasher("sha256").update(serialized).digest("hex"),
+      truncated: true as const,
+    };
+    const encode = (preview: string) => ({
+      bytes: new TextEncoder().encode(JSON.stringify({ preview, truncation: metadata })).byteLength,
+      output: { preview, truncation: metadata },
+    });
+    if (encode("").bytes > maximumBytes) {
+      const marker = { truncated: true as const };
+      return new TextEncoder().encode(JSON.stringify(marker)).byteLength <= maximumBytes ? marker : {};
+    }
+
+    let lower = 0;
+    let upper = encoded.byteLength;
+    let bounded = encode("");
+    while (lower <= upper) {
+      const middle = Math.floor((lower + upper) / 2);
+      const candidate = encode(new TextDecoder().decode(encoded.slice(0, middle)));
+      if (candidate.bytes <= maximumBytes) {
+        bounded = candidate;
+        lower = middle + 1;
+        continue;
+      }
+      upper = middle - 1;
+    }
+    return bounded.output;
+  }
+
   function limitToolSteps(steps: readonly StepResult<ToolSet>[], maximumSteps: number) {
     const toolStepCount = steps.filter((step) => step.toolCalls.length > 0).length;
     return toolStepCount >= Math.max(maximumSteps, 0) ? { activeTools: [] } : undefined;
@@ -356,7 +429,7 @@ export namespace Model {
     };
   }
 
-  function mapInvocationError(cause: unknown): Error {
+  function mapInvocationError(cause: unknown, beforeOutput: boolean): Error {
     if (NoOutputGeneratedError.isInstance(cause) || TypeValidationError.isInstance(cause)) {
       return new InvalidOutput({
         cause,
@@ -370,6 +443,14 @@ export namespace Model {
         cause,
         message: INVOCATION_FAILED_MESSAGE,
         retryable: AISDKError.isInstance(cause),
+      });
+    }
+
+    if (beforeOutput && isContextOverflow(cause)) {
+      return new ContextOverflow({
+        cause,
+        message: "Model context limit exceeded",
+        retryable: false,
       });
     }
 
@@ -394,6 +475,14 @@ export namespace Model {
       message: INVOCATION_FAILED_MESSAGE,
       retryable: cause.isRetryable,
     });
+  }
+
+  function isContextOverflow(error: APICallError) {
+    if (error.statusCode !== 400 && error.statusCode !== 413) return false;
+    const message = `${error.message}\n${error.responseBody ?? ""}`;
+    return /context(?: length| window)|input.*too long|prompt.*too long|too many tokens|token limit exceeded/iu.test(
+      message,
+    );
   }
 
   function logFailure(error: Error, steps: readonly StepResult<ToolSet>[], toolEvents: readonly ToolEvent[]) {

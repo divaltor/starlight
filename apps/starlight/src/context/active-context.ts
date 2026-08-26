@@ -1,4 +1,5 @@
 import type { Prisma } from "@starlight/utils/generated/prisma/client";
+import type { ChatTools } from "@/ai/chat-tools";
 import { Prompt } from "@/context/prompt";
 import { ConversationKey } from "@/conversation/key";
 import type { Lane } from "@/conversation/lane";
@@ -7,7 +8,7 @@ export namespace ActiveContext {
   export async function ensure(
     transaction: Prisma.TransactionClient,
     key: Lane.LaneKey,
-    webLookupEnabled: boolean,
+    toolProfile: ChatTools.Profile,
     frozenMemory: string,
   ) {
     const existing = await transaction.conversationContext.findFirst({
@@ -15,7 +16,7 @@ export namespace ActiveContext {
     });
     if (existing) return existing;
 
-    const envelope = Prompt.renderEnvelope({ webLookupEnabled });
+    const envelope = Prompt.renderEnvelope({ toolProfile });
     // One Prisma transaction connection must execute its queries serially.
     // oxlint-disable-next-line react-doctor/server-sequential-independent-await
     const latest = await transaction.conversationContext.aggregate({
@@ -27,7 +28,7 @@ export namespace ActiveContext {
         ...key,
         activeKey: ConversationKey.format(key),
         generation: (latest._max.generation ?? 0) + 1,
-        modelProfileFingerprint: Prompt.profileFingerprint(webLookupEnabled),
+        modelProfileFingerprint: Prompt.profileFingerprint(toolProfile),
         ...Prompt.stableSeed(envelope, frozenMemory),
       },
     });

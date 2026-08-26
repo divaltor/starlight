@@ -1,8 +1,8 @@
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { z } from "zod";
+import type { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
 import { TelegramDelivery } from "@/conversation/delivery";
-import { Exa } from "@/services/exa";
 
 // The prompt file is read eagerly at module load; top-level await must stay at module
 // scope because namespace bodies cannot contain await.
@@ -11,8 +11,8 @@ const systemPromptText = await Bun.file(new URL("system-prompt.txt", import.meta
 export namespace ChatReply {
   export const systemPrompt = systemPromptText;
   export const outputSchemaVersion = "chat-reply-v1";
-  export const toolsetVersion = "exa-mcp-v3-limited";
-  const MAX_REPLY_OUTPUT_TOKENS = 1024;
+  export const maxOutputTokens = 1024;
+  const MAX_TOOL_OUTPUT_BYTES = 16 * 1024;
   const MAX_AGENT_TOOL_STEPS = 3;
 
   const reactionEmojiSchema = z.enum(TelegramDelivery.reactionEmojis);
@@ -43,26 +43,37 @@ export namespace ChatReply {
     readonly messages: readonly Model.Message[];
     readonly promptCacheKey?: string;
     readonly sessionId: string;
-    readonly webLookupEnabled?: boolean;
+    readonly toolset: ChatTools.Resolved;
   }
 
   export type GenerateResult = Model.GenerationResult<Response>;
 
-  export const generate = Effect.fn("ChatReply.generate")(function* generate(input: GenerateInput) {
-    const model = yield* Model.Service;
-    const exa = yield* Exa.Service;
-    const tools = exa.isEnabled() && input.webLookupEnabled !== false ? exa.tools : {};
+  export interface Interface {
+    readonly generate: (input: GenerateInput) => Effect.Effect<GenerateResult, Model.Error>;
+  }
 
-    return yield* model.generate({
-      cacheBase: input.cacheBase,
-      instructions: input.instructions ?? systemPrompt,
-      maxOutputTokens: MAX_REPLY_OUTPUT_TOKENS,
-      maxToolSteps: Object.keys(tools).length > 0 ? MAX_AGENT_TOOL_STEPS : 0,
-      messages: input.messages,
-      outputSchema: responseSchema,
-      promptCacheKey: input.promptCacheKey,
-      sessionId: input.sessionId,
-      tools,
-    });
-  });
+  export class Service extends Context.Service<Service, Interface>()("starlight/ChatReply") {}
+
+  export const layer: Layer.Layer<Service, never, Model.Service> = Layer.effect(
+    Service,
+    Effect.gen(function* layer() {
+      const model = yield* Model.Service;
+      return Service.of({
+        generate: Effect.fn("ChatReply.generate")(function* generate(input) {
+          return yield* model.generate({
+            cacheBase: input.cacheBase,
+            instructions: input.instructions ?? systemPrompt,
+            maxOutputTokens,
+            maxToolOutputBytes: MAX_TOOL_OUTPUT_BYTES,
+            maxToolSteps: Object.keys(input.toolset.tools).length > 0 ? MAX_AGENT_TOOL_STEPS : 0,
+            messages: input.messages,
+            outputSchema: responseSchema,
+            promptCacheKey: input.promptCacheKey,
+            sessionId: input.sessionId,
+            tools: input.toolset.tools,
+          });
+        }),
+      });
+    }),
+  );
 }

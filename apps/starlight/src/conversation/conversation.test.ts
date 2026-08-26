@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "@starlight/utils/generated/prisma/client";
 import { Effect, Layer, ManagedRuntime } from "effect";
+import { ChatReply } from "@/ai/chat-reply";
+import { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
 import { ConversationContext } from "@/context/context";
 import { Memory } from "@/memory/memory";
@@ -8,7 +10,6 @@ import { Prompt } from "@/context/prompt";
 import { Conversation } from "@/conversation/conversation";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { Database } from "@/services/database";
-import { Exa } from "@/services/exa";
 import { Media } from "@/media/media";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -232,7 +233,7 @@ test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating th
 });
 
 test.skipIf(!databaseUrl)(
-  "soft checkpoint delivers the crossing reply and retains the newest complete run",
+  "finalized responses remain active until the next request requires preflight context compaction",
   async () => {
     const requests: Model.GenerateInput<unknown>[] = [];
     const model: Model.Interface = {
@@ -270,7 +271,7 @@ test.skipIf(!databaseUrl)(
         return Effect.succeed(receipt);
       },
     };
-    const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery, { contextSoftTokenCap: 1 }));
+    const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
     const assistantId = 8_000_000_096;
     const chatId = -8_000_000_096;
     const key = { assistantId, chatId, threadKey: 0 };
@@ -370,13 +371,11 @@ test.skipIf(!databaseUrl)(
         }),
       );
 
-      expect(requests).toHaveLength(3);
+      expect(requests).toHaveLength(2);
       expect(requests[1]!.messages.some((message) => message.text.includes("First"))).toBe(true);
-      expect(requests[2]!.instructions.startsWith("Summarize")).toBe(true);
-      expect(state.contexts.map((context) => context.status)).toEqual(["superseded", "active"]);
-      expect(state.contexts[1]!.turns).toHaveLength(2);
-      expect(state.attempts).toHaveLength(1);
-      expect(state.attempts[0]!.status).toBe("committed");
+      expect(state.contexts.map((context) => context.status)).toEqual(["active"]);
+      expect(state.contexts[0]!.turns).toHaveLength(4);
+      expect(state.attempts).toHaveLength(0);
     } finally {
       await runtime.runPromise(
         Effect.gen(function* cleanup() {
@@ -389,11 +388,17 @@ test.skipIf(!databaseUrl)(
   },
 );
 
-test.skipIf(!databaseUrl)("hard checkpoint publishes a child before model invocation", async () => {
+test.skipIf(!databaseUrl)("provider context overflow checkpoints and retries once", async () => {
   const requests: Model.GenerateInput<unknown>[] = [];
+  let chatAttempts = 0;
   const model: Model.Interface = {
     generate: <Output>(input: Model.GenerateInput<Output>) => {
       requests.push(input);
+      const chatRequest = !input.instructions.startsWith("Summarize");
+      if (chatRequest) chatAttempts += 1;
+      if (chatRequest && chatAttempts === 1) {
+        return Effect.fail(new Model.ContextOverflow({ message: "Model context limit exceeded", retryable: false }));
+      }
       const output = input.instructions.startsWith("Summarize")
         ? { summary: "The recent discussion must remain available." }
         : { replies: [{ replyTo: null, text: "Continued", type: "text" }] };
@@ -423,12 +428,7 @@ test.skipIf(!databaseUrl)("hard checkpoint publishes a child before model invoca
   };
   const runtime = ManagedRuntime.make(
     testLayer(databaseUrl!, model, delivery, {
-      contextEstimateSafetyRatio: 1,
-      contextHardTokenCap: 3000,
-      contextOutputReserveTokens: 0,
       contextRetainedTokenTarget: 1,
-      contextSoftTokenCap: 100_000,
-      contextToolReserveTokens: 0,
     }),
   );
   const assistantId = 8_000_000_097;
@@ -498,7 +498,7 @@ test.skipIf(!databaseUrl)("hard checkpoint publishes a child before model invoca
               inputEndRevision: 1,
               inputStartRevision: 1,
               inputs: { create: { inputId: firstInput.id, ordinal: 0 } },
-              modelProfileFingerprint: Prompt.profileFingerprint(false),
+              modelProfileFingerprint: Prompt.profileFingerprint([]),
               replyEligible: true,
               status: "finalized",
               threadKey: 0,
@@ -548,7 +548,7 @@ test.skipIf(!databaseUrl)("hard checkpoint publishes a child before model invoca
               inputEndRevision: 2,
               inputStartRevision: 2,
               inputs: { create: { inputId: secondInput.id, ordinal: 0 } },
-              modelProfileFingerprint: Prompt.profileFingerprint(false),
+              modelProfileFingerprint: Prompt.profileFingerprint([]),
               replyEligible: true,
               status: "finalized",
               threadKey: 0,
@@ -650,9 +650,10 @@ test.skipIf(!databaseUrl)("hard checkpoint publishes a child before model invoca
       }),
     );
 
-    expect(requests).toHaveLength(2);
-    expect(requests[0]!.instructions.startsWith("Summarize")).toBe(true);
-    expect(requests[1]!.instructions.startsWith("Summarize")).toBe(false);
+    expect(requests).toHaveLength(3);
+    expect(requests[0]!.instructions.startsWith("Summarize")).toBe(false);
+    expect(requests[1]!.instructions.startsWith("Summarize")).toBe(true);
+    expect(requests[2]!.instructions.startsWith("Summarize")).toBe(false);
     expect(state.attempt.reason).toBe("hardSafety");
     expect(state.attempt.status).toBe("committed");
     expect(state.latestRun.contextId).toBe(state.contexts[1]!.id);
@@ -698,11 +699,7 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
   };
   const runtime = ManagedRuntime.make(
     testLayer(databaseUrl!, model, delivery, {
-      contextEstimateSafetyRatio: 1,
-      contextHardTokenCap: 3000,
-      contextOutputReserveTokens: 0,
-      contextSoftTokenCap: 100_000,
-      contextToolReserveTokens: 0,
+      contextHardTokenCap: 22_000,
     }),
   );
   const assistantId = 8_000_000_098;
@@ -994,7 +991,7 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
               inputEndRevision: 1,
               inputStartRevision: 1,
               inputs: { create: { inputId: input.id, ordinal: 0 } },
-              modelProfileFingerprint: Prompt.profileFingerprint(false),
+              modelProfileFingerprint: Prompt.profileFingerprint([]),
               replyEligible: true,
               threadKey: 0,
             },
@@ -1014,8 +1011,8 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
               frozenMemory: Prompt.renderMemory(""),
               frozenMemoryHash: "obsolete-memory",
               generation: 1,
-              modelProfileFingerprint: Prompt.profileFingerprint(false),
-              stableEnvelope: Prompt.renderEnvelope({ webLookupEnabled: false }),
+              modelProfileFingerprint: Prompt.profileFingerprint([]),
+              stableEnvelope: Prompt.renderEnvelope({ toolProfile: [] }),
               stableEnvelopeHash: "obsolete-envelope",
               threadKey: 0,
             },
@@ -1154,10 +1151,11 @@ function testLayer(
   delivery: TelegramDelivery.Interface = unavailableDelivery,
   optionOverrides: Partial<Conversation.Options> = {},
 ) {
+  const chatReply = ChatReply.layer.pipe(Layer.provideMerge(Layer.succeed(Model.Service)(model)));
   const infrastructure = Layer.mergeAll(
     Database.layer(connectionString),
-    Layer.succeed(Model.Service)(model),
-    Layer.succeed(Exa.Service)(disabledExa),
+    chatReply,
+    Layer.succeed(ChatTools.Service)(disabledChatTools),
     Layer.succeed(TelegramDelivery.Service)(delivery),
     Layer.succeed(Media.Service)({
       ingest: (source) =>
@@ -1178,12 +1176,8 @@ function testLayer(
       freezeUserMemory: () => Effect.succeed([]),
     }),
     Conversation.optionsLayer({
-      contextEstimateSafetyRatio: 1.15,
       contextHardTokenCap: 900_000,
-      contextOutputReserveTokens: 1024,
       contextRetainedTokenTarget: 8000,
-      contextSoftTokenCap: 30_000,
-      contextToolReserveTokens: 4096,
       leaseMs: 180_000,
       maxWaitMs: 3000,
       quietMs: 1000,
@@ -1195,9 +1189,9 @@ function testLayer(
   return Conversation.layer.pipe(Layer.provideMerge(context));
 }
 
-const disabledExa: Exa.Interface = {
-  isEnabled: () => false,
-  tools: {},
+const disabledChatTools: ChatTools.Interface = {
+  availableProfile: [],
+  resolve: (profile) => Effect.succeed({ profile, tools: {} }),
 };
 
 const unavailableModel: Model.Interface = {

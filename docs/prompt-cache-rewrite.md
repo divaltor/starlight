@@ -5,7 +5,7 @@
 - Keep the durable lane, context-generation, checkpoint, Hindsight, and explicit-cache architecture.
 - Chat is agentic: allow multiple tool calls/steps inside the existing run timeout. Bound tool output and total context, not call count.
 - Support Telegram photo, sticker, animation/GIF, video, video note, voice/audio, and text/image documents below **20 MiB**. PDFs remain an explicit unavailable marker until their separate pipeline lands. Albums remain one interaction unit.
-- Use **24k soft / 48k hard** context caps initially. Recalibrate later from production usage.
+- Use a **48k hard cap**, a 20k compaction buffer, and an 8k retained tail initially. Recalibrate later from production usage.
 
 ## 1. Media
 
@@ -51,9 +51,9 @@ Extend `ConversationInput`, prepared-run artifacts, and `Model.Message` with app
 
 ## 3. Context limits
 
-- Set `CONTEXT_SOFT_TOKEN_CAP=24000` and `CONTEXT_HARD_TOKEN_CAP=48000`.
-- Keep the current output/tool reserves.
-- Later add an observed-token anchor (`lastObservedInputTokens` plus estimated growth) if real usage shows the conservative 48k boundary is inaccurate.
+- Set `CONTEXT_HARD_TOKEN_CAP=48000`; compact before requests that exceed the cap minus the larger of the actual output limit and the 20k buffer.
+- Bound cumulative model-facing tool output to 16 KiB per generation and clip old tool results while preparing checkpoint summaries.
+- Recover one provider-confirmed context overflow with a checkpoint and retry. Keep observed usage for calibration rather than control flow.
 
 ## 4. Deployment acceptance
 

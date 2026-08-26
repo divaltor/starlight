@@ -1,17 +1,17 @@
 import type { ConversationRunStatus, Prisma } from "@starlight/utils/generated/prisma/client";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import { ChatReply } from "@/ai/chat-reply";
-import { Model } from "@/ai/model";
+import { ChatTools } from "@/ai/chat-tools";
+import type { Model } from "@/ai/model";
 import { Prompt } from "@/context/prompt";
 import { ConversationContext } from "@/context/context";
 import { ConversationKey } from "@/conversation/key";
 import { Lane } from "@/conversation/lane";
-import { PreparedRequestSchema } from "@/conversation/run-artifacts";
+import { PreparedRequestSchema, PreparedToolProfileSchema } from "@/conversation/run-artifacts";
 import type { InputPayload } from "@/conversation/run-artifacts";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { Memory } from "@/memory/memory";
 import { Database } from "@/services/database";
-import { Exa } from "@/services/exa";
 import { OperationalTelemetry } from "@/operational-telemetry";
 
 export namespace Conversation {
@@ -19,6 +19,8 @@ export namespace Conversation {
   const MAX_ALBUM_MESSAGES = 10;
   const MAX_DELIVERY_ATTEMPTS = 5;
   const MAX_MODEL_ATTEMPTS = 5;
+  const CONTEXT_COMPACTION_BUFFER_TOKENS = 20_000;
+  const OVERSIZED_INPUT_ERROR_TAG = "oversized-input";
   const ALBUM_SETTLE_MS = 35_000;
 
   export interface AdmissionInput {
@@ -67,12 +69,8 @@ export namespace Conversation {
   export class Service extends Context.Service<Service, Interface>()("starlight/Conversation") {}
 
   export interface Options {
-    readonly contextEstimateSafetyRatio: number;
     readonly contextHardTokenCap: number;
-    readonly contextOutputReserveTokens: number;
     readonly contextRetainedTokenTarget: number;
-    readonly contextSoftTokenCap: number;
-    readonly contextToolReserveTokens: number;
     readonly leaseMs: number;
     readonly maxWaitMs: number;
     readonly quietMs: number;
@@ -83,10 +81,10 @@ export namespace Conversation {
     Service,
     Effect.gen(function* layer() {
       const database = yield* Database.Service;
+      const chatReply = yield* ChatReply.Service;
+      const chatTools = yield* ChatTools.Service;
       const context = yield* ConversationContext.Service;
       const delivery = yield* TelegramDelivery.Service;
-      const exa = yield* Exa.Service;
-      const model = yield* Model.Service;
       const memory = yield* Memory.Service;
       const options = yield* OptionsService;
       const whitelistedDmUserIds = new Set(options.whitelistedDmUserIds);
@@ -255,8 +253,7 @@ export namespace Conversation {
       });
 
       const drain = Effect.fn("Conversation.drain")(function* drain(input: LaneWakeInput) {
-        const webLookupEnabled = exa.isEnabled();
-        const claimed = yield* claimRun(database, input.key, options.leaseMs, webLookupEnabled);
+        const claimed = yield* claimRun(database, input.key, options.leaseMs, chatTools.availableProfile);
         if (claimed.kind !== "claimed") return { kind: claimed.kind };
 
         return yield* Effect.gen(function* drainClaimed() {
@@ -298,12 +295,16 @@ export namespace Conversation {
             );
           if (claimed.status === "generated" || claimed.status === "dispatching") {
             yield* dispatchRun(database, delivery, claimed, options);
-            yield* appendAndCheckpoint(context, claimed, options);
+            yield* context
+              .appendFinalized({ fencingToken: claimed.fencingToken, runId: claimed.runId })
+              .pipe(Effect.mapError(domainFailed));
             yield* finalizeRun(database, claimed, options);
             return { kind: "completed" as const, runId: claimed.runId };
           }
           if (claimed.status === "failed") {
-            yield* appendAndCheckpoint(context, claimed, options);
+            yield* context
+              .appendFinalized({ fencingToken: claimed.fencingToken, runId: claimed.runId })
+              .pipe(Effect.mapError(domainFailed));
             yield* finalizeRun(database, claimed, options);
             return { kind: "completed" as const, runId: claimed.runId };
           }
@@ -318,13 +319,13 @@ export namespace Conversation {
             return { kind: "completed" as const, runId: claimed.runId };
           }
 
-          const prepared = yield* prepareRun(database, memory, claimed, webLookupEnabled);
+          const prepared = yield* prepareRun(database, memory, claimed);
           yield* context
             .transitionProfile({
               key: claimed.key,
               reason: "profile-change",
               run: { fencingToken: claimed.fencingToken, runId: claimed.runId },
-              webLookupEnabled,
+              toolProfile: prepared.toolProfile,
             })
             .pipe(
               Effect.mapError(domainFailed),
@@ -337,7 +338,9 @@ export namespace Conversation {
               ),
             );
           if (!claimed.replyEligible) {
-            yield* appendAndCheckpoint(context, claimed, options);
+            yield* context
+              .appendFinalized({ fencingToken: claimed.fencingToken, runId: claimed.runId })
+              .pipe(Effect.mapError(domainFailed));
             yield* finalizeRun(database, claimed, options);
             return { kind: "completed" as const, runId: claimed.runId };
           }
@@ -354,7 +357,7 @@ export namespace Conversation {
                     ),
               ),
             );
-          if (projectedTokens(contextRequest, options) >= options.contextHardTokenCap) {
+          if (exceedsUsableContext(contextRequest, options)) {
             yield* context
               .checkpoint({
                 fencingToken: claimed.fencingToken,
@@ -368,7 +371,7 @@ export namespace Conversation {
                 Effect.catch((error) =>
                   error.retryable
                     ? Effect.fail(error)
-                    : blockRun(database, claimed, options, "oversized-input", error.message).pipe(
+                    : blockRun(database, claimed, options, OVERSIZED_INPUT_ERROR_TAG, error.message).pipe(
                         Effect.andThen(Effect.fail(error)),
                       ),
                 ),
@@ -376,12 +379,12 @@ export namespace Conversation {
             contextRequest = yield* context
               .prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId })
               .pipe(Effect.mapError(domainFailed));
-            if (projectedTokens(contextRequest, options) >= options.contextHardTokenCap) {
+            if (exceedsUsableContext(contextRequest, options)) {
               yield* blockRun(
                 database,
                 claimed,
                 options,
-                "oversized-input",
+                OVERSIZED_INPUT_ERROR_TAG,
                 "Prepared request exceeds the hard context limit after checkpoint",
               );
               return yield* new ConversationError({
@@ -391,16 +394,44 @@ export namespace Conversation {
             }
           }
 
-          const generated = yield* invokeModel(database, claimed, prepared, contextRequest, model, exa, options);
-          if (generated === null) {
-            yield* appendAndCheckpoint(context, claimed, options);
+          const toolset = yield* chatTools.resolve(contextRequest.toolProfile).pipe(Effect.mapError(domainFailed));
+
+          const attempted = yield* invokeModel(
+            database,
+            claimed,
+            prepared,
+            contextRequest,
+            chatReply,
+            toolset,
+            options,
+            {
+              allowContextOverflowRecovery: true,
+              attemptNumber: claimed.attemptCount + 1,
+            },
+          );
+          const invocation =
+            attempted.kind === "contextOverflow"
+              ? yield* recoverContextOverflow(context, database, claimed, prepared, chatReply, chatTools, options)
+              : attempted;
+          if (invocation.kind === "failed") {
+            yield* context
+              .appendFinalized({ fencingToken: claimed.fencingToken, runId: claimed.runId })
+              .pipe(Effect.mapError(domainFailed));
             yield* finalizeRun(database, claimed, options);
             return { kind: "completed" as const, runId: claimed.runId };
           }
+          if (invocation.kind === "contextOverflow") {
+            return yield* new ConversationError({
+              message: "Model context limit exceeded after checkpoint",
+              retryable: false,
+            });
+          }
 
-          yield* persistGeneration(database, claimed, generated, prepared.allowedTargetIds);
+          yield* persistGeneration(database, claimed, invocation.generated, prepared.allowedTargetIds);
           yield* dispatchRun(database, delivery, claimed, options);
-          yield* appendAndCheckpoint(context, claimed, options);
+          yield* context
+            .appendFinalized({ fencingToken: claimed.fencingToken, runId: claimed.runId })
+            .pipe(Effect.mapError(domainFailed));
           yield* finalizeRun(database, claimed, options);
           return { kind: "completed" as const, runId: claimed.runId };
         }).pipe(Effect.tapError(() => expireLease(database, claimed)));
@@ -436,6 +467,17 @@ export namespace Conversation {
   interface PreparedRun {
     readonly allowedTargetIds: readonly number[];
     readonly sessionId: string;
+    readonly toolProfile: ChatTools.Profile;
+  }
+
+  type InvocationResult =
+    | { readonly generated: ChatReply.GenerateResult; readonly kind: "generated" }
+    | { readonly kind: "contextOverflow" }
+    | { readonly kind: "failed" };
+
+  interface InvocationOptions {
+    readonly allowContextOverflowRecovery: boolean;
+    readonly attemptNumber: number;
   }
 
   const failed =
@@ -447,7 +489,7 @@ export namespace Conversation {
     database: Database.Interface,
     key: ConversationKey.Value,
     leaseMs: number,
-    webLookupEnabled: boolean,
+    toolProfile: ChatTools.Profile,
   ) {
     return database
       .transaction(async (transaction): Promise<ClaimedRun | DrainResult> => {
@@ -543,7 +585,8 @@ export namespace Conversation {
             fencingToken,
             inputEndRevision: lastInput.admittedRevision,
             inputStartRevision: inputs[0]!.admittedRevision,
-            modelProfileFingerprint: Prompt.profileFingerprint(webLookupEnabled),
+            modelProfileFingerprint: Prompt.profileFingerprint(toolProfile),
+            preparedRequest: { toolProfile: [...toolProfile] },
             replyEligible,
             inputs: {
               create: inputs.map((item, ordinal) => ({ inputId: item.id, ordinal })),
@@ -572,7 +615,7 @@ export namespace Conversation {
           key,
           kind: "claimed",
           attemptCount: 0,
-          preparedRequest: null,
+          preparedRequest: { toolProfile: [...toolProfile] },
           replyEligible,
           runId: run.id,
           status: "prepared",
@@ -581,12 +624,7 @@ export namespace Conversation {
       .pipe(Effect.mapError(failed("Failed to claim conversation lane")));
   }
 
-  function prepareRun(
-    database: Database.Interface,
-    memory: Memory.Interface,
-    claimed: ClaimedRun,
-    webLookupEnabled: boolean,
-  ) {
+  function prepareRun(database: Database.Interface, memory: Memory.Interface, claimed: ClaimedRun) {
     return Effect.gen(function* prepare() {
       const payloads = claimed.inputs.map((input) => input.payload as InputPayload);
       const allowedTargetIds = [
@@ -597,14 +635,15 @@ export namespace Conversation {
           ]),
         ),
       ];
-      const stored =
-        claimed.preparedRequest === null
-          ? null
-          : Schema.decodeUnknownSync(PreparedRequestSchema)(claimed.preparedRequest);
+      const stored = Option.getOrNull(Schema.decodeUnknownOption(PreparedRequestSchema)(claimed.preparedRequest));
+      const pinnedToolProfile = Schema.decodeUnknownSync(PreparedToolProfileSchema)(
+        claimed.preparedRequest,
+      ).toolProfile;
       // Only what time erodes is frozen; rendering rebuilds deterministically from the
       // immutable batch in ConversationContext.prepare.
       const frozen = stored ?? {
         currentDate: new Date().toISOString().slice(0, 10),
+        toolProfile: pinnedToolProfile,
         userMemory: yield* memory
           .freezeUserMemory(
             claimed.inputs.flatMap((input) => (input.senderUserId === null ? [] : [input.senderUserId])),
@@ -623,14 +662,14 @@ export namespace Conversation {
             await transaction.conversationRun.update({
               where: { id: claimed.runId },
               data: {
-                modelProfileFingerprint: Prompt.profileFingerprint(webLookupEnabled),
+                modelProfileFingerprint: Prompt.profileFingerprint(frozen.toolProfile),
                 preparedRequest: frozen,
               },
             });
           })
           .pipe(Effect.mapError(failed("Failed to prepare conversation run")));
       }
-      return { allowedTargetIds, sessionId: frozen.sessionId } satisfies PreparedRun;
+      return { allowedTargetIds, sessionId: frozen.sessionId, toolProfile: frozen.toolProfile } satisfies PreparedRun;
     });
   }
 
@@ -639,17 +678,12 @@ export namespace Conversation {
     claimed: ClaimedRun,
     prepared: PreparedRun,
     contextRequest: ConversationContext.PreparedContextRequest,
-    model: Model.Interface,
-    exa: Exa.Interface,
+    chatReply: ChatReply.Interface,
+    toolset: ChatTools.Resolved,
     options: Options,
+    invocation: InvocationOptions,
   ) {
     return Effect.gen(function* invoke() {
-      if (contextRequest.webLookupEnabled && !exa.isEnabled()) {
-        return yield* new ConversationError({
-          message: "The pinned context requires web lookup, but the tool is unavailable",
-          retryable: true,
-        });
-      }
       yield* database
         .transaction(async (transaction) => {
           await Lane.assertFence(transaction, claimed.dbKey, claimed);
@@ -666,35 +700,96 @@ export namespace Conversation {
         })
         .pipe(Effect.mapError(failed("Failed to start model attempt")));
 
-      return yield* ChatReply.generate({
-        cacheBase: contextRequest.cacheBase,
-        instructions: contextRequest.instructions,
-        messages: contextRequest.messages,
-        promptCacheKey: contextRequest.contextId,
-        sessionId: prepared.sessionId,
-        webLookupEnabled: contextRequest.webLookupEnabled,
-      }).pipe(
-        Effect.provideService(Model.Service, model),
-        Effect.provideService(Exa.Service, exa),
-        Effect.catch((error) => {
-          const exhausted = !error.retryable || claimed.attemptCount + 1 >= MAX_MODEL_ATTEMPTS;
-          if (!exhausted) {
-            return recordModelFailure(database, claimed, error, false).pipe(
-              Effect.andThen(
-                Effect.fail(
-                  new ConversationError({
-                    cause: error,
-                    message: "Model generation failed",
-                    retryable: true,
-                  }),
+      return yield* chatReply
+        .generate({
+          cacheBase: contextRequest.cacheBase,
+          instructions: contextRequest.instructions,
+          messages: contextRequest.messages,
+          promptCacheKey: contextRequest.contextId,
+          sessionId: prepared.sessionId,
+          toolset,
+        })
+        .pipe(
+          Effect.map((generated): InvocationResult => ({ generated, kind: "generated" })),
+          Effect.catch((error) => {
+            if (
+              error._tag === "ContextOverflow" &&
+              invocation.allowContextOverflowRecovery &&
+              invocation.attemptNumber < MAX_MODEL_ATTEMPTS
+            ) {
+              return Effect.succeed<InvocationResult>({ kind: "contextOverflow" });
+            }
+            const exhausted = !error.retryable || invocation.attemptNumber >= MAX_MODEL_ATTEMPTS;
+            if (!exhausted) {
+              return recordModelFailure(database, claimed, error, false).pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    new ConversationError({
+                      cause: error,
+                      message: "Model generation failed",
+                      retryable: true,
+                    }),
+                  ),
                 ),
+              );
+            }
+            return recordModelFailure(database, claimed, error, true).pipe(
+              Effect.as<InvocationResult>({ kind: "failed" }),
+            );
+          }),
+        );
+    });
+  }
+
+  function recoverContextOverflow(
+    context: ConversationContext.Interface,
+    database: Database.Interface,
+    claimed: ClaimedRun,
+    prepared: PreparedRun,
+    chatReply: ChatReply.Interface,
+    chatTools: ChatTools.Interface,
+    options: Options,
+  ) {
+    return context
+      .checkpoint({
+        fencingToken: claimed.fencingToken,
+        leaseMs: options.leaseMs,
+        reason: "hardSafety",
+        retainedTokenTarget: options.contextRetainedTokenTarget,
+        runId: claimed.runId,
+      })
+      .pipe(
+        Effect.mapError(domainFailed),
+        Effect.catch((error) =>
+          error.retryable
+            ? Effect.fail(error)
+            : blockRun(database, claimed, options, OVERSIZED_INPUT_ERROR_TAG, error.message).pipe(
+                Effect.andThen(Effect.fail(error)),
+              ),
+        ),
+        Effect.andThen(
+          context
+            .prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId })
+            .pipe(Effect.mapError(domainFailed)),
+        ),
+        Effect.flatMap((contextRequest) => {
+          if (!exceedsUsableContext(contextRequest, options)) {
+            return chatTools.resolve(contextRequest.toolProfile).pipe(
+              Effect.mapError(domainFailed),
+              Effect.flatMap((toolset) =>
+                invokeModel(database, claimed, prepared, contextRequest, chatReply, toolset, options, {
+                  allowContextOverflowRecovery: false,
+                  attemptNumber: claimed.attemptCount + 2,
+                }),
               ),
             );
           }
-          return recordModelFailure(database, claimed, error, true).pipe(Effect.as(null));
+          const message = "Prepared request exceeds the usable context limit after checkpoint";
+          return blockRun(database, claimed, options, OVERSIZED_INPUT_ERROR_TAG, message).pipe(
+            Effect.andThen(Effect.fail(new ConversationError({ message, retryable: false }))),
+          );
         }),
       );
-    });
   }
 
   function persistGeneration(
@@ -977,41 +1072,16 @@ export namespace Conversation {
       .pipe(Effect.mapError(failed("Failed to record Telegram failure")));
   }
 
-  function appendAndCheckpoint(context: ConversationContext.Interface, claimed: ClaimedRun, options: Options) {
-    return Effect.gen(function* appendContextAndCheckpoint() {
-      const appended = yield* context
-        .appendFinalized({ fencingToken: claimed.fencingToken, runId: claimed.runId })
-        .pipe(Effect.mapError(domainFailed));
-      if (appended.estimatedStableTokens < options.contextSoftTokenCap) return;
-
-      yield* context
-        .checkpoint({
-          fencingToken: claimed.fencingToken,
-          leaseMs: options.leaseMs,
-          reason: "softCost",
-          retainedTokenTarget: options.contextRetainedTokenTarget,
-          runId: claimed.runId,
-        })
-        .pipe(
-          Effect.mapError(domainFailed),
-          Effect.catch((error) =>
-            Effect.logWarning("Soft context checkpoint failed").pipe(
-              Effect.annotateLogs({ errorTag: error._tag, runId: claimed.runId }),
-            ),
-          ),
-        );
-    });
-  }
-
-  function projectedTokens(request: ConversationContext.PreparedContextRequest, options: Options) {
+  function exceedsUsableContext(request: ConversationContext.PreparedContextRequest, options: Options) {
     return (
-      Math.ceil(request.estimatedTokens * options.contextEstimateSafetyRatio) +
-      options.contextOutputReserveTokens +
-      options.contextToolReserveTokens
+      request.estimatedTokens >
+      Math.max(0, options.contextHardTokenCap - Math.max(ChatReply.maxOutputTokens, CONTEXT_COMPACTION_BUFFER_TOKENS))
     );
   }
 
-  function domainFailed(error: ConversationContext.ContextError | Memory.MemoryError): ConversationError {
+  function domainFailed(
+    error: ChatTools.ProfileUnavailable | ConversationContext.ContextError | Memory.MemoryError,
+  ): ConversationError {
     return new ConversationError({
       cause: error,
       message: error.message,

@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "@starlight/utils/generated/prisma/client";
 import { Effect, Layer, ManagedRuntime } from "effect";
+import { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
 import { ConversationContext } from "@/context/context";
 import { Prompt } from "@/context/prompt";
 import { Memory } from "@/memory/memory";
 import { Media } from "@/media/media";
 import { Database } from "@/services/database";
-import { Exa } from "@/services/exa";
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -32,7 +32,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable context s
       Layer.provideMerge(
         Layer.mergeAll(
           Database.layer(databaseUrl!),
-          Layer.succeed(Exa.Service)(disabledExa),
+          Layer.succeed(ChatTools.Service)(disabledChatTools),
           Layer.succeed(Model.Service)(unavailableModel),
           memoryLayer,
           mediaLayer,
@@ -106,7 +106,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable context s
               inputStartRevision: 1,
               inputs: { create: { inputId: input.id, ordinal: 0 } },
               modelProfileFingerprint: new Bun.CryptoHasher("sha256")
-                .update(Prompt.renderEnvelope({ webLookupEnabled: false }))
+                .update(Prompt.renderEnvelope({ toolProfile: [] }))
                 .digest("hex"),
               replyEligible: true,
               status: "finalized",
@@ -157,7 +157,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
       Layer.provideMerge(
         Layer.mergeAll(
           Database.layer(databaseUrl!),
-          Layer.succeed(Exa.Service)(disabledExa),
+          Layer.succeed(ChatTools.Service)(disabledChatTools),
           Layer.succeed(Model.Service)(unavailableModel),
           memoryLayer,
           mediaLayer,
@@ -196,7 +196,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
               frozenMemoryHash: "obsolete-memory",
               generation: 1,
               modelProfileFingerprint: "obsolete-profile",
-              stableEnvelope: Prompt.renderEnvelope({ webLookupEnabled: false }),
+              stableEnvelope: Prompt.renderEnvelope({ toolProfile: [] }),
               stableEnvelopeHash: "obsolete-envelope",
               threadKey: 0,
             },
@@ -209,7 +209,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
               fencingToken: 1n,
               inputEndRevision: 1,
               inputStartRevision: 1,
-              modelProfileFingerprint: Prompt.profileFingerprint(false),
+              modelProfileFingerprint: Prompt.profileFingerprint([]),
               replyEligible: false,
               threadKey: 0,
             },
@@ -225,7 +225,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
           key: { assistantId: Number(assistantId), chatId: Number(chatId), threadKey: 0 },
           reason: "profile-change",
           run: { fencingToken: 1n, runId },
-          webLookupEnabled: false,
+          toolProfile: [],
         });
         const persisted = yield* database.query(async (client) => ({
           contexts: await client.conversationContext.findMany({
@@ -238,7 +238,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
         expect(transitioned.generation).toBe(2);
         expect(persisted.contexts.map((item) => item.status)).toEqual(["superseded", "active"]);
         expect(persisted.run.contextId).toBe(transitioned.id);
-        expect(transitioned.profileFingerprint).toBe(Prompt.profileFingerprint(false));
+        expect(transitioned.profileFingerprint).toBe(Prompt.profileFingerprint([]));
       }),
     );
   } finally {
@@ -258,7 +258,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
       Layer.provideMerge(
         Layer.mergeAll(
           Database.layer(databaseUrl!),
-          Layer.succeed(Exa.Service)(disabledExa),
+          Layer.succeed(ChatTools.Service)(disabledChatTools),
           Layer.succeed(Model.Service)(unavailableModel),
           memoryLayer,
           mediaLayer,
@@ -315,14 +315,11 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
               inputEndRevision: 1,
               inputStartRevision: 1,
               inputs: { create: { inputId: input.id, ordinal: 0 } },
-              modelProfileFingerprint: Prompt.profileFingerprint(false),
+              modelProfileFingerprint: Prompt.profileFingerprint([]),
               preparedRequest: {
-                allowedTargetIds: [61],
                 currentDate: "2026-08-24",
-                messages: [],
-                profileFingerprint: Prompt.profileFingerprint(false),
-                replyEligible: true,
                 sessionId: "frozen-hash-session",
+                toolProfile: [],
                 userMemory: [],
               },
               replyEligible: true,
@@ -375,7 +372,7 @@ test.skipIf(!databaseUrl)(
         Layer.provideMerge(
           Layer.mergeAll(
             Database.layer(databaseUrl!),
-            Layer.succeed(Exa.Service)(disabledExa),
+            Layer.succeed(ChatTools.Service)(disabledChatTools),
             Layer.succeed(Model.Service)(unavailableModel),
             memoryLayer,
             mediaLayer,
@@ -456,7 +453,7 @@ test.skipIf(!databaseUrl)(
                 inputEndRevision: 1,
                 inputStartRevision: 1,
                 inputs: { create: { inputId: inputA.id, ordinal: 0 } },
-                modelProfileFingerprint: Prompt.profileFingerprint(false),
+                modelProfileFingerprint: Prompt.profileFingerprint([]),
                 replyEligible: true,
                 status: "finalized",
                 threadKey: 0,
@@ -481,7 +478,7 @@ test.skipIf(!databaseUrl)(
                 inputEndRevision: 2,
                 inputStartRevision: 2,
                 inputs: { create: { inputId: inputB.id, ordinal: 0 } },
-                modelProfileFingerprint: Prompt.profileFingerprint(false),
+                modelProfileFingerprint: Prompt.profileFingerprint([]),
                 replyEligible: true,
                 status: "finalized",
                 threadKey: 0,
@@ -542,9 +539,9 @@ test.skipIf(!databaseUrl)(
   },
 );
 
-const disabledExa: Exa.Interface = {
-  isEnabled: () => false,
-  tools: {},
+const disabledChatTools: ChatTools.Interface = {
+  availableProfile: [],
+  resolve: (profile) => Effect.succeed({ profile, tools: {} }),
 };
 
 const mediaLayer = Layer.succeed(Media.Service)({

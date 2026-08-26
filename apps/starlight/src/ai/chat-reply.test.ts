@@ -5,7 +5,6 @@ import { Effect, Layer } from "effect";
 import { ChatReply } from "@/ai/chat-reply";
 import { Model } from "@/ai/model";
 import { ModelProvider } from "@/ai/model-provider";
-import { Exa } from "@/services/exa";
 
 test("caps a chatbot reply at 1,024 provider output tokens", async () => {
   const model = textModel('{"replies":[{"type":"ignore"}]}');
@@ -35,14 +34,13 @@ function textModel(text: string) {
 
 function runReply(model: LanguageModel) {
   return Effect.runPromise(
-    ChatReply.generate({
-      messages: [{ role: "user", text: "LIVE MESSAGE #1: привет" }],
-      sessionId: "chat-reply-test",
-    }).pipe(Effect.provideService(Exa.Service, disabledExa), Effect.provide(modelLayer(model))),
+    Effect.gen(function* () {
+      const chatReply = yield* ChatReply.Service;
+      return yield* chatReply.generate({
+        messages: [{ role: "user", text: "LIVE MESSAGE #1: привет" }],
+        sessionId: "chat-reply-test",
+        toolset: { profile: [], tools: {} },
+      });
+    }).pipe(Effect.provide(ChatReply.layer.pipe(Layer.provide(modelLayer(model))))),
   );
 }
-
-const disabledExa: Exa.Interface = {
-  isEnabled: () => false,
-  tools: {},
-};

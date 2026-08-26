@@ -11,6 +11,7 @@
 9. Use structured logging: keep messages stable and put object IDs and dynamic context in log fields (for example, `logger.info({ photoId }, "Photo embeddings generated")`), never interpolate them into the message.
 10. Don't use `git stash` mid-session; other agents or the user can edit files at the same time.
 11. **Never write a test before the admission gate under # Testing passes.**
+12. This project is a pre-production PoC with no legacy or production data. Do not add backward compatibility, migrations, or legacy recovery unless explicitly requested.
 
 ## Communication
 

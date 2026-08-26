@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { APICallError } from "ai";
 import type { LanguageModel, ToolSet } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { ConfigProvider, Effect, Fiber, Layer, Logger } from "effect";
@@ -14,6 +15,7 @@ test.each([{}, { OPENROUTER_API_KEY: "   " }])(
       const model = yield* Model.Service;
       return yield* model.generate({
         instructions: "test",
+        maxToolOutputBytes: 0,
         maxToolSteps: 0,
         messages: [{ role: "user", text: "test" }],
         outputSchema: z.string(),
@@ -64,6 +66,32 @@ test("returns an immutable completed tool event", async () => {
       toolName: "web_lookup",
     },
   ]);
+});
+
+test("bounds cumulative tool output before another model step", async () => {
+  const result = await runModel(
+    new MockLanguageModelV3({
+      doGenerate: [toolCallResult("call-1"), textResult('{"answer":"done"}')],
+    }),
+    {
+      maxToolOutputBytes: 200,
+      maxToolSteps: 1,
+      outputSchema: z.object({ answer: z.string() }),
+      tools: {
+        web_lookup: {
+          description: "Return a large fixture",
+          execute: () => Promise.resolve({ value: "x".repeat(1000) }),
+          inputSchema: z.object({ query: z.string() }),
+        },
+      },
+    },
+  );
+
+  const { output } = result.toolEvents[0] as Model.CompletedToolEvent;
+  expect(output).toMatchObject({
+    truncation: { originalBytes: 1012, truncated: true },
+  });
+  expect(new TextEncoder().encode(JSON.stringify(output)).byteLength).toBeLessThanOrEqual(200);
 });
 
 test("returns a failed tool event when generation recovers", async () => {
@@ -195,6 +223,27 @@ test("does not put prompt or tool-result content in model logs", async () => {
   expect(serializedLogs).not.toContain("TOP_SECRET_TOOL_RESULT");
 });
 
+test("classifies a provider context rejection before output", async () => {
+  const error = await runModelEffect(
+    new MockLanguageModelV3({
+      doGenerate: () =>
+        Promise.reject(
+          new APICallError({
+            isRetryable: false,
+            message: "Prompt exceeds the context window",
+            requestBodyValues: {},
+            statusCode: 400,
+            url: "https://provider.invalid/generate",
+          }),
+        ),
+    }),
+    { outputSchema: z.object({ answer: z.string() }) },
+  ).pipe(Effect.flip, Effect.runPromise);
+
+  expect(error._tag).toBe("ContextOverflow");
+  expect(error.retryable).toBe(false);
+});
+
 test("aborts provider work and returns TimedOut at the total deadline", async () => {
   let aborted = false;
   const model = new MockLanguageModelV3({
@@ -256,6 +305,7 @@ test("aborts an active tool when the total deadline expires", async () => {
 
 interface ModelTestInput<OUTPUT> {
   readonly instructions?: string;
+  readonly maxToolOutputBytes?: number;
   readonly maxToolSteps?: number;
   readonly messages?: readonly Model.Message[];
   readonly outputSchema: z.ZodType<OUTPUT>;
@@ -271,6 +321,7 @@ function runModelEffect<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTP
     const service = yield* Model.Service;
     return yield* service.generate({
       instructions: input.instructions ?? "fixture instructions",
+      maxToolOutputBytes: input.maxToolOutputBytes ?? 16 * 1024,
       maxToolSteps: input.maxToolSteps ?? 0,
       messages: input.messages ?? [{ role: "user", text: "fixture message" }],
       outputSchema: input.outputSchema,

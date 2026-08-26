@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Prompt } from "@/context/prompt";
 
 test("appending a finalized turn preserves every prior context segment", () => {
-  const envelope = Prompt.renderEnvelope({ webLookupEnabled: true });
+  const envelope = Prompt.renderEnvelope({ toolProfile: ["tool-v1"] });
   const memory = Prompt.renderMemory("");
   const base = new Bun.CryptoHasher("sha256")
     .update(`${envelope.length}:${envelope}${memory.length}:${memory}`)
@@ -18,5 +18,5 @@ test("appending a finalized turn preserves every prior context segment", () => {
 });
 
 test("the context profile fingerprints the frozen tool envelope", () => {
-  expect(Prompt.profileFingerprint(true)).not.toBe(Prompt.profileFingerprint(false));
+  expect(Prompt.profileFingerprint(["tool-v1"])).not.toBe(Prompt.profileFingerprint([]));
 });

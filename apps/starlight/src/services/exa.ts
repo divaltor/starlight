@@ -4,17 +4,20 @@ import { Config, Context, Effect, Layer, Option, Redacted, Schema } from "effect
 import { z } from "zod";
 
 export namespace Exa {
+  export const profileId = "exa-mcp-v3-limited";
   const DEFAULT_MCP_URL = "https://mcp.exa.ai/mcp";
   const ENABLED_TOOLS = ["web_search_exa", "web_fetch_exa"] as const;
 
-  const toolSchemas = {
+  const toolDefinitions = {
     web_fetch_exa: {
+      description: "Fetch the readable content of one web page.",
       inputSchema: z.object({
         maxCharacters: z.number().int().positive().max(6000).optional(),
         urls: z.array(z.url()).length(1),
       }),
     },
     web_search_exa: {
+      description: "Search the web for current information.",
       inputSchema: z.object({
         numResults: z.number().int().positive().max(5).default(3),
         query: z.string().min(3).max(300),
@@ -32,7 +35,6 @@ export namespace Exa {
   }
 
   export interface Interface {
-    readonly isEnabled: () => boolean;
     readonly tools: ToolSet;
   }
 
@@ -67,13 +69,25 @@ export namespace Exa {
         (mcpClient) => Effect.promise(() => mcpClient.close()),
       );
       const discoveredTools = yield* Effect.tryPromise({
-        try: () => client.tools({ schemas: toolSchemas }),
+        try: () => client.tools({ schemas: toolDefinitions }),
         catch: (cause) => ExaError.fromCause("Failed to load Exa MCP tools", cause),
       });
+      if (ENABLED_TOOLS.some((name) => !discoveredTools[name]?.execute)) {
+        return yield* new ExaError({ message: "Required Exa MCP tool is unavailable" });
+      }
+      const tools = Object.fromEntries(
+        ENABLED_TOOLS.map((name) => [
+          name,
+          {
+            description: toolDefinitions[name].description,
+            execute: discoveredTools[name]!.execute!,
+            inputSchema: toolDefinitions[name].inputSchema,
+          },
+        ]),
+      );
 
       return Service.of({
-        isEnabled: () => true,
-        tools: discoveredTools,
+        tools,
       });
     }).pipe(
       // Config failures join the service error channel as typed ExaErrors.

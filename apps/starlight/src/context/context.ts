@@ -7,6 +7,7 @@ import { CacheDiagnostics } from "@/context/cache-diagnostics";
 import { Checkpoint } from "@/context/checkpoint";
 import { Prompt } from "@/context/prompt";
 import { Transcript } from "@/context/transcript";
+import { ChatTools } from "@/ai/chat-tools";
 import { ConversationKey } from "@/conversation/key";
 import { Lane } from "@/conversation/lane";
 import { PreparedRequestSchema, StoredPayloadSchema } from "@/conversation/run-artifacts";
@@ -14,9 +15,9 @@ import { Memory } from "@/memory/memory";
 import { Media } from "@/media/media";
 import { OperationalTelemetry } from "@/operational-telemetry";
 import { Database } from "@/services/database";
-import { Exa } from "@/services/exa";
 
 export namespace ConversationContext {
+  const CHECKPOINT_TOOL_OUTPUT_MAX_CHARS = 2000;
   const MAX_REQUEST_MEDIA_BYTES = 20 * 1024 * 1024;
   export interface PreparedContextRequest {
     readonly cacheBase: string;
@@ -24,7 +25,7 @@ export namespace ConversationContext {
     readonly estimatedTokens: number;
     readonly instructions: string;
     readonly messages: readonly Model.Message[];
-    readonly webLookupEnabled: boolean;
+    readonly toolProfile: ChatTools.Profile;
   }
 
   export interface RunReference {
@@ -55,7 +56,7 @@ export namespace ConversationContext {
     readonly key: ConversationKey.Value;
     readonly reason: string;
     readonly run?: RunReference;
-    readonly webLookupEnabled: boolean;
+    readonly toolProfile: ChatTools.Profile;
   }
 
   export interface ContextGeneration {
@@ -86,7 +87,7 @@ export namespace ConversationContext {
     Service,
     Effect.gen(function* layer() {
       const database = yield* Database.Service;
-      const exa = yield* Exa.Service;
+      const chatTools = yield* ChatTools.Service;
       const memoryService = yield* Memory.Service;
       const media = yield* Media.Service;
       const model = yield* Model.Service;
@@ -135,7 +136,7 @@ export namespace ConversationContext {
             // oxlint-disable-next-line react-doctor/server-sequential-independent-await
             const context = run.contextId
               ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ActiveContext.ensure(transaction, key, exa.isEnabled(), initialMemory);
+              : await ActiveContext.ensure(transaction, key, chatTools.availableProfile, initialMemory);
             if (run.contextId === null) {
               await transaction.conversationRun.update({
                 where: { id: run.id },
@@ -295,16 +296,10 @@ export namespace ConversationContext {
             await Lane.assertFence(transaction, key, input);
             const context = run.contextId
               ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ActiveContext.ensure(transaction, key, exa.isEnabled(), initialMemory);
+              : await ActiveContext.ensure(transaction, key, chatTools.availableProfile, initialMemory);
             if (context.status !== "active") throw new Error("Pinned context is not active");
             if (context.modelProfileFingerprint !== run.modelProfileFingerprint) {
               throw new Error("Active context profile does not match the prepared run");
-            }
-            if (context.modelProfileFingerprint !== Prompt.profileFingerprint(exa.isEnabled())) {
-              throw new ContextError({
-                message: "Prepared run profile is no longer available",
-                retryable: false,
-              });
             }
             const turns = await transaction.conversationContextTurn.findMany({
               where: { contextId: context.id },
@@ -372,7 +367,7 @@ export namespace ConversationContext {
                   messages: messageIdentities,
                   profileFingerprint: context.modelProfileFingerprint,
                   terminalPrefixHash,
-                  webLookupEnabled: envelope.tools.length > 0,
+                  toolProfile: envelope.tools,
                 }),
               )
               .digest("hex");
@@ -383,7 +378,7 @@ export namespace ConversationContext {
               estimatedTokens: baseTokens + finalizedTokens + currentTokens,
               instructions: envelope.instructions,
               messages,
-              webLookupEnabled: envelope.tools.length > 0,
+              toolProfile: envelope.tools,
             };
             const snapshot: CacheDiagnostics.PrefixSnapshot = {
               messages: messageIdentities.map((identity) =>
@@ -435,9 +430,7 @@ export namespace ConversationContext {
       ) {
         const startedAt = performance.now();
         const prepared = yield* database
-          .transaction((client) =>
-            prepareCheckpoint(client, checkpointInput, Prompt.profileFingerprint(exa.isEnabled())),
-          )
+          .transaction((client) => prepareCheckpoint(client, checkpointInput))
           .pipe(Effect.mapError(failed("Failed to prepare context checkpoint")));
         if (prepared.kind === "notPossible") {
           OperationalTelemetry.recordDuration("checkpoint", "not-possible", performance.now() - startedAt);
@@ -500,31 +493,6 @@ export namespace ConversationContext {
           )
           .pipe(Effect.mapError(failed("Failed to find resumable context checkpoint")));
         if (!attempt) return null;
-        if (attempt.parentContext.modelProfileFingerprint !== Prompt.profileFingerprint(exa.isEnabled())) {
-          yield* database
-            .transaction(async (transaction) => {
-              const key = {
-                assistantId: attempt.parentContext.assistantId,
-                chatId: attempt.parentContext.chatId,
-                threadKey: attempt.parentContext.threadKey,
-              };
-              await Lane.assertFence(transaction, key, checkpointInput);
-              await transaction.conversationCheckpointAttempt.update({
-                where: { id: attempt.id },
-                data: {
-                  completedAt: new Date(),
-                  lastError: "Checkpoint profile is no longer available",
-                  status: "aborted",
-                },
-              });
-              await transaction.conversationContext.updateMany({
-                where: { id: attempt.parentContextId, status: { in: ["checkpointing", "retryNeeded"] } },
-                data: { status: "active" },
-              });
-            })
-            .pipe(Effect.mapError(failed("Failed to abort stale context checkpoint")));
-          return null;
-        }
         return yield* checkpoint({ ...checkpointInput, reason: attempt.reason });
       });
 
@@ -553,13 +521,13 @@ export namespace ConversationContext {
             const lane = await transaction.conversationLane.findUniqueOrThrow({
               where: { assistantId_chatId_threadKey: key },
             });
-            const profileFingerprint = Prompt.profileFingerprint(input.webLookupEnabled);
+            const profileFingerprint = Prompt.profileFingerprint(input.toolProfile);
             const run = input.run
               ? await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.run.runId } })
               : null;
-            const parent = await ActiveContext.ensure(transaction, key, input.webLookupEnabled, frozenMemory);
+            const parent = await ActiveContext.ensure(transaction, key, input.toolProfile, frozenMemory);
             const envelope = Prompt.renderEnvelope({
-              webLookupEnabled: input.webLookupEnabled,
+              toolProfile: input.toolProfile,
             });
             if (lane.contextResetPending) {
               await transaction.conversationContext.update({
@@ -599,12 +567,9 @@ export namespace ConversationContext {
               const pinned = await transaction.conversationContext.findUniqueOrThrow({
                 where: { id: run.contextId },
               });
-              if (
-                pinned.modelProfileFingerprint !== profileFingerprint ||
-                run.modelProfileFingerprint !== profileFingerprint
-              ) {
+              if (pinned.modelProfileFingerprint !== run.modelProfileFingerprint) {
                 throw new ContextError({
-                  message: "Prepared run profile is no longer available",
+                  message: "Pinned context profile does not match the prepared run",
                   retryable: false,
                 });
               }
@@ -762,6 +727,7 @@ export namespace ConversationContext {
         .generate({
           instructions: Checkpoint.summaryInstructions,
           maxOutputTokens: 2048,
+          maxToolOutputBytes: 0,
           maxToolSteps: 0,
           messages: [{ role: "user", text: prepared.summaryInput }],
           outputSchema: Checkpoint.Summary,
@@ -824,7 +790,6 @@ export namespace ConversationContext {
   async function prepareCheckpoint(
     transaction: Prisma.TransactionClient,
     input: CheckpointInput,
-    currentProfileFingerprint: string,
   ): Promise<PreparedCheckpoint> {
     const run = await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.runId } });
     const key = { assistantId: run.assistantId, chatId: run.chatId, threadKey: run.threadKey };
@@ -833,9 +798,9 @@ export namespace ConversationContext {
     const parent = await transaction.conversationContext.findUniqueOrThrow({
       where: { id: run.contextId },
     });
-    if (parent.modelProfileFingerprint !== currentProfileFingerprint) {
+    if (parent.modelProfileFingerprint !== run.modelProfileFingerprint) {
       throw new ContextError({
-        message: "Context profile changed before checkpoint completion",
+        message: "Pinned context profile does not match the prepared run",
         retryable: false,
       });
     }
@@ -882,7 +847,11 @@ export namespace ConversationContext {
     const summaryInput = existing
       ? existing.summaryInput
       : Prompt.canonicalEncode({
-          head: boundaries.head.map((turn) => turn.renderedContent),
+          head: boundaries.head.map((turn) =>
+            turn.transcriptTurn.kind === "toolResult" && turn.renderedContent.length > CHECKPOINT_TOOL_OUTPUT_MAX_CHARS
+              ? `${turn.renderedContent.slice(0, CHECKPOINT_TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
+              : turn.renderedContent,
+          ),
           previousMemory: parent.frozenMemory,
           version: "context-checkpoint-v1",
         });

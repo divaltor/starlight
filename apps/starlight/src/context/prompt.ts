@@ -1,4 +1,5 @@
 import { ChatReply } from "@/ai/chat-reply";
+import type { ChatTools } from "@/ai/chat-tools";
 import { selected } from "@/ai/model-profile";
 import type { ConversationContextRole } from "@starlight/utils/generated/prisma/client";
 import { Schema } from "effect";
@@ -16,7 +17,7 @@ export namespace Prompt {
   );
 
   export interface EnvelopeInput {
-    readonly webLookupEnabled: boolean;
+    readonly toolProfile: ChatTools.Profile;
   }
 
   export interface RenderedTurn {
@@ -51,12 +52,12 @@ export namespace Prompt {
       reasoning: selected.reasoning,
       renderVersion,
       route: selected.route,
-      tools: input.webLookupEnabled ? [ChatReply.toolsetVersion] : [],
+      tools: input.toolProfile,
     });
   }
 
-  export function profileFingerprint(webLookupEnabled: boolean): string {
-    return new Bun.CryptoHasher("sha256").update(renderEnvelope({ webLookupEnabled })).digest("hex");
+  export function profileFingerprint(toolProfile: ChatTools.Profile): string {
+    return new Bun.CryptoHasher("sha256").update(renderEnvelope({ toolProfile })).digest("hex");
   }
 
   export function renderMemory(memory: string): string {
