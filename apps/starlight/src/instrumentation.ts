@@ -1,6 +1,7 @@
 import { OpenTelemetry } from "@ai-sdk/otel";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
 import { metrics, SpanStatusCode, trace } from "@opentelemetry/api";
+import type { Attributes } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
@@ -20,6 +21,7 @@ let provider: NodeTracerProvider | undefined;
 let meterProvider: MeterProvider | undefined;
 let logProvider: LoggerProvider | undefined;
 let shutdownPromise: Promise<void> | undefined;
+const INSTRUMENTATION_NAME = "starlight-bot";
 
 export interface TelemetryConfig {
   readonly langfuse?: LangfuseConfig;
@@ -29,7 +31,7 @@ export interface TelemetryConfig {
 export function initTelemetry(backends: TelemetryConfig): void {
   registerTelemetry(new OpenTelemetry({ usage: true }));
 
-  const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: "starlight-bot" });
+  const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: INSTRUMENTATION_NAME });
 
   const spanProcessors: SpanProcessor[] = [];
   if (backends.langfuse) {
@@ -86,8 +88,12 @@ function signalEndpoint(endpoint: string, signal: "traces" | "metrics" | "logs")
 }
 
 export function createUpdateTracer(): MiddlewareFn<Context> {
-  return (_ctx, next) =>
-    trace.getTracer("starlight-bot").startActiveSpan("Telegram update", async (span) => {
+  return (ctx, next) =>
+    trace.getTracer(INSTRUMENTATION_NAME).startActiveSpan("Telegram update", async (span) => {
+      span.setAttributes({
+        "telegram.update_id": ctx.update.update_id,
+        "telegram.update_type": Object.keys(ctx.update).find((key) => key !== "update_id") ?? "unknown",
+      });
       try {
         await next();
       } catch (error) {
@@ -98,6 +104,20 @@ export function createUpdateTracer(): MiddlewareFn<Context> {
         span.end();
       }
     });
+}
+
+export function traceAsync<T>(name: string, attributes: Attributes, operation: () => Promise<T>): Promise<T> {
+  return trace.getTracer(INSTRUMENTATION_NAME).startActiveSpan(name, { attributes }, async (span) => {
+    try {
+      return await operation();
+    } catch (error) {
+      span.setStatus({ code: SpanStatusCode.ERROR });
+      span.recordException(error instanceof Error ? error : String(error));
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
 }
 
 export function shutdownTelemetry(): Promise<void> {

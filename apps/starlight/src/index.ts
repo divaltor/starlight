@@ -1,8 +1,6 @@
-import { autoRetry } from "@grammyjs/auto-retry";
 import { run } from "@grammyjs/runner";
 import { Effect, pipe } from "effect";
-import { Bot } from "grammy";
-import type { Context } from "grammy";
+import { bot } from "@/bot";
 import { createBotEnv } from "@/env";
 import { createMessageHandler } from "@/handlers/message";
 import { createMemoryHandler } from "@/handlers/memory";
@@ -23,10 +21,7 @@ await runtime.runPromise(
   ),
 );
 
-const bot = new Bot<Context>(env.STARLIGHT_BOT_TOKEN);
-
 bot.use(createUpdateTracer());
-bot.api.config.use(autoRetry({ maxDelaySeconds: 5, maxRetryAttempts: 3 }));
 
 const boundary = bot.errorBoundary((error) =>
   runtime.runPromise(

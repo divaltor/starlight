@@ -1,4 +1,7 @@
+import type { FileApiFlavor } from "@grammyjs/files";
 import { Context, Effect, Layer, Schema } from "effect";
+import type { Api } from "grammy";
+import { traceAsync } from "@/instrumentation";
 
 export namespace Media {
   const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
@@ -67,7 +70,7 @@ export namespace Media {
     readonly accessKeyId: string;
     readonly endpoint?: string;
     readonly secretAccessKey: string;
-    readonly telegramToken: string;
+    readonly telegramApi: FileApiFlavor<Api>;
   }
 
   export interface Interface {
@@ -88,31 +91,29 @@ export namespace Media {
       secretAccessKey: options.secretAccessKey,
     });
 
-    const download = Effect.fn("Media.download")(function* download(fileId: string) {
+    const download = Effect.fn("Media.download")(function* download(source: Source | Reference) {
       return yield* Effect.tryPromise({
-        try: async () => {
-          const metadataResponse = await fetch(
-            `https://api.telegram.org/bot${options.telegramToken}/getFile?file_id=${encodeURIComponent(fileId)}`,
-            { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
-          );
-          if (!metadataResponse.ok) throw new Error(`Telegram getFile returned ${metadataResponse.status}`);
-          const metadata = Schema.decodeUnknownSync(
-            Schema.Struct({ ok: Schema.Literal(true), result: Schema.Struct({ file_path: Schema.String }) }),
-          )(await metadataResponse.json());
-          const response = await fetch(
-            `https://api.telegram.org/file/bot${options.telegramToken}/${metadata.result.file_path}`,
-            { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
-          );
-          if (!response.ok) throw new Error(`Telegram file download returned ${response.status}`);
-          const contentLength = Number(response.headers.get("content-length"));
-          if (Number.isFinite(contentLength) && contentLength > MAX_SOURCE_BYTES) {
-            throw new Error("Telegram media exceeds the 20 MiB download boundary");
-          }
-          const bytes = new Uint8Array(await response.arrayBuffer());
-          if (bytes.byteLength > MAX_SOURCE_BYTES)
-            throw new Error("Telegram media exceeds the 20 MiB download boundary");
-          return bytes;
-        },
+        try: () =>
+          traceAsync(
+            "Telegram media download",
+            { "media.mime_type": source.mimeType, "media.type": source.type },
+            async () => {
+              const file = await options.telegramApi.getFile(
+                source.telegramFileId,
+                AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+              );
+              const response = await fetch(file.getUrl(), { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+              if (!response.ok) throw new Error(`Telegram file download returned ${response.status}`);
+              const contentLength = Number(response.headers.get("content-length"));
+              if (Number.isFinite(contentLength) && contentLength > MAX_SOURCE_BYTES) {
+                throw new Error("Telegram media exceeds the 20 MiB download boundary");
+              }
+              const bytes = await response.bytes();
+              if (bytes.byteLength > MAX_SOURCE_BYTES)
+                throw new Error("Telegram media exceeds the 20 MiB download boundary");
+              return bytes;
+            },
+          ),
         catch: (cause) => new MediaError({ cause, message: "Failed to download Telegram media", retryable: true }),
       });
     });
@@ -124,14 +125,23 @@ export namespace Media {
       if (source.mimeType === "application/pdf") return unavailable(source, "PDF processing pipeline is planned");
       if (!isSupported(source)) return unavailable(source, "media type is not supported by the model pipeline");
 
-      const downloaded = yield* download(source.telegramFileId);
+      const downloaded = yield* download(source);
       const bytes = isNormalizableImage(source) ? yield* normalizeImage(downloaded) : downloaded;
       const sha256 = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
       const s3Key = `telegram-media/${sha256}`;
       yield* Effect.tryPromise({
-        try: async () => {
-          if (!(await s3.exists(s3Key))) await s3.write(s3Key, bytes, { type: normalizedMimeType(source) });
-        },
+        try: () =>
+          traceAsync(
+            "Media persist",
+            {
+              "media.mime_type": normalizedMimeType(source),
+              "media.size_bytes": bytes.byteLength,
+              "media.type": source.type,
+            },
+            async () => {
+              if (!(await s3.exists(s3Key))) await s3.write(s3Key, bytes, { type: normalizedMimeType(source) });
+            },
+          ),
         catch: (cause) => new MediaError({ cause, message: "Failed to persist media in S3", retryable: true }),
       });
       return {
@@ -150,11 +160,16 @@ export namespace Media {
     const load = Effect.fn("Media.load")(function* load(reference: Reference) {
       if (reference.availability === "unavailable") return null;
       const stored = yield* Effect.tryPromise({
-        try: async () =>
-          (await s3.exists(reference.s3Key)) ? new Uint8Array(await s3.file(reference.s3Key).arrayBuffer()) : null,
+        try: () =>
+          traceAsync(
+            "Media load stored",
+            { "media.mime_type": reference.mimeType, "media.size_bytes": reference.size, "media.type": reference.type },
+            async () =>
+              (await s3.exists(reference.s3Key)) ? new Uint8Array(await s3.file(reference.s3Key).arrayBuffer()) : null,
+          ),
         catch: (cause) => new MediaError({ cause, message: "Failed to load media from S3", retryable: true }),
       });
-      const downloaded = stored ?? (yield* download(reference.telegramFileId));
+      const downloaded = stored ?? (yield* download(reference));
       const bytes =
         stored === null && reference.mimeType.startsWith("image/") && reference.mimeType !== "image/gif"
           ? yield* normalizeImage(downloaded)
@@ -168,7 +183,16 @@ export namespace Media {
       }
       if (stored === null) {
         yield* Effect.tryPromise({
-          try: () => s3.write(reference.s3Key, bytes, { type: reference.mimeType }),
+          try: () =>
+            traceAsync(
+              "Media repair stored",
+              {
+                "media.mime_type": reference.mimeType,
+                "media.size_bytes": bytes.byteLength,
+                "media.type": reference.type,
+              },
+              () => s3.write(reference.s3Key, bytes, { type: reference.mimeType }),
+            ),
           catch: (cause) => new MediaError({ cause, message: "Failed to repair media in S3", retryable: true }),
         });
       }
@@ -180,16 +204,17 @@ export namespace Media {
 
   function normalizeImage(bytes: Uint8Array): Effect.Effect<Uint8Array, MediaError> {
     return Effect.tryPromise({
-      try: async () => {
-        for (const quality of JPEG_QUALITIES) {
-          const normalized = await new Bun.Image(bytes, { maxPixels: MAX_IMAGE_PIXELS })
-            .resize(2000, 2000, { fit: "inside", withoutEnlargement: true })
-            .jpeg({ quality })
-            .bytes();
-          if (normalized.byteLength <= MAX_IMAGE_BYTES) return normalized;
-        }
-        throw new Error("Normalized image exceeds the 5 MiB model boundary");
-      },
+      try: () =>
+        traceAsync("Media normalize image", { "media.source_size_bytes": bytes.byteLength }, async () => {
+          for (const quality of JPEG_QUALITIES) {
+            const normalized = await new Bun.Image(bytes, { maxPixels: MAX_IMAGE_PIXELS })
+              .resize(2000, 2000, { fit: "inside", withoutEnlargement: true })
+              .jpeg({ quality })
+              .bytes();
+            if (normalized.byteLength <= MAX_IMAGE_BYTES) return normalized;
+          }
+          throw new Error("Normalized image exceeds the 5 MiB model boundary");
+        }),
       catch: (cause) => new MediaError({ cause, message: "Failed to normalize image", retryable: false }),
     });
   }

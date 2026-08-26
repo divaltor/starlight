@@ -7,6 +7,7 @@ import type { LogLevel } from "effect/LogLevel";
 import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
+import { fileApi } from "@/bot";
 import { Conversation } from "@/conversation/conversation";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { WakeOutbox } from "@/conversation/wake-outbox";
@@ -93,7 +94,7 @@ const infrastructure = Layer.mergeAll(
     accessKeyId: env.AWS_ACCESS_KEY_ID,
     endpoint: env.AWS_ENDPOINT,
     secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-    telegramToken: env.STARLIGHT_BOT_TOKEN,
+    telegramApi: fileApi,
   }),
   Conversation.optionsLayer({
     contextHardTokenCap: env.CONTEXT_HARD_TOKEN_CAP,

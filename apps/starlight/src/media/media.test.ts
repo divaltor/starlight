@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
+import type { FileApiFlavor } from "@grammyjs/files";
 import { Effect, ManagedRuntime } from "effect";
+import { Bot } from "grammy";
+import type { Context, Api } from "grammy";
 import { Media } from "@/media/media";
 
 test("marks Telegram media unavailable when its declared size exceeds 20 MiB", async () => {
@@ -8,7 +11,7 @@ test("marks Telegram media unavailable when its declared size exceeds 20 MiB", a
       accessKeyId: "test",
       endpoint: "https://s3.example.com",
       secretAccessKey: "test",
-      telegramToken: "test",
+      telegramApi: new Bot<Context, FileApiFlavor<Api>>("test").api,
     }),
   );
 

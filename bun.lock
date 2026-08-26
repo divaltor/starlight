@@ -64,6 +64,7 @@
         "@ai-sdk/mcp": "2.0.37",
         "@ai-sdk/otel": "1.0.79",
         "@grammyjs/auto-retry": "2.0.2",
+        "@grammyjs/files": "1.2.0",
         "@grammyjs/runner": "2.0.3",
         "@langfuse/otel": "5.10.1",
         "@openrouter/ai-sdk-provider": "3.0.0",
