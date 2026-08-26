@@ -27,6 +27,7 @@ export namespace Prompt {
 
   export interface LiveMessagePayload {
     readonly forwardOrigin: string | null;
+    readonly addressed: boolean;
     readonly messageId: number;
     readonly media: readonly Media.Reference[];
     readonly repliedText: string | null;
@@ -95,7 +96,8 @@ export namespace Prompt {
     const media = payload.media.map((reference) => reference.stableDescription).join("\n");
     const repliedMediaBlock = repliedMedia ? `REPLIED MEDIA:\n${repliedMedia}\n` : "";
     const mediaBlock = media ? `\nMEDIA:\n${media}` : "";
-    return `${forwardOrigin}${reply}${repliedMediaBlock}LIVE MESSAGE #${payload.messageId} from ${
+    const label = payload.addressed ? "LIVE MESSAGE" : "CONTEXT MESSAGE";
+    return `${forwardOrigin}${reply}${repliedMediaBlock}${label} #${payload.messageId} from ${
       payload.senderFirstName
     }: ${payload.text}${mediaBlock}`;
   }

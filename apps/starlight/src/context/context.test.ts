@@ -26,7 +26,7 @@ async function clearConversation(client: PrismaClient, assistantId: bigint, chat
   await client.chat.deleteMany({ where: { id: chatId } });
 }
 
-test.skipIf(!databaseUrl)("repeated finalization appends one immutable context sequence", async () => {
+test.skipIf(!databaseUrl)("repeated finalization appends one immutable attributed context sequence", async () => {
   const runtime = ManagedRuntime.make(
     ConversationContext.layer.pipe(
       Layer.provideMerge(
@@ -128,6 +128,11 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable context s
           contextTurns: await client.conversationContextTurn.count({
             where: { contextId: first.contextId },
           }),
+          memoryObservations: await client.memoryObservation.findMany({
+            where: { sourceRunId: runId },
+            orderBy: { namespace: { kind: "asc" } },
+            select: { content: true },
+          }),
           transcriptTurns: await client.conversationTranscriptTurn.count({
             where: { runId },
           }),
@@ -137,6 +142,36 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable context s
         expect(repeated.appendedTurns).toBe(0);
         expect(repeated.terminalPrefixHash).toBe(first.terminalPrefixHash);
         expect(counts.contextTurns).toBe(2);
+        expect(counts.memoryObservations).toEqual([
+          {
+            content: {
+              addressed: true,
+              author: {
+                firstName: "Alice",
+                isBot: false,
+                lastName: null,
+                username: "alice",
+              },
+              messageId: 51,
+              reply: null,
+              text: "Hello",
+            },
+          },
+          {
+            content: {
+              addressed: true,
+              author: {
+                firstName: "Alice",
+                isBot: false,
+                lastName: null,
+                username: "alice",
+              },
+              messageId: 51,
+              reply: null,
+              text: "Hello",
+            },
+          },
+        ]);
         expect(counts.transcriptTurns).toBe(2);
       }),
     );

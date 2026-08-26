@@ -4,6 +4,7 @@ import { Media } from "@/media/media";
 
 // Fields the transcript projection reads back from stored inputs.
 const ProjectedFields = {
+  addressed: Schema.Boolean,
   date: Schema.Int,
   editDate: Schema.NullOr(Schema.Int),
   forwardOrigin: Schema.NullOr(Schema.String),
@@ -26,7 +27,6 @@ export const StoredPayloadSchema = Schema.Struct(ProjectedFields);
 // read the same rows, so a second independent definition would drift silently.
 export const InputPayloadSchema = Schema.Struct({
   ...ProjectedFields,
-  addressed: Schema.Boolean,
   senderIsBot: Schema.optional(Schema.Boolean),
   senderLastName: Schema.optional(Schema.NullOr(Schema.String)),
   senderUsername: Schema.NullOr(Schema.String),

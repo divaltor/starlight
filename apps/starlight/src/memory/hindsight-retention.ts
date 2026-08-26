@@ -77,7 +77,7 @@ export namespace HindsightRetention {
               sourceThreadKey: observation.sourceThreadKey,
               subjectUserId: observation.subjectUserId,
             }),
-            context: `Starlight ${namespace.kind} memory observation`,
+            context: `Starlight ${namespace.kind} memory observation. content.author is the Telegram message author; first-person language refers to content.author. Mentioned and replied-to people are not the author.`,
             document_id: documentId,
             metadata: {
               observation_id: observation.id.toString(),

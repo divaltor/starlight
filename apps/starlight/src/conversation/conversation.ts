@@ -648,10 +648,11 @@ export namespace Conversation {
       const payloads = claimed.inputs.map((input) => input.payload as InputPayload);
       const allowedTargetIds = [
         ...new Set(
-          payloads.flatMap((payload) => [
-            payload.messageId,
-            ...(payload.replyToMessageId === null ? [] : [payload.replyToMessageId]),
-          ]),
+          payloads.flatMap((payload) =>
+            payload.addressed
+              ? [payload.messageId, ...(payload.replyToMessageId === null ? [] : [payload.replyToMessageId])]
+              : [],
+          ),
         ),
       ];
       const stored = Option.getOrNull(Schema.decodeUnknownOption(PreparedRequestSchema)(claimed.preparedRequest));
@@ -665,7 +666,18 @@ export namespace Conversation {
         toolProfile: pinnedToolProfile,
         userMemory: yield* memory
           .freezeUserMemory(
-            claimed.inputs.flatMap((input) => (input.senderUserId === null ? [] : [input.senderUserId])),
+            [
+              ...claimed.inputs
+                .toReversed()
+                .flatMap((input) =>
+                  (input.payload as InputPayload).addressed && input.senderUserId !== null ? [input.senderUserId] : [],
+                ),
+              ...claimed.inputs
+                .toReversed()
+                .flatMap((input) =>
+                  !(input.payload as InputPayload).addressed && input.senderUserId !== null ? [input.senderUserId] : [],
+                ),
+            ],
             claimed.dbKey,
           )
           .pipe(Effect.mapError(domainFailed)),

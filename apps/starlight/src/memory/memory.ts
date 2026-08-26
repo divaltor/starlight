@@ -2,7 +2,7 @@ import type { Prisma } from "@starlight/utils/generated/prisma/client";
 import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect";
 import { Prompt } from "@/context/prompt";
 import { Lane } from "@/conversation/lane";
-import { StoredPayloadSchema } from "@/conversation/run-artifacts";
+import { InputPayloadSchema } from "@/conversation/run-artifacts";
 import type { FrozenUserMemory } from "@/conversation/run-artifacts";
 import { Hindsight } from "@/memory/hindsight";
 import { HindsightRetention } from "@/memory/hindsight-retention";
@@ -124,13 +124,10 @@ export namespace Memory {
                   const scopes = profiles.flatMap((profile) =>
                     profile.profile === null ? [] : [{ bankId: profile.bankId, memory: profile.profile }],
                   );
-                  if (scopes.length === 0) return null;
+                  const text = renderUserMemory(scopes);
+                  if (text === null) return null;
                   return {
-                    text: Prompt.canonicalEncode({
-                      label: "User memory",
-                      scopes,
-                      trust: "untrusted-user-derived-data",
-                    }).slice(0, MAX_USER_MEMORY_CHARS),
+                    text,
                     userId,
                   };
                 }),
@@ -302,9 +299,21 @@ export namespace Memory {
   ): Promise<void> {
     for (const runInput of run.inputs) {
       const { input } = runInput;
-      const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(input.payload);
+      const payload = Schema.decodeUnknownSync(InputPayloadSchema)(input.payload);
       const kind = payload.editDate === null ? "fact" : "correction";
-      const content = { messageId: payload.messageId, sender: payload.senderFirstName, text: payload.text };
+      const content = {
+        addressed: payload.addressed,
+        author: {
+          firstName: payload.senderFirstName,
+          isBot: payload.senderIsBot ?? false,
+          lastName: payload.senderLastName ?? null,
+          username: payload.senderUsername,
+        },
+        messageId: payload.messageId,
+        reply:
+          payload.replyToMessageId === null ? null : { messageId: payload.replyToMessageId, text: payload.repliedText },
+        text: payload.text,
+      };
       if (input.senderUserId !== null) {
         // oxlint-disable-next-line react-doctor/async-await-in-loop
         const namespace = await transaction.memoryNamespace.upsert({
@@ -376,4 +385,41 @@ export namespace Memory {
     (message: string) =>
     (cause: unknown): MemoryError =>
       new MemoryError({ cause, message, retryable: true });
+
+  function renderUserMemory(scopes: readonly { readonly bankId: string; readonly memory: string }[]): string | null {
+    const selected: { readonly bankId: string; readonly memory: string }[] = [];
+    for (const scope of scopes) {
+      const candidate = [...selected, { ...scope, memory: "" }];
+      if (
+        Prompt.canonicalEncode({
+          label: "User memory",
+          scopes: candidate,
+          trust: "untrusted-user-derived-data",
+        }).length > MAX_USER_MEMORY_CHARS
+      )
+        break;
+      selected.push(scope);
+    }
+    if (selected.length === 0) return null;
+
+    const render = (budget: number) => {
+      const bounded: { readonly bankId: string; readonly memory: string }[] = [];
+      let remaining = budget;
+      for (const scope of selected) {
+        const memory = scope.memory.slice(0, remaining);
+        bounded.push({ ...scope, memory });
+        remaining -= memory.length;
+      }
+      return Prompt.canonicalEncode({
+        label: "User memory",
+        scopes: bounded,
+        trust: "untrusted-user-derived-data",
+      });
+    };
+    const contentBudget = Math.max(0, MAX_USER_MEMORY_CHARS - render(0).length);
+    const rendered = render(contentBudget);
+    return rendered.length <= MAX_USER_MEMORY_CHARS
+      ? rendered
+      : render(Math.max(0, contentBudget - (rendered.length - MAX_USER_MEMORY_CHARS)));
+  }
 }
