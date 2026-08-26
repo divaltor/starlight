@@ -247,7 +247,7 @@ export namespace Model {
 
         return {
           finishReason: result.finishReason,
-          output: structuredClone(generated.output),
+          output: generated.output,
           steps: result.steps.map((step, index) => ({
             actualModel: step.response.modelId,
             finishReason: step.finishReason,
@@ -258,7 +258,7 @@ export namespace Model {
             upstreamProvider: Usage.upstreamProvider(step.providerMetadata),
             usage: stepUsage[index]!,
           })),
-          toolEvents: structuredClone(toolEvents),
+          toolEvents,
           transcript: result.steps.flatMap((step) =>
             step.text ? [{ text: step.text, type: "assistant-text" as const }] : [],
           ),
