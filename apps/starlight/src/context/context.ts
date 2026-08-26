@@ -762,7 +762,7 @@ export namespace ConversationContext {
         .generate({
           instructions: Checkpoint.summaryInstructions,
           maxOutputTokens: 2048,
-          maxToolCalls: 0,
+          maxToolSteps: 0,
           messages: [{ role: "user", text: prepared.summaryInput }],
           outputSchema: Checkpoint.Summary,
           sessionId: prepared.parentContextId,

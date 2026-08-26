@@ -14,7 +14,7 @@ test.each([{}, { OPENROUTER_API_KEY: "   " }])(
       const model = yield* Model.Service;
       return yield* model.generate({
         instructions: "test",
-        maxToolCalls: 0,
+        maxToolSteps: 0,
         messages: [{ role: "user", text: "test" }],
         outputSchema: z.string(),
         sessionId: "model-test",
@@ -41,7 +41,7 @@ test("returns an immutable completed tool event", async () => {
       doGenerate: [toolCallResult("call-1"), textResult('{"answer":"done"}')],
     }),
     {
-      maxToolCalls: 1,
+      maxToolSteps: 1,
       outputSchema: z.object({ answer: z.string() }),
       tools: {
         web_lookup: {
@@ -58,53 +58,12 @@ test("returns an immutable completed tool event", async () => {
     {
       durationMs: expect.any(Number),
       input: { query: "current fact" },
-      output: {
-        projection: { value: { value: "before" } },
-        projectionMetadata: {
-          originalBytes: 28,
-          sha256: "207b4c63b6b42148076df446206c86d78b4bc8f16785aadabda35a185c9035d3",
-          truncated: false,
-          version: "tool-result-v2",
-        },
-      },
+      output: { value: "before" },
       state: "completed",
       toolCallId: "call-1",
       toolName: "web_lookup",
     },
   ]);
-});
-
-test("bounds tool output before the next model step", async () => {
-  const result = await runModel(
-    new MockLanguageModelV3({
-      doGenerate: [toolCallResult("call-1"), textResult('{"answer":"done"}')],
-    }),
-    {
-      maxToolCalls: 2,
-      outputSchema: z.object({ answer: z.string() }),
-      tools: {
-        web_lookup: {
-          description: "Return an oversized fixture",
-          execute: () => Promise.resolve({ text: "x".repeat(100_000) }),
-          inputSchema: z.object({ query: z.string() }),
-        },
-      },
-    },
-  );
-  const output = z
-    .object({
-      projection: z.string(),
-      projectionMetadata: z.object({
-        originalBytes: z.number(),
-        sha256: z.string(),
-        truncated: z.literal(true),
-        version: z.literal("tool-result-v2"),
-      }),
-    })
-    .parse(result.toolEvents[0]?.state === "completed" ? result.toolEvents[0].output : null);
-
-  expect(output.projection.length).toBeLessThanOrEqual(16 * 1024);
-  expect(output.projectionMetadata.originalBytes).toBe(100_021);
 });
 
 test("returns a failed tool event when generation recovers", async () => {
@@ -113,7 +72,7 @@ test("returns a failed tool event when generation recovers", async () => {
       doGenerate: [toolCallResult("call-1"), textResult('{"answer":"recovered"}')],
     }),
     {
-      maxToolCalls: 1,
+      maxToolSteps: 1,
       outputSchema: z.object({ answer: z.string() }),
       tools: {
         web_lookup: {
@@ -139,14 +98,49 @@ test("returns a failed tool event when generation recovers", async () => {
   ]);
 });
 
-test("executes at most one tool call", async () => {
+test("allows parallel calls across at most three tool steps", async () => {
   let executionCount = 0;
   const error = await runModelEffect(
     new MockLanguageModelV3({
-      doGenerate: [toolCallResult("call-1"), toolCallResult("call-2")],
+      doGenerate: [
+        parallelToolCallResult("call-1", "call-2"),
+        parallelToolCallResult("call-3", "call-4"),
+        parallelToolCallResult("call-5", "call-6"),
+        parallelToolCallResult("call-7", "call-8"),
+      ],
     }),
     {
-      maxToolCalls: 1,
+      maxToolSteps: 3,
+      outputSchema: z.object({ answer: z.string() }),
+      tools: {
+        web_lookup: {
+          description: "Count executions",
+          execute: (input) => {
+            executionCount += 1;
+            return Promise.resolve(input);
+          },
+          inputSchema: z.object({ query: z.string() }),
+        },
+      },
+    },
+  ).pipe(Effect.flip, Effect.runPromise);
+
+  expect(error._tag).toBe("InvocationFailed");
+  expect(executionCount).toBe(6);
+});
+
+test("stops after 32 model steps", async () => {
+  let executionCount = 0;
+  let callCount = 0;
+  const error = await runModelEffect(
+    new MockLanguageModelV3({
+      doGenerate: () => {
+        callCount += 1;
+        return Promise.resolve(toolCallResult(`call-${callCount}`));
+      },
+    }),
+    {
+      maxToolSteps: 100,
       outputSchema: z.object({ answer: z.string() }),
       tools: {
         web_lookup: {
@@ -162,7 +156,7 @@ test("executes at most one tool call", async () => {
   ).pipe(Effect.flip, Effect.runPromise);
 
   expect(error._tag).toBe("InvalidOutput");
-  expect(executionCount).toBe(1);
+  expect(executionCount).toBe(32);
 });
 
 test("does not put prompt or tool-result content in model logs", async () => {
@@ -176,7 +170,7 @@ test("does not put prompt or tool-result content in model logs", async () => {
     }),
     {
       instructions: "TOP_SECRET_PROMPT",
-      maxToolCalls: 1,
+      maxToolSteps: 1,
       messages: [{ role: "user", text: "TOP_SECRET_MESSAGE" }],
       outputSchema: z.object({ answer: z.string() }),
       tools: {
@@ -234,7 +228,7 @@ test("aborts an active tool when the total deadline expires", async () => {
     Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(
         runModelEffect(new MockLanguageModelV3({ doGenerate: toolCallResult("call-1") }), {
-          maxToolCalls: 1,
+          maxToolSteps: 1,
           outputSchema: z.object({ answer: z.string() }),
           tools: {
             web_lookup: {
@@ -262,7 +256,7 @@ test("aborts an active tool when the total deadline expires", async () => {
 
 interface ModelTestInput<OUTPUT> {
   readonly instructions?: string;
-  readonly maxToolCalls?: number;
+  readonly maxToolSteps?: number;
   readonly messages?: readonly Model.Message[];
   readonly outputSchema: z.ZodType<OUTPUT>;
   readonly tools?: ToolSet;
@@ -277,7 +271,7 @@ function runModelEffect<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTP
     const service = yield* Model.Service;
     return yield* service.generate({
       instructions: input.instructions ?? "fixture instructions",
-      maxToolCalls: input.maxToolCalls ?? 0,
+      maxToolSteps: input.maxToolSteps ?? 0,
       messages: input.messages ?? [{ role: "user", text: "fixture message" }],
       outputSchema: input.outputSchema,
       sessionId: "model-test",
@@ -308,6 +302,29 @@ function toolCallResult(toolCallId: string) {
     ],
     finishReason: { raw: "tool-calls", unified: "tool-calls" as const },
     response: { id: `response-${toolCallId}`, modelId: "mock-model" },
+    usage: modelUsage,
+    warnings: [],
+  };
+}
+
+function parallelToolCallResult(firstToolCallId: string, secondToolCallId: string) {
+  return {
+    content: [
+      {
+        input: '{"query":"current fact"}',
+        toolCallId: firstToolCallId,
+        toolName: "web_lookup",
+        type: "tool-call" as const,
+      },
+      {
+        input: '{"query":"current fact"}',
+        toolCallId: secondToolCallId,
+        toolName: "web_lookup",
+        type: "tool-call" as const,
+      },
+    ],
+    finishReason: { raw: "tool-calls", unified: "tool-calls" as const },
+    response: { id: `response-${firstToolCallId}`, modelId: "mock-model" },
     usage: modelUsage,
     warnings: [],
   };

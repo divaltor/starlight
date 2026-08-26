@@ -7,19 +7,17 @@ import {
   Output,
   TypeValidationError,
 } from "ai";
-import type { ModelMessage, StepResult, Tool, ToolSet } from "ai";
+import type { ModelMessage, StepResult, ToolSet } from "ai";
 import { Context, Duration, Effect, Layer, Option, Predicate, Schema } from "effect";
 import type { ZodType } from "zod";
 import { selected } from "@/ai/model-profile";
 import { ModelProvider } from "@/ai/model-provider";
 import { Usage } from "@/ai/usage";
-import { CanonicalJson } from "@/context/canonical-json";
 import type { Media } from "@/media/media";
 
 export namespace Model {
   const MODEL_TIMEOUT_MS = 120_000;
-  const MAX_TOOL_RESULT_BYTES = 50 * 1024;
-  const MAX_GENERATION_TOOL_RESULT_BYTES = 16 * 1024;
+  const MAX_GENERATION_STEPS = 32;
   const INVOCATION_FAILED_MESSAGE = "Model invocation failed";
 
   const errorFields = {
@@ -47,7 +45,7 @@ export namespace Model {
     readonly cacheBase?: string;
     readonly instructions: string;
     readonly maxOutputTokens?: number;
-    readonly maxToolCalls: number;
+    readonly maxToolSteps: number;
     readonly messages: readonly Message[];
     readonly outputSchema: ZodType<OUTPUT>;
     // Rides on OpenRouter's body verbatim as prompt_cache_key for upstream cache routing.
@@ -76,10 +74,6 @@ export namespace Model {
   }
 
   export type ToolEvent = CompletedToolEvent | FailedToolEvent;
-
-  interface ToolResultValue {
-    readonly value: unknown;
-  }
 
   export interface TranscriptEvent {
     readonly text: string;
@@ -128,7 +122,6 @@ export namespace Model {
         const selectedModel = provider.model;
         const completedSteps: StepResult<ToolSet>[] = [];
         const toolEvents: ToolEvent[] = [];
-        const toolBudget = { remainingBytes: MAX_GENERATION_TOOL_RESULT_BYTES };
         const invocation = Effect.tryPromise({
           try: async (signal) => {
             const result = await generateText({
@@ -146,18 +139,18 @@ export namespace Model {
                 toolEvents.push(createToolEvent(event));
               },
               output: Output.object({ schema: input.outputSchema }),
-              prepareStep: (step) => limitTools(step.steps, input.maxToolCalls, toolBudget.remainingBytes),
+              prepareStep: (step) => limitToolSteps(step.steps, input.maxToolSteps),
               providerOptions: input.promptCacheKey
                 ? { openrouter: { prompt_cache_key: input.promptCacheKey } }
                 : undefined,
-              stopWhen: isStepCount(Math.max(input.maxToolCalls, 0) + 1),
+              stopWhen: isStepCount(MAX_GENERATION_STEPS),
               telemetry: {
                 functionId: "chat-reply",
                 isEnabled: true,
                 recordInputs: false,
                 recordOutputs: false,
               },
-              tools: boundTools(input.tools, toolBudget),
+              tools: input.tools,
             });
 
             return { output: result.output, result };
@@ -309,48 +302,9 @@ export namespace Model {
     ];
   }
 
-  function limitTools(steps: readonly StepResult<ToolSet>[], maximumCalls: number, remainingResultBytes: number) {
-    const callCount = steps.reduce((count, step) => count + step.toolCalls.length, 0);
-    return callCount >= Math.max(maximumCalls, 0) || remainingResultBytes <= 0 ? { activeTools: [] } : undefined;
-  }
-
-  function boundTools(tools: ToolSet, budget: { remainingBytes: number }): ToolSet {
-    return Object.fromEntries(Object.entries(tools).map(([name, tool]) => [name, boundToolResult(tool, budget)]));
-  }
-
-  function boundToolResult(tool: Tool, budget: { remainingBytes: number }): Tool {
-    if (!tool.execute) return tool;
-    return {
-      ...tool,
-      execute: async (input, options) => {
-        const output = await tool.execute!(input, options);
-        const projectedOutput = { value: output ?? null };
-        const canonical = CanonicalJson.encode(projectedOutput);
-        const bytes = new TextEncoder().encode(canonical);
-        const metadataReserveBytes = Math.min(512, budget.remainingBytes);
-        const allowedBytes = Math.min(MAX_TOOL_RESULT_BYTES - 2048, budget.remainingBytes - metadataReserveBytes);
-        const truncated = bytes.byteLength > allowedBytes;
-        budget.remainingBytes = Math.max(
-          0,
-          budget.remainingBytes - metadataReserveBytes - Math.min(bytes.byteLength, allowedBytes),
-        );
-        return {
-          projection: projectToolResult(projectedOutput, bytes, truncated, allowedBytes),
-          projectionMetadata: {
-            originalBytes: bytes.byteLength,
-            sha256: new Bun.CryptoHasher("sha256").update(bytes).digest("hex"),
-            truncated,
-            version: "tool-result-v2",
-          },
-        };
-      },
-    };
-  }
-
-  function projectToolResult(output: ToolResultValue, bytes: Uint8Array, truncated: boolean, allowedBytes: number) {
-    if (!truncated) return output;
-    if (allowedBytes <= 0) return null;
-    return new TextDecoder().decode(bytes.slice(0, Math.floor(allowedBytes / 3)));
+  function limitToolSteps(steps: readonly StepResult<ToolSet>[], maximumSteps: number) {
+    const toolStepCount = steps.filter((step) => step.toolCalls.length > 0).length;
+    return toolStepCount >= Math.max(maximumSteps, 0) ? { activeTools: [] } : undefined;
   }
 
   function clampOutputTokens(value: number | undefined): number {

@@ -11,9 +11,9 @@ const systemPromptText = await Bun.file(new URL("system-prompt.txt", import.meta
 export namespace ChatReply {
   export const systemPrompt = systemPromptText;
   export const outputSchemaVersion = "chat-reply-v1";
-  export const toolsetVersion = "exa-mcp-v2-bounded";
+  export const toolsetVersion = "exa-mcp-v3-limited";
   const MAX_REPLY_OUTPUT_TOKENS = 1024;
-  const MAX_AGENT_TOOL_CALLS = 32;
+  const MAX_AGENT_TOOL_STEPS = 3;
 
   const reactionEmojiSchema = z.enum(TelegramDelivery.reactionEmojis);
 
@@ -57,7 +57,7 @@ export namespace ChatReply {
       cacheBase: input.cacheBase,
       instructions: input.instructions ?? systemPrompt,
       maxOutputTokens: MAX_REPLY_OUTPUT_TOKENS,
-      maxToolCalls: Object.keys(tools).length > 0 ? MAX_AGENT_TOOL_CALLS : 0,
+      maxToolSteps: Object.keys(tools).length > 0 ? MAX_AGENT_TOOL_STEPS : 0,
       messages: input.messages,
       outputSchema: responseSchema,
       promptCacheKey: input.promptCacheKey,

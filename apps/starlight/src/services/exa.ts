@@ -16,7 +16,7 @@ export namespace Exa {
     },
     web_search_exa: {
       inputSchema: z.object({
-        numResults: z.number().int().positive().max(5).optional(),
+        numResults: z.number().int().positive().max(5).default(3),
         query: z.string().min(3).max(300),
       }),
     },
