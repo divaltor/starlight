@@ -163,7 +163,7 @@ export namespace Hindsight {
                 path: { bank_id: bankId, document_id: documentId },
                 signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
               });
-              if (response.error !== undefined && response.response.status !== 404) {
+              if (response.error !== undefined && response.response?.status !== 404) {
                 throw new Error(`Hindsight document deletion failed: ${JSON.stringify(response.error)}`);
               }
             },

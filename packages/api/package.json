@@ -22,7 +22,7 @@
     "@types/bun": "1.4.0"
   },
   "peerDependencies": {
-    "typescript": "^7.0.2"
+    "typescript": "7.0.2"
   },
   "dependencies": {
     "@orpc/client": "catalog:",
@@ -30,9 +30,9 @@
     "@opentelemetry/api": "1.9.1",
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
-    "@telegram-apps/init-data-node": "^2.0.10",
-    "date-fns": "^4.4.0",
-    "effect": "4.0.0-rc.111",
+    "@telegram-apps/init-data-node": "2.0.10",
+    "date-fns": "4.4.0",
+    "effect": "4.0.0-rc.112",
     "zod": "catalog:"
   }
 }

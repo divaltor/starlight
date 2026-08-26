@@ -24,18 +24,18 @@
   "dependencies": {
     "@prisma/adapter-pg": "catalog:",
     "@prisma/client": "catalog:",
-    "@t3-oss/env-core": "^0.13.11",
-    "dotenv": "^17.4.2",
+    "@t3-oss/env-core": "0.13.11",
+    "dotenv": "17.4.2",
     "ky": "catalog:",
     "prisma": "catalog:",
     "prisma-json-types-generator": "catalog:",
-    "sqids": "^0.3.0",
+    "sqids": "0.3.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "tsdown": "catalog:"
   },
   "peerDependencies": {
-    "typescript": "^7.0.2"
+    "typescript": "7.0.2"
   }
 }
