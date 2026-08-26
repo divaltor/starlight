@@ -13,7 +13,7 @@ import { runtime } from "@/services/runtime";
 const env = createBotEnv();
 
 initTelemetry({ langfuse: env.langfuse, otlp: env.otlp });
-runtime.runSync(
+await runtime.runPromise(
   pipe(
     Effect.logInfo("Telemetry established"),
     Effect.annotateLogs({
@@ -29,7 +29,7 @@ bot.use(createUpdateTracer());
 bot.api.config.use(autoRetry({ maxDelaySeconds: 5, maxRetryAttempts: 3 }));
 
 const boundary = bot.errorBoundary((error) =>
-  runtime.runSync(
+  runtime.runPromise(
     pipe(
       Effect.logError("Unhandled bot update error"),
       Effect.annotateLogs({
@@ -50,10 +50,10 @@ boundary.use(
 );
 
 const runner = run(bot);
-runtime.runSync(Effect.logInfo("Starlight bot is running"));
+await runtime.runPromise(Effect.logInfo("Starlight bot is running"));
 
 const shutdown = async () => {
-  runtime.runSync(Effect.logInfo("Stopping Starlight bot"));
+  await runtime.runPromise(Effect.logInfo("Stopping Starlight bot"));
   if (runner.isRunning()) await runner.stop();
   await runtime.dispose();
   await shutdownTelemetry();
