@@ -4,7 +4,7 @@ export interface ModelProfile {
     readonly maximumOutputTokens: number;
   };
   readonly model: string;
-  readonly reasoning: { readonly effort: "minimal" };
+  readonly reasoning: { readonly effort: "low" };
   readonly route: {
     readonly allowFallbacks: false;
     readonly only: readonly ["google-vertex/global"];
@@ -18,7 +18,7 @@ export const selected: ModelProfile = {
     maximumOutputTokens: 65_536,
   },
   model: "google/gemini-3.7-flash",
-  reasoning: { effort: "minimal" },
+  reasoning: { effort: "low" },
   route: {
     allowFallbacks: false,
     only: ["google-vertex/global"],

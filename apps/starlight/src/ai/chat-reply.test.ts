@@ -6,11 +6,11 @@ import { ChatReply } from "@/ai/chat-reply";
 import { Model } from "@/ai/model";
 import { ModelProvider } from "@/ai/model-provider";
 
-test("caps a chatbot reply at 1,024 provider output tokens", async () => {
+test("caps a chatbot reply at 4,096 provider output tokens", async () => {
   const model = textModel('{"replies":[{"type":"ignore"}]}');
   await runReply(model);
 
-  expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(1024);
+  expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(4096);
 });
 
 function modelLayer(model: LanguageModel) {

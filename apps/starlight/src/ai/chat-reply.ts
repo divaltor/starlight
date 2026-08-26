@@ -11,7 +11,7 @@ const systemPromptText = await Bun.file(new URL("system-prompt.txt", import.meta
 export namespace ChatReply {
   export const systemPrompt = systemPromptText;
   export const outputSchemaVersion = "chat-reply-v1";
-  export const maxOutputTokens = 1024;
+  export const maxOutputTokens = 4096;
   const MAX_TOOL_OUTPUT_BYTES = 16 * 1024;
   const MAX_AGENT_TOOL_STEPS = 3;
 
