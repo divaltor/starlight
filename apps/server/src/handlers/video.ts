@@ -1,7 +1,8 @@
 import { FormattedString } from "@grammyjs/parse-mode";
-import { cleanupTweetText, env, extractTweetId, prisma } from "@starlight/utils";
+import { cleanupTweetText, extractTweetId, prisma } from "@starlight/utils";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
+import env from "@/env";
 import { bot } from "@/bot";
 import type { FxEmbedTweet } from "@/services/fxembed/types";
 import { runtime } from "@/services/runtime";

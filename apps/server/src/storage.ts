@@ -1,8 +1,8 @@
 import { RedisClient } from "bun";
-import { env } from "@starlight/utils";
 import { createBunRedisClient } from "bullmq";
 import { Schema, SchemaGetter } from "effect";
 import { Cookie } from "tough-cookie";
+import env from "@/env";
 
 export const redis = createBunRedisClient(new RedisClient(env.REDIS_URL));
 

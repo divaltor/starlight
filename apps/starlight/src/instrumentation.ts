@@ -13,8 +13,8 @@ import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 import { registerTelemetry } from "ai";
-import type { LangfuseConfig, OtlpConfig } from "@starlight/utils/env";
 import type { Context, MiddlewareFn } from "grammy";
+import type { LangfuseConfig, OtlpConfig } from "@/env";
 
 let provider: NodeTracerProvider | undefined;
 let meterProvider: MeterProvider | undefined;

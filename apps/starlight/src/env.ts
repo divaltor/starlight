@@ -1,6 +1,6 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod/v4";
-import { telegramIdList } from "./telegram-ids";
+import { telegramIdList } from "@starlight/utils/telegram-ids";
 
 export interface LangfuseConfig {
   readonly baseUrl: string;
@@ -16,9 +16,8 @@ export interface OtlpConfig {
 
 /**
  * Environment surface of the Starlight bot, declared once and validated at
- * import. Deliberately separate from ./config.ts so each deployable validates
- * only the variables it actually consumes. Factory-shaped so tests can feed a
- * synthetic environment instead of mutating process.env.
+ * import. Factory-shaped so tests can feed a synthetic environment instead of
+ * mutating process.env.
  */
 export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
   const raw = createEnv({
@@ -26,19 +25,23 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       STARLIGHT_BOT_TOKEN: z.string(),
       WHITELIST_CHAT_IDS: telegramIdList("WHITELIST_CHAT_IDS", { allowNegative: true }),
       WHITELIST_DM_USER_IDS: telegramIdList("WHITELIST_DM_USER_IDS"),
+
       DATABASE_URL: z.url({ protocol: /^postgresql$/u }),
       REDIS_URL: z.url({ protocol: /^rediss?$/u }),
+
       CONVERSATION_AFFINITY_SECRET: z.string().min(32),
       CONVERSATION_QUEUE_PREFIX: z.string().default("starlight-conversation"),
       CONVERSATION_BATCH_QUIET_MS: z.coerce.number().int().positive().default(1000),
       CONVERSATION_BATCH_MAX_WAIT_MS: z.coerce.number().int().positive().default(3000),
       CONVERSATION_LANE_LEASE_MS: z.coerce.number().int().positive().default(180_000),
+
       CONTEXT_SOFT_TOKEN_CAP: z.coerce.number().int().positive().default(24_000),
       CONTEXT_HARD_TOKEN_CAP: z.coerce.number().int().positive().default(48_000),
       CONTEXT_RETAINED_TOKEN_TARGET: z.coerce.number().int().positive().default(8000),
       CONTEXT_OUTPUT_RESERVE_TOKENS: z.coerce.number().int().nonnegative().default(1024),
       CONTEXT_TOOL_RESERVE_TOKENS: z.coerce.number().int().nonnegative().default(4096),
       CONTEXT_ESTIMATE_SAFETY_RATIO: z.coerce.number().min(1).default(1.15),
+
       // Internal Docker service discovery does not terminate TLS.
       // oxlint-disable-next-line sonarjs/no-clear-text-protocols
       HINDSIGHT_BASE_URL: z.url().default("http://hindsight:8888"),
@@ -50,10 +53,6 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
 
       NODE_ENV: z.enum(["development", "production"]).default("development"),
       LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),
-
-      OPENROUTER_API_KEY: z.string().optional(),
-      EXA_MCP_URL: z.url().default("https://mcp.exa.ai/mcp"),
-      EXA_API_KEY: z.string().optional(),
 
       LANGFUSE_PUBLIC_KEY: z.string().optional(),
       LANGFUSE_SECRET_KEY: z.string().optional(),

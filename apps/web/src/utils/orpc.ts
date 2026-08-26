@@ -5,11 +5,11 @@ import { createRouterClient } from "@orpc/server";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type { AppRouterClient } from "@starlight/api/routers/index";
 import { appRouter } from "@starlight/api/routers/index";
-import { createContext } from "@starlight/api/context";
 import { defaultShouldDehydrateQuery, QueryClient } from "@tanstack/react-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { retrieveRawInitData } from "@telegram-apps/sdk-react";
+import { createApiContext } from "@/api.server";
 
 const serializer = new StandardRPCJsonSerializer({
   customJsonSerializers: [],
@@ -46,7 +46,7 @@ const getORPCClient = createIsomorphicFn()
     createRouterClient(appRouter, {
       context: () => {
         const request = getRequest();
-        return createContext({ request });
+        return createApiContext(request);
       },
     }),
   )

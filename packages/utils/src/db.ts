@@ -1,6 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import Sqids from "sqids";
-import env from "./config";
+import databaseEnv from "./database-env";
 import { PrismaClient } from "./generated/prisma/client";
 import type { Prisma as PrismaGenerated } from "./generated/prisma/client";
 
@@ -11,7 +11,7 @@ const sqids = new Sqids({
 export const toUniqueId = (id: number) => sqids.encode([Math.abs(id)]);
 
 const adapter = new PrismaPg({
-  connectionString: env.DATABASE_URL,
+  connectionString: databaseEnv.DATABASE_URL,
 });
 
 const onlyNotDeletedMessages = <
@@ -45,7 +45,7 @@ const MESSAGE_READ_OPERATIONS = new Set([
 ]);
 
 export const prisma = new PrismaClient({
-  log: env.NODE_ENV === "production" ? ["warn", "error"] : ["info", "warn", "error"],
+  log: databaseEnv.NODE_ENV === "production" ? ["warn", "error"] : ["info", "warn", "error"],
   adapter,
 }).$extends({
   query: {
@@ -99,11 +99,11 @@ export const prisma = new PrismaClient({
           s3Path: true,
         },
         compute(data: { s3Path: string }) {
-          if (!(data.s3Path && env.BASE_CDN_URL)) {
+          if (!(data.s3Path && databaseEnv.BASE_CDN_URL)) {
             return;
           }
 
-          return `${env.BASE_CDN_URL}/${data.s3Path}`;
+          return `${databaseEnv.BASE_CDN_URL}/${data.s3Path}`;
         },
       },
     },
@@ -117,7 +117,7 @@ export const prisma = new PrismaClient({
             return;
           }
 
-          return `${env.BASE_CDN_URL}/${data.photoThumbnail}`;
+          return `${databaseEnv.BASE_CDN_URL}/${data.photoThumbnail}`;
         },
       },
       bigUrl: {
@@ -125,11 +125,11 @@ export const prisma = new PrismaClient({
           photoBig: true,
         },
         compute(data: { photoBig: string }) {
-          if (!(data.photoBig && env.BASE_CDN_URL)) {
+          if (!(data.photoBig && databaseEnv.BASE_CDN_URL)) {
             return;
           }
 
-          return `${env.BASE_CDN_URL}/${data.photoBig}`;
+          return `${databaseEnv.BASE_CDN_URL}/${data.photoBig}`;
         },
       },
     },

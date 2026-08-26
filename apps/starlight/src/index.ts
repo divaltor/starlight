@@ -1,9 +1,9 @@
 import { autoRetry } from "@grammyjs/auto-retry";
 import { run } from "@grammyjs/runner";
 import { Effect, pipe } from "effect";
-import { createBotEnv } from "@starlight/utils/env";
 import { Bot } from "grammy";
 import type { Context } from "grammy";
+import { createBotEnv } from "@/env";
 import { createMessageHandler } from "@/handlers/message";
 import { createMemoryHandler } from "@/handlers/memory";
 import { createStartHandler } from "@/handlers/start";

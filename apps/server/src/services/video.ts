@@ -1,8 +1,8 @@
 import path from "node:path";
-import { env } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import { Schema } from "effect";
 import { create } from "youtube-dl-exec";
+import env from "@/env";
 import { logger } from "@/logger";
 
 const filesGlob = new Bun.Glob("*.mp4");

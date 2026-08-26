@@ -1,8 +1,8 @@
 import { autoRetry } from "@grammyjs/auto-retry";
 import { hydrateFiles } from "@grammyjs/files";
 import { autoQuote } from "@roziscoding/grammy-autoquote";
-import { env } from "@starlight/utils";
 import { Bot, InlineKeyboard } from "grammy";
+import env from "@/env";
 import { logger } from "@/logger";
 import logUpdates from "@/middlewares/logging";
 import { attachChat, attachChatMember, attachUser } from "@/middlewares/session";

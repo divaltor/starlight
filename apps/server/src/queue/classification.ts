@@ -1,7 +1,8 @@
-import { env, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import { Queue, Worker } from "bullmq";
 import { Schema } from "effect";
+import env from "@/env";
 import { logger } from "@/logger";
 import { embeddingsQueue } from "@/queue/embeddings";
 import { PhotoJobData } from "@/queue/photo-job";

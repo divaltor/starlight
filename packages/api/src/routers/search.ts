@@ -1,11 +1,9 @@
 import { ORPCError } from "@orpc/client";
-import { env, Prisma, prisma } from "@starlight/utils";
+import { Prisma, prisma } from "@starlight/utils";
 import { z } from "zod";
 import { publicProcedure } from "..";
 import { maybeAuthProcedure } from "../middlewares/auth";
 import { resolveQueryEmbedding } from "../services/embedding-cache";
-import { EmbeddingsService } from "../services/embeddings";
-import { runtime } from "../services/runtime";
 import type { SearchResult } from "../types/tweets";
 import { Cursor, SearchCursorPayloadSchema } from "../utils/cursor";
 import type { SearchCursorPayload } from "../utils/cursor";
@@ -22,7 +20,7 @@ export const searchImages = maybeAuthProcedure
     }),
   )
   .handler(async ({ input, context }) => {
-    if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
+    if (!context.config.embeddingsEnabled) {
       throw new ORPCError("Service not available, sorry!");
     }
 
@@ -53,10 +51,7 @@ export const searchImages = maybeAuthProcedure
     }
 
     const { requestId } = context;
-    const text = await resolveQueryEmbedding(
-      () => runtime.runPromise(EmbeddingsService.Service.use((s) => s.generateText(query, requestId))),
-      query,
-    );
+    const text = await resolveQueryEmbedding(() => context.generateTextEmbedding(query, requestId), query);
 
     if (!text) {
       throw new ORPCError("Failed to search images", {
@@ -320,7 +315,7 @@ export const searchImages = maybeAuthProcedure
 		`);
 
     const page = paginateSearchResults(images, limit);
-    const transformedResults = transformSearchResults(page.rows);
+    const transformedResults = transformSearchResults(page.rows, context.config.baseCdnUrl);
 
     let nextCursor: string | null = null;
     if (page.hasNextPage && page.lastPost) {
@@ -337,7 +332,7 @@ export const searchImages = maybeAuthProcedure
     };
   });
 
-export const randomImages = publicProcedure.handler(async () => {
+export const randomImages = publicProcedure.handler(async ({ context }) => {
   // Rank on narrow tuples so window sorts stay in memory; display columns are
   // joined back only for the surviving top500. Decay math must stay float8 —
   // EXTRACT() yields numeric and EXP/LN on numeric is ~100ms slower at this scale.
@@ -396,5 +391,5 @@ export const randomImages = publicProcedure.handler(async () => {
 		LIMIT 30
 	`;
 
-  return transformSearchResults(images);
+  return transformSearchResults(images, context.config.baseCdnUrl);
 });

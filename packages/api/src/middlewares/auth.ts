@@ -1,5 +1,5 @@
 import { ORPCError } from "@orpc/client";
-import { env, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
 import { parse, validate } from "@telegram-apps/init-data-node";
 import { o, publicProcedure } from "../index";
 
@@ -28,9 +28,9 @@ export const authMiddleware = o.middleware(async ({ next, context }) => {
     });
   }
 
-  if (env.NODE_ENV === "production") {
+  if (context.config.nodeEnv === "production") {
     try {
-      validate(auth, env.BOT_TOKEN);
+      validate(auth, context.config.botToken);
     } catch {
       throw new ORPCError("BAD_REQUEST", {
         message: "Invalid init data",
@@ -77,8 +77,8 @@ export const optionalAuthMiddleware = o.middleware(({ next, context }) => {
 
   if (auth) {
     try {
-      if (env.NODE_ENV === "production") {
-        validate(auth, env.BOT_TOKEN);
+      if (context.config.nodeEnv === "production") {
+        validate(auth, context.config.botToken);
       }
 
       ({ user } = parse(auth));

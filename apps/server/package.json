@@ -24,6 +24,7 @@
     "@starlight/api": "workspace:*",
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
+    "@t3-oss/env-core": "0.13.11",
     "@the-convocation/twitter-scraper": "0.22.3",
     "bullmq": "6.3.0",
     "date-fns": "4.4.0",

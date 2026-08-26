@@ -1,7 +1,8 @@
 import { EmbeddingsService } from "@starlight/api/services/embeddings";
-import { DbNull, env, Prisma, prisma } from "@starlight/utils";
+import { DbNull, Prisma, prisma } from "@starlight/utils";
 import { Queue, Worker } from "bullmq";
 import { Schema } from "effect";
+import env from "@/env";
 import { logger } from "@/logger";
 import { PhotoJobData } from "@/queue/photo-job";
 import { runtime } from "@/services/runtime";

@@ -1,10 +1,11 @@
 import { CookieEncryption } from "@starlight/crypto";
 import type { User } from "@starlight/utils";
-import { env, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
 import { Scraper } from "@the-convocation/twitter-scraper";
 import type { QueryTweetsResponse, Tweet } from "@the-convocation/twitter-scraper";
 import { Queue, Worker } from "bullmq";
 import { Schema } from "effect";
+import env from "@/env";
 import { bot } from "@/bot";
 import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";

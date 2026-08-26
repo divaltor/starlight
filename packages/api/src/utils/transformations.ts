@@ -1,4 +1,3 @@
-import { env } from "@starlight/utils";
 import type { Photo, Tweet } from "@starlight/utils";
 import { format } from "date-fns";
 import type { SearchResult, TweetData } from "../types/tweets";
@@ -47,7 +46,7 @@ export const transformTweets = (
   })[],
 ) => transformTweetsBase(tweets, (t) => t.photos);
 
-export const transformSearchResults = (results: SearchResult[]): TweetData[] => {
+export const transformSearchResults = (results: SearchResult[], baseCdnUrl: string): TweetData[] => {
   const grouped: Record<
     string,
     {
@@ -81,7 +80,7 @@ export const transformSearchResults = (results: SearchResult[]): TweetData[] => 
     tweet.photos.push({
       id: result.photo_id,
       originalUrl: result.original_url,
-      s3Url: result.s3_path ? `${env.BASE_CDN_URL}/${result.s3_path}` : undefined,
+      s3Url: result.s3_path ? `${baseCdnUrl}/${result.s3_path}` : undefined,
       is_nsfw: result.is_nsfw,
       height: result.height,
       width: result.width,

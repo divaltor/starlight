@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
+import env from "@/env";
 import type { Context } from "@/types";
-import env from "@starlight/utils/config";
 
 const composer = new Composer<Context>();
 const privateChat = composer.chatType("private");

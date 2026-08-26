@@ -1,15 +1,14 @@
 import { ORPCError } from "@orpc/client";
 import { CookieEncryption } from "@starlight/crypto";
-import { env, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
 import { z } from "zod";
+import type { Context } from "../context";
 import { protectedProcedure } from "../middlewares/auth";
 import type { AuthContext } from "../middlewares/auth";
 
 const cookiesSchema = z.object({
   cookies: z.string(),
 });
-
-const cookieEncryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY, env.COOKIE_ENCRYPTION_SALT);
 
 export const saveCookies = protectedProcedure.input(cookiesSchema).handler(async ({ input, context }) => {
   if (!(context.user && context.databaseUserId)) {
@@ -28,7 +27,10 @@ export const saveCookies = protectedProcedure.input(cookiesSchema).handler(async
   }
 
   // Encrypt and store under telegramId scoped key
-  const encryptedCookies = cookieEncryption.encrypt(input.cookies, context.user.id.toString());
+  const encryptedCookies = new CookieEncryption(
+    context.config.cookieEncryptionKey,
+    context.config.cookieEncryptionSalt,
+  ).encrypt(input.cookies, context.user.id.toString());
 
   await prisma.user.update({
     where: {
@@ -40,7 +42,7 @@ export const saveCookies = protectedProcedure.input(cookiesSchema).handler(async
   });
 });
 
-export const verifyCookies = async ({ context }: { context: AuthContext }) => {
+export const verifyCookies = async ({ context }: { context: AuthContext & Context }) => {
   try {
     if (!(context.user && context.databaseUserId)) {
       return { hasValidCookies: false };
@@ -62,7 +64,10 @@ export const verifyCookies = async ({ context }: { context: AuthContext }) => {
     }
 
     try {
-      cookieEncryption.safeDecrypt(storedCookies, context.user.id.toString());
+      new CookieEncryption(context.config.cookieEncryptionKey, context.config.cookieEncryptionSalt).safeDecrypt(
+        storedCookies,
+        context.user.id.toString(),
+      );
     } catch {
       await prisma.user.update({
         where: {
