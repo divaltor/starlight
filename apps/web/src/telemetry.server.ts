@@ -17,6 +17,16 @@ if (globalThis.starlightWebTracerProvider === undefined) {
         new BatchSpanProcessor(
           new OTLPTraceExporter({
             url: `${otlpEndpoint}/v1/traces`,
+            headers: Object.fromEntries(
+              (process.env.OTEL_EXPORTER_OTLP_HEADERS ?? "").split(",").flatMap((pair) => {
+                const separator = pair.indexOf("=");
+                if (separator < 1) return [];
+
+                const key = pair.slice(0, separator).trim();
+                const value = pair.slice(separator + 1).trim();
+                return key.length > 0 && value.length > 0 ? [[key, value] as const] : [];
+              }),
+            ),
           }),
         ),
       ]
