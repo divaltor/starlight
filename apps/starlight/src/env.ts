@@ -37,7 +37,7 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       // Checkpoint before model invocation, then reject the request if it still reaches this limit.
       CONTEXT_HARD_TOKEN_CAP: z.coerce.number().int().positive().default(48_000),
       // Amount of recent and relevant context a checkpoint aims to preserve.
-      CONTEXT_RETAINED_TOKEN_TARGET: z.coerce.number().int().positive().default(8000),
+      CONTEXT_RETAINED_TOKEN_TARGET: z.coerce.number().int().positive().default(6000),
 
       // Internal Docker service discovery does not terminate TLS.
       // oxlint-disable-next-line sonarjs/no-clear-text-protocols
