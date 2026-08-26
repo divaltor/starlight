@@ -34,7 +34,6 @@
     "bullmq": "^6.2.0",
     "effect": "4.0.0-rc.111",
     "grammy": "catalog:",
-    "uuid": "14.0.2",
     "zod": "catalog:"
   },
   "devDependencies": {

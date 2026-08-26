@@ -1,6 +1,5 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import Sqids from "sqids";
-import { parse } from "uuid";
 import env from "./config";
 import { PrismaClient } from "./generated/prisma/client";
 import type { Prisma as PrismaGenerated } from "./generated/prisma/client";
@@ -90,7 +89,7 @@ export const prisma = new PrismaClient({
             (part) => Math.trunc(Number(part || "0")),
           );
 
-          const userId = parse(data.userId);
+          const userId = Buffer.from(data.userId.replaceAll("-", ""), "hex");
 
           return sqids.encode([...parts, ...userId]);
         },

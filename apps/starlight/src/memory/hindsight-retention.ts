@@ -1,7 +1,6 @@
 import type { MemoryItemInput } from "@vectorize-io/hindsight-client";
 import type { Prisma } from "@starlight/utils/generated/prisma/client";
 import { Context, Effect, Layer, Schedule, Schema, Semaphore } from "effect";
-import { v5 } from "uuid";
 import { Prompt } from "@/context/prompt";
 import { Hindsight } from "@/memory/hindsight";
 import { Database } from "@/services/database";
@@ -106,7 +105,7 @@ export namespace HindsightRetention {
             hindsight.retain({
               bankId,
               items: [...documents.values()],
-              operationId: v5(`${namespace.id}:${bankId}:${sourceThrough}`, v5.URL),
+              operationId: Bun.randomUUIDv5(`${namespace.id}:${bankId}:${sourceThrough}`, "url"),
             }),
           ),
           { concurrency: 3, discard: true },
