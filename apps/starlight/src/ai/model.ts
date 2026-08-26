@@ -157,8 +157,8 @@ export namespace Model {
               telemetry: {
                 functionId: "chat-reply",
                 isEnabled: true,
-                recordInputs: false,
-                recordOutputs: false,
+                recordInputs: true,
+                recordOutputs: true,
               },
               tools,
             });
