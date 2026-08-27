@@ -26,6 +26,7 @@ export namespace Model {
   const FINAL_OUTPUT_TOOL_DESCRIPTION =
     "Return the complete final response in the required structured format. You must call this tool exactly once after completing any necessary research.";
   const INVOCATION_FAILED_MESSAGE = "Model invocation failed";
+  const CACHE_BREAKPOINT_OPTIONS = { openrouter: { cacheControl: { type: "ephemeral" as const } } };
 
   const errorFields = {
     cause: Schema.optional(Schema.Defect()),
@@ -300,63 +301,48 @@ export namespace Model {
       if (message.role === "assistant" || !message.media?.length) {
         if (index === cachePrefixMessageCount - 1) {
           return {
-            content: [
-              {
-                providerOptions: { openrouter: { cacheControl: { type: "ephemeral" } } },
-                text: message.text,
-                type: "text" as const,
-              },
-            ],
+            content: message.text,
+            providerOptions: CACHE_BREAKPOINT_OPTIONS,
             role: message.role,
           };
         }
         return { content: message.text, role: message.role };
       }
-      return {
-        content: [
-          { text: message.text, type: "text" as const },
-          ...message.media.map((item) =>
-            item.mimeType.startsWith("image/")
-              ? {
-                  image: item.bytes,
-                  mediaType: item.mimeType,
-                  type: "image" as const,
-                }
-              : {
-                  data: item.bytes,
-                  filename: `${item.sha256}.${
-                    item.mimeType === "application/pdf"
-                      ? "pdf"
-                      : (item.mimeType.split("/").at(1)?.split(";").at(0) ?? "bin")
-                  }`,
-                  mediaType: item.mimeType,
-                  type: "file" as const,
-                },
-          ),
-        ],
-        role: "user",
-      };
+      const content = [
+        { text: message.text, type: "text" as const },
+        ...message.media.map((item) =>
+          item.mimeType.startsWith("image/")
+            ? {
+                image: item.bytes,
+                mediaType: item.mimeType,
+                type: "image" as const,
+              }
+            : {
+                data: item.bytes,
+                filename: `${item.sha256}.${
+                  item.mimeType === "application/pdf"
+                    ? "pdf"
+                    : (item.mimeType.split("/").at(1)?.split(";").at(0) ?? "bin")
+                }`,
+                mediaType: item.mimeType,
+                type: "file" as const,
+              },
+        ),
+      ];
+      if (index === cachePrefixMessageCount - 1) {
+        return { content, providerOptions: CACHE_BREAKPOINT_OPTIONS, role: "user" };
+      }
+      return { content, role: "user" };
     });
     if (!cacheBase) return conversation;
 
     // OpenRouter's Vertex route does not provide reliable implicit caching for Gemini.
     // Advance one explicit breakpoint through the stable transcript instead.
-    return [
-      {
-        role: "user",
-        content:
-          cachePrefixMessageCount === 0
-            ? [
-                {
-                  providerOptions: { openrouter: { cacheControl: { type: "ephemeral" } } },
-                  text: cacheBase,
-                  type: "text" as const,
-                },
-              ]
-            : cacheBase,
-      },
-      ...conversation,
-    ];
+    const base: ModelMessage =
+      cachePrefixMessageCount === 0
+        ? { content: cacheBase, providerOptions: CACHE_BREAKPOINT_OPTIONS, role: "user" }
+        : { content: cacheBase, role: "user" };
+    return [base, ...conversation];
   }
 
   function boundTools(tools: ToolSet, maximumBytes: number): ToolSet {
