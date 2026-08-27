@@ -51,6 +51,7 @@ export namespace Model {
 
   export interface GenerateInput<OUTPUT> {
     readonly cacheBase?: string;
+    readonly cachePrefixMessageCount?: number;
     readonly instructions: string;
     readonly maxOutputTokens?: number;
     readonly maxToolOutputBytes: number;
@@ -140,7 +141,7 @@ export namespace Model {
               instructions: input.instructions,
               maxOutputTokens: clampOutputTokens(input.maxOutputTokens),
               maxRetries: 0,
-              messages: prepareMessages(input.cacheBase, input.messages),
+              messages: prepareMessages(input.cacheBase, input.cachePrefixMessageCount ?? 0, input.messages),
               model: selectedModel.value,
               onStepEnd: (step) => {
                 completedSteps.push(step);
@@ -263,9 +264,25 @@ export namespace Model {
 
   export const defaultLayer: Layer.Layer<Service> = layer.pipe(Layer.provide(ModelProvider.defaultLayer));
 
-  function prepareMessages(cacheBase: string | undefined, messages: readonly Message[]): ModelMessage[] {
-    const conversation: ModelMessage[] = messages.map((message) => {
+  function prepareMessages(
+    cacheBase: string | undefined,
+    cachePrefixMessageCount: number,
+    messages: readonly Message[],
+  ): ModelMessage[] {
+    const conversation: ModelMessage[] = messages.map((message, index) => {
       if (message.role === "assistant" || !message.media?.length) {
+        if (index === cachePrefixMessageCount - 1) {
+          return {
+            content: [
+              {
+                providerOptions: { openrouter: { cacheControl: { type: "ephemeral" } } },
+                text: message.text,
+                type: "text" as const,
+              },
+            ],
+            role: message.role,
+          };
+        }
         return { content: message.text, role: message.role };
       }
       return {
@@ -295,18 +312,21 @@ export namespace Model {
     });
     if (!cacheBase) return conversation;
 
+    // OpenRouter's Vertex route does not provide reliable implicit caching for Gemini.
+    // Advance one explicit breakpoint through the stable transcript instead.
     return [
       {
         role: "user",
-        content: [
-          {
-            type: "text",
-            text: cacheBase,
-            providerOptions: {
-              openrouter: { cacheControl: { type: "ephemeral" } },
-            },
-          },
-        ],
+        content:
+          cachePrefixMessageCount === 0
+            ? [
+                {
+                  providerOptions: { openrouter: { cacheControl: { type: "ephemeral" } } },
+                  text: cacheBase,
+                  type: "text" as const,
+                },
+              ]
+            : cacheBase,
       },
       ...conversation,
     ];

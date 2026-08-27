@@ -39,6 +39,7 @@ export namespace ChatReply {
 
   export interface GenerateInput {
     readonly cacheBase?: string;
+    readonly cachePrefixMessageCount?: number;
     readonly instructions?: string;
     readonly messages: readonly Model.Message[];
     readonly promptCacheKey?: string;
@@ -62,6 +63,7 @@ export namespace ChatReply {
         generate: Effect.fn("ChatReply.generate")(function* generate(input) {
           return yield* model.generate({
             cacheBase: input.cacheBase,
+            cachePrefixMessageCount: input.cachePrefixMessageCount,
             instructions: input.instructions ?? systemPrompt,
             maxOutputTokens,
             maxToolOutputBytes: MAX_TOOL_OUTPUT_BYTES,

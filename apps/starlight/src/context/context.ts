@@ -21,6 +21,7 @@ export namespace ConversationContext {
   const MAX_REQUEST_MEDIA_BYTES = 20 * 1024 * 1024;
   export interface PreparedContextRequest {
     readonly cacheBase: string;
+    readonly cachePrefixMessageCount: number;
     readonly contextId: string;
     readonly estimatedTokens: number;
     readonly instructions: string;
@@ -389,6 +390,7 @@ export namespace ConversationContext {
             // Region estimates stay local so calibration recording can split A/B/C/D later.
             const prepared = {
               cacheBase,
+              cachePrefixMessageCount: finalized.length,
               contextId: context.id,
               estimatedTokens: baseTokens + finalizedTokens + currentTokens,
               instructions: envelope.instructions,

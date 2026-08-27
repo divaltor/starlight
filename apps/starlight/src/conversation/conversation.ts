@@ -749,6 +749,7 @@ export namespace Conversation {
       return yield* chatReply
         .generate({
           cacheBase: contextRequest.cacheBase,
+          cachePrefixMessageCount: contextRequest.cachePrefixMessageCount,
           instructions: contextRequest.instructions,
           messages: contextRequest.messages,
           promptCacheKey: contextRequest.contextId,
