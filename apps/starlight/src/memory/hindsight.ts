@@ -1,7 +1,6 @@
 import { createClient, createConfig, HindsightClient, sdk } from "@vectorize-io/hindsight-client";
 import type { MemoryItemInput } from "@vectorize-io/hindsight-client";
 import { Context, Effect, Layer, Schema } from "effect";
-import { OperationalTelemetry } from "@/operational-telemetry";
 
 export namespace Hindsight {
   const PROFILE_ID = "profile";
@@ -73,42 +72,7 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
   function make(options: Options): Interface {
     const headers = { Authorization: `Bearer ${options.apiKey}` };
     const client = new HindsightClient({ apiKey: options.apiKey, baseUrl: options.baseUrl });
-    const instrumentedFetch: typeof fetch = Object.assign(
-      (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-        const request = new Request(input, init);
-        const startedAt = performance.now();
-        const path = new URL(request.url).pathname;
-        const operation = path.endsWith("/mental-models/profile") ? "profile-read" : "request";
-        return fetch(request).then(
-          (response) => {
-            OperationalTelemetry.recordExternalDuration(
-              "hindsight",
-              operation,
-              response.ok ? "success" : "error",
-              performance.now() - startedAt,
-            );
-            return response;
-          },
-          (error) => {
-            OperationalTelemetry.recordExternalDuration(
-              "hindsight",
-              operation,
-              "failure",
-              performance.now() - startedAt,
-            );
-            throw error;
-          },
-        );
-      },
-      { preconnect: fetch.preconnect },
-    );
-    const generatedClient = createClient(
-      createConfig({
-        baseUrl: options.baseUrl,
-        headers,
-        fetch: instrumentedFetch,
-      }),
-    );
+    const generatedClient = createClient(createConfig({ baseUrl: options.baseUrl, headers }));
     const initializedBanks = new Set<string>();
     const initializations = new Map<string, Promise<void>>();
 
@@ -218,38 +182,20 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
     const profile = Effect.fn("Hindsight.profile")(function* profile(bankId: string) {
       return yield* Effect.tryPromise({
         try: async (signal) => {
-          const dispatchedAt = performance.now();
           const response = await sdk.getMentalModel({
             client: generatedClient,
             path: { bank_id: bankId, mental_model_id: PROFILE_ID },
             query: { detail: "content" },
             signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
           });
-          const requestDurationMs = performance.now() - dispatchedAt;
-          if (response.response?.status === 404) {
-            return { profile: null, requestDurationMs, statusCode: 404 };
-          }
+          if (response.response?.status === 404) return null;
           if (response.data === undefined) {
             throw new Error(`Hindsight profile read failed: ${JSON.stringify(response.error)}`);
           }
-          return {
-            profile: response.data.content === "Generating content..." ? null : (response.data.content ?? null),
-            requestDurationMs,
-            statusCode: response.response?.status ?? 200,
-          };
+          return response.data.content === "Generating content..." ? null : (response.data.content ?? null);
         },
         catch: (cause) => HindsightError.fromCause("Failed to read Hindsight profile", cause),
-      }).pipe(
-        Effect.tap((result) =>
-          Effect.annotateCurrentSpan({
-            "http.response.status_code": result.statusCode,
-            "memory.bank.scope": bankId.split(":", 1)[0]!,
-            "starlight.client.request.duration_ms": result.requestDurationMs,
-          }),
-        ),
-        Effect.map((result) => result.profile),
-        Effect.withSpan("Hindsight profile read"),
-      );
+      }).pipe(Effect.withSpan("Hindsight profile read"));
     });
 
     const reconcileBank = Effect.fn("Hindsight.reconcileBank")(function* reconcileBank(bankId: string) {
