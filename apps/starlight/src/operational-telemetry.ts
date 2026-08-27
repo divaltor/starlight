@@ -19,17 +19,19 @@ export namespace OperationalTelemetry {
   const instruments: { current: Instruments | null } = { current: null };
 
   export const eventLoopMonitorLayer = Layer.effectDiscard(
-    Effect.callback<never>(() => {
-      const intervalMs = 1000;
-      const state = { expectedAt: performance.now() + intervalMs };
-      const { eventLoopDelays } = getInstruments();
-      const timer = setInterval(() => {
-        const now = performance.now();
-        eventLoopDelays.record(Math.max(0, now - state.expectedAt));
-        state.expectedAt = now + intervalMs;
-      }, intervalMs);
-      return Effect.sync(() => clearInterval(timer));
-    }),
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const intervalMs = 1000;
+        const state = { expectedAt: performance.now() + intervalMs };
+        const { eventLoopDelays } = getInstruments();
+        return setInterval(() => {
+          const now = performance.now();
+          eventLoopDelays.record(Math.max(0, now - state.expectedAt));
+          state.expectedAt = now + intervalMs;
+        }, intervalMs);
+      }),
+      (timer) => Effect.sync(() => clearInterval(timer)),
+    ),
   );
 
   export function recordEvent(event: string, result: string): void {
