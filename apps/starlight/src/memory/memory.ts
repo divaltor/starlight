@@ -76,7 +76,7 @@ export namespace Memory {
           return bankIds.map((bankId) => {
             const snapshot = snapshotsByBankId.get(bankId);
             if (snapshot?.invalidatedAt) return { bankId, profile: null };
-            return { bankId, profile: snapshot?.content ?? remoteByBankId.get(bankId)?.content ?? null };
+            return { bankId, profile: snapshot?.content ?? remoteByBankId.get(bankId) ?? null };
           });
         });
 
@@ -339,11 +339,9 @@ export namespace Memory {
                 await transaction.memoryProfileSnapshot.updateMany({
                   where: { bankId: item.bankId, invalidationToken: result.invalidationToken },
                   data: {
-                    content: item.profile?.content ?? null,
+                    content: item.profile,
                     invalidatedAt: null,
                     invalidationToken: null,
-                    profileRefreshedAt: item.profile?.refreshedAt ?? null,
-                    sourceWatermark: item.profile?.sourceWatermark ?? null,
                   },
                 });
               }
@@ -522,29 +520,22 @@ export namespace Memory {
     transaction: Prisma.TransactionClient,
     profiles: readonly ProfileSnapshotWrite[],
   ): Promise<void> {
-    if (profiles.length === 0) return;
     await transaction.memoryProfileSnapshot.createMany({
       data: profiles.map((item) => ({
         bankId: item.bankId,
-        content: item.profile?.content ?? null,
+        content: item.profile,
         revision: item.expectedRevision,
-        profileRefreshedAt: item.profile?.refreshedAt ?? null,
-        sourceWatermark: item.profile?.sourceWatermark ?? null,
       })),
       skipDuplicates: true,
     });
     for (const item of profiles.filter(
-      (profile): profile is ProfileSnapshotWrite & { readonly profile: Hindsight.Profile } => profile.profile !== null,
+      (profile): profile is ProfileSnapshotWrite & { readonly profile: string } => profile.profile !== null,
     )) {
       // One Prisma transaction connection must execute its queries serially.
       // oxlint-disable-next-line react-doctor/async-await-in-loop
       await transaction.memoryProfileSnapshot.updateMany({
         where: { bankId: item.bankId, invalidatedAt: null, revision: item.expectedRevision },
-        data: {
-          content: item.profile.content,
-          profileRefreshedAt: item.profile.refreshedAt,
-          sourceWatermark: item.profile.sourceWatermark,
-        },
+        data: { content: item.profile },
       });
     }
   }
@@ -552,7 +543,7 @@ export namespace Memory {
   interface ProfileSnapshotWrite {
     readonly bankId: string;
     readonly expectedRevision: number;
-    readonly profile: Hindsight.Profile | null;
+    readonly profile: string | null;
   }
 
   const failed =

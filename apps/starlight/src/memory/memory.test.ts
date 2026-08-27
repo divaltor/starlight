@@ -21,7 +21,7 @@ test.skipIf(!databaseUrl)("reuses completed user memory without another profile 
     profile: () =>
       Effect.sync(() => {
         profileReads.count += 1;
-        return { content: "group continuity", refreshedAt: null, sourceWatermark: null };
+        return "group continuity";
       }),
     reconcileBank: () => Effect.void,
     refreshProfile: () => Effect.void,
@@ -59,21 +59,8 @@ test.skipIf(!databaseUrl)("reuses completed user memory without another profile 
     const frozen = await runtime.runPromise(
       Effect.gen(function* freezeUserMemory() {
         const memory = yield* Memory.Service;
-        return yield* Effect.all(
-          [
-            memory.freezeUserMemory([user.id], {
-              assistantId: 8_100_000_101n,
-              chatId: telegramId,
-              threadKey: 0,
-            }),
-            memory.freezeUserMemory([user.id], {
-              assistantId: 8_100_000_101n,
-              chatId: telegramId,
-              threadKey: 0,
-            }),
-          ],
-          { concurrency: 1 },
-        );
+        const key = { assistantId: 8_100_000_101n, chatId: telegramId, threadKey: 0 };
+        return [yield* memory.freezeUserMemory([user.id], key), yield* memory.freezeUserMemory([user.id], key)];
       }),
     );
 

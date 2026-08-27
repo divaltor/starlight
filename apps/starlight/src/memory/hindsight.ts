@@ -47,12 +47,6 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
     readonly operationId: string;
   }
 
-  export interface Profile {
-    readonly content: string;
-    readonly refreshedAt: string | null;
-    readonly sourceWatermark: string | null;
-  }
-
   export class HindsightError extends Schema.TaggedError<HindsightError>()("HindsightError", {
     cause: Schema.optional(Schema.Defect()),
     message: Schema.String,
@@ -64,7 +58,7 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
 
   export interface Interface {
     readonly deleteDocuments: (bankId: string, documentIds: readonly string[]) => Effect.Effect<void, HindsightError>;
-    readonly profile: (bankId: string) => Effect.Effect<Profile | null, HindsightError>;
+    readonly profile: (bankId: string) => Effect.Effect<string | null, HindsightError>;
     readonly reconcileBank: (bankId: string) => Effect.Effect<void, HindsightError>;
     readonly refreshProfile: (bankId: string) => Effect.Effect<void, HindsightError>;
     readonly retain: (input: RetainInput) => Effect.Effect<void, HindsightError>;
@@ -239,16 +233,7 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
             throw new Error(`Hindsight profile read failed: ${JSON.stringify(response.error)}`);
           }
           return {
-            profile:
-              response.data.content === "Generating content..." ||
-              response.data.content === null ||
-              response.data.content === undefined
-                ? null
-                : {
-                    content: response.data.content,
-                    refreshedAt: response.data.last_refreshed_at ?? null,
-                    sourceWatermark: response.data.last_memory_seen_at ?? null,
-                  },
+            profile: response.data.content === "Generating content..." ? null : (response.data.content ?? null),
             requestDurationMs,
             statusCode: response.response?.status ?? 200,
           };
@@ -259,8 +244,6 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
           Effect.annotateCurrentSpan({
             "http.response.status_code": result.statusCode,
             "memory.bank.scope": bankId.split(":", 1)[0]!,
-            "server.address": new URL(options.baseUrl).hostname,
-            "server.port": Number(new URL(options.baseUrl).port || (options.baseUrl.startsWith("https:") ? 443 : 80)),
             "starlight.client.request.duration_ms": result.requestDurationMs,
           }),
         ),

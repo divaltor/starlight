@@ -751,8 +751,6 @@ model MemoryNamespace {
 model MemoryProfileSnapshot {
   bankId String @id @map("bank_id")
   content String? @db.Text
-  profileRefreshedAt String? @map("profile_refreshed_at")
-  sourceWatermark String? @map("source_watermark")
   invalidatedAt DateTime? @map("invalidated_at")
   invalidationToken String? @map("invalidation_token") @db.Uuid
   revision Int @default(0)
@@ -760,7 +758,6 @@ model MemoryProfileSnapshot {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@index([invalidatedAt, updatedAt])
   @@map("memory_profile_snapshots")
 }
 
