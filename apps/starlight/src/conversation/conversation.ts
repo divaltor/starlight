@@ -10,6 +10,7 @@ import { Lane } from "@/conversation/lane";
 import { PreparedRequestSchema, PreparedToolProfileSchema } from "@/conversation/run-artifacts";
 import type { InputPayload } from "@/conversation/run-artifacts";
 import { TelegramDelivery } from "@/conversation/delivery";
+import { traceAsync } from "@/instrumentation";
 import { Memory } from "@/memory/memory";
 import { Database } from "@/services/database";
 import { OperationalTelemetry } from "@/operational-telemetry";
@@ -859,76 +860,78 @@ export namespace Conversation {
       steps: structuredClone(generated.steps) as unknown as Prisma.InputJsonArray,
     };
     return database
-      .transaction(async (transaction) => {
-        await Lane.assertFence(transaction, claimed.dbKey, claimed);
-        const run = await transaction.conversationRun.findUniqueOrThrow({
-          where: { id: claimed.runId },
-          select: { contextId: true },
-        });
-        await transaction.conversationToolCall.createMany({
-          data: generated.toolEvents.map((event) => ({
-            durationMs: event.durationMs,
-            errorMessage: event.state === "failed" ? event.errorMessage : null,
-            input: event.input as Prisma.InputJsonObject,
-            inputHash: new Bun.CryptoHasher("sha256")
-              .update(Prompt.canonicalEncode(event.input as Prisma.InputJsonObject))
-              .digest("hex"),
-            providerCallId: event.toolCallId,
-            result: event.state === "completed" ? (event.output as Prisma.InputJsonObject) : undefined,
-            runId: claimed.runId,
-            status: event.state === "completed" ? "completed" : "error",
-            toolName: event.toolName,
-          })),
-          skipDuplicates: true,
-        });
-        await transaction.conversationRunAction.createMany({
-          data: generated.output.replies.map((action, ordinal) => {
-            if (action.type === "ignore") {
+      .transaction((transaction) =>
+        traceAsync("Conversation generation persist", {}, async () => {
+          await Lane.assertFence(transaction, claimed.dbKey, claimed);
+          const run = await transaction.conversationRun.findUniqueOrThrow({
+            where: { id: claimed.runId },
+            select: { contextId: true },
+          });
+          await transaction.conversationToolCall.createMany({
+            data: generated.toolEvents.map((event) => ({
+              durationMs: event.durationMs,
+              errorMessage: event.state === "failed" ? event.errorMessage : null,
+              input: event.input as Prisma.InputJsonObject,
+              inputHash: new Bun.CryptoHasher("sha256")
+                .update(Prompt.canonicalEncode(event.input as Prisma.InputJsonObject))
+                .digest("hex"),
+              providerCallId: event.toolCallId,
+              result: event.state === "completed" ? (event.output as Prisma.InputJsonObject) : undefined,
+              runId: claimed.runId,
+              status: event.state === "completed" ? "completed" : "error",
+              toolName: event.toolName,
+            })),
+            skipDuplicates: true,
+          });
+          await transaction.conversationRunAction.createMany({
+            data: generated.output.replies.map((action, ordinal) => {
+              if (action.type === "ignore") {
+                return {
+                  deliveryStatus: "delivered" as const,
+                  lastError: null,
+                  ordinal,
+                  payload: action as Prisma.InputJsonObject,
+                  runId: claimed.runId,
+                  targetMessageId: null,
+                  type: action.type,
+                };
+              }
+              const target = action.type === "reaction" ? action.messageId : action.replyTo;
+              const invalidTarget = target !== null && target !== undefined && !allowedTargets.has(target);
               return {
-                deliveryStatus: "delivered" as const,
-                lastError: null,
+                deliveryStatus: invalidTarget ? ("failed" as const) : ("pending" as const),
+                lastError: invalidTarget ? "Model selected a target outside the frozen batch" : null,
                 ordinal,
                 payload: action as Prisma.InputJsonObject,
                 runId: claimed.runId,
-                targetMessageId: null,
+                targetMessageId: target ?? null,
                 type: action.type,
               };
-            }
-            const target = action.type === "reaction" ? action.messageId : action.replyTo;
-            const invalidTarget = target !== null && target !== undefined && !allowedTargets.has(target);
-            return {
-              deliveryStatus: invalidTarget ? ("failed" as const) : ("pending" as const),
-              lastError: invalidTarget ? "Model selected a target outside the frozen batch" : null,
-              ordinal,
-              payload: action as Prisma.InputJsonObject,
-              runId: claimed.runId,
-              targetMessageId: target ?? null,
-              type: action.type,
-            };
-          }),
-          skipDuplicates: true,
-        });
-        await transaction.conversationRun.update({
-          where: { id: claimed.runId },
-          data: {
-            finishReason: generated.finishReason,
-            generatedAt: new Date(),
-            generatedOutput: generated.output as Prisma.InputJsonObject,
-            modelTranscript: transcript,
-            status: "generated",
-            usage,
-          },
-        });
-        if (run.contextId !== null) {
-          await transaction.conversationContext.update({
-            where: { id: run.contextId },
+            }),
+            skipDuplicates: true,
+          });
+          await transaction.conversationRun.update({
+            where: { id: claimed.runId },
             data: {
-              lastObservedCacheReadTokens: generated.steps.at(-1)?.usage.cacheReadTokens,
-              lastObservedInputTokens: generated.usage.contextInputTokens,
+              finishReason: generated.finishReason,
+              generatedAt: new Date(),
+              generatedOutput: generated.output as Prisma.InputJsonObject,
+              modelTranscript: transcript,
+              status: "generated",
+              usage,
             },
           });
-        }
-      })
+          if (run.contextId !== null) {
+            await transaction.conversationContext.update({
+              where: { id: run.contextId },
+              data: {
+                lastObservedCacheReadTokens: generated.steps.at(-1)?.usage.cacheReadTokens,
+                lastObservedInputTokens: generated.usage.contextInputTokens,
+              },
+            });
+          }
+        }),
+      )
       .pipe(Effect.mapError(failed("Failed to persist model generation")));
   }
 
@@ -1164,20 +1167,22 @@ export namespace Conversation {
     status?: ConversationRunStatus,
   ) {
     return database
-      .transaction(async (transaction) => {
-        await Lane.assertFence(transaction, claimed.dbKey, claimed);
-        const run = await transaction.conversationRun.findUniqueOrThrow({
-          where: { id: claimed.runId },
-          select: { status: true },
-        });
-        await transaction.conversationRun.update({
-          where: { id: claimed.runId },
-          // The override exists for crash recovery of runs already blocked in an earlier deploy;
-          // their status must stay "blocked" instead of being rewritten to "finalized".
-          data: { finalizedAt: new Date(), status: status ?? (run.status === "failed" ? "failed" : "finalized") },
-        });
-        await releaseLane(transaction, claimed, options);
-      })
+      .transaction((transaction) =>
+        traceAsync("Conversation run finalize", {}, async () => {
+          await Lane.assertFence(transaction, claimed.dbKey, claimed);
+          const run = await transaction.conversationRun.findUniqueOrThrow({
+            where: { id: claimed.runId },
+            select: { status: true },
+          });
+          await transaction.conversationRun.update({
+            where: { id: claimed.runId },
+            // The override exists for crash recovery of runs already blocked in an earlier deploy;
+            // their status must stay "blocked" instead of being rewritten to "finalized".
+            data: { finalizedAt: new Date(), status: status ?? (run.status === "failed" ? "failed" : "finalized") },
+          });
+          await releaseLane(transaction, claimed, options);
+        }),
+      )
       .pipe(Effect.mapError(failed("Failed to finalize conversation run")));
   }
 

@@ -13,6 +13,7 @@ import { Lane } from "@/conversation/lane";
 import { PreparedRequestSchema, StoredPayloadSchema } from "@/conversation/run-artifacts";
 import { Memory } from "@/memory/memory";
 import { Media } from "@/media/media";
+import { traceAsync } from "@/instrumentation";
 import { OperationalTelemetry } from "@/operational-telemetry";
 import { Database } from "@/services/database";
 
@@ -110,119 +111,124 @@ export namespace ConversationContext {
                 .freezeContextMemory(runContext, "")
                 .pipe(Effect.mapError(failed("Failed to freeze initial context memory")))
             : "";
-        return yield* database
-          .transaction(async (transaction) => {
-            const run = await transaction.conversationRun.findUniqueOrThrow({
-              where: { id: input.runId },
-              include: {
-                actions: { orderBy: { ordinal: "asc" } },
-                inputs: { include: { input: true }, orderBy: { ordinal: "asc" } },
-                toolCalls: { orderBy: { createdAt: "asc" } },
-              },
-            });
-            const key = {
-              assistantId: run.assistantId,
-              chatId: run.chatId,
-              threadKey: run.threadKey,
-            };
-            await Lane.assertFence(transaction, key, input);
-            if (run.actions.some((action) => !["delivered", "failed"].includes(action.deliveryStatus))) {
-              throw new Error("Run delivery is not terminal");
-            }
-            const existingRunTurns = await transaction.conversationTranscriptTurn.count({
-              where: { runId: input.runId },
-            });
-            // One Prisma transaction connection must execute its queries serially.
-            // oxlint-disable-next-line react-doctor/server-sequential-independent-await
-            const context = run.contextId
-              ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ActiveContext.ensure(transaction, key, chatTools.availableProfile, initialMemory);
-            if (run.contextId === null) {
-              await transaction.conversationRun.update({
-                where: { id: run.id },
-                data: { contextId: context.id },
+        // oxlint-disable sonarjs/no-nested-functions -- tracing wraps the existing transactional workflow.
+        const appended = yield* database
+          .transaction((transaction) =>
+            traceAsync("Context append finalized", {}, async () => {
+              const run = await transaction.conversationRun.findUniqueOrThrow({
+                where: { id: input.runId },
+                include: {
+                  actions: { orderBy: { ordinal: "asc" } },
+                  inputs: { include: { input: true }, orderBy: { ordinal: "asc" } },
+                  toolCalls: { orderBy: { createdAt: "asc" } },
+                },
               });
-            }
-            if (existingRunTurns > 0) {
-              const terminal = await transaction.conversationContextTurn.findFirst({
-                where: { contextId: context.id },
-                orderBy: { ordinal: "desc" },
-              });
-              return {
-                appendedTurns: 0,
-                contextId: context.id,
-                estimatedStableTokens: context.estimatedStableTokens,
-                terminalPrefixHash: terminal?.rollingPrefixHash ?? context.basePrefixHash,
+              const key = {
+                assistantId: run.assistantId,
+                chatId: run.chatId,
+                threadKey: run.threadKey,
               };
-            }
-
-            const existingTurns = await transaction.conversationTranscriptTurn.findMany({
-              where: key,
-              orderBy: { ordinal: "asc" },
-              select: { ordinal: true, sourceMessageId: true },
-            });
-            const knownMessageIds = new Set(
-              existingTurns.flatMap((turn) => (turn.sourceMessageId === null ? [] : [turn.sourceMessageId])),
-            );
-            const projections = Transcript.projectRun(run, knownMessageIds);
-            const firstOrdinal = (existingTurns.at(-1)?.ordinal ?? 0) + 1;
-            const contextTurns = await transaction.conversationContextTurn.findMany({
-              where: { contextId: context.id },
-              orderBy: { ordinal: "asc" },
-            });
-            let rollingHash = contextTurns.at(-1)?.rollingPrefixHash ?? context.basePrefixHash;
-            let estimatedTokens = context.estimatedStableTokens;
-
-            for (const [index, projection] of projections.entries()) {
-              const ordinal = firstOrdinal + index;
-              const transcript = await transaction.conversationTranscriptTurn.create({
-                data: {
-                  ...key,
-                  content: projection.content,
-                  idempotencyKey: `${input.runId}:${projection.key}`,
-                  kind: projection.kind,
-                  ordinal,
-                  runId: input.runId,
-                  sourceMessageId: projection.sourceMessageId,
-                  sourceReferences: projection.sourceReferences,
-                  visibility: projection.visibility,
-                },
+              await Lane.assertFence(transaction, key, input);
+              if (run.actions.some((action) => !["delivered", "failed"].includes(action.deliveryStatus))) {
+                throw new Error("Run delivery is not terminal");
+              }
+              const existingRunTurns = await transaction.conversationTranscriptTurn.count({
+                where: { runId: input.runId },
               });
-              const rendered = Prompt.renderTurn({
-                content: Prompt.canonicalEncode(projection.content),
-                role: projection.role,
-              });
-              const segment = Prompt.extendPrefix(rollingHash, rendered);
-              rollingHash = segment.rollingPrefixHash;
-              estimatedTokens += segment.estimatedTokens;
-              await transaction.conversationContextTurn.create({
-                data: {
+              // One Prisma transaction connection must execute its queries serially.
+              // oxlint-disable-next-line react-doctor/server-sequential-independent-await
+              const context = run.contextId
+                ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
+                : await ActiveContext.ensure(transaction, key, chatTools.availableProfile, initialMemory);
+              if (run.contextId === null) {
+                await transaction.conversationRun.update({
+                  where: { id: run.id },
+                  data: { contextId: context.id },
+                });
+              }
+              if (existingRunTurns > 0) {
+                const terminal = await transaction.conversationContextTurn.findFirst({
+                  where: { contextId: context.id },
+                  orderBy: { ordinal: "desc" },
+                });
+                return {
+                  appendedTurns: 0,
                   contextId: context.id,
-                  estimatedTokens: segment.estimatedTokens,
-                  ordinal: contextTurns.length + index + 1,
-                  renderedContent: rendered,
-                  renderVersion: Prompt.renderVersion,
-                  role: projection.role,
-                  rollingPrefixHash: segment.rollingPrefixHash,
-                  segmentHash: segment.segmentHash,
-                  transcriptTurnId: transcript.id,
-                },
-              });
-            }
-            await transaction.conversationContext.update({
-              where: { id: context.id },
-              data: { estimatedStableTokens: estimatedTokens },
-            });
-            await Memory.recordFinalized(transaction, run);
+                  estimatedStableTokens: context.estimatedStableTokens,
+                  terminalPrefixHash: terminal?.rollingPrefixHash ?? context.basePrefixHash,
+                };
+              }
 
-            return {
-              appendedTurns: projections.length,
-              contextId: context.id,
-              estimatedStableTokens: estimatedTokens,
-              terminalPrefixHash: rollingHash,
-            };
-          })
+              const existingTurns = await transaction.conversationTranscriptTurn.findMany({
+                where: key,
+                orderBy: { ordinal: "asc" },
+                select: { ordinal: true, sourceMessageId: true },
+              });
+              const knownMessageIds = new Set(
+                existingTurns.flatMap((turn) => (turn.sourceMessageId === null ? [] : [turn.sourceMessageId])),
+              );
+              const projections = Transcript.projectRun(run, knownMessageIds);
+              const firstOrdinal = (existingTurns.at(-1)?.ordinal ?? 0) + 1;
+              const contextTurns = await transaction.conversationContextTurn.findMany({
+                where: { contextId: context.id },
+                orderBy: { ordinal: "asc" },
+              });
+              let rollingHash = contextTurns.at(-1)?.rollingPrefixHash ?? context.basePrefixHash;
+              let estimatedTokens = context.estimatedStableTokens;
+
+              for (const [index, projection] of projections.entries()) {
+                const ordinal = firstOrdinal + index;
+                const transcript = await transaction.conversationTranscriptTurn.create({
+                  data: {
+                    ...key,
+                    content: projection.content,
+                    idempotencyKey: `${input.runId}:${projection.key}`,
+                    kind: projection.kind,
+                    ordinal,
+                    runId: input.runId,
+                    sourceMessageId: projection.sourceMessageId,
+                    sourceReferences: projection.sourceReferences,
+                    visibility: projection.visibility,
+                  },
+                });
+                const rendered = Prompt.renderTurn({
+                  content: Prompt.canonicalEncode(projection.content),
+                  role: projection.role,
+                });
+                const segment = Prompt.extendPrefix(rollingHash, rendered);
+                rollingHash = segment.rollingPrefixHash;
+                estimatedTokens += segment.estimatedTokens;
+                await transaction.conversationContextTurn.create({
+                  data: {
+                    contextId: context.id,
+                    estimatedTokens: segment.estimatedTokens,
+                    ordinal: contextTurns.length + index + 1,
+                    renderedContent: rendered,
+                    renderVersion: Prompt.renderVersion,
+                    role: projection.role,
+                    rollingPrefixHash: segment.rollingPrefixHash,
+                    segmentHash: segment.segmentHash,
+                    transcriptTurnId: transcript.id,
+                  },
+                });
+              }
+              await transaction.conversationContext.update({
+                where: { id: context.id },
+                data: { estimatedStableTokens: estimatedTokens },
+              });
+              await Memory.recordFinalized(transaction, run);
+
+              return {
+                appendedTurns: projections.length,
+                contextId: context.id,
+                estimatedStableTokens: estimatedTokens,
+                terminalPrefixHash: rollingHash,
+              };
+            }),
+          )
           .pipe(Effect.mapError(failed("Failed to append finalized context")));
+        // oxlint-enable sonarjs/no-nested-functions
+        return appended;
       });
 
       const prepare = Effect.fn("ConversationContext.prepare")(function* prepare(input: RunReference) {
