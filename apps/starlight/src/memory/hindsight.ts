@@ -39,7 +39,6 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
   export interface Options {
     readonly apiKey: string;
     readonly baseUrl: string;
-    readonly profileBaseUrl: string;
   }
 
   export interface RetainInput {
@@ -112,13 +111,6 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
     const generatedClient = createClient(
       createConfig({
         baseUrl: options.baseUrl,
-        headers,
-        fetch: instrumentedFetch,
-      }),
-    );
-    const profileClient = createClient(
-      createConfig({
-        baseUrl: options.profileBaseUrl,
         headers,
         fetch: instrumentedFetch,
       }),
@@ -234,7 +226,7 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
         try: async (signal) => {
           const dispatchedAt = performance.now();
           const response = await sdk.getMentalModel({
-            client: profileClient,
+            client: generatedClient,
             path: { bank_id: bankId, mental_model_id: PROFILE_ID },
             query: { detail: "content" },
             signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
@@ -267,10 +259,8 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
           Effect.annotateCurrentSpan({
             "http.response.status_code": result.statusCode,
             "memory.bank.scope": bankId.split(":", 1)[0]!,
-            "server.address": new URL(options.profileBaseUrl).hostname,
-            "server.port": Number(
-              new URL(options.profileBaseUrl).port || (options.profileBaseUrl.startsWith("https:") ? 443 : 80),
-            ),
+            "server.address": new URL(options.baseUrl).hostname,
+            "server.port": Number(new URL(options.baseUrl).port || (options.baseUrl.startsWith("https:") ? 443 : 80)),
             "starlight.client.request.duration_ms": result.requestDurationMs,
           }),
         ),

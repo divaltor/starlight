@@ -104,11 +104,7 @@ const infrastructure = Layer.mergeAll(
   chatReply,
   TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
   WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
-  Hindsight.layer({
-    apiKey: env.HINDSIGHT_API_KEY,
-    baseUrl: env.HINDSIGHT_BASE_URL,
-    profileBaseUrl: env.HINDSIGHT_PROFILE_BASE_URL ?? env.HINDSIGHT_BASE_URL,
-  }),
+  Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),
   Media.layer({
     accessKeyId: env.AWS_ACCESS_KEY_ID,
     endpoint: env.AWS_ENDPOINT,
