@@ -17,7 +17,7 @@ export namespace ChatReply {
 
   const reactionEmojiSchema = z.enum(TelegramDelivery.reactionEmojis);
 
-  export const actionSchema = z.discriminatedUnion("type", [
+  export const actionSchema = z.union([
     z.object({ type: z.literal("ignore") }),
     z.object({
       replyTo: z.number().int().nullable().optional(),

@@ -40,7 +40,7 @@ test("returns an immutable completed tool event", async () => {
   const toolOutput = { value: "before" };
   const result = await runModel(
     new MockLanguageModelV3({
-      doGenerate: [toolCallResult("call-1"), textResult('{"answer":"done"}')],
+      doGenerate: [toolCallResult("call-1"), finalOutputResult("done")],
     }),
     {
       maxToolSteps: 1,
@@ -71,7 +71,7 @@ test("returns an immutable completed tool event", async () => {
 test("bounds cumulative tool output before another model step", async () => {
   const result = await runModel(
     new MockLanguageModelV3({
-      doGenerate: [toolCallResult("call-1"), textResult('{"answer":"done"}')],
+      doGenerate: [toolCallResult("call-1"), finalOutputResult("done")],
     }),
     {
       maxToolOutputBytes: 200,
@@ -97,7 +97,7 @@ test("bounds cumulative tool output before another model step", async () => {
 test("returns a failed tool event when generation recovers", async () => {
   const result = await runModel(
     new MockLanguageModelV3({
-      doGenerate: [toolCallResult("call-1"), textResult('{"answer":"recovered"}')],
+      doGenerate: [toolCallResult("call-1"), finalOutputResult("recovered")],
     }),
     {
       maxToolSteps: 1,
@@ -126,15 +126,15 @@ test("returns a failed tool event when generation recovers", async () => {
   ]);
 });
 
-test("allows parallel calls across at most three tool steps", async () => {
+test("requires final output after at most three external tool steps", async () => {
   let executionCount = 0;
-  const error = await runModelEffect(
+  const result = await runModel(
     new MockLanguageModelV3({
       doGenerate: [
         parallelToolCallResult("call-1", "call-2"),
         parallelToolCallResult("call-3", "call-4"),
         parallelToolCallResult("call-5", "call-6"),
-        parallelToolCallResult("call-7", "call-8"),
+        finalOutputResult("done"),
       ],
     }),
     {
@@ -151,10 +151,61 @@ test("allows parallel calls across at most three tool steps", async () => {
         },
       },
     },
-  ).pipe(Effect.flip, Effect.runPromise);
+  );
 
-  expect(error._tag).toBe("InvocationFailed");
+  expect(result.output).toEqual({ answer: "done" });
   expect(executionCount).toBe(6);
+});
+
+test("waits for external tool results before accepting final output", async () => {
+  const result = await runModel(
+    new MockLanguageModelV3({
+      doGenerate: [
+        {
+          content: [
+            {
+              input: '{"query":"current fact"}',
+              toolCallId: "web-call",
+              toolName: "web_lookup",
+              type: "tool-call" as const,
+            },
+            {
+              input: '{"answer":"stale"}',
+              toolCallId: "mixed-final-call",
+              toolName: "final_output",
+              type: "tool-call" as const,
+            },
+          ],
+          finishReason: { raw: "tool-calls", unified: "tool-calls" as const },
+          response: { id: "mixed-response", modelId: "mock-model" },
+          usage: modelUsage,
+          warnings: [],
+        },
+        finalOutputResult("fresh"),
+      ],
+    }),
+    {
+      maxToolSteps: 1,
+      outputSchema: z.object({ answer: z.string() }),
+      tools: {
+        web_lookup: {
+          description: "Return a fixture",
+          execute: () => Promise.resolve({ value: "fresh fact" }),
+          inputSchema: z.object({ query: z.string() }),
+        },
+      },
+    },
+  );
+
+  expect(result.output).toEqual({ answer: "fresh" });
+});
+
+test("rejects malformed final output tool input", async () => {
+  const error = await runModelEffect(new MockLanguageModelV3({ doGenerate: finalOutputResult(42) }), {
+    outputSchema: z.object({ answer: z.string() }),
+  }).pipe(Effect.flip, Effect.runPromise);
+
+  expect(error._tag).toBe("InvalidOutput");
 });
 
 test("stops after 32 model steps", async () => {
@@ -194,7 +245,7 @@ test("does not put prompt or tool-result content in model logs", async () => {
   );
   const result = await runModelEffect(
     new MockLanguageModelV3({
-      doGenerate: [toolCallResult("call-1"), textResult('{"answer":"done"}')],
+      doGenerate: [toolCallResult("call-1"), finalOutputResult("done")],
     }),
     {
       instructions: "TOP_SECRET_PROMPT",
@@ -331,11 +382,18 @@ function runModelEffect<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTP
   }).pipe(Effect.provide(Model.layer.pipe(Layer.provide(ModelProvider.testLayer(model)))));
 }
 
-function textResult(text: string) {
+function finalOutputResult(answer: string | number) {
   return {
-    content: [{ text, type: "text" as const }],
-    finishReason: { raw: "stop", unified: "stop" as const },
-    response: { id: "response-1", modelId: "mock-model" },
+    content: [
+      {
+        input: JSON.stringify({ answer }),
+        toolCallId: "final-output-call",
+        toolName: "final_output",
+        type: "tool-call" as const,
+      },
+    ],
+    finishReason: { raw: "tool-calls", unified: "tool-calls" as const },
+    response: { id: "final-output-response", modelId: "mock-model" },
     usage: modelUsage,
     warnings: [],
   };

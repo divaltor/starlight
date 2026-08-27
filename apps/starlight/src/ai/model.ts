@@ -2,9 +2,11 @@ import {
   AISDKError,
   APICallError,
   generateText,
+  InvalidToolInputError,
   isStepCount,
+  NoObjectGeneratedError,
   NoOutputGeneratedError,
-  Output,
+  tool,
   TypeValidationError,
 } from "ai";
 import type { ModelMessage, StepResult, ToolSet } from "ai";
@@ -18,6 +20,11 @@ import type { Media } from "@/media/media";
 export namespace Model {
   const MODEL_TIMEOUT_MS = 120_000;
   const MAX_GENERATION_STEPS = 32;
+  const FINAL_OUTPUT_TOOL_NAME = "final_output";
+  const FINAL_OUTPUT_INSTRUCTION =
+    "IMPORTANT: You MUST use the final_output tool to provide your final response. Complete any necessary research first, then call final_output exactly once. Do not return the final response as text.";
+  const FINAL_OUTPUT_TOOL_DESCRIPTION =
+    "Return the complete final response in the required structured format. You must call this tool exactly once after completing any necessary research.";
   const INVOCATION_FAILED_MESSAGE = "Model invocation failed";
 
   const errorFields = {
@@ -132,13 +139,24 @@ export namespace Model {
         const selectedModel = provider.model;
         const completedSteps: StepResult<ToolSet>[] = [];
         const toolEvents: ToolEvent[] = [];
-        const tools = boundTools(input.tools, input.maxToolOutputBytes);
+        const outputs = new Map<string, OUTPUT>();
+        const tools = {
+          ...boundTools(input.tools, input.maxToolOutputBytes),
+          [FINAL_OUTPUT_TOOL_NAME]: tool({
+            description: FINAL_OUTPUT_TOOL_DESCRIPTION,
+            execute: (output, execution) => {
+              outputs.set(execution.toolCallId, output);
+              return Promise.resolve({ captured: true });
+            },
+            inputSchema: input.outputSchema,
+          }),
+        };
         const invocation = Effect.tryPromise({
-          try: async (signal) => {
-            const result = await generateText({
+          try: (signal) =>
+            generateText({
               abortSignal: signal,
               headers: { "x-session-id": input.sessionId },
-              instructions: input.instructions,
+              instructions: `${input.instructions}\n\n${FINAL_OUTPUT_INSTRUCTION}`,
               maxOutputTokens: clampOutputTokens(input.maxOutputTokens),
               maxRetries: 0,
               messages: prepareMessages(input.cacheBase, input.cachePrefixMessageCount ?? 0, input.messages),
@@ -147,25 +165,34 @@ export namespace Model {
                 completedSteps.push(step);
               },
               onToolExecutionEnd: (event) => {
+                if (event.toolOutput.toolName === FINAL_OUTPUT_TOOL_NAME) return;
                 toolEvents.push(createToolEvent(event));
               },
-              output: Output.object({ schema: input.outputSchema }),
               prepareStep: (step) => limitToolSteps(step.steps, input.maxToolSteps),
               providerOptions: input.promptCacheKey
                 ? { openrouter: { prompt_cache_key: input.promptCacheKey } }
                 : undefined,
-              stopWhen: isStepCount(MAX_GENERATION_STEPS),
+              stopWhen: [hasStandaloneFinalOutput, isStepCount(MAX_GENERATION_STEPS)],
               telemetry: {
                 functionId: "chat-reply",
                 isEnabled: true,
                 recordInputs: true,
                 recordOutputs: true,
               },
+              toolChoice: "required",
               tools,
-            });
+            }).then((result) => {
+              const finalStep = result.steps.at(-1);
+              const finalCall =
+                finalStep?.toolCalls.length === 1 && finalStep.toolCalls[0]?.toolName === FINAL_OUTPUT_TOOL_NAME
+                  ? finalStep.toolCalls[0]
+                  : undefined;
+              if (!finalCall || !outputs.has(finalCall.toolCallId)) {
+                throw new NoOutputGeneratedError({ message: "Model did not produce exactly one final output" });
+              }
 
-            return { output: result.output, result };
-          },
+              return { output: outputs.get(finalCall.toolCallId)!, result };
+            }),
           catch: (cause) => mapInvocationError(cause, completedSteps.length === 0 && toolEvents.length === 0),
         }).pipe(
           Effect.timeout(Duration.millis(MODEL_TIMEOUT_MS)),
@@ -396,8 +423,15 @@ export namespace Model {
   }
 
   function limitToolSteps(steps: readonly StepResult<ToolSet>[], maximumSteps: number) {
-    const toolStepCount = steps.filter((step) => step.toolCalls.length > 0).length;
-    return toolStepCount >= Math.max(maximumSteps, 0) ? { activeTools: [] } : undefined;
+    const toolStepCount = steps.filter((step) =>
+      step.toolCalls.some((toolCall) => toolCall.toolName !== FINAL_OUTPUT_TOOL_NAME),
+    ).length;
+    return toolStepCount >= Math.max(maximumSteps, 0) ? { activeTools: [FINAL_OUTPUT_TOOL_NAME] as const } : undefined;
+  }
+
+  function hasStandaloneFinalOutput({ steps }: { steps: StepResult<ToolSet>[] }) {
+    const toolCalls = steps.at(-1)?.toolCalls;
+    return toolCalls?.length === 1 && toolCalls[0]?.toolName === FINAL_OUTPUT_TOOL_NAME;
   }
 
   function clampOutputTokens(value: number | undefined): number {
@@ -450,7 +484,12 @@ export namespace Model {
   }
 
   function mapInvocationError(cause: unknown, beforeOutput: boolean): Error {
-    if (NoOutputGeneratedError.isInstance(cause) || TypeValidationError.isInstance(cause)) {
+    if (
+      InvalidToolInputError.isInstance(cause) ||
+      NoObjectGeneratedError.isInstance(cause) ||
+      NoOutputGeneratedError.isInstance(cause) ||
+      TypeValidationError.isInstance(cause)
+    ) {
       return new InvalidOutput({
         cause,
         message: "Model output could not be decoded",

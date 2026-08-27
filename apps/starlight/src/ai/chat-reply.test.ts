@@ -7,7 +7,7 @@ import { Model } from "@/ai/model";
 import { ModelProvider } from "@/ai/model-provider";
 
 test("caps a chatbot reply at 4,096 provider output tokens", async () => {
-  const model = textModel('{"replies":[{"type":"ignore"}]}');
+  const model = replyModel();
   await runReply(model);
 
   expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(4096);
@@ -17,11 +17,18 @@ function modelLayer(model: LanguageModel) {
   return Model.layer.pipe(Layer.provide(ModelProvider.testLayer(model)));
 }
 
-function textModel(text: string) {
+function replyModel() {
   return new MockLanguageModelV3({
     doGenerate: {
-      content: [{ text, type: "text" }],
-      finishReason: { raw: "stop", unified: "stop" },
+      content: [
+        {
+          input: '{"replies":[{"type":"ignore"}]}',
+          toolCallId: "final-output-call",
+          toolName: "final_output",
+          type: "tool-call",
+        },
+      ],
+      finishReason: { raw: "tool-calls", unified: "tool-calls" },
       response: { id: "response-1", modelId: "mock-model" },
       usage: {
         inputTokens: { cacheRead: 0, cacheWrite: 0, noCache: 10, total: 10 },
