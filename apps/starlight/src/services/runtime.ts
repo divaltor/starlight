@@ -139,6 +139,7 @@ const background = Layer.mergeAll(
   WakeOutbox.publisherLayer,
   WakeQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
   HindsightRetention.workerLayer,
+  Memory.workerLayer,
 ).pipe(Layer.provideMerge(domain), Layer.provideMerge(observability));
 
 export const runtime = ManagedRuntime.make(Layer.mergeAll(observability, background));

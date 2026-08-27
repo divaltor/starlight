@@ -53,10 +53,31 @@ export namespace Memory {
         const retention = yield* HindsightRetention.Service;
 
         const readProfiles = Effect.fn("Memory.readProfiles")(function* readProfiles(bankIds: readonly string[]) {
-          return yield* Effect.all(
-            bankIds.map((bankId) => hindsight.profile(bankId).pipe(Effect.map((profile) => ({ bankId, profile })))),
+          const snapshots = yield* database
+            .query((client) => client.memoryProfileSnapshot.findMany({ where: { bankId: { in: [...bankIds] } } }))
+            .pipe(Effect.mapError(failed("Failed to read memory profile snapshots")));
+          const snapshotsByBankId = new Map(snapshots.map((snapshot) => [snapshot.bankId, snapshot]));
+          const remote = yield* Effect.all(
+            bankIds.flatMap((bankId) => {
+              const snapshot = snapshotsByBankId.get(bankId);
+              if (snapshot !== undefined) return [];
+              return [
+                hindsight.profile(bankId).pipe(Effect.map((profile) => ({ bankId, expectedRevision: 0, profile }))),
+              ];
+            }),
             { concurrency: 3 },
           ).pipe(Effect.mapError(failed("Failed to read Hindsight profiles")));
+          if (remote.length > 0) {
+            yield* database
+              .transaction((transaction) => storeProfileSnapshots(transaction, remote))
+              .pipe(Effect.mapError(failed("Failed to store memory profile snapshots")));
+          }
+          const remoteByBankId = new Map(remote.map((item) => [item.bankId, item.profile]));
+          return bankIds.map((bankId) => {
+            const snapshot = snapshotsByBankId.get(bankId);
+            if (snapshot?.invalidatedAt) return { bankId, profile: null };
+            return { bankId, profile: snapshot?.content ?? remoteByBankId.get(bankId)?.content ?? null };
+          });
         });
 
         const freezeUserMemory = Effect.fn("Memory.freezeUserMemory")(function* freezeUserMemory(
@@ -162,16 +183,12 @@ export namespace Memory {
             ),
             { concurrency: 2, discard: true },
           );
-          const profiles = yield* Effect.all(
-            namespaces.map((namespace) =>
-              hindsight.profile(namespace.ownerKey).pipe(Effect.map((profile) => ({ kind: namespace.kind, profile }))),
-            ),
-            { concurrency: 2 },
-          ).pipe(Effect.mapError(failed("Failed to read context memory")));
+          const profiles = yield* readProfiles(namespaces.map((namespace) => namespace.ownerKey));
+          const kinds = new Map(namespaces.map((namespace) => [namespace.ownerKey, namespace.kind]));
           return Prompt.renderMemory({
             checkpoint,
             scopes: profiles.flatMap((profile) =>
-              profile.profile === null ? [] : [{ kind: profile.kind, memory: profile.profile }],
+              profile.profile === null ? [] : [{ kind: kinds.get(profile.bankId)!, memory: profile.profile }],
             ),
           });
         });
@@ -203,9 +220,26 @@ export namespace Memory {
               });
               const relatedNamespaces = await transaction.memoryNamespace.findMany({
                 where: { OR: [{ id: userNamespace.id }, { observations: { some: { subjectUserId: user.id } } }] },
-                select: { chatId: true, id: true },
+                select: {
+                  chatId: true,
+                  id: true,
+                  kind: true,
+                  observations: {
+                    where: { kind: { not: "forget" }, subjectUserId: user.id },
+                    select: { sourceChatId: true, sourceThreadKey: true, visibility: true },
+                  },
+                  ownerKey: true,
+                  userId: true,
+                },
               });
               const namespaces = [...new Set(relatedNamespaces.map((namespace) => namespace.id))];
+              const affectedBankIds = [
+                ...new Set(
+                  relatedNamespaces.flatMap((namespace) =>
+                    namespace.observations.map(HindsightRetention.bankFor.bind(null, namespace)),
+                  ),
+                ),
+              ];
               const affectedChatIds = [
                 ...new Set(
                   relatedNamespaces.flatMap((namespace) => (namespace.chatId === null ? [] : [namespace.chatId])),
@@ -227,6 +261,17 @@ export namespace Memory {
               }
               if (lockedLanes.some((lane) => lane.activeRunId !== null)) throw new ForgetBusyError();
               const markers: { readonly id: bigint; readonly namespaceId: string }[] = [];
+              const invalidatedAt = new Date();
+              const invalidationToken = crypto.randomUUID();
+              for (const bankId of affectedBankIds) {
+                // One Prisma transaction connection must execute its queries serially.
+                // oxlint-disable-next-line react-doctor/async-await-in-loop
+                await transaction.memoryProfileSnapshot.upsert({
+                  where: { bankId },
+                  create: { bankId, invalidatedAt, invalidationToken, revision: 1 },
+                  update: { invalidatedAt, invalidationToken, revision: { increment: 1 } },
+                });
+              }
               for (const namespaceId of namespaces) {
                 // The markers must be ordered and returned so deletion completes before confirmation.
                 // oxlint-disable-next-line react-doctor/async-await-in-loop
@@ -253,7 +298,7 @@ export namespace Memory {
                 },
                 data: { contextResetPending: true },
               });
-              return { affectedLanes: affected.count, markers };
+              return { affectedBankIds, affectedLanes: affected.count, invalidationToken, markers };
             })
             .pipe(
               Effect.mapError((error) =>
@@ -280,6 +325,30 @@ export namespace Memory {
             ),
             { concurrency: 3, discard: true },
           );
+          const refreshed = yield* Effect.all(
+            result.affectedBankIds.map((bankId) =>
+              hindsight.profile(bankId).pipe(Effect.map((profile) => ({ bankId, profile }))),
+            ),
+            { concurrency: 3 },
+          ).pipe(Effect.mapError(failed("Failed to read erased memory profiles")));
+          yield* database
+            .transaction(async (transaction) => {
+              for (const item of refreshed) {
+                // A newer forget token must keep the snapshot unavailable until its own erase finishes.
+                // oxlint-disable-next-line react-doctor/async-await-in-loop
+                await transaction.memoryProfileSnapshot.updateMany({
+                  where: { bankId: item.bankId, invalidationToken: result.invalidationToken },
+                  data: {
+                    content: item.profile?.content ?? null,
+                    invalidatedAt: null,
+                    invalidationToken: null,
+                    profileRefreshedAt: item.profile?.refreshedAt ?? null,
+                    sourceWatermark: item.profile?.sourceWatermark ?? null,
+                  },
+                });
+              }
+            })
+            .pipe(Effect.mapError(failed("Failed to publish erased memory profiles")));
           yield* Effect.logInfo("Memory forget completed").pipe(
             Effect.annotateLogs({ affectedLanes: result.affectedLanes, observations: result.markers.length }),
           );
@@ -290,6 +359,76 @@ export namespace Memory {
         return Service.of({ forget, freezeContextMemory, freezeUserMemory });
       }),
     );
+
+  export const workerLayer: Layer.Layer<never, never, Database.Service | Hindsight.Service> = Layer.effectDiscard(
+    Effect.gen(function* make() {
+      const database = yield* Database.Service;
+      const hindsight = yield* Hindsight.Service;
+      const refreshSnapshots = Effect.fn("Memory.refreshProfileSnapshots")(function* refreshProfileSnapshots() {
+        const namespaces = yield* database.query((client) =>
+          client.memoryNamespace.findMany({
+            select: {
+              kind: true,
+              observations: {
+                distinct: ["sourceChatId", "sourceThreadKey", "visibility"],
+                select: { sourceChatId: true, sourceThreadKey: true, visibility: true },
+                where: { kind: { not: "forget" } },
+              },
+              ownerKey: true,
+              userId: true,
+            },
+          }),
+        );
+        const bankIds = [
+          ...new Set(
+            namespaces.flatMap((namespace) =>
+              namespace.kind === "user"
+                ? namespace.observations.map(HindsightRetention.bankFor.bind(null, namespace))
+                : [namespace.ownerKey],
+            ),
+          ),
+        ];
+        const snapshots = yield* database.query((client) =>
+          client.memoryProfileSnapshot.findMany({
+            where: { bankId: { in: bankIds } },
+            select: { bankId: true, invalidatedAt: true, revision: true },
+          }),
+        );
+        const snapshotsByBankId = new Map(snapshots.map((snapshot) => [snapshot.bankId, snapshot]));
+        const reads = yield* Effect.all(
+          bankIds.flatMap((bankId) => {
+            const snapshot = snapshotsByBankId.get(bankId);
+            if (snapshot?.invalidatedAt) return [];
+            return [
+              hindsight.profile(bankId).pipe(
+                Effect.map((profile) => [{ bankId, expectedRevision: snapshot?.revision ?? 0, profile }]),
+                Effect.catch((error) =>
+                  Effect.logWarning("Memory profile snapshot read failed").pipe(
+                    Effect.annotateLogs({ bankId, error: error.message, errorTag: error._tag }),
+                    Effect.as([]),
+                  ),
+                ),
+              ),
+            ];
+          }),
+          { concurrency: 3 },
+        );
+        const profiles = reads.flat();
+        if (profiles.length === 0) return;
+        yield* database.transaction((transaction) => storeProfileSnapshots(transaction, profiles));
+      });
+      yield* Effect.forkScoped(
+        refreshSnapshots().pipe(
+          Effect.catch((error) =>
+            Effect.logError("Memory profile snapshot refresh failed").pipe(
+              Effect.annotateLogs({ error: error.message, errorTag: error._tag }),
+            ),
+          ),
+          Effect.repeat(Schedule.spaced("30 seconds")),
+        ),
+      );
+    }),
+  );
 
   export async function recordFinalized(
     transaction: Prisma.TransactionClient,
@@ -377,6 +516,43 @@ export namespace Memory {
 
   class ForgetBusyError extends Error {
     override readonly name = "ForgetBusyError";
+  }
+
+  async function storeProfileSnapshots(
+    transaction: Prisma.TransactionClient,
+    profiles: readonly ProfileSnapshotWrite[],
+  ): Promise<void> {
+    if (profiles.length === 0) return;
+    await transaction.memoryProfileSnapshot.createMany({
+      data: profiles.map((item) => ({
+        bankId: item.bankId,
+        content: item.profile?.content ?? null,
+        revision: item.expectedRevision,
+        profileRefreshedAt: item.profile?.refreshedAt ?? null,
+        sourceWatermark: item.profile?.sourceWatermark ?? null,
+      })),
+      skipDuplicates: true,
+    });
+    for (const item of profiles.filter(
+      (profile): profile is ProfileSnapshotWrite & { readonly profile: Hindsight.Profile } => profile.profile !== null,
+    )) {
+      // One Prisma transaction connection must execute its queries serially.
+      // oxlint-disable-next-line react-doctor/async-await-in-loop
+      await transaction.memoryProfileSnapshot.updateMany({
+        where: { bankId: item.bankId, invalidatedAt: null, revision: item.expectedRevision },
+        data: {
+          content: item.profile.content,
+          profileRefreshedAt: item.profile.refreshedAt,
+          sourceWatermark: item.profile.sourceWatermark,
+        },
+      });
+    }
+  }
+
+  interface ProfileSnapshotWrite {
+    readonly bankId: string;
+    readonly expectedRevision: number;
+    readonly profile: Hindsight.Profile | null;
   }
 
   const failed =

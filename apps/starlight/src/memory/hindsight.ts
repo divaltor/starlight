@@ -48,6 +48,12 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
     readonly operationId: string;
   }
 
+  export interface Profile {
+    readonly content: string;
+    readonly refreshedAt: string | null;
+    readonly sourceWatermark: string | null;
+  }
+
   export class HindsightError extends Schema.TaggedError<HindsightError>()("HindsightError", {
     cause: Schema.optional(Schema.Defect()),
     message: Schema.String,
@@ -59,7 +65,7 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
 
   export interface Interface {
     readonly deleteDocuments: (bankId: string, documentIds: readonly string[]) => Effect.Effect<void, HindsightError>;
-    readonly profile: (bankId: string) => Effect.Effect<string | null, HindsightError>;
+    readonly profile: (bankId: string) => Effect.Effect<Profile | null, HindsightError>;
     readonly reconcileBank: (bankId: string) => Effect.Effect<void, HindsightError>;
     readonly refreshProfile: (bankId: string) => Effect.Effect<void, HindsightError>;
     readonly retain: (input: RetainInput) => Effect.Effect<void, HindsightError>;
@@ -235,13 +241,22 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
           });
           const requestDurationMs = performance.now() - dispatchedAt;
           if (response.response?.status === 404) {
-            return { content: null, requestDurationMs, statusCode: 404 };
+            return { profile: null, requestDurationMs, statusCode: 404 };
           }
           if (response.data === undefined) {
             throw new Error(`Hindsight profile read failed: ${JSON.stringify(response.error)}`);
           }
           return {
-            content: response.data.content === "Generating content..." ? null : (response.data.content ?? null),
+            profile:
+              response.data.content === "Generating content..." ||
+              response.data.content === null ||
+              response.data.content === undefined
+                ? null
+                : {
+                    content: response.data.content,
+                    refreshedAt: response.data.last_refreshed_at ?? null,
+                    sourceWatermark: response.data.last_memory_seen_at ?? null,
+                  },
             requestDurationMs,
             statusCode: response.response?.status ?? 200,
           };
@@ -259,7 +274,7 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
             "starlight.client.request.duration_ms": result.requestDurationMs,
           }),
         ),
-        Effect.map((result) => result.content),
+        Effect.map((result) => result.profile),
         Effect.withSpan("Hindsight profile read"),
       );
     });
