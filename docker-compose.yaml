@@ -1,3 +1,27 @@
+x-hindsight-environment: &hindsight-environment
+  HINDSIGHT_API_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+  HINDSIGHT_API_DATABASE_SCHEMA: hindsight
+  HINDSIGHT_API_VECTOR_EXTENSION: pgvector
+  HINDSIGHT_API_WORKER_ID: hindsight
+  HINDSIGHT_API_STORE_DOCUMENT_TEXT: "false"
+  HINDSIGHT_API_TENANT_EXTENSION: hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension
+  HINDSIGHT_API_TENANT_API_KEY: ${HINDSIGHT_API_KEY:?HINDSIGHT_API_KEY is required}
+  HINDSIGHT_API_LLM_PROVIDER: openrouter
+  HINDSIGHT_API_LLM_BASE_URL: https://openrouter.ai/api/v1
+  HINDSIGHT_API_LLM_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required}
+  HINDSIGHT_API_LLM_MODEL: google/gemini-3.7-flash
+  HINDSIGHT_API_LLM_EXTRA_BODY: '{"provider":{"allow_fallbacks":false,"data_collection":"deny","only":["google-vertex/global"],"order":["google-vertex/global"],"require_parameters":true}}'
+  HINDSIGHT_API_REFLECT_MAX_ITERATIONS: "8"
+  HINDSIGHT_API_EMBEDDINGS_PROVIDER: openai
+  HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL: ${CLASSIFICATION_URL:-http://classification:8000}/v1/openai
+  HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
+  HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL: BAAI/bge-m3
+  HINDSIGHT_API_EMBEDDINGS_OPENAI_BATCH_SIZE: "64"
+  HINDSIGHT_API_RERANKER_PROVIDER: cohere
+  HINDSIGHT_API_COHERE_API_KEY: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
+  HINDSIGHT_API_RERANKER_COHERE_BASE_URL: ${CLASSIFICATION_URL:-http://classification:8000}/v1/rerank
+  HINDSIGHT_API_RERANKER_COHERE_MODEL: BAAI/bge-reranker-v2-m3
+
 services:
   valkey:
     image: valkey/valkey:9.1.1-alpine
@@ -108,30 +132,10 @@ services:
     restart: unless-stopped
 
   hindsight:
-    image: ghcr.io/vectorize-io/hindsight:0.9.1
+    image: ghcr.io/vectorize-io/hindsight:0.9.2
     environment:
-      HINDSIGHT_API_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
-      HINDSIGHT_API_DATABASE_SCHEMA: hindsight
-      HINDSIGHT_API_VECTOR_EXTENSION: pgvector
-      HINDSIGHT_API_WORKER_ID: hindsight
-      HINDSIGHT_API_STORE_DOCUMENT_TEXT: "false"
-      HINDSIGHT_API_TENANT_EXTENSION: hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension
-      HINDSIGHT_API_TENANT_API_KEY: ${HINDSIGHT_API_KEY:?HINDSIGHT_API_KEY is required}
-      HINDSIGHT_API_LLM_PROVIDER: openrouter
-      HINDSIGHT_API_LLM_BASE_URL: https://openrouter.ai/api/v1
-      HINDSIGHT_API_LLM_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required}
-      HINDSIGHT_API_LLM_MODEL: google/gemini-3.7-flash
-      HINDSIGHT_API_LLM_EXTRA_BODY: '{"provider":{"allow_fallbacks":false,"data_collection":"deny","only":["google-vertex/global"],"order":["google-vertex/global"],"require_parameters":true}}'
-      HINDSIGHT_API_REFLECT_MAX_ITERATIONS: "8"
-      HINDSIGHT_API_EMBEDDINGS_PROVIDER: openai
-      HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL: ${CLASSIFICATION_URL:-http://classification:8000}/v1/openai
-      HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
-      HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL: BAAI/bge-m3
-      HINDSIGHT_API_EMBEDDINGS_OPENAI_BATCH_SIZE: "64"
-      HINDSIGHT_API_RERANKER_PROVIDER: cohere
-      HINDSIGHT_API_COHERE_API_KEY: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
-      HINDSIGHT_API_RERANKER_COHERE_BASE_URL: ${CLASSIFICATION_URL:-http://classification:8000}/v1/rerank
-      HINDSIGHT_API_RERANKER_COHERE_MODEL: BAAI/bge-reranker-v2-m3
+      <<: *hindsight-environment
+      HINDSIGHT_API_WORKER_ENABLED: "false"
     depends_on:
       postgresql:
         condition: service_healthy
@@ -139,6 +143,24 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8888/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+      start_period: 300s
+    networks:
+      - starlight
+    restart: unless-stopped
+
+  hindsight-worker:
+    image: ghcr.io/vectorize-io/hindsight:0.9.2
+    command: ["/app/api/.venv/bin/hindsight-worker"]
+    environment:
+      <<: *hindsight-environment
+    depends_on:
+      hindsight:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8889/health"]
       interval: 10s
       timeout: 10s
       retries: 6
