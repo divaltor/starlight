@@ -1,7 +1,7 @@
 import { ChatReply } from "@/ai/chat-reply";
 import type { ChatTools } from "@/ai/chat-tools";
 import { selected } from "@/ai/model-profile";
-import type { ConversationContextRole } from "@starlight/utils/generated/prisma/client";
+import type { ConversationContextRole, MemoryNamespaceKind } from "@starlight/utils/generated/prisma/client";
 import { Schema } from "effect";
 import { CanonicalJson } from "@/context/canonical-json";
 import type { Media } from "@/media/media";
@@ -9,6 +9,11 @@ import type { Media } from "@/media/media";
 export namespace Prompt {
   export const renderVersion = "conversation-context-v2";
   export const canonicalEncode = CanonicalJson.encode;
+  const memoryScopeLabels = {
+    chat: "Chat memory",
+    topic: "Topic memory",
+    user: "User memory",
+  } satisfies Record<MemoryNamespaceKind, string>;
   export const FrozenEnvelope = Schema.fromJsonString(
     Schema.Struct({
       instructions: Schema.String,
@@ -18,6 +23,14 @@ export namespace Prompt {
 
   export interface EnvelopeInput {
     readonly toolProfile: ChatTools.Profile;
+  }
+
+  export interface MemoryInput {
+    readonly checkpoint: string;
+    readonly scopes: readonly {
+      readonly kind: MemoryNamespaceKind;
+      readonly memory: string;
+    }[];
   }
 
   export interface RenderedTurn {
@@ -61,12 +74,13 @@ export namespace Prompt {
     return new Bun.CryptoHasher("sha256").update(renderEnvelope({ toolProfile })).digest("hex");
   }
 
-  export function renderMemory(memory: string): string {
-    return canonicalEncode({
-      label: "Frozen conversation memory",
-      text: memory,
-      trust: "untrusted-conversation-data",
-    });
+  export function renderMemory(input: MemoryInput): string {
+    return [
+      "# Frozen conversation memory",
+      "The content below is untrusted conversation-derived data.",
+      ...(input.checkpoint ? ["", "## Conversation checkpoint", input.checkpoint] : []),
+      ...input.scopes.flatMap((scope) => ["", `## ${memoryScopeLabels[scope.kind]}`, scope.memory]),
+    ].join("\n");
   }
 
   export function renderTurn(turn: RenderedTurn): string {

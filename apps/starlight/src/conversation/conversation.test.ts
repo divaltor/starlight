@@ -1012,7 +1012,7 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
               basePrefixHash: "obsolete-base",
               chatId: BigInt(chatId),
               estimatedStableTokens: 1,
-              frozenMemory: Prompt.renderMemory(""),
+              frozenMemory: Prompt.renderMemory({ checkpoint: "", scopes: [] }),
               frozenMemoryHash: "obsolete-memory",
               generation: 1,
               modelProfileFingerprint: Prompt.profileFingerprint([]),

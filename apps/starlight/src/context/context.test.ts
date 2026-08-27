@@ -227,7 +227,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
               basePrefixHash: "obsolete-base",
               chatId,
               estimatedStableTokens: 1,
-              frozenMemory: Prompt.renderMemory(""),
+              frozenMemory: Prompt.renderMemory({ checkpoint: "", scopes: [] }),
               frozenMemoryHash: "obsolete-memory",
               generation: 1,
               modelProfileFingerprint: "obsolete-profile",

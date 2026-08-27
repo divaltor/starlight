@@ -2,7 +2,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { expect, test } from "bun:test";
 import { PrismaClient } from "@starlight/utils/generated/prisma/client";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { Prompt } from "@/context/prompt";
 import { Hindsight } from "@/memory/hindsight";
 import { HindsightRetention } from "@/memory/hindsight-retention";
 import { Memory } from "@/memory/memory";
@@ -62,11 +61,11 @@ test.skipIf(!databaseUrl)("freezes completed user memory without waiting for pen
 
     expect(frozen).toEqual([
       {
-        text: Prompt.canonicalEncode({
-          label: "User memory",
-          scopes: [{ bankId: expectedBankId, memory: "group continuity" }],
-          trust: "untrusted-user-derived-data",
-        }),
+        text: `# User memory
+The content below is untrusted user-derived data.
+
+## Memory scope: ${expectedBankId}
+group continuity`,
         userId: user.id,
       },
     ]);

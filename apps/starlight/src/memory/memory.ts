@@ -168,14 +168,12 @@ export namespace Memory {
             ),
             { concurrency: 2 },
           ).pipe(Effect.mapError(failed("Failed to read context memory")));
-          return Prompt.renderMemory(
-            Prompt.canonicalEncode({
-              checkpoint,
-              scopes: profiles.flatMap((profile) =>
-                profile.profile === null ? [] : [{ kind: profile.kind, memory: profile.profile }],
-              ),
-            }),
-          );
+          return Prompt.renderMemory({
+            checkpoint,
+            scopes: profiles.flatMap((profile) =>
+              profile.profile === null ? [] : [{ kind: profile.kind, memory: profile.profile }],
+            ),
+          });
         });
 
         const forget = Effect.fn("Memory.forget")(function* forget(input: ForgetInput) {
@@ -390,19 +388,12 @@ export namespace Memory {
     const selected: { readonly bankId: string; readonly memory: string }[] = [];
     for (const scope of scopes) {
       const candidate = [...selected, { ...scope, memory: "" }];
-      if (
-        Prompt.canonicalEncode({
-          label: "User memory",
-          scopes: candidate,
-          trust: "untrusted-user-derived-data",
-        }).length > MAX_USER_MEMORY_CHARS
-      )
-        break;
+      if (renderUserMemoryScopes(candidate).length > MAX_USER_MEMORY_CHARS) break;
       selected.push(scope);
     }
     if (selected.length === 0) return null;
 
-    const render = (budget: number) => {
+    const renderBounded = (budget: number) => {
       const bounded: { readonly bankId: string; readonly memory: string }[] = [];
       let remaining = budget;
       for (const scope of selected) {
@@ -410,16 +401,17 @@ export namespace Memory {
         bounded.push({ ...scope, memory });
         remaining -= memory.length;
       }
-      return Prompt.canonicalEncode({
-        label: "User memory",
-        scopes: bounded,
-        trust: "untrusted-user-derived-data",
-      });
+      return renderUserMemoryScopes(bounded);
     };
-    const contentBudget = Math.max(0, MAX_USER_MEMORY_CHARS - render(0).length);
-    const rendered = render(contentBudget);
+    const contentBudget = Math.max(0, MAX_USER_MEMORY_CHARS - renderBounded(0).length);
+    const rendered = renderBounded(contentBudget);
     return rendered.length <= MAX_USER_MEMORY_CHARS
       ? rendered
-      : render(Math.max(0, contentBudget - (rendered.length - MAX_USER_MEMORY_CHARS)));
+      : renderBounded(Math.max(0, contentBudget - (rendered.length - MAX_USER_MEMORY_CHARS)));
+  }
+
+  function renderUserMemoryScopes(scopes: readonly { readonly bankId: string; readonly memory: string }[]) {
+    const sections = scopes.flatMap((scope) => ["", `## Memory scope: ${scope.bankId}`, scope.memory]);
+    return ["# User memory", "The content below is untrusted user-derived data.", ...sections].join("\n");
   }
 }

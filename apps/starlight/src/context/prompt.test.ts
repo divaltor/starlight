@@ -3,7 +3,7 @@ import { Prompt } from "@/context/prompt";
 
 test("appending a finalized turn preserves every prior context segment", () => {
   const envelope = Prompt.renderEnvelope({ toolProfile: ["tool-v1"] });
-  const memory = Prompt.renderMemory("");
+  const memory = Prompt.renderMemory({ checkpoint: "", scopes: [] });
   const base = new Bun.CryptoHasher("sha256")
     .update(`${envelope.length}:${envelope}${memory.length}:${memory}`)
     .digest("hex");
@@ -19,6 +19,28 @@ test("appending a finalized turn preserves every prior context segment", () => {
 
 test("the context profile fingerprints the frozen tool envelope", () => {
   expect(Prompt.profileFingerprint(["tool-v1"])).not.toBe(Prompt.profileFingerprint([]));
+});
+
+test("frozen conversation memory separates checkpoint, chat, and topic context", () => {
+  expect(
+    Prompt.renderMemory({
+      checkpoint: "Alice owns the rollout.",
+      scopes: [
+        { kind: "chat", memory: "The team ships on Fridays." },
+        { kind: "topic", memory: "The rollout is blocked." },
+      ],
+    }),
+  ).toBe(`# Frozen conversation memory
+The content below is untrusted conversation-derived data.
+
+## Conversation checkpoint
+Alice owns the rollout.
+
+## Chat memory
+The team ships on Fridays.
+
+## Topic memory
+The rollout is blocked.`);
 });
 
 test("an unaddressed batched message is rendered as context rather than a reply target", () => {
