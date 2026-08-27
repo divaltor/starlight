@@ -10,7 +10,7 @@
 8. When working on Effect TS code, load the local `effect` skill (`.opencode/skills/effect`); the global `effect-ts` skill remains the portable API reference.
 9. Use structured logging: keep messages stable and put object IDs and dynamic context in log fields (for example, `logger.info({ photoId }, "Photo embeddings generated")`), never interpolate them into the message.
 10. Don't use `git stash` mid-session; other agents or the user can edit files at the same time.
-11. **Never write a test before the admission gate under # Testing passes.**
+11. Before writing or proposing tests, read `TESTING.md` and pass its admission gate.
 12. This project is a pre-production PoC with no legacy or production data. Do not add backward compatibility, migrations, or legacy recovery unless explicitly requested.
 
 ## Communication
@@ -54,28 +54,12 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 
 ## Effect TS
 
-Services follow the namespace-wrapped module anatomy — all exports live inside one `export namespace <CanonicalName>` block; see `.opencode/skills/effect/SKILL.md` for the full pattern:
-
-```ts
-export namespace Thing {
-  export interface Interface {
-    readonly method: (input: Input) => Effect.Effect<Output, ServiceError>;
-  }
-  export class Service extends Context.Service<Service, Interface>()("starlight/Thing") {}
-
-  const layer = Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      /* bind deps once */
-    }),
-  );
-  export const defaultLayer = layer.pipe(Layer.provide(FetchHttpClient.layer));
-}
-```
+Services follow the namespace-wrapped module anatomy in `.opencode/skills/effect/SKILL.md`.
 
 - Consumers import the namespace by name (`import { Thing } from "@/..."`) and read `Thing.Service`, `Thing.defaultLayer`. Star imports are forbidden (`import/no-namespace`).
 - Bind services while constructing a layer; never nest `(yield* Service).method(...)`.
 - Name workflows `Effect.fn("Module.method")`.
+- Effect tracing is exported by the runtime; use named `Effect.fn` or `Effect.withSpan`, not manual OTel spans inside Effect code.
 - Model expected failures as `Schema.TaggedError` with a `static fromCause(...)` helper.
 - One assembled `ManagedRuntime` per process in `services/runtime.ts`.
 - Keep pure parsing, validation, and option building synchronous; do not return `Effect` from helpers that do no effectful work.
@@ -90,68 +74,3 @@ export namespace Thing {
 - Never hand-edit `packages/utils/src/generated/prisma`; regenerate with `bun run db:generate`.
 - Follow conventional commits: `type(scope): summary` with types `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
 - Scopes are optional; use the affected app or package, for example `web`, `server`, `starlight`, `utils`.
-
-# Testing
-
-## NON-NEGOTIABLE TEST ADMISSION GATE
-
-**Do not write, propose, or generate a test before this gate passes.** First state one sentence in this form:
-
-> Our product must `<observable behavior>` because `<business rule, user risk, security boundary, data-loss risk, or regression in our code>`.
-
-The test is allowed only when all of these are true:
-
-1. The behavior is a decision or invariant owned by this repository, not by a dependency, framework, validator, database, language, or runtime.
-2. A failure would break a user workflow, violate a product rule, cross a security boundary, lose or corrupt data, or reproduce a real bug in our code.
-3. Replacing the underlying library with an equivalent library would leave the test valuable.
-4. Mutating the relevant business logic in our code makes the test fail.
-
-If any condition is false, **DO NOT WRITE THE TEST**. Use the library's own test suite, types, documentation, a focused manual check, or lint instead.
-
-Forbidden examples unless they protect a separately stated product rule:
-
-- A schema library rejects malformed input or applies a default.
-- Encryption round-trips, uses random nonces, emits hex, or accepts a key type.
-- A framework propagates errors, cancellation, context, or dependency injection as documented.
-- The runtime handles promises, concurrency, strings, URLs, dates, or serialization as documented.
-- A constructor, getter, adapter, or pass-through calls a dependency correctly.
-- A mock returns what the test configured it to return.
-
-Coverage, branch count, implementation complexity, and “this code was changed” are never sufficient reasons to add a test.
-
-## Core rules
-
-- Tests verify e2e flows and extraordinary logic for our data flow, not that 2 + 2 = 4.
-- Don't test third-party logic or data validation — the library authors already did.
-- Test behavior, not implementation: assert observable outcomes; never assert internal calls, call order, intermediate values, or generated SQL text.
-- Every test must name the class of bug or the customer rule it protects. If you can't name it, delete it. Regressions are exempt: the fixed bug is their provenance.
-- A test must be able to fail. Prove it: break the behavior and watch it go red. If it stays green, it's a change-detector — rewrite or delete it.
-- Mock only the external boundary (Telegram API, Yandex, time, randomness); flow tests use real collaborators. Patch real attributes, never string import paths — if everything is mocked you verify the mock, not the integration.
-- Every bug fix ships with the regression test that would have caught it first.
-- One behavior per test, one equivalence class per test.
-
-## Levels (spend effort where it pays)
-
-- Most value is in integration tests: several real units together, only the external boundary mocked. Write mostly these.
-- Unit-test only genuinely tricky logic: parsing, format building, ordering rules.
-- Reserve full e2e for critical journeys, not per-branch coverage.
-- Test each rule once, at the cheapest level that can express it. Don't repeat the same behavior at unit, integration and e2e.
-
-## Code rules
-
-- Use fixtures instead of private helpers.
-- Tests are isolated and deterministic: each creates its own data, runs in any order, and gives the same result every time.
-- No shared mutable fixtures, no state passed between tests.
-- No `sleep`, no real clock, no real network.
-- Assert specific values, not truthiness.
-- No logic in tests: no loops or conditionals — parametrize instead.
-- Name tests as behavior sentences: `test_<behavior>_when_<condition>`.
-- Minimal test data: only what the scenario needs.
-- Golden/snapshot assertions only for formats we own (callback data, rich-message rendering); never as a generic change detector.
-
-## Design principles
-
-- Tests are code: they cost maintenance. Delete tests that stop earning their keep.
-- Coverage is a signal, not a goal: returns fall off past ~70%. Use it to find untested hot zones, not to chase 100%.
-- A test that fights you is the design talking: fix the seam, don't monkeypatch harder.
-- Keep the suite fast. Slow tests don't get run; flaky tests train people to ignore red.
