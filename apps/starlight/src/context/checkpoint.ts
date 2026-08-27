@@ -14,7 +14,7 @@ Remove obsolete intermediate wording and repeated greetings. Do not invent facts
   export type SealedTurn = Prisma.ConversationContextTurnGetPayload<{ include: { transcriptTurn: true } }>;
 
   // Fields republished from parent turns onto the child context after a commit.
-  export type TailTurn = Pick<SealedTurn, "renderedContent" | "role" | "transcriptTurnId">;
+  export type TailTurn = Pick<SealedTurn, "renderedContent" | "renderVersion" | "role" | "transcriptTurnId">;
 
   // Attempt columns that freeze a boundary between attempts.
   export type Attempt = Pick<

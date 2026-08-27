@@ -186,7 +186,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable attribute
   }
 });
 
-test.skipIf(!databaseUrl)("a prepared run transitions to the configured context profile", async () => {
+test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving retained turns", async () => {
   const runtime = ManagedRuntime.make(
     ConversationContext.layer.pipe(
       Layer.provideMerge(
@@ -202,6 +202,8 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
   );
   const assistantId = 8_000_000_093n;
   const chatId = -8_000_000_093n;
+  const retainedRenderedContent = '<message role="user">retained bytes</message>';
+  const retainedRenderVersion = "conversation-context-v1";
 
   try {
     await runtime.runPromise(
@@ -249,6 +251,33 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
               threadKey: 0,
             },
           });
+          const transcriptTurn = await client.conversationTranscriptTurn.create({
+            data: {
+              assistantId,
+              chatId,
+              content: { text: "Retained" },
+              idempotencyKey: `${run.id}:retained`,
+              kind: "userMessage",
+              ordinal: 1,
+              runId: run.id,
+              sourceReferences: {},
+              threadKey: 0,
+              visibility: "conversation",
+            },
+          });
+          await client.conversationContextTurn.create({
+            data: {
+              contextId: parent.id,
+              estimatedTokens: 2,
+              ordinal: 1,
+              renderedContent: retainedRenderedContent,
+              renderVersion: retainedRenderVersion,
+              role: "user",
+              rollingPrefixHash: "obsolete-rolling",
+              segmentHash: "obsolete-segment",
+              transcriptTurnId: transcriptTurn.id,
+            },
+          });
           await client.conversationLane.update({
             where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
             data: { activeContextId: parent.id, activeRunId: run.id, fencingToken: 1n },
@@ -268,12 +297,22 @@ test.skipIf(!databaseUrl)("a prepared run transitions to the configured context 
             orderBy: { generation: "asc" },
           }),
           run: await client.conversationRun.findUniqueOrThrow({ where: { id: runId } }),
+          turns: await client.conversationContextTurn.findMany({
+            where: { contextId: transitioned.id },
+            orderBy: { ordinal: "asc" },
+          }),
         }));
 
         expect(transitioned.generation).toBe(2);
         expect(persisted.contexts.map((item) => item.status)).toEqual(["superseded", "active"]);
         expect(persisted.run.contextId).toBe(transitioned.id);
         expect(transitioned.profileFingerprint).toBe(Prompt.profileFingerprint([]));
+        expect(
+          persisted.turns.map((turn) => ({
+            renderedContent: turn.renderedContent,
+            renderVersion: turn.renderVersion,
+          })),
+        ).toEqual([{ renderedContent: retainedRenderedContent, renderVersion: retainedRenderVersion }]);
       }),
     );
   } finally {
