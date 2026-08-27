@@ -19,6 +19,7 @@ import { Hindsight } from "@/memory/hindsight";
 import { HindsightRetention } from "@/memory/hindsight-retention";
 import { Memory } from "@/memory/memory";
 import { Media } from "@/media/media";
+import { OperationalTelemetry } from "@/operational-telemetry";
 import { Database } from "@/services/database";
 import { Exa } from "@/services/exa";
 
@@ -130,6 +131,7 @@ const conversation = Conversation.layer.pipe(
 const outbox = WakeOutbox.layer.pipe(Layer.provideMerge(infrastructure));
 const domain = Layer.mergeAll(infrastructure, memory, hindsightRetention, context, conversation, outbox);
 const background = Layer.mergeAll(
+  OperationalTelemetry.eventLoopMonitorLayer,
   WakeOutbox.publisherLayer,
   WakeQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
   HindsightRetention.workerLayer,
