@@ -106,10 +106,12 @@ export namespace WakeQueue {
     return Layer.effectDiscard(
       Effect.gen(function* makeWorker() {
         const conversation = yield* Conversation.Service;
+        const runPromise: typeof Effect.runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const redis = createBunRedisClient(new RedisClient(redisUrl));
         const worker = new Worker<JobData>(
           `${prefix}-lane-wake`,
-          (job, _token, signal) => processJob(conversation, Schema.decodeUnknownSync(JobData)(job.data), signal),
+          (job, _token, signal) =>
+            processJob(conversation, Schema.decodeUnknownSync(JobData)(job.data), runPromise, signal),
           {
             connection: redis,
             concurrency: 10,
@@ -117,7 +119,7 @@ export namespace WakeQueue {
           },
         );
         worker.on("error", (error) => {
-          void Effect.runPromise(
+          void runPromise(
             Effect.logError("Conversation worker error").pipe(Effect.annotateLogs({ error: error.message })),
           );
         });
@@ -140,12 +142,17 @@ export namespace WakeQueue {
     );
   }
 
-  function processJob(conversation: Conversation.Interface, data: JobData, signal?: AbortSignal) {
+  function processJob(
+    conversation: Conversation.Interface,
+    data: JobData,
+    runPromise: typeof Effect.runPromise,
+    signal?: AbortSignal,
+  ) {
     return context.with(propagation.extract(ROOT_CONTEXT, data), () =>
       trace
         .getTracer("starlight-bot")
         .startActiveSpan("Conversation lane wake", { kind: SpanKind.CONSUMER }, (span) =>
-          drainConversation(conversation, data, signal, span),
+          drainConversation(conversation, data, runPromise, signal, span),
         ),
     );
   }
@@ -153,13 +160,12 @@ export namespace WakeQueue {
   async function drainConversation(
     conversation: Conversation.Interface,
     data: JobData,
+    runPromise: typeof Effect.runPromise,
     signal: AbortSignal | undefined,
     span: Span,
   ) {
     try {
-      return await (signal
-        ? Effect.runPromise(conversation.drain(data), { signal })
-        : Effect.runPromise(conversation.drain(data)));
+      return await (signal ? runPromise(conversation.drain(data), { signal }) : runPromise(conversation.drain(data)));
     } catch (error) {
       span.setStatus({ code: SpanStatusCode.ERROR });
       span.recordException(error instanceof Error ? error : String(error));

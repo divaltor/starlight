@@ -115,14 +115,23 @@ export namespace ConversationContext {
         const appended = yield* database
           .transaction((transaction) =>
             traceAsync("Context append finalized", {}, async () => {
-              const run = await transaction.conversationRun.findUniqueOrThrow({
-                where: { id: input.runId },
-                include: {
-                  actions: { orderBy: { ordinal: "asc" } },
-                  inputs: { include: { input: true }, orderBy: { ordinal: "asc" } },
-                  toolCalls: { orderBy: { createdAt: "asc" } },
-                },
+              const storedRun = await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.runId } });
+              // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- one transaction connection must execute queries serially
+              const actions = await transaction.conversationRunAction.findMany({
+                where: { runId: input.runId },
+                orderBy: { ordinal: "asc" },
               });
+              const inputs = await transaction.conversationRunInput.findMany({
+                where: { runId: input.runId },
+                include: { input: true },
+                orderBy: { ordinal: "asc" },
+              });
+              // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- one transaction connection must execute queries serially
+              const toolCalls = await transaction.conversationToolCall.findMany({
+                where: { runId: input.runId },
+                orderBy: { createdAt: "asc" },
+              });
+              const run = { ...storedRun, actions, inputs, toolCalls };
               const key = {
                 assistantId: run.assistantId,
                 chatId: run.chatId,

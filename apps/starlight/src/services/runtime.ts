@@ -80,6 +80,14 @@ function activeTraceContext(): Context | undefined {
 }
 
 const production = env.NODE_ENV === "production";
+const logging = Layer.mergeAll(
+  Logger.layer([
+    production ? Logger.consoleJson : Logger.consolePretty(),
+    ...(env.otlp === undefined ? [] : [otelSink()]),
+    Logger.tracerLogger,
+  ]),
+  Layer.succeed(References.MinimumLogLevel)(parseLogLevel(env.LOG_LEVEL ?? (production ? "info" : "debug"))),
+);
 const chatTools = ChatTools.layer.pipe(Layer.provideMerge(Exa.defaultLayer));
 const chatReply = ChatReply.layer.pipe(Layer.provideMerge(Model.defaultLayer));
 
@@ -119,16 +127,6 @@ const background = Layer.mergeAll(
   WakeOutbox.publisherLayer,
   WakeQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
   HindsightRetention.workerLayer,
-).pipe(Layer.provideMerge(domain));
+).pipe(Layer.provideMerge(domain), Layer.provideMerge(logging));
 
-export const runtime = ManagedRuntime.make(
-  Layer.mergeAll(
-    Logger.layer([
-      production ? Logger.consoleJson : Logger.consolePretty(),
-      ...(env.otlp === undefined ? [] : [otelSink()]),
-      Logger.tracerLogger,
-    ]),
-    Layer.succeed(References.MinimumLogLevel)(parseLogLevel(env.LOG_LEVEL ?? (production ? "info" : "debug"))),
-    background,
-  ),
-);
+export const runtime = ManagedRuntime.make(Layer.mergeAll(logging, background));
