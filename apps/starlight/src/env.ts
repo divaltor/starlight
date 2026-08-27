@@ -42,6 +42,7 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       // Internal Docker service discovery does not terminate TLS.
       // oxlint-disable-next-line sonarjs/no-clear-text-protocols
       HINDSIGHT_BASE_URL: z.url().default("http://hindsight:8888"),
+      HINDSIGHT_PROFILE_BASE_URL: z.url().optional(),
       HINDSIGHT_API_KEY: z.string(),
 
       AWS_ACCESS_KEY_ID: z.string(),

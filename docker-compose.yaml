@@ -77,6 +77,7 @@ services:
       - apps/starlight/.env
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      HINDSIGHT_PROFILE_BASE_URL: http://hindsight-profile:8888
       REDIS_URL: redis://:${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}@valkey:6379
     depends_on:
       valkey:
@@ -148,7 +149,9 @@ services:
       retries: 6
       start_period: 300s
     networks:
-      - starlight
+      starlight:
+        aliases:
+          - hindsight-profile
     restart: unless-stopped
 
   hindsight-worker:
