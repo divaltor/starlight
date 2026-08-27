@@ -1,6 +1,5 @@
 import { Api, GrammyError } from "grammy";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
-import { traceAsync } from "@/instrumentation";
 import { OperationalTelemetry } from "@/operational-telemetry";
 
 export namespace TelegramDelivery {
@@ -90,22 +89,21 @@ export namespace TelegramDelivery {
         const startedAt = performance.now();
 
         return yield* Effect.tryPromise({
-          try: () =>
-            // oxlint-disable-next-line sonarjs/no-nested-functions -- tracing wraps the external request boundary.
-            traceAsync("Telegram delivery", { "telegram.action_type": action.type }, async () => {
-              if (action.type === "reaction") {
-                await api.setMessageReaction(input.chatId, action.messageId, [{ emoji: action.emoji, type: "emoji" }]);
-                return { telegramMessageId: null };
-              }
+          try: async () => {
+            if (action.type === "reaction") {
+              await api.setMessageReaction(input.chatId, action.messageId, [{ emoji: action.emoji, type: "emoji" }]);
+              return { telegramMessageId: null };
+            }
 
-              const sent = await api.sendMessage(input.chatId, action.text, {
-                message_thread_id: input.threadKey === 0 ? undefined : input.threadKey,
-                reply_parameters: action.replyTo ? { message_id: action.replyTo } : undefined,
-              });
-              return { telegramMessageId: sent.message_id };
-            }),
+            const sent = await api.sendMessage(input.chatId, action.text, {
+              message_thread_id: input.threadKey === 0 ? undefined : input.threadKey,
+              reply_parameters: action.replyTo ? { message_id: action.replyTo } : undefined,
+            });
+            return { telegramMessageId: sent.message_id };
+          },
           catch: mapDeliveryError,
         }).pipe(
+          Effect.withSpan("Telegram delivery", { attributes: { "telegram.action_type": action.type } }),
           Effect.timeout(Duration.seconds(30)),
           Effect.mapError((cause) =>
             cause instanceof DeliveryError

@@ -1,7 +1,6 @@
 import { OpenTelemetry } from "@ai-sdk/otel";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
 import { metrics, SpanStatusCode, trace } from "@opentelemetry/api";
-import type { Attributes } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
@@ -104,20 +103,6 @@ export function createUpdateTracer(): MiddlewareFn<Context> {
         span.end();
       }
     });
-}
-
-export function traceAsync<T>(name: string, attributes: Attributes, operation: () => Promise<T>): Promise<T> {
-  return trace.getTracer(INSTRUMENTATION_NAME).startActiveSpan(name, { attributes }, async (span) => {
-    try {
-      return await operation();
-    } catch (error) {
-      span.setStatus({ code: SpanStatusCode.ERROR });
-      span.recordException(error instanceof Error ? error : String(error));
-      throw error;
-    } finally {
-      span.end();
-    }
-  });
 }
 
 export function shutdownTelemetry(): Promise<void> {

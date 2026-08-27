@@ -2,6 +2,7 @@ import { isSpanContextValid, ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import type { Context } from "@opentelemetry/api";
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import type { LogRecord } from "@opentelemetry/api-logs";
+import { OtelTracer, Resource } from "@effect/opentelemetry";
 import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
 import type { LogLevel } from "effect/LogLevel";
 import { ChatReply } from "@/ai/chat-reply";
@@ -90,6 +91,11 @@ const logging = Layer.mergeAll(
 );
 const chatTools = ChatTools.layer.pipe(Layer.provideMerge(Exa.defaultLayer));
 const chatReply = ChatReply.layer.pipe(Layer.provideMerge(Model.defaultLayer));
+const tracing =
+  env.langfuse === undefined && env.otlp === undefined
+    ? Layer.empty
+    : OtelTracer.layerGlobal.pipe(Layer.provide(Resource.layer({ serviceName: "starlight-bot" })));
+const observability = Layer.mergeAll(logging, tracing);
 
 const infrastructure = Layer.mergeAll(
   Database.layer(env.DATABASE_URL),
@@ -127,6 +133,6 @@ const background = Layer.mergeAll(
   WakeOutbox.publisherLayer,
   WakeQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
   HindsightRetention.workerLayer,
-).pipe(Layer.provideMerge(domain), Layer.provideMerge(logging));
+).pipe(Layer.provideMerge(domain), Layer.provideMerge(observability));
 
-export const runtime = ManagedRuntime.make(Layer.mergeAll(logging, background));
+export const runtime = ManagedRuntime.make(Layer.mergeAll(observability, background));
