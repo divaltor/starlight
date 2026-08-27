@@ -9,7 +9,7 @@ import { Database } from "@/services/database";
 const databaseUrl = process.env.DATABASE_URL;
 
 describe.skipIf(!databaseUrl)("Hindsight retention", () => {
-  test("deletes only the requesting user's documents preceding a forget observation", async () => {
+  test("refreshes profiles only when deleting the requesting user's documents", async () => {
     const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl! }) });
     const ownerKey = `chat:${crypto.randomUUID()}`;
     const deleted: { readonly bankId: string; readonly documentIds: readonly string[] }[] = [];
@@ -25,6 +25,7 @@ describe.skipIf(!databaseUrl)("Hindsight retention", () => {
                 deleted.push({ bankId, documentIds });
               }),
             profile: () => Effect.succeed(null),
+            reconcileBank: () => Effect.void,
             refreshProfile: (bankId) =>
               Effect.sync(() => {
                 refreshed.push(bankId);
@@ -49,7 +50,7 @@ describe.skipIf(!databaseUrl)("Hindsight retention", () => {
       const namespace = await client.memoryNamespace.create({
         data: { chatId: chat.id, kind: "chat", ownerKey },
       });
-      const observations = await client.$transaction([
+      await client.$transaction([
         client.memoryObservation.create({
           data: {
             content: { messageId: 10, sender: "Requester", text: "old detail" },
@@ -72,6 +73,18 @@ describe.skipIf(!databaseUrl)("Hindsight retention", () => {
             visibility: "sameChat",
           },
         }),
+      ]);
+
+      await runtime.runPromise(
+        Effect.gen(function* retainPending() {
+          const retention = yield* HindsightRetention.Service;
+          yield* retention.retainPending(namespace.id);
+        }),
+      );
+
+      expect(refreshed).toEqual([]);
+
+      const observations = await client.$transaction([
         client.memoryObservation.create({
           data: {
             content: { request: "forget me" },
@@ -111,7 +124,7 @@ describe.skipIf(!databaseUrl)("Hindsight retention", () => {
       expect(deleted).toEqual([{ bankId: ownerKey, documentIds: [`message:${chat.id}:10`] }]);
       expect(refreshed).toEqual([ownerKey]);
       expect(await client.memoryNamespace.findUniqueOrThrow({ where: { id: namespace.id } })).toMatchObject({
-        retentionWatermark: observations[2]!.id,
+        retentionWatermark: observations[0]!.id,
       });
     } finally {
       await runtime.dispose();

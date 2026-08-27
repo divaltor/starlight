@@ -114,9 +114,9 @@ export namespace HindsightRetention {
           [...deletions].map(([bankId, documentIds]) => hindsight.deleteDocuments(bankId, [...documentIds])),
           { concurrency: 3, discard: true },
         );
-        const refreshedBanks = new Set([...banks.keys(), ...deletions.keys()]);
+        const touchedBanks = new Set([...banks.keys(), ...deletions.keys()]);
         yield* Effect.all(
-          [...refreshedBanks].map((bankId) => hindsight.refreshProfile(bankId)),
+          [...deletions.keys()].map((bankId) => hindsight.refreshProfile(bankId)),
           {
             concurrency: 3,
             discard: true,
@@ -133,7 +133,7 @@ export namespace HindsightRetention {
         );
         yield* Effect.logInfo("Hindsight retention completed").pipe(
           Effect.annotateLogs({
-            banks: refreshedBanks.size,
+            banks: touchedBanks.size,
             deletedDocuments: namespace.forgotten.length,
             namespaceId,
             observations: namespace.observations.length,
@@ -163,15 +163,17 @@ export namespace HindsightRetention {
     }),
   );
 
-  export const workerLayer: Layer.Layer<never, never, Database.Service | Service> = Layer.effectDiscard(
-    Effect.gen(function* make() {
-      const database = yield* Database.Service;
-      const retention = yield* Service;
+  export const workerLayer: Layer.Layer<never, never, Database.Service | Hindsight.Service | Service> =
+    Layer.effectDiscard(
+      Effect.gen(function* make() {
+        const database = yield* Database.Service;
+        const hindsight = yield* Hindsight.Service;
+        const retention = yield* Service;
 
-      const retainBatch = database
-        .query(
-          (client) =>
-            client.$queryRaw<{ readonly id: string }[]>`
+        const retainBatch = database
+          .query(
+            (client) =>
+              client.$queryRaw<{ readonly id: string }[]>`
               SELECT namespace.id
               FROM memory_namespaces AS namespace
               WHERE EXISTS (
@@ -183,34 +185,80 @@ export namespace HindsightRetention {
               ORDER BY namespace.updated_at ASC, namespace.id ASC
               LIMIT ${BATCH_SIZE}
             `,
-        )
-        .pipe(
-          Effect.flatMap((namespaces) =>
-            Effect.all(
-              namespaces.map((namespace) =>
-                retention.retainPending(namespace.id).pipe(
-                  // One malformed shadow bank must not prevent unrelated namespaces from progressing.
-                  // oxlint-disable-next-line sonarjs/no-nested-functions
-                  Effect.catch((error) =>
-                    Effect.logError("Hindsight retention failed").pipe(
-                      Effect.annotateLogs({ error: error.message, errorTag: error._tag, namespaceId: namespace.id }),
+          )
+          .pipe(
+            Effect.flatMap((namespaces) =>
+              Effect.all(
+                namespaces.map((namespace) =>
+                  retention.retainPending(namespace.id).pipe(
+                    // One malformed shadow bank must not prevent unrelated namespaces from progressing.
+                    // oxlint-disable-next-line sonarjs/no-nested-functions
+                    Effect.catch((error) =>
+                      Effect.logError("Hindsight retention failed").pipe(
+                        Effect.annotateLogs({ error: error.message, errorTag: error._tag, namespaceId: namespace.id }),
+                      ),
                     ),
                   ),
                 ),
+                { concurrency: NAMESPACE_CONCURRENCY, discard: true },
               ),
-              { concurrency: NAMESPACE_CONCURRENCY, discard: true },
             ),
-          ),
-          Effect.catch((error) =>
-            Effect.logError("Hindsight retention scan failed").pipe(
-              Effect.annotateLogs({ error: error.message, errorTag: error._tag }),
+            Effect.catch((error) =>
+              Effect.logError("Hindsight retention scan failed").pipe(
+                Effect.annotateLogs({ error: error.message, errorTag: error._tag }),
+              ),
             ),
-          ),
-        );
+          );
 
-      yield* Effect.forkScoped(retainBatch.pipe(Effect.repeat(Schedule.spaced("1 second"))));
-    }),
-  );
+        const reconcileBanks = database
+          .query((client) =>
+            client.memoryNamespace.findMany({
+              include: {
+                observations: {
+                  distinct: ["sourceChatId", "sourceThreadKey", "visibility"],
+                  select: { sourceChatId: true, sourceThreadKey: true, visibility: true },
+                },
+              },
+            }),
+          )
+          .pipe(
+            Effect.flatMap((namespaces) =>
+              Effect.all(
+                [
+                  ...new Set(
+                    namespaces.flatMap((namespace) =>
+                      namespace.kind === "user"
+                        ? namespace.observations.map((observation) => bankFor(namespace, observation))
+                        : [namespace.ownerKey],
+                    ),
+                  ),
+                ].map((bankId) =>
+                  hindsight.reconcileBank(bankId).pipe(
+                    // One unavailable bank must not prevent unrelated bank definitions from being reconciled.
+                    // oxlint-disable-next-line sonarjs/no-nested-functions
+                    Effect.catch((error) =>
+                      Effect.logError("Hindsight bank reconciliation failed").pipe(
+                        Effect.annotateLogs({ bankId, error: error.message, errorTag: error._tag }),
+                      ),
+                    ),
+                  ),
+                ),
+                { concurrency: NAMESPACE_CONCURRENCY, discard: true },
+              ),
+            ),
+            Effect.catch((error) =>
+              Effect.logError("Hindsight bank reconciliation scan failed").pipe(
+                Effect.annotateLogs({ error: error.message, errorTag: error._tag }),
+              ),
+            ),
+          );
+
+        yield* Effect.all([
+          Effect.forkScoped(retainBatch.pipe(Effect.repeat(Schedule.spaced("1 second")))),
+          Effect.forkScoped(reconcileBanks.pipe(Effect.repeat(Schedule.spaced("5 minutes")))),
+        ]);
+      }),
+    );
 
   export function bankFor(
     namespace: Pick<Prisma.MemoryNamespaceGetPayload<object>, "kind" | "ownerKey" | "userId">,

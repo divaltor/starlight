@@ -17,6 +17,7 @@ test.skipIf(!databaseUrl)("freezes completed user memory without waiting for pen
   const hindsightLayer = Layer.succeed(Hindsight.Service)({
     deleteDocuments: () => Effect.void,
     profile: () => Effect.succeed("group continuity"),
+    reconcileBank: () => Effect.void,
     refreshProfile: () => Effect.void,
     retain: () => Effect.die(new Error("User memory reads must not retain pending observations")),
   });

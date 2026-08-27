@@ -58,6 +58,7 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
   export interface Interface {
     readonly deleteDocuments: (bankId: string, documentIds: readonly string[]) => Effect.Effect<void, HindsightError>;
     readonly profile: (bankId: string) => Effect.Effect<string | null, HindsightError>;
+    readonly reconcileBank: (bankId: string) => Effect.Effect<void, HindsightError>;
     readonly refreshProfile: (bankId: string) => Effect.Effect<void, HindsightError>;
     readonly retain: (input: RetainInput) => Effect.Effect<void, HindsightError>;
   }
@@ -110,7 +111,6 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
           signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
         });
         const profile = models.items.find((model) => model.id === PROFILE_ID);
-        // oxlint-disable-next-line unicorn/prefer-ternary -- creation has an operation that must complete before refresh
         if (profile === undefined) {
           const created = await sdk.createMentalModel({
             body: {
@@ -118,7 +118,7 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
               max_tokens: profileConfig.maxTokens,
               name: "profile",
               source_query: profileConfig.query,
-              trigger: { mode: "delta", refresh_after_consolidation: false },
+              trigger: { mode: "delta", refresh_after_consolidation: true },
             },
             client: generatedClient,
             path: { bank_id: bankId },
@@ -127,14 +127,15 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
           if (created.data === undefined) {
             throw new Error(`Hindsight mental model creation failed: ${JSON.stringify(created.error)}`);
           }
-          await waitForOperation(bankId, created.data.operation_id, signal);
         } else {
+          const profileDefinitionChanged =
+            profile.source_query !== profileConfig.query || profile.max_tokens !== profileConfig.maxTokens;
           const updated = await sdk.updateMentalModel({
             body: {
               max_tokens: profileConfig.maxTokens,
               name: "profile",
               source_query: profileConfig.query,
-              trigger: { mode: "delta", refresh_after_consolidation: false },
+              trigger: { mode: "delta", refresh_after_consolidation: true },
             },
             client: generatedClient,
             path: { bank_id: bankId, mental_model_id: PROFILE_ID },
@@ -143,11 +144,10 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
           if (updated.data === undefined) {
             throw new Error(`Hindsight mental model update failed: ${JSON.stringify(updated.error)}`);
           }
-          if (profile.source_query !== profileConfig.query || profile.max_tokens !== profileConfig.maxTokens) {
-            const refreshed = await client.refreshMentalModel(bankId, PROFILE_ID, {
+          if (profileDefinitionChanged) {
+            await client.refreshMentalModel(bankId, PROFILE_ID, {
               signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
             });
-            await waitForOperation(bankId, refreshed.operation_id, signal);
           }
         }
         initializedBanks.add(bankId);
@@ -182,15 +182,27 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
     const profile = Effect.fn("Hindsight.profile")(function* profile(bankId: string) {
       return yield* Effect.tryPromise({
         try: async (signal) => {
-          await ensureBank(bankId, signal);
-          const model = await client.getMentalModel(bankId, PROFILE_ID, {
-            detail: "content",
+          const response = await sdk.getMentalModel({
+            client: generatedClient,
+            path: { bank_id: bankId, mental_model_id: PROFILE_ID },
+            query: { detail: "content" },
             signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
           });
-          return model.content ?? null;
+          if (response.response?.status === 404) return null;
+          if (response.data === undefined) {
+            throw new Error(`Hindsight profile read failed: ${JSON.stringify(response.error)}`);
+          }
+          return response.data.content === "Generating content..." ? null : (response.data.content ?? null);
         },
         catch: (cause) => HindsightError.fromCause("Failed to read Hindsight profile", cause),
       }).pipe(Effect.withSpan("Hindsight profile read"));
+    });
+
+    const reconcileBank = Effect.fn("Hindsight.reconcileBank")(function* reconcileBank(bankId: string) {
+      yield* Effect.tryPromise({
+        try: (signal) => ensureBank(bankId, signal),
+        catch: (cause) => HindsightError.fromCause("Failed to reconcile Hindsight bank", cause),
+      }).pipe(Effect.withSpan("Hindsight bank reconciliation"));
     });
 
     const deleteDocuments = Effect.fn("Hindsight.deleteDocuments")(function* deleteDocuments(
@@ -269,6 +281,6 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
       }
     }
 
-    return { deleteDocuments, profile, refreshProfile, retain };
+    return { deleteDocuments, profile, reconcileBank, refreshProfile, retain };
   }
 }
