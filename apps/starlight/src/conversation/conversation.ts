@@ -305,16 +305,22 @@ export namespace Conversation {
             return { kind: "completed" as const, runId: claimed.runId };
           }
 
-          const prepared = yield* prepareRun(claimed);
-          yield* blockOnPermanent(
-            context.transitionProfile({
-              key: claimed.key,
-              reason: "profile-change",
-              run: { fencingToken: claimed.fencingToken, runId: claimed.runId },
-              toolProfile: prepared.toolProfile,
-            }),
-            claimed,
-            "profile-transition-required",
+          const { toolProfile } = Schema.decodeUnknownSync(PreparedToolProfileSchema)(claimed.preparedRequest);
+          const [prepared] = yield* Effect.all(
+            [
+              prepareRun(claimed, toolProfile),
+              blockOnPermanent(
+                context.transitionProfile({
+                  key: claimed.key,
+                  reason: "profile-change",
+                  run: { fencingToken: claimed.fencingToken, runId: claimed.runId },
+                  toolProfile,
+                }),
+                claimed,
+                "profile-transition-required",
+              ),
+            ],
+            { concurrency: 2 },
           );
           if (!claimed.replyEligible) return yield* finalizeClaimed(claimed);
 
@@ -532,7 +538,7 @@ export namespace Conversation {
           .pipe(Effect.mapError(failed("Failed to claim conversation lane")));
       }
 
-      function prepareRun(claimed: ClaimedRun) {
+      function prepareRun(claimed: ClaimedRun, pinnedToolProfile: ChatTools.Profile) {
         return Effect.gen(function* prepare() {
           const payloads = claimed.inputs.map((input) => input.payload as InputPayload);
           const allowedTargetIds = [
@@ -545,9 +551,6 @@ export namespace Conversation {
             ),
           ];
           const stored = Option.getOrNull(Schema.decodeUnknownOption(PreparedRequestSchema)(claimed.preparedRequest));
-          const pinnedToolProfile = Schema.decodeUnknownSync(PreparedToolProfileSchema)(
-            claimed.preparedRequest,
-          ).toolProfile;
           // Only what time erodes is frozen; rendering rebuilds deterministically from the
           // immutable batch in ConversationContext.prepare.
           const frozen = stored ?? {
