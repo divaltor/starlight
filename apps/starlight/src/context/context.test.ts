@@ -5,7 +5,6 @@ import { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
 import { ConversationContext } from "@/context/context";
 import { Prompt } from "@/context/prompt";
-import { Memory } from "@/memory/memory";
 import { Media } from "@/media/media";
 import { Database } from "@/services/database";
 
@@ -34,7 +33,6 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable attribute
           Database.layer(databaseUrl!),
           Layer.succeed(ChatTools.Service)(disabledChatTools),
           Layer.succeed(Model.Service)(unavailableModel),
-          memoryLayer,
           mediaLayer,
         ),
       ),
@@ -194,7 +192,6 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
           Database.layer(databaseUrl!),
           Layer.succeed(ChatTools.Service)(disabledChatTools),
           Layer.succeed(Model.Service)(unavailableModel),
-          memoryLayer,
           mediaLayer,
         ),
       ),
@@ -334,7 +331,6 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
           Database.layer(databaseUrl!),
           Layer.succeed(ChatTools.Service)(disabledChatTools),
           Layer.succeed(Model.Service)(unavailableModel),
-          memoryLayer,
           mediaLayer,
         ),
       ),
@@ -391,6 +387,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
               inputs: { create: { inputId: input.id, ordinal: 0 } },
               modelProfileFingerprint: Prompt.profileFingerprint([]),
               preparedRequest: {
+                contextMemory: null,
                 currentDate: "2026-08-24",
                 sessionId: "frozen-hash-session",
                 toolProfile: [],
@@ -448,7 +445,6 @@ test.skipIf(!databaseUrl)(
             Database.layer(databaseUrl!),
             Layer.succeed(ChatTools.Service)(disabledChatTools),
             Layer.succeed(Model.Service)(unavailableModel),
-            memoryLayer,
             mediaLayer,
           ),
         ),
@@ -630,12 +626,6 @@ const mediaLayer = Layer.succeed(Media.Service)({
       type: source.type,
     }),
   load: () => Effect.succeed(null),
-});
-
-const memoryLayer = Layer.succeed(Memory.Service)({
-  forget: () => Effect.die(new Error("Memory forget must not run in context tests")),
-  freezeContextMemory: () => Effect.succeed(""),
-  freezeUserMemory: () => Effect.succeed([]),
 });
 
 const unavailableModel: Model.Interface = {

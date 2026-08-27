@@ -10,8 +10,10 @@ import { OperationalTelemetry } from "@/operational-telemetry";
 import { Database } from "@/services/database";
 
 export namespace Memory {
+  const MAX_CONTEXT_MEMORY_CHARS = 3200;
   const MAX_USER_MEMORY_SENDERS = 3;
   const MAX_USER_MEMORY_CHARS = 1600;
+  const RECALL_MAX_TOKENS = 800;
 
   export interface ForgetInput {
     readonly firstName: string;
@@ -27,6 +29,17 @@ export namespace Memory {
     readonly observations: number;
   }
 
+  export interface RecallInput {
+    readonly key: Lane.LaneKey;
+    readonly query: string;
+    readonly userIds: readonly string[];
+  }
+
+  export interface Recalled {
+    readonly contextMemory: string | null;
+    readonly userMemory: readonly FrozenUserMemory[];
+  }
+
   export class MemoryError extends Schema.TaggedError<MemoryError>()("MemoryError", {
     cause: Schema.optional(Schema.Defect()),
     message: Schema.String,
@@ -35,11 +48,7 @@ export namespace Memory {
 
   export interface Interface {
     readonly forget: (input: ForgetInput) => Effect.Effect<ForgetResult, MemoryError>;
-    readonly freezeContextMemory: (key: Lane.LaneKey, checkpoint: string) => Effect.Effect<string, MemoryError>;
-    readonly freezeUserMemory: (
-      userIds: readonly string[],
-      key: Lane.LaneKey,
-    ) => Effect.Effect<readonly FrozenUserMemory[], MemoryError>;
+    readonly recall: (input: RecallInput) => Effect.Effect<Recalled, MemoryError>;
   }
 
   export class Service extends Context.Service<Service, Interface>()("starlight/Memory") {}
@@ -52,44 +61,18 @@ export namespace Memory {
         const hindsight = yield* Hindsight.Service;
         const retention = yield* HindsightRetention.Service;
 
-        const readProfiles = Effect.fn("Memory.readProfiles")(function* readProfiles(bankIds: readonly string[]) {
-          const snapshots = yield* database
-            .query((client) => client.memoryProfileSnapshot.findMany({ where: { bankId: { in: [...bankIds] } } }))
-            .pipe(Effect.mapError(failed("Failed to read memory profile snapshots")));
-          const snapshotsByBankId = new Map(snapshots.map((snapshot) => [snapshot.bankId, snapshot]));
-          const remote = yield* Effect.all(
-            bankIds.flatMap((bankId) => {
-              const snapshot = snapshotsByBankId.get(bankId);
-              if (snapshot !== undefined) return [];
-              return [
-                hindsight.profile(bankId).pipe(Effect.map((profile) => ({ bankId, expectedRevision: 0, profile }))),
-              ];
-            }),
-            { concurrency: 3 },
-          ).pipe(Effect.mapError(failed("Failed to read Hindsight profiles")));
-          if (remote.length > 0) {
-            yield* database
-              .transaction((transaction) => storeProfileSnapshots(transaction, remote))
-              .pipe(Effect.mapError(failed("Failed to store memory profile snapshots")));
-          }
-          const remoteByBankId = new Map(remote.map((item) => [item.bankId, item.profile]));
-          return bankIds.map((bankId) => {
-            const snapshot = snapshotsByBankId.get(bankId);
-            if (snapshot?.invalidatedAt) return { bankId, profile: null };
-            return { bankId, profile: snapshot?.content ?? remoteByBankId.get(bankId) ?? null };
-          });
-        });
-
-        const freezeUserMemory = Effect.fn("Memory.freezeUserMemory")(function* freezeUserMemory(
-          userIds: readonly string[],
-          key: Lane.LaneKey,
-        ) {
-          const selectedUserIds = [...new Set(userIds)].slice(0, MAX_USER_MEMORY_SENDERS);
-          if (selectedUserIds.length === 0) return [];
+        const recall = Effect.fn("Memory.recall")(function* recall(input: RecallInput) {
+          const selectedUserIds = [...new Set(input.userIds)].slice(0, MAX_USER_MEMORY_SENDERS);
+          const contextOwnerKeys =
+            input.key.chatId < 0n
+              ? [`chat:${input.key.chatId}`, `topic:${input.key.chatId}:${input.key.threadKey}`]
+              : [];
           const namespaces = yield* database
             .query((client) =>
               client.memoryNamespace.findMany({
-                where: { kind: "user", userId: { in: selectedUserIds } },
+                where: {
+                  OR: [{ kind: "user", userId: { in: selectedUserIds } }, { ownerKey: { in: contextOwnerKeys } }],
+                },
                 include: {
                   observations: {
                     where: { kind: { not: "forget" } },
@@ -99,98 +82,112 @@ export namespace Memory {
                 },
               }),
             )
-            .pipe(Effect.mapError(failed("Failed to find user memory namespaces")));
-          const byUserId = new Map(
-            namespaces.flatMap((namespace) =>
-              namespace.userId === null ? [] : [[namespace.userId, namespace] as const],
-            ),
-          );
-          return yield* Effect.all(
-            selectedUserIds.map((userId) => {
-              const namespace = byUserId.get(userId);
-              if (namespace === undefined) return Effect.succeed(null);
-              const bankIds = [
-                ...new Set(
-                  namespace.observations.flatMap((observation) => {
-                    if (
-                      key.chatId > 0n &&
-                      !["privateUser", "sameChat", "publicProfile", "explicitShareable"].includes(
-                        observation.visibility,
-                      )
-                    )
-                      return [];
-                    if (key.chatId < 0n && observation.visibility === "privateUser") return [];
-                    if (
-                      key.chatId < 0n &&
-                      observation.visibility === "sameChat" &&
-                      observation.sourceChatId !== key.chatId
-                    )
-                      return [];
-                    if (
-                      key.chatId < 0n &&
-                      observation.visibility === "sameTopic" &&
-                      (observation.sourceChatId !== key.chatId || observation.sourceThreadKey !== key.threadKey)
-                    )
-                      return [];
-                    return [HindsightRetention.bankFor(namespace, observation)];
-                  }),
-                ),
-              ].toSorted();
-              if (bankIds.length < namespace.observations.length) {
-                OperationalTelemetry.recordEvent("memory-projection", "privacy-filtered");
-              }
-              return readProfiles(bankIds).pipe(
-                Effect.map((profiles): FrozenUserMemory | null => {
-                  // oxlint-disable-next-line sonarjs/no-nested-functions -- Effect projection remains local to one user
-                  const scopes = profiles.flatMap((profile) =>
-                    profile.profile === null ? [] : [{ bankId: profile.bankId, memory: profile.profile }],
-                  );
-                  const text = renderUserMemory(scopes);
-                  if (text === null) return null;
-                  return {
-                    text,
-                    userId,
-                  };
-                }),
-              );
-            }),
-            { concurrency: 3 },
-          ).pipe(
-            Effect.map((snapshots) => snapshots.filter((snapshot): snapshot is FrozenUserMemory => snapshot !== null)),
-          );
-        });
-
-        const freezeContextMemory = Effect.fn("Memory.freezeContextMemory")(function* freezeContextMemory(
-          key: Lane.LaneKey,
-          checkpoint: string,
-        ) {
-          const namespaces = yield* database
+            .pipe(Effect.mapError(failed("Failed to find relevant memory namespaces")));
+          const latestByNamespace = yield* database
             .query((client) =>
-              client.memoryNamespace.findMany({
-                where: { ownerKey: { in: [`chat:${key.chatId}`, `topic:${key.chatId}:${key.threadKey}`] } },
-                include: { observations: { orderBy: { id: "desc" }, select: { id: true }, take: 1 } },
-                orderBy: { kind: "asc" },
+              client.memoryObservation.groupBy({
+                by: ["namespaceId"],
+                where: { namespaceId: { in: namespaces.map((namespace) => namespace.id) } },
+                _max: { id: true },
               }),
             )
-            .pipe(Effect.mapError(failed("Failed to find context memory namespaces")));
+            .pipe(Effect.mapError(failed("Failed to find pending relevant memory")));
           yield* Effect.all(
-            namespaces.map((namespace) =>
-              namespace.observations.length === 0
-                ? Effect.void
-                : retention
-                    .retainThrough(namespace.id, namespace.observations[0]!.id)
-                    .pipe(Effect.mapError(failed("Failed to synchronize context memory"))),
+            latestByNamespace.map((latest) =>
+              retention
+                .retainThrough(latest.namespaceId, latest._max.id!)
+                .pipe(Effect.mapError(failed("Failed to synchronize relevant memory"))),
             ),
-            { concurrency: 2, discard: true },
+            { concurrency: 3, discard: true },
           );
-          const profiles = yield* readProfiles(namespaces.map((namespace) => namespace.ownerKey));
-          const kinds = new Map(namespaces.map((namespace) => [namespace.ownerKey, namespace.kind]));
-          return Prompt.renderMemory({
-            checkpoint,
-            scopes: profiles.flatMap((profile) =>
-              profile.profile === null ? [] : [{ kind: kinds.get(profile.bankId)!, memory: profile.profile }],
-            ),
+
+          const userTargets = namespaces.flatMap((namespace) => {
+            if (namespace.kind !== "user" || namespace.userId === null) return [];
+            const bankIds = [
+              ...new Set(
+                namespace.observations.flatMap((observation) => {
+                  if (
+                    input.key.chatId > 0n &&
+                    !["privateUser", "sameChat", "publicProfile", "explicitShareable"].includes(observation.visibility)
+                  )
+                    return [];
+                  if (input.key.chatId < 0n && observation.visibility === "privateUser") return [];
+                  if (
+                    input.key.chatId < 0n &&
+                    observation.visibility === "sameChat" &&
+                    observation.sourceChatId !== input.key.chatId
+                  )
+                    return [];
+                  if (
+                    input.key.chatId < 0n &&
+                    observation.visibility === "sameTopic" &&
+                    (observation.sourceChatId !== input.key.chatId ||
+                      observation.sourceThreadKey !== input.key.threadKey)
+                  )
+                    return [];
+                  return [HindsightRetention.bankFor(namespace, observation)];
+                }),
+              ),
+            ].toSorted();
+            if (bankIds.length < namespace.observations.length) {
+              OperationalTelemetry.recordEvent("memory-projection", "privacy-filtered");
+            }
+            return bankIds.map((bankId) => ({ bankId, kind: namespace.kind, userId: namespace.userId }));
           });
+          const contextTargets = namespaces.flatMap((namespace) =>
+            namespace.kind === "user" || namespace.observations.length === 0
+              ? []
+              : [{ bankId: namespace.ownerKey, kind: namespace.kind, userId: null }],
+          );
+          const targets = [
+            ...new Map(
+              [...userTargets, ...contextTargets].map((target) => [
+                `${target.userId ?? "context"}:${target.bankId}`,
+                target,
+              ]),
+            ).values(),
+          ];
+          const recalled = yield* Effect.all(
+            targets.map((target) =>
+              hindsight
+                .recall({ bankId: target.bankId, maxTokens: RECALL_MAX_TOKENS, query: input.query })
+                .pipe(Effect.map((results) => ({ ...target, results }))),
+            ),
+            { concurrency: 3 },
+          ).pipe(Effect.mapError(failed("Failed to recall Hindsight memory")));
+
+          const contextSeen = new Set<string>();
+          const contextScopes: Prompt.MemoryInput["scopes"][number][] = [];
+          const seenByUserId = new Map(selectedUserIds.map((userId) => [userId, new Set<string>()]));
+          const scopesByUserId = new Map(
+            selectedUserIds.map((userId) => [userId, [] as { readonly bankId: string; readonly memory: string }[]]),
+          );
+          for (const item of recalled.toSorted(
+            (left, right) => Number(right.kind === "topic") - Number(left.kind === "topic"),
+          )) {
+            const seen = item.userId === null ? contextSeen : seenByUserId.get(item.userId)!;
+            const lines: string[] = [];
+            for (const result of item.results) {
+              if (seen.has(result.text)) continue;
+              seen.add(result.text);
+              lines.push(`- ${result.text}`);
+            }
+            if (lines.length > 0 && item.userId === null) {
+              contextScopes.push({ kind: item.kind, memory: lines.join("\n") });
+            }
+            if (lines.length > 0 && item.userId !== null) {
+              scopesByUserId.get(item.userId)!.push({ bankId: item.bankId, memory: lines.join("\n") });
+            }
+          }
+          const contextMemory =
+            contextScopes.length === 0
+              ? null
+              : Prompt.renderMemory({ checkpoint: "", scopes: contextScopes }).slice(0, MAX_CONTEXT_MEMORY_CHARS);
+          const userMemory = selectedUserIds.flatMap((userId): readonly FrozenUserMemory[] => {
+            const text = renderUserMemory(scopesByUserId.get(userId)!);
+            return text === null ? [] : [{ text, userId }];
+          });
+          return { contextMemory, userMemory };
         });
 
         const forget = Effect.fn("Memory.forget")(function* forget(input: ForgetInput) {
@@ -260,18 +257,8 @@ export namespace Memory {
                 lockedLanes.push(await Lane.lockLane(transaction, lane));
               }
               if (lockedLanes.some((lane) => lane.activeRunId !== null)) throw new ForgetBusyError();
+              await transaction.memoryProfileSnapshot.deleteMany({ where: { bankId: { in: affectedBankIds } } });
               const markers: { readonly id: bigint; readonly namespaceId: string }[] = [];
-              const invalidatedAt = new Date();
-              const invalidationToken = crypto.randomUUID();
-              for (const bankId of affectedBankIds) {
-                // One Prisma transaction connection must execute its queries serially.
-                // oxlint-disable-next-line react-doctor/async-await-in-loop
-                await transaction.memoryProfileSnapshot.upsert({
-                  where: { bankId },
-                  create: { bankId, invalidatedAt, invalidationToken, revision: 1 },
-                  update: { invalidatedAt, invalidationToken, revision: { increment: 1 } },
-                });
-              }
               for (const namespaceId of namespaces) {
                 // The markers must be ordered and returned so deletion completes before confirmation.
                 // oxlint-disable-next-line react-doctor/async-await-in-loop
@@ -298,7 +285,7 @@ export namespace Memory {
                 },
                 data: { contextResetPending: true },
               });
-              return { affectedBankIds, affectedLanes: affected.count, invalidationToken, markers };
+              return { affectedLanes: affected.count, markers };
             })
             .pipe(
               Effect.mapError((error) =>
@@ -325,28 +312,6 @@ export namespace Memory {
             ),
             { concurrency: 3, discard: true },
           );
-          const refreshed = yield* Effect.all(
-            result.affectedBankIds.map((bankId) =>
-              hindsight.profile(bankId).pipe(Effect.map((profile) => ({ bankId, profile }))),
-            ),
-            { concurrency: 3 },
-          ).pipe(Effect.mapError(failed("Failed to read erased memory profiles")));
-          yield* database
-            .transaction(async (transaction) => {
-              for (const item of refreshed) {
-                // A newer forget token must keep the snapshot unavailable until its own erase finishes.
-                // oxlint-disable-next-line react-doctor/async-await-in-loop
-                await transaction.memoryProfileSnapshot.updateMany({
-                  where: { bankId: item.bankId, invalidationToken: result.invalidationToken },
-                  data: {
-                    content: item.profile,
-                    invalidatedAt: null,
-                    invalidationToken: null,
-                  },
-                });
-              }
-            })
-            .pipe(Effect.mapError(failed("Failed to publish erased memory profiles")));
           yield* Effect.logInfo("Memory forget completed").pipe(
             Effect.annotateLogs({ affectedLanes: result.affectedLanes, observations: result.markers.length }),
           );
@@ -354,79 +319,9 @@ export namespace Memory {
           return { affectedLanes: result.affectedLanes, observations: result.markers.length };
         });
 
-        return Service.of({ forget, freezeContextMemory, freezeUserMemory });
+        return Service.of({ forget, recall });
       }),
     );
-
-  export const workerLayer: Layer.Layer<never, never, Database.Service | Hindsight.Service> = Layer.effectDiscard(
-    Effect.gen(function* make() {
-      const database = yield* Database.Service;
-      const hindsight = yield* Hindsight.Service;
-      const refreshSnapshots = Effect.fn("Memory.refreshProfileSnapshots")(function* refreshProfileSnapshots() {
-        const namespaces = yield* database.query((client) =>
-          client.memoryNamespace.findMany({
-            select: {
-              kind: true,
-              observations: {
-                distinct: ["sourceChatId", "sourceThreadKey", "visibility"],
-                select: { sourceChatId: true, sourceThreadKey: true, visibility: true },
-                where: { kind: { not: "forget" } },
-              },
-              ownerKey: true,
-              userId: true,
-            },
-          }),
-        );
-        const bankIds = [
-          ...new Set(
-            namespaces.flatMap((namespace) =>
-              namespace.kind === "user"
-                ? namespace.observations.map(HindsightRetention.bankFor.bind(null, namespace))
-                : [namespace.ownerKey],
-            ),
-          ),
-        ];
-        const snapshots = yield* database.query((client) =>
-          client.memoryProfileSnapshot.findMany({
-            where: { bankId: { in: bankIds } },
-            select: { bankId: true, invalidatedAt: true, revision: true },
-          }),
-        );
-        const snapshotsByBankId = new Map(snapshots.map((snapshot) => [snapshot.bankId, snapshot]));
-        const reads = yield* Effect.all(
-          bankIds.flatMap((bankId) => {
-            const snapshot = snapshotsByBankId.get(bankId);
-            if (snapshot?.invalidatedAt) return [];
-            return [
-              hindsight.profile(bankId).pipe(
-                Effect.map((profile) => [{ bankId, expectedRevision: snapshot?.revision ?? 0, profile }]),
-                Effect.catch((error) =>
-                  Effect.logWarning("Memory profile snapshot read failed").pipe(
-                    Effect.annotateLogs({ bankId, error: error.message, errorTag: error._tag }),
-                    Effect.as([]),
-                  ),
-                ),
-              ),
-            ];
-          }),
-          { concurrency: 3 },
-        );
-        const profiles = reads.flat();
-        if (profiles.length === 0) return;
-        yield* database.transaction((transaction) => storeProfileSnapshots(transaction, profiles));
-      });
-      yield* Effect.forkScoped(
-        refreshSnapshots().pipe(
-          Effect.catch((error) =>
-            Effect.logError("Memory profile snapshot refresh failed").pipe(
-              Effect.annotateLogs({ error: error.message, errorTag: error._tag }),
-            ),
-          ),
-          Effect.repeat(Schedule.spaced("30 seconds")),
-        ),
-      );
-    }),
-  );
 
   export async function recordFinalized(
     transaction: Prisma.TransactionClient,
@@ -514,36 +409,6 @@ export namespace Memory {
 
   class ForgetBusyError extends Error {
     override readonly name = "ForgetBusyError";
-  }
-
-  async function storeProfileSnapshots(
-    transaction: Prisma.TransactionClient,
-    profiles: readonly ProfileSnapshotWrite[],
-  ): Promise<void> {
-    await transaction.memoryProfileSnapshot.createMany({
-      data: profiles.map((item) => ({
-        bankId: item.bankId,
-        content: item.profile,
-        revision: item.expectedRevision,
-      })),
-      skipDuplicates: true,
-    });
-    for (const item of profiles.filter(
-      (profile): profile is ProfileSnapshotWrite & { readonly profile: string } => profile.profile !== null,
-    )) {
-      // One Prisma transaction connection must execute its queries serially.
-      // oxlint-disable-next-line react-doctor/async-await-in-loop
-      await transaction.memoryProfileSnapshot.updateMany({
-        where: { bankId: item.bankId, invalidatedAt: null, revision: item.expectedRevision },
-        data: { content: item.profile },
-      });
-    }
-  }
-
-  interface ProfileSnapshotWrite {
-    readonly bankId: string;
-    readonly expectedRevision: number;
-    readonly profile: string | null;
   }
 
   const failed =

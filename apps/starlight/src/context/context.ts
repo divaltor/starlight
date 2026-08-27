@@ -89,7 +89,6 @@ export namespace ConversationContext {
     Effect.gen(function* layer() {
       const database = yield* Database.Service;
       const chatTools = yield* ChatTools.Service;
-      const memoryService = yield* Memory.Service;
       const media = yield* Media.Service;
       const model = yield* Model.Service;
       const prefixSnapshots = new Map<string, CacheDiagnostics.PrefixSnapshot>();
@@ -105,12 +104,7 @@ export namespace ConversationContext {
             }),
           )
           .pipe(Effect.mapError(failed("Failed to find finalized run context")));
-        const initialMemory =
-          runContext.contextId === null
-            ? yield* memoryService
-                .freezeContextMemory(runContext, "")
-                .pipe(Effect.mapError(failed("Failed to freeze initial context memory")))
-            : "";
+        const initialMemory = runContext.contextId === null ? Prompt.renderMemory({ checkpoint: "", scopes: [] }) : "";
         // oxlint-disable sonarjs/no-nested-functions -- Prisma owns the transaction callback boundary.
         const appended = yield* database
           .transaction(async (transaction) => {
@@ -289,12 +283,7 @@ export namespace ConversationContext {
             { concurrency: "unbounded" },
           ),
         );
-        const initialMemory =
-          runContext.contextId === null
-            ? yield* memoryService
-                .freezeContextMemory(runContext, "")
-                .pipe(Effect.mapError(failed("Failed to freeze initial context memory")))
-            : "";
+        const initialMemory = runContext.contextId === null ? Prompt.renderMemory({ checkpoint: "", scopes: [] }) : "";
         const outcome = yield* database
           .transaction(async (transaction) => {
             const run = await transaction.conversationRun.findUniqueOrThrow({
@@ -342,6 +331,7 @@ export namespace ConversationContext {
                 role: "user" as const,
                 text: `TRUSTED REQUEST METADATA\nCurrent date: ${frozen.currentDate}`,
               },
+              ...(frozen.contextMemory === null ? [] : [{ role: "user" as const, text: frozen.contextMemory }]),
               ...run.inputs.flatMap((runInput) => {
                 const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
                 const memory =
@@ -459,11 +449,7 @@ export namespace ConversationContext {
         }
 
         const summarized = prepared.summary ?? (yield* summarizeCheckpoint(database, model, prepared, checkpointInput));
-        const frozenMemory =
-          prepared.frozenMemory ??
-          (yield* memoryService
-            .freezeContextMemory(prepared.key, summarized)
-            .pipe(Effect.mapError(failed("Failed to freeze checkpoint memory"))));
+        const frozenMemory = prepared.frozenMemory ?? Prompt.renderMemory({ checkpoint: summarized, scopes: [] });
         if (prepared.frozenMemory === null) {
           yield* database
             .query((client) =>
@@ -527,9 +513,7 @@ export namespace ConversationContext {
           .pipe(Effect.mapError(failed("Failed to inspect transitioned context")));
         const frozenMemory =
           state.activeContextId === null || state.contextResetPending
-            ? yield* memoryService
-                .freezeContextMemory(key, "")
-                .pipe(Effect.mapError(failed("Failed to freeze transitioned context memory")))
+            ? Prompt.renderMemory({ checkpoint: "", scopes: [] })
             : "";
         return yield* database
           .transaction(async (transaction) => {

@@ -121,7 +121,7 @@ const infrastructure = Layer.mergeAll(
 );
 const hindsightRetention = HindsightRetention.layer.pipe(Layer.provideMerge(infrastructure));
 const memory = Memory.layer.pipe(Layer.provideMerge(hindsightRetention), Layer.provideMerge(infrastructure));
-const context = ConversationContext.layer.pipe(Layer.provideMerge(memory), Layer.provideMerge(infrastructure));
+const context = ConversationContext.layer.pipe(Layer.provideMerge(infrastructure));
 const conversation = Conversation.layer.pipe(
   Layer.provideMerge(context),
   Layer.provideMerge(memory),
@@ -133,7 +133,6 @@ const background = Layer.mergeAll(
   WakeOutbox.publisherLayer,
   WakeQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
   HindsightRetention.workerLayer,
-  Memory.workerLayer,
 ).pipe(Layer.provideMerge(domain), Layer.provideMerge(observability));
 
 export const runtime = ManagedRuntime.make(Layer.mergeAll(observability, background));

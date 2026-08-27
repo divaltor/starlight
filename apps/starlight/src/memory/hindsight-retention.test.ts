@@ -9,11 +9,10 @@ import { Database } from "@/services/database";
 const databaseUrl = process.env.DATABASE_URL;
 
 describe.skipIf(!databaseUrl)("Hindsight retention", () => {
-  test("refreshes profiles only when deleting the requesting user's documents", async () => {
+  test("deletes only the requesting user's retained documents", async () => {
     const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl! }) });
     const ownerKey = `chat:${crypto.randomUUID()}`;
     const deleted: { readonly bankId: string; readonly documentIds: readonly string[] }[] = [];
-    const refreshed: string[] = [];
     const retained: Hindsight.RetainInput[] = [];
     const runtime = ManagedRuntime.make(
       HindsightRetention.layer.pipe(
@@ -24,12 +23,7 @@ describe.skipIf(!databaseUrl)("Hindsight retention", () => {
               Effect.sync(() => {
                 deleted.push({ bankId, documentIds });
               }),
-            profile: () => Effect.succeed(null),
-            reconcileBank: () => Effect.void,
-            refreshProfile: (bankId) =>
-              Effect.sync(() => {
-                refreshed.push(bankId);
-              }),
+            recall: () => Effect.succeed([]),
             retain: (input) =>
               Effect.sync(() => {
                 retained.push(input);
@@ -82,8 +76,6 @@ describe.skipIf(!databaseUrl)("Hindsight retention", () => {
         }),
       );
 
-      expect(refreshed).toEqual([]);
-
       const observations = await client.$transaction([
         client.memoryObservation.create({
           data: {
@@ -122,7 +114,6 @@ describe.skipIf(!databaseUrl)("Hindsight retention", () => {
         `message:${chat.id}:11`,
       ]);
       expect(deleted).toEqual([{ bankId: ownerKey, documentIds: [`message:${chat.id}:10`] }]);
-      expect(refreshed).toEqual([ownerKey]);
       expect(await client.memoryNamespace.findUniqueOrThrow({ where: { id: namespace.id } })).toMatchObject({
         retentionWatermark: observations[0]!.id,
       });

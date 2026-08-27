@@ -47,22 +47,28 @@ Recovery paths in `drain`: `generated`/`dispatching` resumes at dispatch (delive
 `ConversationRun.preparedRequest` is the durable boundary between mutable external state and deterministic retries. A new run freezes only values that can change with time; immutable batch inputs remain normalized `ConversationInput` rows.
 
 ```text
-claimed run ──▶ preparedRequest null? ── yes ──▶ freeze date + user profiles + affinity ──▶ persist JSONB
-                         │
-                         no
+claimed run ──▶ preparedRequest null? ── yes ──▶ sync pending retention ──▶ recall relevant banks
+                          │                                                   │
+                          │                                                   ▼
+                          │                                       freeze results + date + affinity
+                          │                                                   │
+                          │                                                   ▼
+                          │                                              persist JSONB
+                          │
+                          no
                          ▼
                 PreparedRequestSchema.decode
                          │
                          ▼
-        prepareRun reads sessionId; Context.prepare renders date + userMemory
+       Context.prepare renders date + recalled context/user memory
                          │
                          ▼
              same stored values on every retry
 ```
 
-The stored shape is `{ currentDate, sessionId, userMemory: [{ userId, text }] }`. `userMemory` contains rendered, audience-scoped Hindsight profiles, not live profile references. `Context.prepare` indexes the snapshots by `userId` and injects each sender's profile once before that sender's first live message. No memory is represented explicitly as `userMemory: []`; missing or malformed fields fail decoding.
+The stored shape is `{ contextMemory, currentDate, sessionId, toolProfile, userMemory: [{ userId, text }] }`. On first preparation, the current input batch becomes a bounded Hindsight recall query. Pending observations in the relevant namespaces are retained first; recall then runs against the permitted user/chat/topic banks. `contextMemory` carries chat/topic results, while `userMemory` carries audience-scoped results per sender. `Context.prepare` injects the frozen context block once and each sender block before that sender's first live message. Retries decode the stored result and never repeat recall.
 
-The model receives two separately frozen inputs: `preparedRequest.userMemory` for per-sender personalization and `ConversationContext.frozenMemory` for chat/topic continuity. Generation persists actions before Telegram dispatch. Successful and terminal model-failure paths append available transcript/context turns. Every terminal path advances `processedRevision`, clears the lane lease and `activeRunId`, and schedules another wake if later revisions exist.
+The model receives query-relevant memory from `preparedRequest` and checkpoint continuity from `ConversationContext.frozenMemory`; no mental-model profile is maintained. Generation persists actions before Telegram dispatch. Successful and terminal model-failure paths append available transcript/context turns. Every terminal path advances `processedRevision`, clears the lane lease and `activeRunId`, and schedules another wake if later revisions exist.
 
 ## Model invocation and the tool budget
 
@@ -72,7 +78,7 @@ This is deliberate, not a missing guard: the product rule is "at most one web-re
 
 ## Context generations (`context/context.ts`, `context/active-context.ts`)
 
-Per-lane chain of `ConversationContext` rows (generation N+1 supersedes N). Turns are global per lane (`ConversationTranscriptTurn`) and projected per context with a hash chain: `basePrefixHash = sha256(envelope + memory)`, each turn extends it (`Prompt.extendPrefix`). `verifyPrefix` re-walks the whole chain on every `prepare` — rendering drift or tampering fails the run permanently.
+Per-lane chain of `ConversationContext` rows (generation N+1 supersedes N). Turns are global per lane (`ConversationTranscriptTurn`) and projected per context with a hash chain: `basePrefixHash = sha256(envelope + checkpoint memory)`, each turn extends it (`Prompt.extendPrefix`). `verifyPrefix` re-walks the whole chain on every `prepare` — rendering drift or tampering fails the run permanently.
 
 All context creation paths (`ActiveContext.ensure`, `transitionProfile`, `commitCheckpoint`) must produce byte-identical seeds via `stableSeed`; divergence breaks every later chain.
 
@@ -88,7 +94,7 @@ prepared ──▶ summarizing ──▶ summarized ──▶ committed
                  └─▶ failed ──▶ aborted (stale profile) | resumed
 ```
 
-The summary input is sealed and hash-checked at prepare time; commits create the child generation with `frozenMemory` = rendered summary and retain whole-run tail units toward `retainedTokenTarget`. Failed `hardSafety` attempts resume without an attempt bound by design — a permanent summarization failure must block, not redrive forever.
+The summary input is sealed and hash-checked at prepare time; commits create the child generation with `frozenMemory` = rendered checkpoint summary and retain whole-run tail units toward `retainedTokenTarget`. Failed `hardSafety` attempts resume without an attempt bound by design — a permanent summarization failure must block, not redrive forever.
 
 ## Delivery (`dispatchRun`, `deliverStoredAction`)
 

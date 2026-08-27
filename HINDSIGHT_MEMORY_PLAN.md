@@ -27,14 +27,14 @@ Phase 2 — complete Hindsight memory replacement (implemented 2026-08-24):
 
 | Area        | Change                                                                                                                                                                                                         |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment  | Hindsight server/client pinned to `0.9.1`; Compose service uses the existing pgvector Postgres, OpenRouter `google/gemini-3.7-flash`, and classification embedding/rerank routes                               |
-| App client  | `Hindsight` Effect service wraps async batch retain, profile reads, deterministic document deletion, and profile refresh                                                                                       |
-| Retention   | The single long-polling bot process scans at most 100 observations per namespace; reads synchronously drain relevant namespaces before snapshotting profiles                                                   |
+| Deployment  | Hindsight server/client pinned to `0.9.2`; Compose service uses the existing pgvector Postgres, OpenRouter `google/gemini-3.7-flash`, and classification embedding/rerank routes                               |
+| App client  | `Hindsight` Effect service wraps async batch retain, query-time recall, deterministic document deletion, and removal of legacy profile models                                                                  |
+| Retention   | The single long-polling bot process scans at most 100 observations per namespace; reads synchronously drain relevant namespaces before recall                                                                  |
 | Isolation   | User banks are audience-scoped (`private`, per-chat, per-topic, `public`); chat/topic banks keep their namespace keys                                                                                          |
-| Durability  | `MemoryNamespace.retentionWatermark` advances only after deterministic retain/delete/profile-refresh operations complete; retries resume the same retain operation                                             |
+| Durability  | `MemoryNamespace.retentionWatermark` advances only after deterministic retain/delete operations complete; retries resume the same retain operation                                                             |
 | Privacy     | Memory Defense explicitly redacts Hindsight's recognized secret/structured-PII patterns; `/forget` deletes every pre-request source document attributed to the requester instead of relying on semantic recall |
 | Corrections | Hindsight document IDs use Telegram chat/message identity, so edits replace the original retained document                                                                                                     |
-| Reads       | Rendered user profiles are frozen in `preparedRequest`; chat/topic profiles are frozen in `ConversationContext.frozenMemory`; retries never reread mutable profiles                                            |
+| Reads       | Query-relevant user/chat/topic recall results are frozen in `preparedRequest`; `ConversationContext.frozenMemory` contains only checkpoint continuity; retries never repeat recall                             |
 | Removal     | `MemoryRevision`, `MemoryBuildAttempt`, `MemoryQueue`, builder configuration, and revision rendering were removed; Hindsight is mandatory                                                                      |
 
 Real-data preflight used a recent production Langfuse Starlight trace: a 50-message Russian
@@ -82,8 +82,7 @@ live Hindsight retain/recall remain deployment smoke checks.
 
 ### C. Deploy Hindsight beside it
 
-Required Compose configuration is prepared in `docker-compose.yaml` but has not been
-started. Exact release: `0.9.1`.
+Compose configuration lives in `docker-compose.yaml`. Exact release: `0.9.2`.
 
 - Postgres 15+ with pgvector (pre-flight: confirm extension installable on our DB host).
 - Pin an exact 0.9.x release (changelog shows weekly churn; do not track latest).
@@ -96,7 +95,8 @@ started. Exact release: `0.9.1`.
   - Reranker: provider `cohere` + `COHERE_BASE_URL=http://classification:<port>/v1/rerank`.
   - Memory Defense is fixed to redact recognized secrets and structured PII.
 - Retain cadence stays app-driven: the single bot process scans in batches (≤100 observations
-  per namespace wake-up) → one async retain per bank batch. Never retain-per-message.
+  per namespace wake-up) → one async retain per bank batch. Low-volume traffic can produce
+  singleton batches; this affects extraction cost but never triggers mental-model reflection.
 
 ### D. Memory retrieval bake-off — complete
 
@@ -118,18 +118,20 @@ Licensing is explicitly out of scope for this deployment. Keep the selected mode
 Hindsight is the only memory backend. PostgreSQL keeps `MemoryNamespace` and
 `MemoryObservation` as the transactional provenance/outbox ledger.
 
-- User profile text is synchronized and frozen before `preparedRequest` is persisted.
-- Chat/topic profile text is synchronized outside Prisma transactions and frozen at context
-  creation, reset, and checkpoint boundaries.
+- Pending relevant observations are retained, then the current immutable input batch queries
+  the permitted user/chat/topic banks through Hindsight recall.
+- Bounded recall results are frozen in `preparedRequest`; retries reuse identical bytes.
+- Conversation checkpoints remain in `ConversationContext.frozenMemory` and are independent
+  of Hindsight mental models.
 - `/forget` writes ordered markers under lane locks, drains every affected namespace through
-  those markers, deletes requester-authored pre-marker documents, refreshes profiles, and only
-  then confirms to the user.
+  those markers, deletes requester-authored pre-marker documents, resets affected contexts, and
+  only then confirms to the user.
 - The destructive replacement migration was generated and applied to the local development DB.
 
 ### G. Later / ops
 
-- Mental-model refresh cost tuning once traffic exists; correctness currently uses explicit refresh.
-- Monitoring: Hindsight operations lag, extraction token spend per batch, recall latency.
+- Monitoring: Hindsight operations lag, extraction token spend per batch, recall latency and
+  recalled-result volume.
 
 ## Reference
 

@@ -19,6 +19,7 @@ export namespace Conversation {
   const MAX_ALBUM_MESSAGES = 10;
   const MAX_DELIVERY_ATTEMPTS = 5;
   const MAX_MODEL_ATTEMPTS = 5;
+  const MAX_MEMORY_QUERY_CHARS = 4000;
   const CONTEXT_COMPACTION_BUFFER_TOKENS = 20_000;
   const OVERSIZED_INPUT_ERROR_TAG = "oversized-input";
   const ALBUM_SETTLE_MS = 35_000;
@@ -553,35 +554,52 @@ export namespace Conversation {
           const stored = Option.getOrNull(Schema.decodeUnknownOption(PreparedRequestSchema)(claimed.preparedRequest));
           // Only what time erodes is frozen; rendering rebuilds deterministically from the
           // immutable batch in ConversationContext.prepare.
-          const frozen = stored ?? {
-            currentDate: new Date().toISOString().slice(0, 10),
-            toolProfile: pinnedToolProfile,
-            userMemory: yield* memory
-              .freezeUserMemory(
-                [
-                  ...claimed.inputs
-                    .toReversed()
-                    .flatMap((input) =>
-                      (input.payload as InputPayload).addressed && input.senderUserId !== null
-                        ? [input.senderUserId]
-                        : [],
-                    ),
-                  ...claimed.inputs
-                    .toReversed()
-                    .flatMap((input) =>
-                      !(input.payload as InputPayload).addressed && input.senderUserId !== null
-                        ? [input.senderUserId]
-                        : [],
-                    ),
-                ],
-                claimed.dbKey,
-              )
-              .pipe(Effect.mapError(domainFailed)),
-            sessionId: new Bun.CryptoHasher("sha256")
-              .update(ConversationKey.format(claimed.key))
-              .digest("hex")
-              .slice(0, 32),
-          };
+          const recalled =
+            stored === null
+              ? yield* memory
+                  .recall({
+                    key: claimed.dbKey,
+                    query:
+                      payloads
+                        .map(
+                          (payload) =>
+                            `${payload.senderFirstName}: ${payload.text}${
+                              payload.repliedText === null ? "" : `\nReplied to: ${payload.repliedText}`
+                            }`,
+                        )
+                        .join("\n")
+                        .slice(-MAX_MEMORY_QUERY_CHARS) || "Relevant context for the current conversation",
+                    userIds: [
+                      ...claimed.inputs
+                        .toReversed()
+                        .flatMap((input) =>
+                          (input.payload as InputPayload).addressed && input.senderUserId !== null
+                            ? [input.senderUserId]
+                            : [],
+                        ),
+                      ...claimed.inputs
+                        .toReversed()
+                        .flatMap((input) =>
+                          !(input.payload as InputPayload).addressed && input.senderUserId !== null
+                            ? [input.senderUserId]
+                            : [],
+                        ),
+                    ],
+                  })
+                  .pipe(Effect.mapError(domainFailed))
+              : null;
+          const frozen =
+            stored ??
+            ({
+              contextMemory: recalled!.contextMemory,
+              currentDate: new Date().toISOString().slice(0, 10),
+              sessionId: new Bun.CryptoHasher("sha256")
+                .update(ConversationKey.format(claimed.key))
+                .digest("hex")
+                .slice(0, 32),
+              toolProfile: pinnedToolProfile,
+              userMemory: recalled!.userMemory,
+            } satisfies typeof PreparedRequestSchema.Type);
           if (stored === null) {
             yield* database
               .transaction(async (transaction) => {

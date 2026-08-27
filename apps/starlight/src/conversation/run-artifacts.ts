@@ -48,6 +48,7 @@ export const PreparedToolProfileSchema = Schema.Struct({
 // values that time erodes are persisted: everything else re-derives deterministically
 // from the immutable batch inputs.
 export const PreparedRequestSchema = Schema.Struct({
+  contextMemory: Schema.NullOr(Schema.String),
   currentDate: Schema.String,
   sessionId: Schema.String,
   toolProfile: Schema.Array(Schema.String),

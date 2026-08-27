@@ -7,7 +7,7 @@ import { CanonicalJson } from "@/context/canonical-json";
 import type { Media } from "@/media/media";
 
 export namespace Prompt {
-  export const renderVersion = "conversation-context-v2";
+  export const renderVersion = "conversation-context-v3";
   export const canonicalEncode = CanonicalJson.encode;
   const memoryScopeLabels = {
     chat: "Chat memory",

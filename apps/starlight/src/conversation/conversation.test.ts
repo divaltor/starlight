@@ -86,6 +86,130 @@ test.skipIf(!databaseUrl)("duplicate Telegram delivery creates one immutable inp
   }
 });
 
+test.skipIf(!databaseUrl)("reuses frozen recalled memory after a retryable model failure", async () => {
+  const requests: Model.GenerateInput<unknown>[] = [];
+  let recallCount = 0;
+  const recallQueries: string[] = [];
+  const memory: Memory.Interface = {
+    forget: () => Effect.die(new Error("Memory forget must not run in conversation tests")),
+    recall: (input) => {
+      recallCount += 1;
+      recallQueries.push(input.query);
+      return Effect.succeed({ contextMemory: `recalled version ${recallCount}`, userMemory: [] });
+    },
+  };
+  const model: Model.Interface = {
+    generate: <Output>(input: Model.GenerateInput<Output>) => {
+      requests.push(input);
+      if (requests.length === 1) {
+        return Effect.fail(new Model.TimedOut({ message: "Retry model generation", retryable: true }));
+      }
+      return Effect.succeed({
+        finishReason: "stop",
+        output: { replies: [{ replyTo: null, text: "Recovered", type: "text" }] } as Output,
+        steps: [],
+        toolEvents: [],
+        transcript: [],
+        usage: {
+          billing: {
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            costUsd: 0,
+            inputTokens: 10,
+            outputTokens: 2,
+            reasoningTokens: 0,
+          },
+          contextInputTokens: 10,
+          stepCount: 0,
+        },
+      });
+    },
+  };
+  const delivery: TelegramDelivery.Interface = {
+    deliver: () => Effect.succeed({ telegramMessageId: 900 }),
+    indicateTyping: () => Effect.void,
+  };
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery, {}, memory));
+  const assistantId = 8_000_000_103;
+  const chatId = -8_000_000_103;
+  const key = { assistantId, chatId, threadKey: 0 };
+
+  try {
+    await runtime.runPromise(
+      Effect.gen(function* admit() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* conversation.admit({
+          chatTitle: "Recall retry test",
+          chatUsername: null,
+          key,
+          payload: {
+            addressed: true,
+            date: 1_700_000_000,
+            editDate: null,
+            forwardOrigin: null,
+            media: [],
+            mediaGroupId: null,
+            messageId: 101,
+            repliedMedia: [],
+            repliedText: null,
+            replyToMessageId: null,
+            senderFirstName: "Alice",
+            senderId: 42,
+            senderUsername: "alice",
+            text: "Remember this",
+          },
+          updateId: 201,
+        });
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+      }),
+    );
+
+    await expect(
+      runtime.runPromise(
+        Effect.gen(function* failFirstAttempt() {
+          const conversation = yield* Conversation.Service;
+          return yield* conversation.drain({ key });
+        }),
+      ),
+    ).rejects.toBeInstanceOf(Conversation.ConversationError);
+    const resumed = await runtime.runPromise(
+      Effect.gen(function* resume() {
+        const conversation = yield* Conversation.Service;
+        return yield* conversation.drain({ key });
+      }),
+    );
+
+    expect(resumed.kind).toBe("completed");
+    expect(recallCount).toBe(1);
+    expect(recallQueries).toEqual(["Alice: Remember this"]);
+    expect(requests).toHaveLength(2);
+    expect(requests.every((request) => request.messages.some((message) => message.text === "recalled version 1"))).toBe(
+      true,
+    );
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
 test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating the model output", async () => {
   const model: Model.Interface = {
     generate: <Output>() =>
@@ -1154,6 +1278,7 @@ function testLayer(
   model: Model.Interface = unavailableModel,
   delivery: TelegramDelivery.Interface = unavailableDelivery,
   optionOverrides: Partial<Conversation.Options> = {},
+  memory: Memory.Interface = unavailableMemory,
 ) {
   const chatReply = ChatReply.layer.pipe(Layer.provideMerge(Layer.succeed(Model.Service)(model)));
   const infrastructure = Layer.mergeAll(
@@ -1174,11 +1299,7 @@ function testLayer(
         }),
       load: () => Effect.succeed(null),
     }),
-    Layer.succeed(Memory.Service)({
-      forget: () => Effect.die(new Error("Memory forget must not run in conversation tests")),
-      freezeContextMemory: () => Effect.succeed(""),
-      freezeUserMemory: () => Effect.succeed([]),
-    }),
+    Layer.succeed(Memory.Service)(memory),
     Conversation.optionsLayer({
       contextHardTokenCap: 900_000,
       contextRetainedTokenTarget: 8000,
@@ -1200,6 +1321,11 @@ const disabledChatTools: ChatTools.Interface = {
 
 const unavailableModel: Model.Interface = {
   generate: () => Effect.die(new Error("Model must not run during admission")),
+};
+
+const unavailableMemory: Memory.Interface = {
+  forget: () => Effect.die(new Error("Memory forget must not run in conversation tests")),
+  recall: () => Effect.succeed({ contextMemory: null, userMemory: [] }),
 };
 
 const unavailableDelivery: TelegramDelivery.Interface = {
