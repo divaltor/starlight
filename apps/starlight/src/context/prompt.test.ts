@@ -44,20 +44,17 @@ The rollout is blocked.`);
 });
 
 test("an unaddressed batched message is rendered as context rather than a reply target", () => {
-  const rendered = Prompt.renderLiveMessage(
-    {
-      addressed: false,
-      forwardOrigin: null,
-      media: [],
-      messageId: 41,
-      repliedMedia: [],
-      repliedText: null,
-      replyToMessageId: null,
-      senderFirstName: "Alice",
-      text: "background chatter",
-    },
-    () => "",
-  );
+  const rendered = Prompt.renderLiveMessage({
+    addressed: false,
+    forwardOrigin: null,
+    media: [],
+    messageId: 41,
+    repliedMedia: [],
+    repliedText: null,
+    replyToMessageId: null,
+    senderFirstName: "Alice",
+    text: "background chatter",
+  });
 
   expect(rendered).toBe("CONTEXT MESSAGE #41 from Alice: background chatter");
 });

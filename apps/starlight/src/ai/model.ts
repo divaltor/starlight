@@ -298,15 +298,13 @@ export namespace Model {
     messages: readonly Message[],
   ): ModelMessage[] {
     const conversation: ModelMessage[] = messages.map((message, index) => {
+      const breakpoint = index === cachePrefixMessageCount - 1;
       if (message.role === "assistant" || !message.media?.length) {
-        if (index === cachePrefixMessageCount - 1) {
-          return {
-            content: message.text,
-            providerOptions: CACHE_BREAKPOINT_OPTIONS,
-            role: message.role,
-          };
-        }
-        return { content: message.text, role: message.role };
+        return {
+          content: message.text,
+          providerOptions: breakpoint ? CACHE_BREAKPOINT_OPTIONS : undefined,
+          role: message.role,
+        };
       }
       const content = [
         { text: message.text, type: "text" as const },
@@ -329,10 +327,7 @@ export namespace Model {
               },
         ),
       ];
-      if (index === cachePrefixMessageCount - 1) {
-        return { content, providerOptions: CACHE_BREAKPOINT_OPTIONS, role: "user" };
-      }
-      return { content, role: "user" };
+      return { content, providerOptions: breakpoint ? CACHE_BREAKPOINT_OPTIONS : undefined, role: message.role };
     });
     if (!cacheBase) return conversation;
 

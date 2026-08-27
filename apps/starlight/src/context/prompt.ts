@@ -87,25 +87,16 @@ export namespace Prompt {
     return canonicalEncode({ role: turn.role, content: turn.content });
   }
 
-  // Reply targets resolve against sealed transcript turns when available; live batches have
-  // no sealed history yet, so their targets quote the captured replied text instead.
-  export function describeReplyTarget(
-    payload: LiveMessagePayload,
-    knownMessageIds?: ReadonlySet<number>,
-  ): (replyToMessageId: number) => string {
-    return (replyToMessageId) => {
-      if (knownMessageIds?.has(replyToMessageId)) return `REPLIES TO MESSAGE #${replyToMessageId}\n`;
-      if (payload.repliedText) return `REPLIED MESSAGE #${replyToMessageId}: ${payload.repliedText}\n`;
-      return `REPLIED MESSAGE #${replyToMessageId}: [target unavailable]\n`;
-    };
-  }
-
-  export function renderLiveMessage(
-    payload: LiveMessagePayload,
-    resolveTarget: (replyToMessageId: number) => string,
-  ): string {
+  export function renderLiveMessage(payload: LiveMessagePayload, knownMessageIds?: ReadonlySet<number>): string {
     const forwardOrigin = payload.forwardOrigin === null ? "" : `FORWARD ORIGIN: ${payload.forwardOrigin}\n`;
-    const reply = payload.replyToMessageId === null ? "" : resolveTarget(payload.replyToMessageId);
+    // Reply targets resolve against sealed transcript turns when available; live batches have
+    // no sealed history yet, so their targets quote the captured replied text instead.
+    const reply = (() => {
+      if (payload.replyToMessageId === null) return "";
+      if (knownMessageIds?.has(payload.replyToMessageId)) return `REPLIES TO MESSAGE #${payload.replyToMessageId}\n`;
+      if (payload.repliedText) return `REPLIED MESSAGE #${payload.replyToMessageId}: ${payload.repliedText}\n`;
+      return `REPLIED MESSAGE #${payload.replyToMessageId}: [target unavailable]\n`;
+    })();
     const repliedMedia = payload.repliedMedia.map((reference) => reference.stableDescription).join("\n");
     const media = payload.media.map((reference) => reference.stableDescription).join("\n");
     const repliedMediaBlock = repliedMedia ? `REPLIED MEDIA:\n${repliedMedia}\n` : "";

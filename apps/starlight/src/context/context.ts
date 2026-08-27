@@ -356,7 +356,7 @@ export namespace ConversationContext {
                   {
                     media: loadedMedia.get(runInput.input.id) ?? [],
                     role: "user" as const,
-                    text: Prompt.renderLiveMessage(payload, Prompt.describeReplyTarget(payload, knownMessageIds)),
+                    text: Prompt.renderLiveMessage(payload, knownMessageIds),
                   },
                 ];
               }),
@@ -634,17 +634,13 @@ export namespace ConversationContext {
             const retained = await transaction.conversationContextTurn.findMany({
               where: { contextId: parent.id },
               orderBy: { ordinal: "asc" },
-              include: { transcriptTurn: true },
             });
             let rollingHash = child.basePrefixHash;
             let estimatedTokens = child.estimatedStableTokens;
             for (const [index, turn] of retained.entries()) {
-              const role = Transcript.roleByKind[turn.transcriptTurn.kind];
-              const rendered = Prompt.renderTurn({
-                content: Prompt.canonicalEncode(turn.transcriptTurn.content),
-                role,
-              });
-              const segment = Prompt.extendPrefix(rollingHash, rendered);
+              // Copy the stored rendered bytes so the child prefix stays identical to the
+              // parent's published chain even if the encoder changes between deploys.
+              const segment = Prompt.extendPrefix(rollingHash, turn.renderedContent);
               rollingHash = segment.rollingPrefixHash;
               estimatedTokens += segment.estimatedTokens;
               await transaction.conversationContextTurn.create({
@@ -652,9 +648,9 @@ export namespace ConversationContext {
                   contextId: child.id,
                   estimatedTokens: segment.estimatedTokens,
                   ordinal: index + 1,
-                  renderedContent: rendered,
+                  renderedContent: turn.renderedContent,
                   renderVersion: Prompt.renderVersion,
-                  role,
+                  role: turn.role,
                   rollingPrefixHash: segment.rollingPrefixHash,
                   segmentHash: segment.segmentHash,
                   transcriptTurnId: turn.transcriptTurnId,
