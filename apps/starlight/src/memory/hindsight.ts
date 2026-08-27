@@ -112,21 +112,37 @@ Keep what is being discussed or attempted, decisions and corrections, responsibi
         const profile = models.items.find((model) => model.id === PROFILE_ID);
         // oxlint-disable-next-line unicorn/prefer-ternary -- creation has an operation that must complete before refresh
         if (profile === undefined) {
-          const created = await client.createMentalModel(bankId, "profile", profileConfig.query, {
-            id: PROFILE_ID,
-            maxTokens: profileConfig.maxTokens,
+          const created = await sdk.createMentalModel({
+            body: {
+              id: PROFILE_ID,
+              max_tokens: profileConfig.maxTokens,
+              name: "profile",
+              source_query: profileConfig.query,
+              trigger: { mode: "delta", refresh_after_consolidation: false },
+            },
+            client: generatedClient,
+            path: { bank_id: bankId },
             signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
-            trigger: { refreshAfterConsolidation: false },
           });
-          await waitForOperation(bankId, created.operation_id, signal);
+          if (created.data === undefined) {
+            throw new Error(`Hindsight mental model creation failed: ${JSON.stringify(created.error)}`);
+          }
+          await waitForOperation(bankId, created.data.operation_id, signal);
         } else {
-          await client.updateMentalModel(bankId, PROFILE_ID, {
-            maxTokens: profileConfig.maxTokens,
-            name: "profile",
+          const updated = await sdk.updateMentalModel({
+            body: {
+              max_tokens: profileConfig.maxTokens,
+              name: "profile",
+              source_query: profileConfig.query,
+              trigger: { mode: "delta", refresh_after_consolidation: false },
+            },
+            client: generatedClient,
+            path: { bank_id: bankId, mental_model_id: PROFILE_ID },
             signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
-            sourceQuery: profileConfig.query,
-            trigger: { refreshAfterConsolidation: false },
           });
+          if (updated.data === undefined) {
+            throw new Error(`Hindsight mental model update failed: ${JSON.stringify(updated.error)}`);
+          }
           if (profile.source_query !== profileConfig.query || profile.max_tokens !== profileConfig.maxTokens) {
             const refreshed = await client.refreshMentalModel(bankId, PROFILE_ID, {
               signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
