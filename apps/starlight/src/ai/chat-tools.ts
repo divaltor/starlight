@@ -1,6 +1,6 @@
 import type { ToolSet } from "ai";
 import { Context, Effect, Layer, Schema } from "effect";
-import { Exa } from "@/services/exa";
+import { Exa } from "@/ai/tools/exa";
 
 export namespace ChatTools {
   export type Profile = readonly string[];

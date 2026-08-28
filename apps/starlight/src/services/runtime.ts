@@ -19,7 +19,7 @@ import { HindsightRetention } from "@/memory/hindsight-retention";
 import { Memory } from "@/memory/memory";
 import { Media } from "@/media/media";
 import { Database } from "@/services/database";
-import { Exa } from "@/services/exa";
+import { Exa } from "@/ai/tools/exa";
 
 const env = createBotEnv();
 

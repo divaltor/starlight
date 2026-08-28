@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { ChatTools } from "@/ai/chat-tools";
-import { Exa } from "@/services/exa";
+import { Exa } from "@/ai/tools/exa";
 
 const layer = ChatTools.layer.pipe(
   Layer.provide(
