@@ -112,7 +112,6 @@ const infrastructure = Layer.mergeAll(
     leaseMs: env.CONVERSATION_LANE_LEASE_MS,
     maxWaitMs: env.CONVERSATION_BATCH_MAX_WAIT_MS,
     quietMs: env.CONVERSATION_BATCH_QUIET_MS,
-    whitelistedDmUserIds: env.WHITELIST_DM_USER_IDS,
   }),
 );
 const hindsightRetention = HindsightRetention.layer.pipe(Layer.provideMerge(infrastructure));

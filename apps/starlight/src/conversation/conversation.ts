@@ -75,7 +75,6 @@ export namespace Conversation {
     readonly leaseMs: number;
     readonly maxWaitMs: number;
     readonly quietMs: number;
-    readonly whitelistedDmUserIds: readonly number[];
   }
 
   export const layer = Layer.effect(
@@ -88,7 +87,6 @@ export namespace Conversation {
       const delivery = yield* TelegramDelivery.Service;
       const memory = yield* Memory.Service;
       const options = yield* OptionsService;
-      const whitelistedDmUserIds = new Set(options.whitelistedDmUserIds);
 
       const admit = Effect.fn("Conversation.admit")(function* admit(input: AdmissionInput) {
         const traceCarrier: Record<string, string> = {};
@@ -271,13 +269,13 @@ export namespace Conversation {
         if (claimed.kind !== "claimed") return { kind: claimed.kind };
 
         return yield* Effect.gen(function* drainClaimed() {
-          if (
-            claimed.key.chatId > 0 &&
-            claimed.inputs.some(
-              (entry) => entry.senderTelegramId === null || !whitelistedDmUserIds.has(Number(entry.senderTelegramId)),
+          const chat = yield* database
+            .query((client) =>
+              client.chat.findUnique({ where: { id: BigInt(claimed.key.chatId) }, select: { isPremium: true } }),
             )
-          ) {
-            yield* blockRun(claimed, "dm-authorization-revoked", "Direct-message access is not allowed");
+            .pipe(Effect.mapError(failed("Failed to verify chat access")));
+          if (!chat?.isPremium) {
+            yield* blockRun(claimed, "chat-access-revoked", "Chat access is not allowed");
             return { kind: "completed" as const, runId: claimed.runId };
           }
           // A permanent checkpoint failure (e.g. summarization that can never succeed) would

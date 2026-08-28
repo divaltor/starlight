@@ -10,43 +10,28 @@ import { runtime } from "@/services/runtime";
 // 5 retries after the initial attempt; exponential delays 500ms → 8s.
 const ADMISSION_RETRIES = 5;
 
-export interface MessageHandlerOptions {
-  readonly whitelistedChatIds: readonly number[];
-  readonly whitelistedDmUserIds: readonly number[];
-}
+const composer = new Composer<Context>();
+const groupChat = composer.chatType(["group", "supergroup"]);
+const privateChat = composer.chatType("private");
 
-export function createMessageHandler(options: MessageHandlerOptions): Composer<Context> {
-  const composer = new Composer<Context>();
-  const chatWhitelist = new Set(options.whitelistedChatIds);
-  const dmWhitelist = new Set(options.whitelistedDmUserIds);
-  const groupChat = composer.chatType(["group", "supergroup"]).filter((ctx) => chatWhitelist.has(ctx.chat.id));
-  const privateChat = composer.chatType("private");
-  const authorizedPrivateChat = privateChat.filter((ctx) => dmWhitelist.has(ctx.from.id));
-  const unauthorizedPrivateChat = privateChat.filter((ctx) => !dmWhitelist.has(ctx.from.id));
+groupChat
+  .on("message")
+  .filter(hasAdmittableContent)
+  .use((ctx) => admitMessage(ctx, ctx.message, isAddressedToBot(ctx, ctx.message)));
+groupChat
+  .on("edited_message")
+  .filter(hasAdmittableEditedContent)
+  .use((ctx) => admitMessage(ctx, ctx.editedMessage, isAddressedToBot(ctx, ctx.editedMessage)));
+privateChat
+  .on("message")
+  .filter(hasAdmittableContent)
+  .use((ctx) => admitMessage(ctx, ctx.message, true));
+privateChat
+  .on("edited_message")
+  .filter(hasAdmittableEditedContent)
+  .use((ctx) => admitMessage(ctx, ctx.editedMessage, true));
 
-  groupChat
-    .on("message")
-    .filter(hasAdmittableContent)
-    .use((ctx) => admitMessage(ctx, ctx.message, isAddressedToBot(ctx, ctx.message)));
-  groupChat
-    .on("edited_message")
-    .filter(hasAdmittableEditedContent)
-    .use((ctx) => admitMessage(ctx, ctx.editedMessage, isAddressedToBot(ctx, ctx.editedMessage)));
-  authorizedPrivateChat
-    .on("message")
-    .filter(hasAdmittableContent)
-    .use((ctx) => admitMessage(ctx, ctx.message, true));
-  authorizedPrivateChat
-    .on("edited_message")
-    .filter(hasAdmittableEditedContent)
-    .use((ctx) => admitMessage(ctx, ctx.editedMessage, true));
-  unauthorizedPrivateChat
-    .on("message")
-    .filter(hasAdmittableContent)
-    .use((ctx) => ctx.reply("Личные сообщения для этого аккаунта не разрешены."));
-
-  return composer;
-}
+export default composer;
 
 async function admitMessage(ctx: Context, message: Message, addressed: boolean) {
   await runtime.runPromise(

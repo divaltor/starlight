@@ -1,6 +1,5 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod/v4";
-import { telegramIdList } from "@starlight/utils/telegram-ids";
 
 export interface LangfuseConfig {
   readonly baseUrl: string;
@@ -23,8 +22,6 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
   const raw = createEnv({
     server: {
       STARLIGHT_BOT_TOKEN: z.string(),
-      WHITELIST_CHAT_IDS: telegramIdList("WHITELIST_CHAT_IDS", { allowNegative: true }),
-      WHITELIST_DM_USER_IDS: telegramIdList("WHITELIST_DM_USER_IDS"),
 
       DATABASE_URL: z.url({ protocol: /^postgresql$/u }),
       REDIS_URL: z.url({ protocol: /^rediss?$/u }),

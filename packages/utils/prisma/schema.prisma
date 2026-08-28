@@ -143,9 +143,10 @@ model User {
 
 model Chat {
   // Telegram ID
-  id       BigInt  @id
-  title    String?
-  username String?
+  id        BigInt  @id
+  title     String?
+  username  String?
+  isPremium Boolean @default(false) @map("is_premium")
 
 	settings Json @default("{}")
 

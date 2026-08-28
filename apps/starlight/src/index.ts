@@ -2,9 +2,10 @@ import { run } from "@grammyjs/runner";
 import { Effect, pipe } from "effect";
 import { bot } from "@/bot";
 import { createBotEnv } from "@/env";
-import { createMessageHandler } from "@/handlers/message";
-import { createStartHandler } from "@/handlers/start";
+import messageHandler from "@/handlers/message";
+import startHandler from "@/handlers/start";
 import { createUpdateTracer, initTelemetry, shutdownTelemetry } from "@/instrumentation";
+import premiumAccess from "@/middlewares/premium-access";
 import { runtime } from "@/services/runtime";
 
 const env = createBotEnv();
@@ -34,13 +35,9 @@ const boundary = bot.errorBoundary((error) =>
   ),
 );
 
-boundary.use(createStartHandler(env.WHITELIST_DM_USER_IDS));
-boundary.use(
-  createMessageHandler({
-    whitelistedChatIds: env.WHITELIST_CHAT_IDS,
-    whitelistedDmUserIds: env.WHITELIST_DM_USER_IDS,
-  }),
-);
+boundary.use(premiumAccess);
+boundary.use(startHandler);
+boundary.use(messageHandler);
 
 const runner = run(bot);
 await runtime.runPromise(Effect.logInfo("Starlight bot is running"));

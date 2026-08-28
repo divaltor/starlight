@@ -163,6 +163,9 @@ test.skipIf(!databaseUrl)("reuses frozen recalled memory after a retryable model
           updateId: 201,
         });
         yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
           client.conversationLane.update({
             where: {
               assistantId_chatId_threadKey: {
@@ -295,6 +298,9 @@ test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating th
           },
           updateId: 111,
         });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
         yield* database.query((client) =>
           client.conversationLane.update({
             where: {
@@ -430,6 +436,9 @@ test.skipIf(!databaseUrl)(
             },
             updateId: 131,
           });
+          yield* database.query((client) =>
+            client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+          );
           yield* database.query((client) =>
             client.conversationLane.update({
               where: {
@@ -587,7 +596,7 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
         const database = yield* Database.Service;
         const runIds = yield* database.query(async (client) => {
           await resetLane(client, assistantId, chatId);
-          await client.chat.create({ data: { id: BigInt(chatId) } });
+          await client.chat.create({ data: { id: BigInt(chatId), isPremium: true } });
           await client.conversationLane.create({
             data: {
               assistantId: BigInt(assistantId),
@@ -760,6 +769,9 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
           updateId: 143,
         });
         yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
           client.conversationLane.update({
             where: {
               assistantId_chatId_threadKey: {
@@ -892,6 +904,9 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
           },
           updateId: 144,
         });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
         yield* database.query((client) =>
           client.conversationLane.update({
             where: {
@@ -1105,7 +1120,7 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
         const database = yield* Database.Service;
         yield* database.query(async (client) => {
           await resetLane(client, assistantId, chatId);
-          await client.chat.create({ data: { id: BigInt(chatId) } });
+          await client.chat.create({ data: { id: BigInt(chatId), isPremium: true } });
           await client.conversationLane.create({
             data: {
               assistantId: BigInt(assistantId),
@@ -1337,7 +1352,6 @@ function testLayer(
       maxWaitMs: 3000,
       quietMs: 1000,
       ...optionOverrides,
-      whitelistedDmUserIds: optionOverrides.whitelistedDmUserIds ?? [],
     }),
   );
   const context = ConversationContext.layer.pipe(Layer.provideMerge(infrastructure));
