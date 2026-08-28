@@ -3,10 +3,7 @@ import { z } from "zod";
 import type { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
 import { TelegramDelivery } from "@/conversation/delivery";
-
-// The prompt file is read eagerly at module load; top-level await must stay at module
-// scope because namespace bodies cannot contain await.
-const systemPromptText = await Bun.file(new URL("system-prompt.txt", import.meta.url)).text();
+import systemPromptText from "./system-prompt.txt";
 
 export namespace ChatReply {
   export const systemPrompt = systemPromptText;
