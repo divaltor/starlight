@@ -36,6 +36,12 @@ export namespace WakeQueue {
     readonly publish: (wake: LaneWake) => Effect.Effect<void, PublishError>;
   }
 
+  /**
+   * Redis-backed execution path for delayed conversation wakes. It provides
+   * deduplication, retries, and distributed workers, while the database outbox
+   * remains the durable source of wake intent because queue publication cannot
+   * be atomic with the database transaction that advances a conversation lane.
+   */
   export class Service extends Context.Service<Service, Interface>()("starlight/ConversationWakeQueue") {}
 
   export function layer(redisUrl: string, prefix: string): Layer.Layer<Service, WorkerStartupError> {

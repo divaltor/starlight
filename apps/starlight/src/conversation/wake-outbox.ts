@@ -26,6 +26,12 @@ export namespace WakeOutbox {
     readonly publishAvailable: (limit: number) => Effect.Effect<PublishResult, OutboxError>;
   }
 
+  /**
+   * Database-backed durability boundary for conversation wakes. Wake intent is
+   * committed with lane state, then published or reconciled into {@link WakeQueue},
+   * so a failed publish or missing queue job cannot strand committed input; the
+   * queue stays separate to handle delayed, deduplicated, retryable execution.
+   */
   export class Service extends Context.Service<Service, Interface>()("starlight/ConversationWakeOutbox") {}
 
   export const layer: Layer.Layer<Service, never, Database.Service | WakeQueue.Service> = Layer.effect(
