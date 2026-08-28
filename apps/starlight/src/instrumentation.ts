@@ -49,12 +49,7 @@ export function initTelemetry(backends: TelemetryConfig): void {
 
   const spanProcessors: SpanProcessor[] = [];
   if (backends.langfuse) {
-    spanProcessors.push(
-      new LangfuseSpanProcessor({
-        ...backends.langfuse,
-        shouldExportSpan: ({ otelSpan }) => otelSpan.attributes["gen_ai.agent.name"] !== undefined,
-      }),
-    );
+    spanProcessors.push(new LangfuseSpanProcessor(backends.langfuse));
   }
   if (backends.otlp) {
     spanProcessors.push(
