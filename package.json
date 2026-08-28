@@ -17,8 +17,8 @@
       "@orpc/client": "1.15.0",
       "zod": "4.4.3",
       "prisma": "7.10.0",
-      "grammy": "1.45.1",
-      "ky": "2.0.2"
+      "grammy": "1.46.0",
+      "ky": "2.1.0"
     }
   },
   "scripts": {
@@ -46,15 +46,15 @@
     "@typescript/native": "npm:typescript@7.0.2",
     "eslint-plugin-github": "6.1.2",
     "eslint-plugin-sonarjs": "4.2.0",
-    "lefthook": "2.1.10",
-    "oxfmt": "0.64.0",
+    "lefthook": "2.1.12",
+    "oxfmt": "0.65.0",
     "oxlint": "1.80.0",
     "oxlint-plugin-react-doctor": "0.9.12",
     "oxlint-tsgolint": "7.0.2001",
     "tsdown": "0.22.14",
     "turbo": "2.10.12",
     "typescript": "7.0.2",
-    "ultracite": "7.10.6"
+    "ultracite": "7.10.7"
   },
   "packageManager": "bun@1.4.0",
   "overrides": {
