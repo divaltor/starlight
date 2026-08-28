@@ -277,7 +277,7 @@ export namespace Conversation {
             .query((client) =>
               client.chat.findUnique({
                 where: { id: BigInt(claimed.key.chatId) },
-                select: { isPremium: true, isPrivate: true },
+                select: { isPremium: true, isPrivate: true, title: true },
               }),
             )
             .pipe(Effect.mapError(failed("Failed to verify chat access")));
@@ -286,6 +286,11 @@ export namespace Conversation {
             return { kind: "completed" as const, runId: claimed.runId };
           }
           const telemetryPrivate = chat.isPrivate;
+          const telemetry = {
+            telemetryPrivate,
+            telemetryTraceName: chat.title ?? undefined,
+            telemetryUserId: claimed.inputs.at(-1)?.senderTelegramId?.toString(),
+          };
           // A permanent checkpoint failure (e.g. summarization that can never succeed) would
           // otherwise be redriven forever: failed hardSafety attempts are deliberately
           // resumable with no attempt bound.
@@ -380,11 +385,11 @@ export namespace Conversation {
           const attempted = yield* invokeModel(claimed, prepared, contextRequest, toolset, {
             allowContextOverflowRecovery: true,
             attemptNumber: claimed.attemptCount + 1,
-            telemetryPrivate: chat?.isPrivate === true,
+            ...telemetry,
           });
           const invocation =
             attempted.kind === "contextOverflow"
-              ? yield* recoverContextOverflow(claimed, prepared, chat?.isPrivate === true)
+              ? yield* recoverContextOverflow(claimed, prepared, telemetry)
               : attempted;
           if (invocation.kind === "failed") return yield* finalizeClaimed(claimed);
           if (invocation.kind === "contextOverflow") {
@@ -665,6 +670,8 @@ export namespace Conversation {
               promptCacheKey: contextRequest.contextId,
               private: invocation.telemetryPrivate,
               sessionId: prepared.sessionId,
+              telemetryTraceName: invocation.telemetryTraceName,
+              telemetryUserId: invocation.telemetryUserId,
               toolset,
             })
             .pipe(
@@ -697,7 +704,11 @@ export namespace Conversation {
         }).pipe(Effect.scoped);
       }
 
-      function recoverContextOverflow(claimed: ClaimedRun, prepared: PreparedRun, telemetryPrivate: boolean) {
+      function recoverContextOverflow(
+        claimed: ClaimedRun,
+        prepared: PreparedRun,
+        telemetry: Pick<InvocationOptions, "telemetryPrivate" | "telemetryTraceName" | "telemetryUserId">,
+      ) {
         return blockOnPermanent(
           conversationContext.checkpoint({
             fencingToken: claimed.fencingToken,
@@ -705,7 +716,7 @@ export namespace Conversation {
             reason: "hardSafety",
             retainedTokenTarget: options.contextRetainedTokenTarget,
             runId: claimed.runId,
-            telemetryPrivate,
+            telemetryPrivate: telemetry.telemetryPrivate,
           }),
           claimed,
           OVERSIZED_INPUT_ERROR_TAG,
@@ -724,7 +735,7 @@ export namespace Conversation {
                   invokeModel(claimed, prepared, contextRequest, toolset, {
                     allowContextOverflowRecovery: false,
                     attemptNumber: claimed.attemptCount + 2,
-                    telemetryPrivate,
+                    ...telemetry,
                   }),
                 ),
               );
@@ -1163,6 +1174,8 @@ export namespace Conversation {
     readonly allowContextOverflowRecovery: boolean;
     readonly attemptNumber: number;
     readonly telemetryPrivate: boolean;
+    readonly telemetryTraceName?: string;
+    readonly telemetryUserId?: string;
   }
 
   const failed =

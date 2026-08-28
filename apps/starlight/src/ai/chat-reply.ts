@@ -44,6 +44,8 @@ export namespace ChatReply {
     readonly messages: readonly Model.Message[];
     readonly promptCacheKey?: string;
     readonly sessionId: string;
+    readonly telemetryTraceName?: string;
+    readonly telemetryUserId?: string;
     readonly toolset: ChatTools.Resolved;
   }
 
@@ -73,6 +75,8 @@ export namespace ChatReply {
             private: input.private,
             promptCacheKey: input.promptCacheKey,
             sessionId: input.sessionId,
+            telemetryTraceName: input.telemetryTraceName,
+            telemetryUserId: input.telemetryUserId,
             tools: input.toolset.tools,
           });
         }),

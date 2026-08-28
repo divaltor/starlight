@@ -30,9 +30,17 @@ export interface TelemetryConfig {
 export function initTelemetry(backends: TelemetryConfig): void {
   registerTelemetry(
     new OpenTelemetry({
-      enrichSpan: ({ runtimeContext }) =>
-        runtimeContext?.["starlight.private"] === true ? { "starlight.private": true } : undefined,
-      runtimeContext: true,
+      enrichSpan: (span) => {
+        const sessionId = span.runtimeContext?.["langfuse.session.id"];
+        const traceName = span.runtimeContext?.["langfuse.trace.name"];
+        const userId = span.runtimeContext?.["langfuse.user.id"];
+        return {
+          ...(typeof sessionId === "string" && { "langfuse.session.id": sessionId }),
+          ...(typeof traceName === "string" && { "langfuse.trace.name": traceName }),
+          ...(typeof userId === "string" && { "langfuse.user.id": userId }),
+          ...(span.runtimeContext?.["starlight.private"] === true && { "starlight.private": true }),
+        };
+      },
       usage: true,
     }),
   );
@@ -41,10 +49,12 @@ export function initTelemetry(backends: TelemetryConfig): void {
 
   const spanProcessors: SpanProcessor[] = [];
   if (backends.langfuse) {
-    // The default shouldExportSpan filter drops every span without gen_ai attributes,
-    // which silently deleted our root spans — and with them langfuse.session.id,
-    // user ids, and trace names. Export everything; content redaction happens upstream.
-    spanProcessors.push(new LangfuseSpanProcessor({ ...backends.langfuse, shouldExportSpan: () => true }));
+    spanProcessors.push(
+      new LangfuseSpanProcessor({
+        ...backends.langfuse,
+        shouldExportSpan: ({ otelSpan }) => otelSpan.attributes["gen_ai.agent.name"] !== undefined,
+      }),
+    );
   }
   if (backends.otlp) {
     spanProcessors.push(

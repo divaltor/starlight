@@ -72,6 +72,8 @@ export namespace Model {
     readonly promptCacheKey?: string;
     readonly sessionId: string;
     readonly telemetryFunctionId?: string;
+    readonly telemetryTraceName?: string;
+    readonly telemetryUserId?: string;
     readonly tools: ToolSet;
   }
 
@@ -172,9 +174,13 @@ export namespace Model {
               providerOptions: input.promptCacheKey
                 ? { openrouter: { prompt_cache_key: input.promptCacheKey } }
                 : undefined,
-              // Private chats keep cost/usage metadata; only the raw prompt/completion
-              // content is stripped from the gen_ai spans.
-              runtimeContext: input.private === true ? { "starlight.private": true } : undefined,
+              runtimeContext: {
+                "langfuse.session.id": input.sessionId,
+                ...(input.private !== true &&
+                  input.telemetryTraceName !== undefined && { "langfuse.trace.name": input.telemetryTraceName }),
+                ...(input.telemetryUserId !== undefined && { "langfuse.user.id": input.telemetryUserId }),
+                ...(input.private === true && { "starlight.private": true }),
+              },
               stopWhen: [
                 // A step whose only tool call is final_output means the answer is complete.
                 (step) => {
