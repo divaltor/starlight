@@ -322,6 +322,7 @@ model Video {
   @@map("videos")
 }
 
+/// @deprecated Write-only raw mirror; the conversation engine reads `ConversationInput` instead. No read path — do not add one.
 model Message {
   messageId Int    @map("message_id")
   chatId    BigInt @map("chat_id")
@@ -379,6 +380,7 @@ model Message {
   @@map("messages")
 }
 
+/// @deprecated Unused. Long-term media ledger is `ConversationInput.mediaReferences` JSON + S3 (`telegram-media/<sha256>`).
 model MessagePart {
   id String @id @default(uuid(7)) @db.Uuid
 
@@ -400,6 +402,7 @@ model MessagePart {
   @@map("message_parts")
 }
 
+/// @deprecated Unused. Long-term media ledger is `ConversationInput.mediaReferences` JSON + S3 (`telegram-media/<sha256>`).
 model Attachment {
   id Int @id @default(autoincrement())
 

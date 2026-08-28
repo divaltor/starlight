@@ -151,29 +151,5 @@ export const prisma = new PrismaClient({
         },
       }),
     },
-    message: {
-      async hasNewerMessages(params: {
-        chatId: bigint | number;
-        messageId: number;
-        messageThreadId: number | null | undefined;
-      }): Promise<boolean> {
-        const newerMessage = await prisma.message.findFirst({
-          where: {
-            chatId: BigInt(params.chatId),
-            messageThreadId: params.messageThreadId ?? null,
-            messageId: { gt: params.messageId },
-            fromId: { not: null },
-            rawData: {
-              path: ["from", "is_bot"],
-              equals: false,
-            },
-          },
-          select: { messageId: true },
-          orderBy: { messageId: "desc" },
-        });
-
-        return newerMessage !== null;
-      },
-    },
   },
 });
