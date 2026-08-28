@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "@starlight/utils/generated/prisma/client";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, Logger, ManagedRuntime, References } from "effect";
 import { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
 import { ConversationContext } from "@/context/context";
@@ -593,6 +593,189 @@ test.skipIf(!databaseUrl)(
     }
   },
 );
+
+test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_live_form", async () => {
+  const runtime = ManagedRuntime.make(
+    ConversationContext.layer.pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Database.layer(databaseUrl!),
+          Layer.succeed(ChatTools.Service)(disabledChatTools),
+          Layer.succeed(Model.Service)(unavailableModel),
+          mediaLayer,
+        ),
+      ),
+    ),
+  );
+  const assistantId = 8_000_000_102n;
+  const chatId = -8_000_000_102n;
+  const verdicts: { annotations: object; message: unknown }[] = [];
+  const collector = Logger.formatStructured.pipe(
+    Logger.map((output) => verdicts.push({ annotations: output.annotations, message: output.message })),
+  );
+  let runAId = "";
+  let runBId = "";
+
+  try {
+    await runtime.runPromise(
+      Effect.gen(function* verifySealedPrefixIsAppendOnly() {
+        const context = yield* ConversationContext.Service;
+        const database = yield* Database.Service;
+        const ids = yield* database.query(async (client) => {
+          await clearConversation(client, assistantId, chatId);
+          await client.chat.create({ data: { id: chatId } });
+          await client.conversationLane.create({
+            data: { assistantId, chatId, pendingRevision: 1, processedRevision: 1, threadKey: 0 },
+          });
+          const inputA = await client.conversationInput.create({
+            data: {
+              admittedRevision: 1,
+              assistantId,
+              chatId,
+              payload: {
+                addressed: true,
+                date: 1_700_000_000,
+                editDate: null,
+                forwardOrigin: null,
+                messageId: 71,
+                repliedText: null,
+                replyToMessageId: null,
+                senderFirstName: "Alice",
+                senderId: 42,
+                senderUsername: "alice",
+                text: "Hello",
+              },
+              senderTelegramId: 42n,
+              sourceMessageId: 71,
+              sourceRevision: "71:1700000000",
+              sourceUpdateId: 171,
+              threadKey: 0,
+            },
+          });
+          const runA = await client.conversationRun.create({
+            data: {
+              actions: {
+                create: {
+                  deliveryStatus: "delivered",
+                  ordinal: 0,
+                  payload: { replyTo: 71, text: "Hi", type: "text" },
+                  targetMessageId: 71,
+                  type: "text",
+                },
+              },
+              assistantId,
+              chatId,
+              eligibilityReason: "direct",
+              fencingToken: 1n,
+              finalizedAt: new Date(),
+              inputEndRevision: 1,
+              inputStartRevision: 1,
+              inputs: { create: { inputId: inputA.id, ordinal: 0 } },
+              modelProfileFingerprint: Prompt.profileFingerprint([]),
+              preparedRequest: {
+                contextMemory: null,
+                currentDate: "2026-08-28",
+                sessionId: "cache-prefix-session-a",
+                toolProfile: [],
+              },
+              replyEligible: true,
+              status: "finalized",
+              threadKey: 0,
+            },
+          });
+          const inputB = await client.conversationInput.create({
+            data: {
+              admittedRevision: 2,
+              assistantId,
+              chatId,
+              payload: {
+                addressed: true,
+                date: 1_700_000_100,
+                editDate: null,
+                forwardOrigin: null,
+                messageId: 72,
+                repliedText: null,
+                replyToMessageId: null,
+                senderFirstName: "Alice",
+                senderId: 42,
+                senderUsername: "alice",
+                text: "Follow-up",
+              },
+              senderTelegramId: 42n,
+              sourceMessageId: 72,
+              sourceRevision: "72:1700000100",
+              sourceUpdateId: 172,
+              threadKey: 0,
+            },
+          });
+          const runB = await client.conversationRun.create({
+            data: {
+              assistantId,
+              chatId,
+              eligibilityReason: "direct",
+              fencingToken: 2n,
+              inputEndRevision: 2,
+              inputStartRevision: 2,
+              inputs: { create: { inputId: inputB.id, ordinal: 0 } },
+              modelProfileFingerprint: Prompt.profileFingerprint([]),
+              preparedRequest: {
+                contextMemory: null,
+                currentDate: "2026-08-28",
+                sessionId: "cache-prefix-session-b",
+                toolProfile: [],
+              },
+              replyEligible: true,
+              status: "invoking",
+              threadKey: 0,
+            },
+          });
+          await client.conversationLane.update({
+            where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
+            data: { activeRunId: runA.id, fencingToken: 1n },
+          });
+          return { runA: runA.id, runB: runB.id };
+        });
+        runAId = ids.runA;
+        runBId = ids.runB;
+
+        yield* context.prepare({ fencingToken: 1n, runId: runAId });
+        yield* context.appendFinalized({ fencingToken: 1n, runId: runAId });
+        const contextId = yield* database.query(async (client) => {
+          const runA = await client.conversationRun.findUniqueOrThrow({ where: { id: runAId } });
+          await client.conversationRun.update({ where: { id: runBId }, data: { contextId: runA.contextId } });
+          await client.conversationLane.update({
+            where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
+            data: { activeRunId: runBId, fencingToken: 2n },
+          });
+          return runA.contextId;
+        });
+        expect(contextId).not.toBeNull();
+
+        yield* context.prepare({ fencingToken: 2n, runId: runBId });
+      }).pipe(
+        // The verdict is logged at debug level, which the default minimum filters out.
+        Effect.provide(Logger.layer([collector])),
+        Effect.provideService(References.MinimumLogLevel, "Debug"),
+      ),
+    );
+
+    const compared = verdicts.filter((entry) => entry.message === "Prepared context prefix compared");
+    expect(compared.at(-1)?.annotations).toMatchObject({
+      appendedMessages: 2,
+      messageCount: 2,
+      previousMessageCount: 0,
+      status: "append-only",
+    });
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => clearConversation(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
 
 const disabledChatTools: ChatTools.Interface = {
   availableProfile: [],

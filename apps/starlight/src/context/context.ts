@@ -375,8 +375,13 @@ export namespace ConversationContext {
               messages,
               toolProfile: envelope.tools,
             };
+            // The explicit cache breakpoint sits after the finalized turns (model.ts
+            // prepareMessages), so only that prefix is provider-cacheable. The live tail
+            // intentionally changes shape when it seals (renderLiveMessage vs renderTurn)
+            // and must not count as a change.
+            const cachePrefixIdentities = finalized.map(messageIdentity);
             const snapshot: CacheDiagnostics.PrefixSnapshot = {
-              messages: messageIdentities.map((identity) =>
+              messages: cachePrefixIdentities.map((identity) =>
                 new Bun.CryptoHasher("sha256").update(Prompt.canonicalEncode(identity)).digest("hex"),
               ),
               settings: `${selected.model}:${selected.reasoning}:${envelope.tools.length > 0}`,
