@@ -15,6 +15,9 @@ const env = createEnv({
     ML_BASE_URL: z.url().optional(),
     ML_API_TOKEN: z.string().optional(),
 
+    OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
+    OTEL_EXPORTER_OTLP_HEADERS: z.string().default(""),
+
     BASE_CDN_URL: z.string().default(""),
   },
   runtimeEnv: process.env,

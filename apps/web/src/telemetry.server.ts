@@ -4,6 +4,7 @@ import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
+import env from "@/env.server";
 
 declare global {
   var starlightWebTracerProvider: NodeTracerProvider | undefined;
@@ -11,14 +12,14 @@ declare global {
 }
 
 if (globalThis.starlightWebTracerProvider === undefined) {
-  const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+  const otlpEndpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT;
   const spanProcessors = otlpEndpoint
     ? [
         new BatchSpanProcessor(
           new OTLPTraceExporter({
             url: `${otlpEndpoint}/v1/traces`,
             headers: Object.fromEntries(
-              (process.env.OTEL_EXPORTER_OTLP_HEADERS ?? "").split(",").flatMap((pair) => {
+              env.OTEL_EXPORTER_OTLP_HEADERS.split(",").flatMap((pair) => {
                 const separator = pair.indexOf("=");
                 if (separator < 1) return [];
 
