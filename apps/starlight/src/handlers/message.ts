@@ -43,10 +43,10 @@ async function admitMessage(ctx: Context, message: Message, addressed: boolean) 
       // Telegram extraction is branch-heavy by protocol shape but remains one boundary normalization.
       // oxlint-disable-next-line eslint/complexity
       return yield* Effect.gen(function* attempt() {
-        const references = yield* Effect.all(mediaSources(message).map(media.ingest), {
+        const references = yield* Effect.all(Media.fromTelegramMessage(message).map(media.ingest), {
           concurrency: "unbounded",
         }).pipe(Effect.mapError(mediaAdmissionError));
-        const repliedMedia = yield* Effect.all(mediaSources(message.reply_to_message).map(media.ingest), {
+        const repliedMedia = yield* Effect.all(Media.fromTelegramMessage(message.reply_to_message).map(media.ingest), {
           concurrency: "unbounded",
         }).pipe(Effect.mapError(mediaAdmissionError));
         return yield* conversation.admit({
@@ -114,101 +114,14 @@ function isAddressedToBot(ctx: Context, message: Message): boolean {
 }
 
 function hasAdmittableContent(ctx: Context): boolean {
-  return Boolean(ctx.message && ((ctx.message.text ?? ctx.message.caption) || mediaSources(ctx.message).length > 0));
+  return Boolean(
+    ctx.message && ((ctx.message.text ?? ctx.message.caption) || Media.fromTelegramMessage(ctx.message).length > 0),
+  );
 }
 
 function hasAdmittableEditedContent(ctx: Context): boolean {
   return Boolean(
     ctx.editedMessage &&
-    ((ctx.editedMessage.text ?? ctx.editedMessage.caption) || mediaSources(ctx.editedMessage).length > 0),
+    ((ctx.editedMessage.text ?? ctx.editedMessage.caption) || Media.fromTelegramMessage(ctx.editedMessage).length > 0),
   );
-}
-
-function mediaSources(message: Message | undefined): Media.Source[] {
-  if (!message) return [];
-  if (message.photo?.length) {
-    const photo = message.photo.at(-1)!;
-    return [source("photo", photo.file_id, photo.file_unique_id, "image/jpeg", photo.file_size)];
-  }
-  if (message.sticker) {
-    const file = message.sticker.is_animated || message.sticker.is_video ? message.sticker.thumbnail : message.sticker;
-    return file ? [source("sticker", file.file_id, file.file_unique_id, "image/webp", file.file_size)] : [];
-  }
-  if (message.animation) {
-    return [
-      source(
-        "animation",
-        message.animation.file_id,
-        message.animation.file_unique_id,
-        message.animation.mime_type ?? "video/mp4",
-        message.animation.file_size,
-      ),
-    ];
-  }
-  if (message.video) {
-    return [
-      source(
-        "video",
-        message.video.file_id,
-        message.video.file_unique_id,
-        message.video.mime_type ?? "video/mp4",
-        message.video.file_size,
-      ),
-    ];
-  }
-  if (message.video_note) {
-    return [
-      source(
-        "video-note",
-        message.video_note.file_id,
-        message.video_note.file_unique_id,
-        "video/mp4",
-        message.video_note.file_size,
-      ),
-    ];
-  }
-  if (message.voice) {
-    return [
-      source(
-        "voice",
-        message.voice.file_id,
-        message.voice.file_unique_id,
-        message.voice.mime_type ?? "audio/ogg",
-        message.voice.file_size,
-      ),
-    ];
-  }
-  if (message.audio) {
-    return [
-      source(
-        "audio",
-        message.audio.file_id,
-        message.audio.file_unique_id,
-        message.audio.mime_type ?? "audio/mpeg",
-        message.audio.file_size,
-      ),
-    ];
-  }
-  if (message.document) {
-    return [
-      source(
-        "document",
-        message.document.file_id,
-        message.document.file_unique_id,
-        message.document.mime_type ?? "application/octet-stream",
-        message.document.file_size,
-      ),
-    ];
-  }
-  return [];
-}
-
-function source(
-  type: Media.Type,
-  telegramFileId: string,
-  telegramFileUniqueId: string,
-  mimeType: string,
-  declaredSize: number | undefined,
-): Media.Source {
-  return { declaredSize: declaredSize ?? null, mimeType, telegramFileId, telegramFileUniqueId, type };
 }

@@ -1,6 +1,7 @@
 import type { FileApiFlavor } from "@grammyjs/files";
 import { Context, Effect, Layer, Schema } from "effect";
 import type { Api } from "grammy";
+import type { Message } from "grammy/types";
 
 export namespace Media {
   const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
@@ -78,6 +79,86 @@ export namespace Media {
   }
 
   export class Service extends Context.Service<Service, Interface>()("starlight/Media") {}
+
+  export function fromTelegramMessage(message: Message | undefined): Source[] {
+    if (!message) return [];
+    if (message.photo?.length) {
+      const photo = message.photo.at(-1)!;
+      return [createSource("photo", photo.file_id, photo.file_unique_id, "image/jpeg", photo.file_size)];
+    }
+    if (message.sticker) {
+      const file =
+        message.sticker.is_animated || message.sticker.is_video ? message.sticker.thumbnail : message.sticker;
+      return file ? [createSource("sticker", file.file_id, file.file_unique_id, "image/webp", file.file_size)] : [];
+    }
+    if (message.animation) {
+      return [
+        createSource(
+          "animation",
+          message.animation.file_id,
+          message.animation.file_unique_id,
+          message.animation.mime_type ?? "video/mp4",
+          message.animation.file_size,
+        ),
+      ];
+    }
+    if (message.video) {
+      return [
+        createSource(
+          "video",
+          message.video.file_id,
+          message.video.file_unique_id,
+          message.video.mime_type ?? "video/mp4",
+          message.video.file_size,
+        ),
+      ];
+    }
+    if (message.video_note) {
+      return [
+        createSource(
+          "video-note",
+          message.video_note.file_id,
+          message.video_note.file_unique_id,
+          "video/mp4",
+          message.video_note.file_size,
+        ),
+      ];
+    }
+    if (message.voice) {
+      return [
+        createSource(
+          "voice",
+          message.voice.file_id,
+          message.voice.file_unique_id,
+          message.voice.mime_type ?? "audio/ogg",
+          message.voice.file_size,
+        ),
+      ];
+    }
+    if (message.audio) {
+      return [
+        createSource(
+          "audio",
+          message.audio.file_id,
+          message.audio.file_unique_id,
+          message.audio.mime_type ?? "audio/mpeg",
+          message.audio.file_size,
+        ),
+      ];
+    }
+    if (message.document) {
+      return [
+        createSource(
+          "document",
+          message.document.file_id,
+          message.document.file_unique_id,
+          message.document.mime_type ?? "application/octet-stream",
+          message.document.file_size,
+        ),
+      ];
+    }
+    return [];
+  }
 
   export function layer(options: Options): Layer.Layer<Service> {
     return Layer.succeed(Service, Service.of(make(options)));
@@ -244,5 +325,15 @@ export namespace Media {
       source.mimeType.startsWith("video/") ||
       source.mimeType.startsWith("audio/")
     );
+  }
+
+  function createSource(
+    type: Type,
+    telegramFileId: string,
+    telegramFileUniqueId: string,
+    mimeType: string,
+    declaredSize: number | undefined,
+  ): Source {
+    return { declaredSize: declaredSize ?? null, mimeType, telegramFileId, telegramFileUniqueId, type };
   }
 }

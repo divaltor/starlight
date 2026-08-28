@@ -3,6 +3,7 @@ import { z } from "zod";
 import guestPromptText from "@/ai/guest-prompt.txt";
 import { Model } from "@/ai/model";
 import personaPromptText from "@/ai/persona-prompt.txt";
+import type { Media } from "@/media/media";
 
 export namespace GuestReply {
   const MAX_OUTPUT_TOKENS = 2048;
@@ -13,6 +14,8 @@ export namespace GuestReply {
   export interface Interface {
     readonly generate: (input: {
       readonly message: string;
+      readonly repliedMedia: readonly Media.Loaded[];
+      readonly repliedMessage: string | null;
       readonly sessionId: string;
     }) => Effect.Effect<string, Model.Error>;
   }
@@ -31,7 +34,13 @@ export namespace GuestReply {
             maxOutputTokens: MAX_OUTPUT_TOKENS,
             maxToolOutputBytes: 0,
             maxToolSteps: 0,
-            messages: [{ role: "user", text: input.message }],
+            messages: [
+              {
+                role: "user",
+                media: input.repliedMedia,
+                text: `Replied-to message:\n${input.repliedMessage ?? "[none]"}\nReplied-to attachments: ${input.repliedMedia.length}\n\nCurrent guest message:\n${input.message}`,
+              },
+            ],
             outputSchema,
             sessionId: input.sessionId,
             telemetryFunctionId: "guest-reply",
