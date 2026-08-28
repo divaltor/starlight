@@ -16,6 +16,7 @@ import { Media } from "@/media/media";
 import { Database } from "@/services/database";
 
 export namespace ConversationContext {
+  const PREFIX_SNAPSHOT_LIMIT = 128;
   const CHECKPOINT_TOOL_OUTPUT_MAX_CHARS = 2000;
   const MAX_REQUEST_MEDIA_BYTES = 20 * 1024 * 1024;
   export interface PreparedContextRequest {
@@ -401,7 +402,11 @@ export namespace ConversationContext {
           })
           .pipe(Effect.mapError(failed("Failed to prepare context request")));
         const previous = prefixSnapshots.get(outcome.prepared.contextId);
+        if (previous !== undefined) prefixSnapshots.delete(outcome.prepared.contextId);
         prefixSnapshots.set(outcome.prepared.contextId, outcome.snapshot);
+        if (prefixSnapshots.size > PREFIX_SNAPSHOT_LIMIT) {
+          prefixSnapshots.delete(prefixSnapshots.keys().next().value!);
+        }
         const verdict = CacheDiagnostics.comparePrefix(previous, outcome.snapshot);
         const annotations: Record<string, string | number> = {
           contextId: outcome.prepared.contextId,
