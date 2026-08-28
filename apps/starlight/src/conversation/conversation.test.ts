@@ -27,6 +27,7 @@ test.skipIf(!databaseUrl)("duplicate Telegram delivery creates one immutable inp
         yield* database.query((client) => resetLane(client, assistantId, chatId));
         const input: Conversation.AdmissionInput = {
           chatTitle: "Phase 2 test",
+          chatType: "supergroup",
           chatUsername: null,
           key: { assistantId, chatId, threadKey: 17 },
           payload: {
@@ -131,6 +132,7 @@ test.skipIf(!databaseUrl)("model-selected reply targets are passed to Telegram d
         yield* database.query((client) => resetLane(client, assistantId, chatId));
         yield* conversation.admit({
           chatTitle: "Reply target test",
+          chatType: "supergroup",
           chatUsername: null,
           key,
           payload: {
@@ -239,6 +241,7 @@ test.skipIf(!databaseUrl)("reuses frozen recalled memory after a retryable model
         yield* database.query((client) => resetLane(client, assistantId, chatId));
         yield* conversation.admit({
           chatTitle: "Recall retry test",
+          chatType: "supergroup",
           chatUsername: null,
           key,
           payload: {
@@ -375,6 +378,7 @@ test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating th
         yield* database.query((client) => resetLane(client, assistantId, chatId));
         yield* conversation.admit({
           chatTitle: "Phase 2 retry test",
+          chatType: "supergroup",
           chatUsername: null,
           key: { assistantId, chatId, threadKey: 0 },
           payload: {
@@ -513,6 +517,7 @@ test.skipIf(!databaseUrl)(
           yield* database.query((client) => resetLane(client, assistantId, chatId));
           yield* conversation.admit({
             chatTitle: "Checkpoint test",
+            chatType: "supergroup",
             chatUsername: null,
             key,
             payload: {
@@ -551,6 +556,7 @@ test.skipIf(!databaseUrl)(
           yield* conversation.drain({ key });
           yield* conversation.admit({
             chatTitle: "Checkpoint test",
+            chatType: "supergroup",
             chatUsername: null,
             key,
             payload: {
@@ -845,6 +851,7 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
         );
         yield* conversation.admit({
           chatTitle: "Hard checkpoint test",
+          chatType: "supergroup",
           chatUsername: null,
           key,
           payload: {
@@ -981,6 +988,7 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
         yield* database.query((client) => resetLane(client, assistantId, chatId));
         yield* conversation.admit({
           chatTitle: "Oversized test",
+          chatType: "supergroup",
           chatUsername: null,
           key,
           payload: {
@@ -1043,6 +1051,7 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
         const database = yield* Database.Service;
         yield* conversation.admit({
           chatTitle: "Oversized test",
+          chatType: "supergroup",
           chatUsername: null,
           key,
           payload: {
@@ -1137,6 +1146,7 @@ test.skipIf(!databaseUrl)("an edit in the original message second creates a corr
         yield* database.query((client) => resetLane(client, assistantId, chatId));
         const original: Conversation.AdmissionInput = {
           chatTitle: "Phase 2 edit test",
+          chatType: "supergroup",
           chatUsername: null,
           key: { assistantId, chatId, threadKey: 0 },
           payload: {

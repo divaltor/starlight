@@ -282,6 +282,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
           profileEnvelope,
           reason: "profile-change",
           retainedTokenTarget: 6000,
+          telemetryPrivate: false,
           run: { fencingToken: 1n, runId },
           toolProfile: [],
         });
@@ -488,6 +489,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
             profileEnvelope,
             reason: "profile-change",
             retainedTokenTarget: 6000,
+            telemetryPrivate: false,
             run: { fencingToken: 1n, runId: seeded.runId },
             toolProfile: [],
           }),
@@ -506,6 +508,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
           profileEnvelope,
           reason: "profile-change",
           retainedTokenTarget: 6000,
+          telemetryPrivate: false,
           run: { fencingToken: 2n, runId: seeded.runId },
           toolProfile: [],
         });
@@ -540,6 +543,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
           profileEnvelope,
           reason: "profile-change",
           retainedTokenTarget: 6000,
+          telemetryPrivate: false,
           run: { fencingToken: 2n, runId: seeded.runId },
           toolProfile: [],
         });

@@ -1,5 +1,6 @@
 import type { ConversationRunStatus, Prisma } from "@starlight/utils/generated/prisma/client";
 import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect";
+import type { Chat as TelegramChat } from "grammy/types";
 import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";
 import type { Model } from "@/ai/model";
@@ -26,6 +27,7 @@ export namespace Conversation {
 
   export interface AdmissionInput {
     readonly chatTitle: string | null;
+    readonly chatType: TelegramChat["type"];
     readonly chatUsername: string | null;
     readonly key: ConversationKey.Value;
     readonly payload: InputPayload;
@@ -113,6 +115,8 @@ export namespace Conversation {
               where: { id: BigInt(input.key.chatId) },
               create: {
                 id: BigInt(input.key.chatId),
+                // Direct messages stay private by default; groups opt in via the flag.
+                isPrivate: input.chatType === "private",
                 title: input.chatTitle,
                 username: input.chatUsername,
               },
@@ -271,13 +275,17 @@ export namespace Conversation {
         return yield* Effect.gen(function* drainClaimed() {
           const chat = yield* database
             .query((client) =>
-              client.chat.findUnique({ where: { id: BigInt(claimed.key.chatId) }, select: { isPremium: true } }),
+              client.chat.findUnique({
+                where: { id: BigInt(claimed.key.chatId) },
+                select: { isPremium: true, isPrivate: true },
+              }),
             )
             .pipe(Effect.mapError(failed("Failed to verify chat access")));
           if (!chat?.isPremium) {
             yield* blockRun(claimed, "chat-access-revoked", "Chat access is not allowed");
             return { kind: "completed" as const, runId: claimed.runId };
           }
+          const telemetryPrivate = chat.isPrivate;
           // A permanent checkpoint failure (e.g. summarization that can never succeed) would
           // otherwise be redriven forever: failed hardSafety attempts are deliberately
           // resumable with no attempt bound.
@@ -287,6 +295,7 @@ export namespace Conversation {
               leaseMs: options.leaseMs,
               retainedTokenTarget: options.contextRetainedTokenTarget,
               runId: claimed.runId,
+              telemetryPrivate,
             }),
             claimed,
             "checkpoint-failed",
@@ -320,6 +329,7 @@ export namespace Conversation {
               retainedTokenTarget: options.contextRetainedTokenTarget,
               run: { fencingToken: claimed.fencingToken, runId: claimed.runId },
               toolProfile: frozenProfile.toolProfile,
+              telemetryPrivate,
             }),
             claimed,
             "profile-transition-required",
@@ -343,6 +353,7 @@ export namespace Conversation {
                 reason: "hardSafety",
                 retainedTokenTarget: options.contextRetainedTokenTarget,
                 runId: claimed.runId,
+                telemetryPrivate,
               }),
               claimed,
               OVERSIZED_INPUT_ERROR_TAG,
@@ -369,9 +380,12 @@ export namespace Conversation {
           const attempted = yield* invokeModel(claimed, prepared, contextRequest, toolset, {
             allowContextOverflowRecovery: true,
             attemptNumber: claimed.attemptCount + 1,
+            telemetryPrivate: chat?.isPrivate === true,
           });
           const invocation =
-            attempted.kind === "contextOverflow" ? yield* recoverContextOverflow(claimed, prepared) : attempted;
+            attempted.kind === "contextOverflow"
+              ? yield* recoverContextOverflow(claimed, prepared, chat?.isPrivate === true)
+              : attempted;
           if (invocation.kind === "failed") return yield* finalizeClaimed(claimed);
           if (invocation.kind === "contextOverflow") {
             return yield* new ConversationError({
@@ -649,6 +663,7 @@ export namespace Conversation {
               instructions: contextRequest.instructions,
               messages: contextRequest.messages,
               promptCacheKey: contextRequest.contextId,
+              private: invocation.telemetryPrivate,
               sessionId: prepared.sessionId,
               toolset,
             })
@@ -682,7 +697,7 @@ export namespace Conversation {
         }).pipe(Effect.scoped);
       }
 
-      function recoverContextOverflow(claimed: ClaimedRun, prepared: PreparedRun) {
+      function recoverContextOverflow(claimed: ClaimedRun, prepared: PreparedRun, telemetryPrivate: boolean) {
         return blockOnPermanent(
           conversationContext.checkpoint({
             fencingToken: claimed.fencingToken,
@@ -690,6 +705,7 @@ export namespace Conversation {
             reason: "hardSafety",
             retainedTokenTarget: options.contextRetainedTokenTarget,
             runId: claimed.runId,
+            telemetryPrivate,
           }),
           claimed,
           OVERSIZED_INPUT_ERROR_TAG,
@@ -708,6 +724,7 @@ export namespace Conversation {
                   invokeModel(claimed, prepared, contextRequest, toolset, {
                     allowContextOverflowRecovery: false,
                     attemptNumber: claimed.attemptCount + 2,
+                    telemetryPrivate,
                   }),
                 ),
               );
@@ -1145,6 +1162,7 @@ export namespace Conversation {
   interface InvocationOptions {
     readonly allowContextOverflowRecovery: boolean;
     readonly attemptNumber: number;
+    readonly telemetryPrivate: boolean;
   }
 
   const failed =

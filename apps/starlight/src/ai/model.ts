@@ -66,6 +66,8 @@ export namespace Model {
     readonly maxToolSteps: number;
     readonly messages: readonly Message[];
     readonly outputSchema: ZodType<OUTPUT>;
+    // Private chats keep cost/usage telemetry but never export input/output content.
+    readonly private?: boolean;
     // Rides on OpenRouter's body verbatim as prompt_cache_key for upstream cache routing.
     readonly promptCacheKey?: string;
     readonly sessionId: string;
@@ -170,6 +172,9 @@ export namespace Model {
               providerOptions: input.promptCacheKey
                 ? { openrouter: { prompt_cache_key: input.promptCacheKey } }
                 : undefined,
+              // Private chats keep cost/usage metadata; only the raw prompt/completion
+              // content is stripped from the gen_ai spans.
+              runtimeContext: input.private === true ? { "starlight.private": true } : undefined,
               stopWhen: [
                 // A step whose only tool call is final_output means the answer is complete.
                 (step) => {
@@ -181,8 +186,8 @@ export namespace Model {
               telemetry: {
                 functionId: input.telemetryFunctionId ?? "chat-reply",
                 isEnabled: true,
-                recordInputs: true,
-                recordOutputs: true,
+                recordInputs: input.private !== true,
+                recordOutputs: input.private !== true,
               },
               toolChoice: "required",
               tools,

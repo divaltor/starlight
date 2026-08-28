@@ -28,13 +28,23 @@ export interface TelemetryConfig {
 }
 
 export function initTelemetry(backends: TelemetryConfig): void {
-  registerTelemetry(new OpenTelemetry({ usage: true }));
+  registerTelemetry(
+    new OpenTelemetry({
+      enrichSpan: ({ runtimeContext }) =>
+        runtimeContext?.["starlight.private"] === true ? { "starlight.private": true } : undefined,
+      runtimeContext: true,
+      usage: true,
+    }),
+  );
 
   const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: INSTRUMENTATION_NAME });
 
   const spanProcessors: SpanProcessor[] = [];
   if (backends.langfuse) {
-    spanProcessors.push(new LangfuseSpanProcessor(backends.langfuse));
+    // The default shouldExportSpan filter drops every span without gen_ai attributes,
+    // which silently deleted our root spans — and with them langfuse.session.id,
+    // user ids, and trace names. Export everything; content redaction happens upstream.
+    spanProcessors.push(new LangfuseSpanProcessor({ ...backends.langfuse, shouldExportSpan: () => true }));
   }
   if (backends.otlp) {
     spanProcessors.push(
@@ -93,16 +103,8 @@ export function createUpdateTracer(): MiddlewareFn<Context> {
         "telegram.update_id": ctx.update.update_id,
         "telegram.update_type": Object.keys(ctx.update).find((key) => key !== "update_id") ?? "unknown",
       });
-      // Langfuse groups traces into sessions by langfuse.session.id; one session per
-      // conversation lane (chat + topic thread). The session takes its display name from
-      // the first trace, so name the trace after the chat; without a chat the span name
-      // stays the fallback.
-      const {chat} = ctx;
-      if (chat !== undefined) {
-        span.setAttribute('langfuse.session.id', `${chat.id}/${ctx.msg?.message_thread_id ?? 0}`);
-        const chatName = chat.title ?? chat.first_name;
-        if (chatName !== undefined) span.setAttribute('langfuse.trace.name', chatName);
-      }
+      // langfuse.session.id / langfuse.user.id / langfuse.trace.name are set by the
+      // access middleware once the chat (and its privacy flag) is loaded.
       try {
         await next();
       } catch (error) {

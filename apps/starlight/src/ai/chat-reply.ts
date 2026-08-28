@@ -39,6 +39,8 @@ export namespace ChatReply {
     readonly cacheBase?: string;
     readonly cachePrefixMessageCount?: number;
     readonly instructions?: string;
+    // Private chats keep cost/usage telemetry but never export input/output content.
+    readonly private?: boolean;
     readonly messages: readonly Model.Message[];
     readonly promptCacheKey?: string;
     readonly sessionId: string;
@@ -68,6 +70,7 @@ export namespace ChatReply {
             maxToolSteps: Object.keys(input.toolset.tools).length > 0 ? MAX_AGENT_TOOL_STEPS : 0,
             messages: input.messages,
             outputSchema: responseSchema,
+            private: input.private,
             promptCacheKey: input.promptCacheKey,
             sessionId: input.sessionId,
             tools: input.toolset.tools,

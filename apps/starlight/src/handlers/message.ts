@@ -51,6 +51,7 @@ async function admitMessage(ctx: Context, message: Message, addressed: boolean) 
         }).pipe(Effect.mapError(mediaAdmissionError));
         return yield* conversation.admit({
           chatTitle: ctx.chat!.title ?? null,
+          chatType: ctx.chat!.type,
           chatUsername: ctx.chat!.username ?? null,
           key: {
             assistantId: ctx.me.id,

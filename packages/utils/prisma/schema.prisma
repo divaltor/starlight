@@ -147,6 +147,9 @@ model Chat {
   title     String?
   username  String?
   isPremium Boolean @default(false) @map("is_premium")
+  // Default private: chats keep cost/usage metadata but never export input/output content
+  // to telemetry unless explicitly opted in.
+  isPrivate Boolean @default(true) @map("is_private")
 
   photoThumbnail String? @map("photo_thumbnail")
   photoBig       String? @map("photo_big")

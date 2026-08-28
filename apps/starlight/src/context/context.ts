@@ -39,6 +39,8 @@ export namespace ConversationContext {
     readonly leaseMs: number;
     readonly reason: ConversationCheckpointReason;
     readonly retainedTokenTarget: number;
+    // Private chats keep cost/usage telemetry but never export input/output content.
+    readonly telemetryPrivate: boolean;
   }
 
   export interface CheckpointResult {
@@ -62,6 +64,8 @@ export namespace ConversationContext {
     readonly retainedTokenTarget: number;
     readonly run: RunReference;
     readonly toolProfile: ChatTools.Profile;
+    // Private chats keep cost/usage telemetry but never export input/output content.
+    readonly telemetryPrivate: boolean;
   }
 
   export interface ContextGeneration {
@@ -643,6 +647,7 @@ export namespace ConversationContext {
           leaseMs: input.leaseMs,
           reason: "profileChange",
           retainedTokenTarget: input.retainedTokenTarget,
+          telemetryPrivate: input.telemetryPrivate,
         });
         return {
           generation: result.generation,
@@ -712,6 +717,7 @@ export namespace ConversationContext {
           maxToolSteps: 0,
           messages: [{ role: "user", text: prepared.summaryInput }],
           outputSchema: Checkpoint.Summary,
+          private: checkpointInput.telemetryPrivate,
           sessionId: prepared.parentContextId,
           tools: {},
         })
