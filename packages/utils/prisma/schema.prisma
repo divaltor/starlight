@@ -148,8 +148,6 @@ model Chat {
   username  String?
   isPremium Boolean @default(false) @map("is_premium")
 
-	settings Json @default("{}")
-
   photoThumbnail String? @map("photo_thumbnail")
   photoBig       String? @map("photo_big")
 
