@@ -10,13 +10,13 @@ export namespace ActiveContext {
     key: Lane.LaneKey,
     toolProfile: ChatTools.Profile,
     frozenMemory: string,
+    stableEnvelope = Prompt.renderEnvelope({ toolProfile }),
   ) {
     const existing = await transaction.conversationContext.findFirst({
       where: { ...key, status: "active" },
     });
     if (existing) return existing;
 
-    const envelope = Prompt.renderEnvelope({ toolProfile });
     // One Prisma transaction connection must execute its queries serially.
     // oxlint-disable-next-line react-doctor/server-sequential-independent-await
     const latest = await transaction.conversationContext.aggregate({
@@ -28,8 +28,8 @@ export namespace ActiveContext {
         ...key,
         activeKey: ConversationKey.format(key),
         generation: (latest._max.generation ?? 0) + 1,
-        modelProfileFingerprint: Prompt.profileFingerprint(toolProfile),
-        ...Prompt.stableSeed(envelope, frozenMemory),
+        modelProfileFingerprint: new Bun.CryptoHasher("sha256").update(stableEnvelope).digest("hex"),
+        ...Prompt.stableSeed(stableEnvelope, frozenMemory),
       },
     });
     await transaction.conversationLane.update({

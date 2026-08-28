@@ -3,12 +3,18 @@ import type { PrismaClient } from "@starlight/utils/generated/prisma/client";
 import { Effect, Layer, Logger, ManagedRuntime, References } from "effect";
 import { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
+import { Usage } from "@/ai/usage";
 import { ConversationContext } from "@/context/context";
 import { Prompt } from "@/context/prompt";
 import { Media } from "@/media/media";
 import { Database } from "@/services/database";
 
 const databaseUrl = process.env.DATABASE_URL;
+const FROZEN_PROFILE_ENVELOPE = Prompt.canonicalEncode({
+  instructions: "Frozen profile instructions",
+  tools: [],
+  version: "profile-envelope-test-v1",
+});
 
 // Each test owns an isolated assistant/chat pair; clearing every conversation row for the
 // pair keeps runs independent of execution order.
@@ -187,6 +193,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
   const chatId = -8_000_000_093n;
   const retainedRenderedContent = '<message role="user">retained bytes</message>';
   const retainedRenderVersion = "conversation-context-v1";
+  const profileEnvelope = FROZEN_PROFILE_ENVELOPE;
 
   try {
     await runtime.runPromise(
@@ -229,7 +236,8 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
               fencingToken: 1n,
               inputEndRevision: 1,
               inputStartRevision: 1,
-              modelProfileFingerprint: Prompt.profileFingerprint([]),
+              modelProfileFingerprint: new Bun.CryptoHasher("sha256").update(profileEnvelope).digest("hex"),
+              preparedRequest: { profileEnvelope, toolProfile: [] },
               replyEligible: false,
               threadKey: 0,
             },
@@ -270,7 +278,10 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
 
         const transitioned = yield* context.transitionProfile({
           key: { assistantId: Number(assistantId), chatId: Number(chatId), threadKey: 0 },
+          leaseMs: 180_000,
+          profileEnvelope,
           reason: "profile-change",
+          retainedTokenTarget: 6000,
           run: { fencingToken: 1n, runId },
           toolProfile: [],
         });
@@ -289,13 +300,250 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
         expect(transitioned.generation).toBe(2);
         expect(persisted.contexts.map((item) => item.status)).toEqual(["superseded", "active"]);
         expect(persisted.run.contextId).toBe(transitioned.id);
-        expect(transitioned.profileFingerprint).toBe(Prompt.profileFingerprint([]));
+        expect(transitioned.profileFingerprint).toBe(
+          new Bun.CryptoHasher("sha256").update(profileEnvelope).digest("hex"),
+        );
+        expect(transitioned.summarized).toBe(false);
+        expect(persisted.contexts.at(-1)?.stableEnvelope).toBe(profileEnvelope);
         expect(
           persisted.turns.map((turn) => ({
             renderedContent: turn.renderedContent,
             renderVersion: turn.renderVersion,
           })),
         ).toEqual([{ renderedContent: retainedRenderedContent, renderVersion: retainedRenderVersion }]);
+      }),
+    );
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => clearConversation(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
+test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the newest eight", async () => {
+  let summaryAttempts = 0;
+  const retryingSummaryModel: Model.Interface = {
+    generate: (input) => {
+      summaryAttempts += 1;
+      if (summaryAttempts === 1) {
+        return Effect.fail(new Model.Unavailable({ message: "Interrupted profile summary", retryable: true }));
+      }
+      return Effect.succeed({
+        finishReason: "stop",
+        output: input.outputSchema.parse({ summary: "Condensed conversation history" }),
+        steps: [],
+        toolEvents: [],
+        transcript: [],
+        usage: Usage.aggregate([]),
+      });
+    },
+  };
+  const runtime = ManagedRuntime.make(
+    ConversationContext.layer.pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Database.layer(databaseUrl!),
+          Layer.succeed(ChatTools.Service)(disabledChatTools),
+          Layer.succeed(Model.Service)(retryingSummaryModel),
+          mediaLayer,
+        ),
+      ),
+    ),
+  );
+  const assistantId = 8_000_000_105n;
+  const chatId = -8_000_000_105n;
+  const profileEnvelope = FROZEN_PROFILE_ENVELOPE;
+  const obsoleteEnvelope = "obsolete-profile-envelope";
+
+  try {
+    await runtime.runPromise(
+      Effect.gen(function* transitionProfileWithSummary() {
+        const context = yield* ConversationContext.Service;
+        const database = yield* Database.Service;
+        const seeded = yield* database.query(async (client) => {
+          await clearConversation(client, assistantId, chatId);
+          await client.chat.create({ data: { id: chatId } });
+          await client.conversationLane.create({
+            data: {
+              assistantId,
+              chatId,
+              pendingRevision: 11,
+              processedRevision: 10,
+              threadKey: 0,
+            },
+          });
+          const parent = await client.conversationContext.create({
+            data: {
+              activeKey: `v1/${assistantId}/${chatId}/0`,
+              assistantId,
+              chatId,
+              generation: 1,
+              modelProfileFingerprint: new Bun.CryptoHasher("sha256").update(obsoleteEnvelope).digest("hex"),
+              threadKey: 0,
+              ...Prompt.stableSeed(obsoleteEnvelope, Prompt.renderMemory({ checkpoint: "", scopes: [] })),
+            },
+          });
+          let summarizedThroughInputSequence = 0n;
+          for (const index of Array.from({ length: 10 }, (_, item) => item + 1)) {
+            const input = await client.conversationInput.create({
+              data: {
+                admittedRevision: index,
+                assistantId,
+                chatId,
+                payload: {
+                  addressed: true,
+                  date: 1_700_000_000 + index,
+                  editDate: null,
+                  forwardOrigin: null,
+                  messageId: 100 + index,
+                  repliedText: null,
+                  replyToMessageId: null,
+                  senderFirstName: "Alice",
+                  senderId: 42,
+                  senderUsername: "alice",
+                  text: `Message ${index}`,
+                },
+                senderTelegramId: 42n,
+                sourceMessageId: 100 + index,
+                sourceRevision: `original:${100 + index}`,
+                sourceUpdateId: 200 + index,
+                threadKey: 0,
+              },
+            });
+            const run = await client.conversationRun.create({
+              data: {
+                assistantId,
+                chatId,
+                eligibilityReason: "profile-checkpoint-history",
+                fencingToken: 1n,
+                finalizedAt: new Date(),
+                inputEndRevision: index,
+                inputStartRevision: index,
+                inputs: { create: { inputId: input.id, ordinal: 0 } },
+                modelProfileFingerprint: new Bun.CryptoHasher("sha256").update(obsoleteEnvelope).digest("hex"),
+                replyEligible: true,
+                status: "finalized",
+                threadKey: 0,
+              },
+            });
+            const transcriptTurn = await client.conversationTranscriptTurn.create({
+              data: {
+                assistantId,
+                chatId,
+                content: { text: `Message ${index}` },
+                idempotencyKey: `${run.id}:user`,
+                kind: "userMessage",
+                ordinal: index,
+                runId: run.id,
+                sourceMessageId: 100 + index,
+                sourceReferences: {},
+                threadKey: 0,
+                visibility: "conversation",
+              },
+            });
+            await client.conversationContextTurn.create({
+              data: {
+                contextId: parent.id,
+                estimatedTokens: 100,
+                ordinal: index,
+                renderedContent: `turn-${index}`,
+                renderVersion: "profile-checkpoint-test-v1",
+                role: "user",
+                rollingPrefixHash: `obsolete-rolling-${index}`,
+                segmentHash: `obsolete-segment-${index}`,
+                transcriptTurnId: transcriptTurn.id,
+              },
+            });
+            if (index === 2) summarizedThroughInputSequence = input.id;
+          }
+          const currentRun = await client.conversationRun.create({
+            data: {
+              assistantId,
+              chatId,
+              eligibilityReason: "profile-checkpoint-current",
+              fencingToken: 1n,
+              inputEndRevision: 11,
+              inputStartRevision: 11,
+              modelProfileFingerprint: new Bun.CryptoHasher("sha256").update(profileEnvelope).digest("hex"),
+              preparedRequest: { profileEnvelope, toolProfile: [] },
+              replyEligible: true,
+              threadKey: 0,
+            },
+          });
+          await client.conversationLane.update({
+            where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
+            data: { activeContextId: parent.id, activeRunId: currentRun.id, fencingToken: 1n },
+          });
+          return { runId: currentRun.id, summarizedThroughInputSequence };
+        });
+
+        const firstAttempt = yield* Effect.result(
+          context.transitionProfile({
+            key: { assistantId: Number(assistantId), chatId: Number(chatId), threadKey: 0 },
+            leaseMs: 180_000,
+            profileEnvelope,
+            reason: "profile-change",
+            retainedTokenTarget: 6000,
+            run: { fencingToken: 1n, runId: seeded.runId },
+            toolProfile: [],
+          }),
+        );
+        expect(firstAttempt._tag).toBe("Failure");
+        yield* database.query(async (client) => {
+          await client.conversationRun.update({ where: { id: seeded.runId }, data: { fencingToken: 2n } });
+          await client.conversationLane.update({
+            where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
+            data: { fencingToken: 2n },
+          });
+        });
+        const transitioned = yield* context.transitionProfile({
+          key: { assistantId: Number(assistantId), chatId: Number(chatId), threadKey: 0 },
+          leaseMs: 180_000,
+          profileEnvelope,
+          reason: "profile-change",
+          retainedTokenTarget: 6000,
+          run: { fencingToken: 2n, runId: seeded.runId },
+          toolProfile: [],
+        });
+        const persisted = yield* database.query(async (client) => ({
+          attempts: await client.conversationCheckpointAttempt.findMany({
+            where: { runId: seeded.runId },
+          }),
+          child: await client.conversationContext.findUniqueOrThrow({ where: { id: transitioned.id } }),
+          run: await client.conversationRun.findUniqueOrThrow({ where: { id: seeded.runId } }),
+          turns: await client.conversationContextTurn.findMany({
+            where: { contextId: transitioned.id },
+            include: { transcriptTurn: true },
+            orderBy: { ordinal: "asc" },
+          }),
+        }));
+
+        expect(transitioned.summarized).toBe(true);
+        expect(summaryAttempts).toBe(2);
+        expect(persisted.attempts).toHaveLength(1);
+        expect(persisted.attempts[0]).toMatchObject({ reason: "profileChange", status: "committed" });
+        expect(persisted.child.stableEnvelope).toBe(profileEnvelope);
+        expect(persisted.child.frozenMemory).toBe(
+          Prompt.renderMemory({ checkpoint: "Condensed conversation history", scopes: [] }),
+        );
+        expect(persisted.child.summaryThroughInputSequence).toBe(seeded.summarizedThroughInputSequence);
+        expect(persisted.run.contextId).toBe(transitioned.id);
+        expect(persisted.turns.map((turn) => turn.transcriptTurn.ordinal)).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+
+        const repeated = yield* context.transitionProfile({
+          key: { assistantId: Number(assistantId), chatId: Number(chatId), threadKey: 0 },
+          leaseMs: 180_000,
+          profileEnvelope,
+          reason: "profile-change",
+          retainedTokenTarget: 6000,
+          run: { fencingToken: 2n, runId: seeded.runId },
+          toolProfile: [],
+        });
+        expect(repeated).toMatchObject({ id: transitioned.id, summarized: false });
       }),
     );
   } finally {
@@ -375,6 +623,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
               preparedRequest: {
                 contextMemory: null,
                 currentDate: "2026-08-24",
+                profileEnvelope: Prompt.renderEnvelope({ toolProfile: [] }),
                 sessionId: "frozen-hash-session",
                 toolProfile: [],
               },
@@ -675,6 +924,7 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
               preparedRequest: {
                 contextMemory: null,
                 currentDate: "2026-08-28",
+                profileEnvelope: Prompt.renderEnvelope({ toolProfile: [] }),
                 sessionId: "cache-prefix-session-a",
                 toolProfile: [],
               },
@@ -721,6 +971,7 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
               preparedRequest: {
                 contextMemory: null,
                 currentDate: "2026-08-28",
+                profileEnvelope: Prompt.renderEnvelope({ toolProfile: [] }),
                 sessionId: "cache-prefix-session-b",
                 toolProfile: [],
               },

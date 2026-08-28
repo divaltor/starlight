@@ -310,23 +310,24 @@ export namespace Conversation {
             return { kind: "completed" as const, runId: claimed.runId };
           }
 
-          const { toolProfile } = Schema.decodeUnknownSync(PreparedToolProfileSchema)(claimed.preparedRequest);
-          const [prepared] = yield* Effect.all(
-            [
-              prepareRun(claimed, toolProfile),
-              blockOnPermanent(
-                conversationContext.transitionProfile({
-                  key: claimed.key,
-                  reason: "profile-change",
-                  run: { fencingToken: claimed.fencingToken, runId: claimed.runId },
-                  toolProfile,
-                }),
-                claimed,
-                "profile-transition-required",
-              ),
-            ],
-            { concurrency: 2 },
+          const frozenProfile = Schema.decodeUnknownSync(PreparedToolProfileSchema)(claimed.preparedRequest);
+          const transitioned = yield* blockOnPermanent(
+            conversationContext.transitionProfile({
+              key: claimed.key,
+              leaseMs: options.leaseMs,
+              profileEnvelope: frozenProfile.profileEnvelope,
+              reason: "profile-change",
+              retainedTokenTarget: options.contextRetainedTokenTarget,
+              run: { fencingToken: claimed.fencingToken, runId: claimed.runId },
+              toolProfile: frozenProfile.toolProfile,
+            }),
+            claimed,
+            "profile-transition-required",
           );
+          if (transitioned.summarized) {
+            yield* memory.flush(claimed.dbKey).pipe(Effect.mapError(domainFailed));
+          }
+          const prepared = yield* prepareRun(claimed, frozenProfile);
           if (!claimed.replyEligible) return yield* finalizeClaimed(claimed);
 
           let contextRequest = yield* blockOnPermanent(
@@ -410,6 +411,7 @@ export namespace Conversation {
 
       function claimRun(key: ConversationKey.Value) {
         const toolProfile = chatTools.availableProfile;
+        const profileEnvelope = Prompt.renderEnvelope({ toolProfile });
         return database
           .transaction(async (transaction): Promise<ClaimedRun | DrainResult> => {
             const where = ConversationKey.toDb(key);
@@ -505,8 +507,8 @@ export namespace Conversation {
                 fencingToken,
                 inputEndRevision: lastInput.admittedRevision,
                 inputStartRevision: inputs[0]!.admittedRevision,
-                modelProfileFingerprint: Prompt.profileFingerprint(toolProfile),
-                preparedRequest: { toolProfile: [...toolProfile] },
+                modelProfileFingerprint: new Bun.CryptoHasher("sha256").update(profileEnvelope).digest("hex"),
+                preparedRequest: { profileEnvelope, toolProfile: [...toolProfile] },
                 replyEligible,
                 inputs: {
                   create: inputs.map((item, ordinal) => ({ inputId: item.id, ordinal })),
@@ -535,7 +537,7 @@ export namespace Conversation {
               key,
               kind: "claimed",
               attemptCount: 0,
-              preparedRequest: { toolProfile: [...toolProfile] },
+              preparedRequest: { profileEnvelope, toolProfile: [...toolProfile] },
               replyEligible,
               runId: run.id,
               status: "prepared",
@@ -544,7 +546,7 @@ export namespace Conversation {
           .pipe(Effect.mapError(failed("Failed to claim conversation lane")));
       }
 
-      function prepareRun(claimed: ClaimedRun, pinnedToolProfile: ChatTools.Profile) {
+      function prepareRun(claimed: ClaimedRun, frozenProfile: typeof PreparedToolProfileSchema.Type) {
         return Effect.gen(function* prepare() {
           const payloads = claimed.inputs.map((input) => input.payload as InputPayload);
           const stored = Option.getOrNull(Schema.decodeUnknownOption(PreparedRequestSchema)(claimed.preparedRequest));
@@ -573,11 +575,12 @@ export namespace Conversation {
             ({
               contextMemory: recalled!.contextMemory,
               currentDate: new Date().toISOString().slice(0, 10),
+              profileEnvelope: frozenProfile.profileEnvelope,
               sessionId: new Bun.CryptoHasher("sha256")
                 .update(ConversationKey.format(claimed.key))
                 .digest("hex")
                 .slice(0, 32),
-              toolProfile: pinnedToolProfile,
+              toolProfile: frozenProfile.toolProfile,
             } satisfies typeof PreparedRequestSchema.Type);
           if (stored === null) {
             yield* database
@@ -586,7 +589,9 @@ export namespace Conversation {
                 await transaction.conversationRun.update({
                   where: { id: claimed.runId },
                   data: {
-                    modelProfileFingerprint: Prompt.profileFingerprint(frozen.toolProfile),
+                    modelProfileFingerprint: new Bun.CryptoHasher("sha256")
+                      .update(frozen.profileEnvelope)
+                      .digest("hex"),
                     preparedRequest: frozen,
                   },
                 });
@@ -595,7 +600,6 @@ export namespace Conversation {
           }
           return {
             sessionId: frozen.sessionId,
-            toolProfile: frozen.toolProfile,
           } satisfies PreparedRun;
         });
       }
@@ -1131,7 +1135,6 @@ export namespace Conversation {
 
   interface PreparedRun {
     readonly sessionId: string;
-    readonly toolProfile: ChatTools.Profile;
   }
 
   type InvocationResult =

@@ -35,15 +35,16 @@ export const InputPayloadSchema = Schema.Struct({
 export type InputPayload = typeof InputPayloadSchema.Type & Prisma.InputJsonObject;
 
 export const PreparedToolProfileSchema = Schema.Struct({
+  profileEnvelope: Schema.String,
   toolProfile: Schema.Array(Schema.String),
 });
 
-// The frozen request written by Conversation.prepareRun and replayed on resume. Only
-// values that time erodes are persisted: everything else re-derives deterministically
-// from the immutable batch inputs.
+// The frozen request written by Conversation.prepareRun and replayed on resume. It keeps
+// time-sensitive values and the exact profile envelope stable across retries.
 export const PreparedRequestSchema = Schema.Struct({
   contextMemory: Schema.NullOr(Schema.String),
   currentDate: Schema.String,
+  profileEnvelope: Schema.String,
   sessionId: Schema.String,
   toolProfile: Schema.Array(Schema.String),
 });

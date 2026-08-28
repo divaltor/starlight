@@ -1,7 +1,8 @@
-import type { Prisma } from "@starlight/utils/generated/prisma/client";
+import type { ConversationCheckpointReason, Prisma } from "@starlight/utils/generated/prisma/client";
 import { z } from "zod";
 
 export namespace Checkpoint {
+  const PROFILE_RETAINED_RUN_LIMIT = 8;
   export const summaryInstructions = `Summarize the conversation history for future continuity.
 Preserve speaker attribution, current decisions, corrections, open questions, tool-derived facts, media facts, and unfinished work.
 Remove obsolete intermediate wording and repeated greetings. Do not invent facts.`;
@@ -50,14 +51,53 @@ Remove obsolete intermediate wording and repeated greetings. Do not invent facts
     return { head: turns.slice(0, tailStart), tail: turns.slice(tailStart) };
   }
 
+  export function selectProfileBoundary(
+    turns: readonly SealedTurn[],
+    retainedTokenTarget: number,
+  ): { readonly head: SealedTurn[]; readonly tail: SealedTurn[] } {
+    const units: { runId: string; start: number; tokens: number }[] = [];
+    for (const [index, turn] of turns.entries()) {
+      const current = units.at(-1);
+      // oxlint-disable-next-line prefer-destructuring -- project style keeps property access explicit
+      const runId = turn.transcriptTurn.runId;
+      if (current?.runId === runId) {
+        current.tokens += turn.estimatedTokens;
+      }
+      if (current?.runId !== runId) {
+        units.push({ runId, start: index, tokens: turn.estimatedTokens });
+      }
+    }
+
+    let retainedRuns = 0;
+    let retainedTokens = 0;
+    let tailStart = turns.length;
+    for (const unit of units.toReversed()) {
+      if (
+        retainedRuns >= PROFILE_RETAINED_RUN_LIMIT ||
+        (retainedRuns > 0 && retainedTokens + unit.tokens > retainedTokenTarget)
+      ) {
+        break;
+      }
+      tailStart = unit.start;
+      retainedRuns += 1;
+      retainedTokens += unit.tokens;
+    }
+    return { head: turns.slice(0, tailStart), tail: turns.slice(tailStart) };
+  }
+
   // Retries resolve against the ordinals sealed on the existing attempt instead of
   // re-selecting, so every attempt summarizes the exact same head input.
   export function resolveBoundary(
     turns: readonly SealedTurn[],
     existing: Attempt | null,
     retainedTokenTarget: number,
+    reason: ConversationCheckpointReason,
   ): { readonly head: SealedTurn[]; readonly tail: SealedTurn[] } | null {
-    if (!existing) return selectBoundary(turns, retainedTokenTarget);
+    if (!existing) {
+      return reason === "profileChange"
+        ? selectProfileBoundary(turns, retainedTokenTarget)
+        : selectBoundary(turns, retainedTokenTarget);
+    }
     const retainedStart = existing.retainedStartTurnOrdinal;
     return {
       head: turns.filter((turn) => turn.transcriptTurn.ordinal <= existing.headEndTurnOrdinal),

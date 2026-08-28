@@ -10,7 +10,7 @@ import { Transcript } from "@/context/transcript";
 import { ChatTools } from "@/ai/chat-tools";
 import { ConversationKey } from "@/conversation/key";
 import { Lane } from "@/conversation/lane";
-import { PreparedRequestSchema, StoredPayloadSchema } from "@/conversation/run-artifacts";
+import { PreparedRequestSchema, PreparedToolProfileSchema, StoredPayloadSchema } from "@/conversation/run-artifacts";
 import { Memory } from "@/memory/memory";
 import { Media } from "@/media/media";
 import { Database } from "@/services/database";
@@ -19,6 +19,7 @@ export namespace ConversationContext {
   const PREFIX_SNAPSHOT_LIMIT = 128;
   const CHECKPOINT_TOOL_OUTPUT_MAX_CHARS = 2000;
   const MAX_REQUEST_MEDIA_BYTES = 20 * 1024 * 1024;
+  const PROFILE_MISMATCH_ERROR = "Checkpoint profile does not match the prepared run";
   export interface PreparedContextRequest {
     readonly cacheBase: string;
     readonly cachePrefixMessageCount: number;
@@ -55,8 +56,11 @@ export namespace ConversationContext {
 
   export interface ProfileTransitionInput {
     readonly key: ConversationKey.Value;
+    readonly leaseMs: number;
+    readonly profileEnvelope: string;
     readonly reason: string;
-    readonly run?: RunReference;
+    readonly retainedTokenTarget: number;
+    readonly run: RunReference;
     readonly toolProfile: ChatTools.Profile;
   }
 
@@ -64,6 +68,7 @@ export namespace ConversationContext {
     readonly generation: number;
     readonly id: string;
     readonly profileFingerprint: string;
+    readonly summarized: boolean;
   }
 
   export class ContextError extends Schema.TaggedError<ContextError>()("ContextError", {
@@ -512,56 +517,55 @@ export namespace ConversationContext {
         input: ProfileTransitionInput,
       ) {
         const key = ConversationKey.toDb(input.key);
-        const state = yield* database
-          .query((client) =>
-            client.conversationLane.findUniqueOrThrow({
-              where: { assistantId_chatId_threadKey: key },
-              select: { activeContextId: true },
-            }),
-          )
-          .pipe(Effect.mapError(failed("Failed to inspect transitioned context")));
-        const frozenMemory = state.activeContextId === null ? Prompt.renderMemory({ checkpoint: "", scopes: [] }) : "";
-        return yield* database
+        const profileFingerprint = new Bun.CryptoHasher("sha256").update(input.profileEnvelope).digest("hex");
+        const decision = yield* database
           .transaction(async (transaction) => {
             await Lane.lockLane(transaction, key);
-            if (input.run) await Lane.assertFence(transaction, key, input.run);
-            const profileFingerprint = Prompt.profileFingerprint(input.toolProfile);
-            const run = input.run
-              ? await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.run.runId } })
-              : null;
-            const parent = await ActiveContext.ensure(transaction, key, input.toolProfile, frozenMemory);
-            const envelope = Prompt.renderEnvelope({
-              toolProfile: input.toolProfile,
-            });
-            if (run?.contextId) {
-              const pinned = await transaction.conversationContext.findUniqueOrThrow({
-                where: { id: run.contextId },
+            await Lane.assertFence(transaction, key, input.run);
+            const run = await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.run.runId } });
+            if (run.modelProfileFingerprint !== profileFingerprint) {
+              throw new ContextError({
+                message: PROFILE_MISMATCH_ERROR,
+                retryable: false,
               });
-              if (pinned.modelProfileFingerprint !== run.modelProfileFingerprint) {
-                throw new ContextError({
-                  message: "Pinned context profile does not match the prepared run",
-                  retryable: false,
-                });
-              }
-              return {
-                generation: pinned.generation,
-                id: pinned.id,
-                profileFingerprint: pinned.modelProfileFingerprint,
-              };
             }
+            const parent = run.contextId
+              ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
+              : await ActiveContext.ensure(
+                  transaction,
+                  key,
+                  input.toolProfile,
+                  Prompt.renderMemory({ checkpoint: "", scopes: [] }),
+                  input.profileEnvelope,
+                );
             if (parent.modelProfileFingerprint === profileFingerprint) {
-              if (input.run) {
-                await transaction.conversationRun.update({
-                  where: { id: input.run.runId },
-                  data: { contextId: parent.id },
-                });
-              }
+              await transaction.conversationRun.update({
+                where: { id: input.run.runId },
+                data: { contextId: parent.id },
+              });
               return {
+                kind: "complete" as const,
                 generation: parent.generation,
                 id: parent.id,
                 profileFingerprint: parent.modelProfileFingerprint,
+                summarized: false,
               };
             }
+
+            const turns = await transaction.conversationContextTurn.findMany({
+              where: { contextId: parent.id },
+              orderBy: { ordinal: "asc" },
+              include: { transcriptTurn: true },
+            });
+            const boundaries = Checkpoint.selectProfileBoundary(turns, input.retainedTokenTarget);
+            if (boundaries.head.length > 0) {
+              await transaction.conversationRun.update({
+                where: { id: input.run.runId },
+                data: { contextId: parent.id, requestHash: null },
+              });
+              return { kind: "checkpoint" as const };
+            }
+
             const memory = parent.frozenMemory;
             await transaction.conversationContext.update({
               where: { id: parent.id },
@@ -581,18 +585,12 @@ export namespace ConversationContext {
                 retainedFromTurnOrdinal: parent.retainedFromTurnOrdinal,
                 resetReason: input.reason,
                 summaryThroughInputSequence: parent.summaryThroughInputSequence,
-                ...Prompt.stableSeed(envelope, memory),
+                ...Prompt.stableSeed(input.profileEnvelope, memory),
               },
-            });
-            // One Prisma transaction connection must execute its queries serially.
-            // oxlint-disable-next-line react-doctor/server-sequential-independent-await
-            const retained = await transaction.conversationContextTurn.findMany({
-              where: { contextId: parent.id },
-              orderBy: { ordinal: "asc" },
             });
             let rollingHash = child.basePrefixHash;
             let estimatedTokens = child.estimatedStableTokens;
-            for (const [index, turn] of retained.entries()) {
+            for (const [index, turn] of boundaries.tail.entries()) {
               // Copy the stored rendered bytes so the child prefix stays identical to the
               // parent's published chain even if the encoder changes between deploys.
               const segment = Prompt.extendPrefix(rollingHash, turn.renderedContent);
@@ -624,20 +622,34 @@ export namespace ConversationContext {
               where: { assistantId_chatId_threadKey: key },
               data: { activeContextId: child.id },
             });
-            if (input.run) {
-              await transaction.conversationRun.update({
-                where: { id: input.run.runId },
-                data: { contextId: child.id, requestHash: null },
-              });
-            }
+            await transaction.conversationRun.update({
+              where: { id: input.run.runId },
+              data: { contextId: child.id, requestHash: null },
+            });
 
             return {
+              kind: "complete" as const,
               generation: child.generation,
               id: child.id,
               profileFingerprint: child.modelProfileFingerprint,
+              summarized: false,
             };
           })
           .pipe(Effect.mapError(failed("Failed to transition context profile")));
+        if (decision.kind === "complete") return decision;
+
+        const result = yield* checkpoint({
+          ...input.run,
+          leaseMs: input.leaseMs,
+          reason: "profileChange",
+          retainedTokenTarget: input.retainedTokenTarget,
+        });
+        return {
+          generation: result.generation,
+          id: result.childContextId,
+          profileFingerprint,
+          summarized: true,
+        };
       });
 
       return Service.of({ appendFinalized, checkpoint, prepare, resumeCheckpoint, transitionProfile });
@@ -656,6 +668,7 @@ export namespace ConversationContext {
     readonly parentContextId: string;
     readonly summary: string | null;
     readonly summaryInput: string;
+    readonly summaryThroughInputSequence: bigint;
     readonly tail: readonly Checkpoint.TailTurn[];
   }
 
@@ -766,12 +779,7 @@ export namespace ConversationContext {
     const parent = await transaction.conversationContext.findUniqueOrThrow({
       where: { id: run.contextId },
     });
-    if (parent.modelProfileFingerprint !== run.modelProfileFingerprint) {
-      throw new ContextError({
-        message: "Pinned context profile does not match the prepared run",
-        retryable: false,
-      });
-    }
+    assertCheckpointProfile(run, parent, input.reason);
     const existing = await transaction.conversationCheckpointAttempt.findUnique({
       where: {
         parentContextId_runId_reason: {
@@ -808,7 +816,7 @@ export namespace ConversationContext {
     if (existing && turns.at(-1)?.transcriptTurn.ordinal !== existing.sealedThroughTurnOrdinal) {
       throw new Error("Checkpoint parent changed after its boundary was sealed");
     }
-    const boundaries = Checkpoint.resolveBoundary(turns, existing, input.retainedTokenTarget);
+    const boundaries = Checkpoint.resolveBoundary(turns, existing, input.retainedTokenTarget, input.reason);
     if (boundaries === null) {
       return { kind: "notPossible", message: "Context has no complete head unit to summarize" };
     }
@@ -827,7 +835,7 @@ export namespace ConversationContext {
       throw new Error("Stored checkpoint input hash is invalid");
     }
     const summaryProfileFingerprint = new Bun.CryptoHasher("sha256")
-      .update(`${parent.modelProfileFingerprint}:context-checkpoint-v1`)
+      .update(`${parent.modelProfileFingerprint}:${run.modelProfileFingerprint}:${input.reason}:context-checkpoint-v1`)
       .digest("hex");
     const attempt = existing
       ? await transaction.conversationCheckpointAttempt.update({
@@ -858,6 +866,11 @@ export namespace ConversationContext {
       data: { status: "checkpointing" },
     });
     const storedSummary = attempt.summaryOutput ? Checkpoint.Summary.parse(attempt.summaryOutput).summary.trim() : null;
+    const summaryThroughInputSequence = await resolveSummaryThroughInputSequence(
+      transaction,
+      parent.summaryThroughInputSequence,
+      boundaries.head,
+    );
 
     return {
       kind: "ready",
@@ -867,6 +880,7 @@ export namespace ConversationContext {
       parentContextId: parent.id,
       summary: storedSummary,
       summaryInput: attempt.summaryInput,
+      summaryThroughInputSequence,
       tail: boundaries.tail.map((turn) => ({
         renderedContent: turn.renderedContent,
         renderVersion: turn.renderVersion,
@@ -874,6 +888,38 @@ export namespace ConversationContext {
         transcriptTurnId: turn.transcriptTurnId,
       })),
     };
+  }
+
+  function assertCheckpointProfile(
+    run: Prisma.ConversationRunGetPayload<object>,
+    parent: Prisma.ConversationContextGetPayload<object>,
+    reason: ConversationCheckpointReason,
+  ) {
+    const profileFingerprint =
+      reason === "profileChange"
+        ? new Bun.CryptoHasher("sha256")
+            .update(Schema.decodeUnknownSync(PreparedToolProfileSchema)(run.preparedRequest).profileEnvelope)
+            .digest("hex")
+        : parent.modelProfileFingerprint;
+    if (profileFingerprint === run.modelProfileFingerprint) return;
+    throw new ContextError({
+      message: PROFILE_MISMATCH_ERROR,
+      retryable: false,
+    });
+  }
+
+  async function resolveSummaryThroughInputSequence(
+    transaction: Prisma.TransactionClient,
+    previous: bigint | null,
+    head: readonly Checkpoint.SealedTurn[],
+  ) {
+    const summarizedInput = await transaction.conversationRunInput.aggregate({
+      where: { runId: { in: [...new Set(head.map((turn) => turn.transcriptTurn.runId))] } },
+      _max: { inputId: true },
+    });
+    if (summarizedInput._max.inputId === null) throw new Error("Checkpoint head has no source input");
+    if (previous === null || summarizedInput._max.inputId > previous) return summarizedInput._max.inputId;
+    return previous;
   }
 
   async function commitCheckpoint(
@@ -907,6 +953,21 @@ export namespace ConversationContext {
       where: { id: parent.id },
       data: { activeKey: null },
     });
+    const run = await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.runId } });
+    const profileEnvelope =
+      input.reason === "profileChange"
+        ? Schema.decodeUnknownSync(PreparedToolProfileSchema)(run.preparedRequest).profileEnvelope
+        : parent.stableEnvelope;
+    const profileFingerprint =
+      input.reason === "profileChange"
+        ? new Bun.CryptoHasher("sha256").update(profileEnvelope).digest("hex")
+        : parent.modelProfileFingerprint;
+    if (input.reason === "profileChange" && profileFingerprint !== run.modelProfileFingerprint) {
+      throw new ContextError({
+        message: PROFILE_MISMATCH_ERROR,
+        retryable: false,
+      });
+    }
     const child = await transaction.conversationContext.create({
       data: {
         assistantId: parent.assistantId,
@@ -914,12 +975,12 @@ export namespace ConversationContext {
         threadKey: parent.threadKey,
         activeKey: ConversationKey.format(parent),
         generation: parent.generation + 1,
-        modelProfileFingerprint: parent.modelProfileFingerprint,
+        modelProfileFingerprint: profileFingerprint,
         parentContextId: parent.id,
-        resetReason: input.reason,
+        resetReason: input.reason === "profileChange" ? "profile-change" : input.reason,
         retainedFromTurnOrdinal: attempt.retainedStartTurnOrdinal,
-        summaryThroughInputSequence: BigInt(attempt.headEndTurnOrdinal),
-        ...Prompt.stableSeed(parent.stableEnvelope, frozenMemory),
+        summaryThroughInputSequence: prepared.summaryThroughInputSequence,
+        ...Prompt.stableSeed(profileEnvelope, frozenMemory),
       },
     });
     let rollingHash = child.basePrefixHash;
@@ -958,7 +1019,7 @@ export namespace ConversationContext {
       where: { assistantId_chatId_threadKey: prepared.key },
       data: { activeContextId: child.id },
     });
-    if (input.reason === "hardSafety") {
+    if (input.reason === "hardSafety" || input.reason === "profileChange") {
       await transaction.conversationRun.update({
         where: { id: input.runId },
         data: { contextId: child.id, requestHash: null },
