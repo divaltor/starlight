@@ -6,6 +6,7 @@ import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
 import type { LogLevel } from "effect/LogLevel";
 import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";
+import { GuestReply } from "@/ai/guest-reply";
 import { Model } from "@/ai/model";
 import { fileApi } from "@/bot";
 import { Conversation } from "@/conversation/conversation";
@@ -86,7 +87,9 @@ const logging = Layer.mergeAll(
   Layer.succeed(References.MinimumLogLevel)(parseLogLevel(env.LOG_LEVEL ?? (production ? "info" : "debug"))),
 );
 const chatTools = ChatTools.layer.pipe(Layer.provideMerge(Exa.defaultLayer));
-const chatReply = ChatReply.layer.pipe(Layer.provideMerge(Model.defaultLayer(env.OPENROUTER_API_KEY)));
+const replies = Layer.mergeAll(ChatReply.layer, GuestReply.layer).pipe(
+  Layer.provideMerge(Model.defaultLayer(env.OPENROUTER_API_KEY)),
+);
 const tracing =
   env.langfuse === undefined && env.otlp === undefined
     ? Layer.empty
@@ -96,7 +99,7 @@ const observability = Layer.mergeAll(logging, tracing);
 const infrastructure = Layer.mergeAll(
   Database.layer(env.DATABASE_URL),
   chatTools,
-  chatReply,
+  replies,
   TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
   WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
   Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),

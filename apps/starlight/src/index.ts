@@ -2,6 +2,7 @@ import { run } from "@grammyjs/runner";
 import { Effect, pipe } from "effect";
 import { bot } from "@/bot";
 import { createBotEnv } from "@/env";
+import guestMessageHandler from "@/handlers/guest-message";
 import messageHandler from "@/handlers/message";
 import startHandler from "@/handlers/start";
 import { createUpdateTracer, initTelemetry, shutdownTelemetry } from "@/instrumentation";
@@ -37,6 +38,7 @@ const boundary = bot.errorBoundary((error) =>
 
 boundary.use(premiumAccess);
 boundary.use(startHandler);
+boundary.use(guestMessageHandler);
 boundary.use(messageHandler);
 
 const runner = run(bot);

@@ -3,10 +3,11 @@ import { z } from "zod";
 import type { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
 import { TelegramDelivery } from "@/conversation/delivery";
-import systemPromptText from "./system-prompt.txt";
+import personaPromptText from "@/ai/persona-prompt.txt";
+import systemPromptText from "@/ai/system-prompt.txt";
 
 export namespace ChatReply {
-  export const systemPrompt = systemPromptText;
+  export const systemPrompt = `${personaPromptText}\n\n${systemPromptText}`;
   export const outputSchemaVersion = "chat-reply-v1";
   export const maxOutputTokens = 4096;
   const MAX_TOOL_OUTPUT_BYTES = 16 * 1024;
@@ -15,15 +16,15 @@ export namespace ChatReply {
   const reactionEmojiSchema = z.enum(TelegramDelivery.reactionEmojis);
 
   export const actionSchema = z.union([
-    z.object({ type: z.literal("ignore") }),
+    z.object({ type: z.literal("ignore").describe("Stay silent") }),
     z.object({
-      replyTo: z.number().int().nullable().optional(),
-      text: z.string().min(1),
+      replyTo: z.number().int().nullable().optional().describe("LIVE MESSAGE ID to reply to, or null"),
+      text: z.string().min(1).describe("Plain-text Telegram reply without Markdown"),
       type: z.literal("text"),
     }),
     z.object({
-      emoji: reactionEmojiSchema,
-      messageId: z.number().int(),
+      emoji: reactionEmojiSchema.describe("Telegram reaction emoji"),
+      messageId: z.number().int().describe("LIVE MESSAGE ID to react to"),
       type: z.literal("reaction"),
     }),
   ]);

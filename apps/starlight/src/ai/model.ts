@@ -69,6 +69,7 @@ export namespace Model {
     // Rides on OpenRouter's body verbatim as prompt_cache_key for upstream cache routing.
     readonly promptCacheKey?: string;
     readonly sessionId: string;
+    readonly telemetryFunctionId?: string;
     readonly tools: ToolSet;
   }
 
@@ -178,7 +179,7 @@ export namespace Model {
                 isStepCount(MAX_GENERATION_STEPS),
               ],
               telemetry: {
-                functionId: "chat-reply",
+                functionId: input.telemetryFunctionId ?? "chat-reply",
                 isEnabled: true,
                 recordInputs: true,
                 recordOutputs: true,
