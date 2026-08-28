@@ -7,7 +7,7 @@ export namespace Hindsight {
   const OPERATION_POLL_INTERVAL_MS = 2000;
   const OPERATION_TIMEOUT_MS = 600_000;
   const REQUEST_TIMEOUT_MS = 60_000;
-  const RETAIN_MISSION = `Each document is one ordered sequence of human-authored Telegram conversation turns. Extract only durable facts explicitly supported by those messages. Resolve first-person language to the named author and preserve exact attribution. Mentioned, quoted, and replied-to people are not the author. Keep durable identity, preferences, work and skills, decisions, commitments, corrections, recurring topics, unresolved situations, blockers, and concrete next steps. Never invent assistant or bot behavior. Omit greetings, one-off banter, weak personality inferences, unsupported sensitive traits, and resolved or outdated state.`;
+  const RETAIN_MISSION = `Each document is either an ordered sequence of human-authored Telegram conversation turns or an explicitly labeled legacy cumulative memory derived from those turns. Extract only durable facts explicitly supported by the document. Resolve first-person language to the named author and preserve exact attribution. Mentioned, quoted, and replied-to people are not the author. Keep durable identity, preferences, work and skills, decisions, commitments, corrections, recurring topics, unresolved situations, blockers, and concrete next steps. Never invent assistant or bot behavior. Omit greetings, one-off banter, weak personality inferences, unsupported sensitive traits, and resolved or outdated state.`;
 
   export interface Options {
     readonly apiKey: string;
