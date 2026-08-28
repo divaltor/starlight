@@ -55,46 +55,56 @@ async function admitMessage(ctx: Context, message: Message, addressed: boolean) 
     Effect.gen(function* admit() {
       const conversation = yield* Conversation.Service;
       const media = yield* Media.Service;
-      return yield* retryAdmission(
-        // Telegram extraction is branch-heavy by protocol shape but remains one boundary normalization.
-        // oxlint-disable-next-line eslint/complexity
-        Effect.gen(function* attempt() {
-          const references = yield* Effect.all(mediaSources(message).map(media.ingest), {
-            concurrency: "unbounded",
-          }).pipe(Effect.mapError(mediaAdmissionError));
-          const repliedMedia = yield* Effect.all(mediaSources(message.reply_to_message).map(media.ingest), {
-            concurrency: "unbounded",
-          }).pipe(Effect.mapError(mediaAdmissionError));
-          return yield* conversation.admit({
-            chatTitle: ctx.chat!.title ?? null,
-            chatUsername: ctx.chat!.username ?? null,
-            key: {
-              assistantId: ctx.me.id,
-              chatId: ctx.chat!.id,
-              threadKey: message.message_thread_id ?? 0,
-            },
-            payload: {
-              addressed,
-              date: message.date,
-              editDate: message.edit_date ?? null,
-              forwardOrigin: message.forward_origin ? Prompt.canonicalEncode(message.forward_origin) : null,
-              messageId: message.message_id,
-              media: references,
-              mediaGroupId: message.media_group_id ?? null,
-              repliedText: message.reply_to_message?.text ?? message.reply_to_message?.caption ?? null,
-              repliedMedia,
-              replyToMessageId: message.reply_to_message?.message_id ?? null,
-              senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
-              senderId: message.from?.id ?? null,
-              senderIsBot: message.from?.is_bot ?? false,
-              senderLastName: message.from?.last_name ?? null,
-              senderUsername: message.from?.username ?? null,
-              text: message.text ?? message.caption ?? "",
-            },
-            updateId: ctx.update.update_id,
-          });
+      // Telegram extraction is branch-heavy by protocol shape but remains one boundary normalization.
+      // oxlint-disable-next-line eslint/complexity
+      return yield* Effect.gen(function* attempt() {
+        const references = yield* Effect.all(mediaSources(message).map(media.ingest), {
+          concurrency: "unbounded",
+        }).pipe(Effect.mapError(mediaAdmissionError));
+        const repliedMedia = yield* Effect.all(mediaSources(message.reply_to_message).map(media.ingest), {
+          concurrency: "unbounded",
+        }).pipe(Effect.mapError(mediaAdmissionError));
+        return yield* conversation.admit({
+          chatTitle: ctx.chat!.title ?? null,
+          chatUsername: ctx.chat!.username ?? null,
+          key: {
+            assistantId: ctx.me.id,
+            chatId: ctx.chat!.id,
+            threadKey: message.message_thread_id ?? 0,
+          },
+          payload: {
+            addressed,
+            date: message.date,
+            editDate: message.edit_date ?? null,
+            forwardOrigin: message.forward_origin ? Prompt.canonicalEncode(message.forward_origin) : null,
+            messageId: message.message_id,
+            media: references,
+            mediaGroupId: message.media_group_id ?? null,
+            repliedText: message.reply_to_message?.text ?? message.reply_to_message?.caption ?? null,
+            repliedMedia,
+            replyToMessageId: message.reply_to_message?.message_id ?? null,
+            senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
+            senderId: message.from?.id ?? null,
+            senderIsBot: message.from?.is_bot ?? false,
+            senderLastName: message.from?.last_name ?? null,
+            senderUsername: message.from?.username ?? null,
+            text: message.text ?? message.caption ?? "",
+          },
+          updateId: ctx.update.update_id,
+        });
+      }).pipe(
+        Effect.tapError((error) =>
+          error.retryable
+            ? Effect.logWarning("Conversation admission attempt failed").pipe(
+                Effect.annotateLogs({ errorTag: error._tag, updateId: ctx.update.update_id }),
+              )
+            : Effect.void,
+        ),
+        Effect.retry({
+          schedule: Schedule.exponential(Duration.millis(500)),
+          times: ADMISSION_RETRIES,
+          while: (error) => error.retryable,
         }),
-        ctx.update.update_id,
       );
     }),
   );
@@ -106,26 +116,6 @@ function mediaAdmissionError(error: Media.MediaError): Conversation.AdmissionErr
     message: error.message,
     retryable: error.retryable,
   });
-}
-
-function retryAdmission(
-  admission: Effect.Effect<Conversation.AdmissionResult, Conversation.AdmissionError>,
-  updateId: number,
-): Effect.Effect<Conversation.AdmissionResult, Conversation.AdmissionError> {
-  return admission.pipe(
-    Effect.tapError((error) =>
-      error.retryable
-        ? Effect.logWarning("Conversation admission attempt failed").pipe(
-            Effect.annotateLogs({ errorTag: error._tag, updateId }),
-          )
-        : Effect.void,
-    ),
-    Effect.retry({
-      schedule: Schedule.exponential(Duration.millis(500)),
-      times: ADMISSION_RETRIES,
-      while: (error) => error.retryable,
-    }),
-  );
 }
 
 function isAddressedToBot(ctx: Context, message: Message): boolean {
