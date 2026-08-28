@@ -93,6 +93,16 @@ export function createUpdateTracer(): MiddlewareFn<Context> {
         "telegram.update_id": ctx.update.update_id,
         "telegram.update_type": Object.keys(ctx.update).find((key) => key !== "update_id") ?? "unknown",
       });
+      // Langfuse groups traces into sessions by langfuse.session.id; one session per
+      // conversation lane (chat + topic thread). The session takes its display name from
+      // the first trace, so name the trace after the chat; without a chat the span name
+      // stays the fallback.
+      const {chat} = ctx;
+      if (chat !== undefined) {
+        span.setAttribute('langfuse.session.id', `${chat.id}/${ctx.msg?.message_thread_id ?? 0}`);
+        const chatName = chat.title ?? chat.first_name;
+        if (chatName !== undefined) span.setAttribute('langfuse.trace.name', chatName);
+      }
       try {
         await next();
       } catch (error) {
