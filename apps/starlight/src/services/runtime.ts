@@ -90,7 +90,7 @@ const logging = Layer.mergeAll(
   Layer.succeed(References.MinimumLogLevel)(parseLogLevel(env.LOG_LEVEL ?? (production ? "info" : "debug"))),
 );
 const chatTools = ChatTools.layer.pipe(Layer.provideMerge(Exa.defaultLayer));
-const chatReply = ChatReply.layer.pipe(Layer.provideMerge(Model.defaultLayer));
+const chatReply = ChatReply.layer.pipe(Layer.provideMerge(Model.defaultLayer(env.OPENROUTER_API_KEY)));
 const tracing =
   env.langfuse === undefined && env.otlp === undefined
     ? Layer.empty

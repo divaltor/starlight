@@ -2,39 +2,11 @@ import { expect, test } from "bun:test";
 import { APICallError } from "ai";
 import type { LanguageModel, ToolSet } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
-import { ConfigProvider, Effect, Fiber, Layer, Logger } from "effect";
+import { Effect, Fiber, Layer, Logger } from "effect";
 import { TestClock } from "effect/testing";
 import { z } from "zod";
 import { Model } from "@/ai/model";
 import { ModelProvider } from "@/ai/model-provider";
-
-test.each([{}, { OPENROUTER_API_KEY: "   " }])(
-  "returns Unavailable without usable provider configuration",
-  async (configuration) => {
-    const program = Effect.gen(function* () {
-      const model = yield* Model.Service;
-      return yield* model.generate({
-        instructions: "test",
-        maxToolOutputBytes: 0,
-        maxToolSteps: 0,
-        messages: [{ role: "user", text: "test" }],
-        outputSchema: z.string(),
-        sessionId: "model-test",
-        tools: {},
-      });
-    });
-    const error = await Effect.runPromise(
-      program.pipe(
-        Effect.flip,
-        Effect.provide(Model.defaultLayer),
-        Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown(configuration)),
-      ),
-    );
-
-    expect(error._tag).toBe("Unavailable");
-    expect(error.retryable).toBe(false);
-  },
-);
 
 test("returns an immutable completed tool event", async () => {
   const toolOutput = { value: "before" };
@@ -379,7 +351,7 @@ function runModelEffect<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTP
       sessionId: "model-test",
       tools: input.tools ?? {},
     });
-  }).pipe(Effect.provide(Model.layer.pipe(Layer.provide(ModelProvider.testLayer(model)))));
+  }).pipe(Effect.provide(Model.layer.pipe(Layer.provide(Layer.succeed(ModelProvider.Service)({ model })))));
 }
 
 function finalOutputResult(answer: string | number) {

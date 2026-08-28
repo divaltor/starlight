@@ -14,7 +14,7 @@ test("caps a chatbot reply at 4,096 provider output tokens", async () => {
 });
 
 function modelLayer(model: LanguageModel) {
-  return Model.layer.pipe(Layer.provide(ModelProvider.testLayer(model)));
+  return Model.layer.pipe(Layer.provide(Layer.succeed(ModelProvider.Service)({ model })));
 }
 
 function replyModel() {

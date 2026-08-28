@@ -46,6 +46,8 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       HINDSIGHT_BASE_URL: z.url().default("http://hindsight:8888"),
       HINDSIGHT_API_KEY: z.string(),
 
+      OPENROUTER_API_KEY: z.string().trim().min(1),
+
       AWS_ACCESS_KEY_ID: z.string(),
       AWS_SECRET_ACCESS_KEY: z.string(),
       AWS_ENDPOINT: z.string().optional(),

@@ -10,7 +10,7 @@ import {
   TypeValidationError,
 } from "ai";
 import type { ModelMessage, StepResult, ToolSet } from "ai";
-import { Context, Duration, Effect, Layer, Option, Predicate, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Predicate, Schema } from "effect";
 import type { ZodType } from "zod";
 import { selected } from "@/ai/model-profile";
 import { ModelProvider } from "@/ai/model-provider";
@@ -130,14 +130,6 @@ export namespace Model {
       const provider = yield* ModelProvider.Service;
 
       const generate = Effect.fn("Model.generate")(function* generate<OUTPUT>(input: GenerateInput<OUTPUT>) {
-        if (Option.isNone(provider.model)) {
-          return yield* new Unavailable({
-            message: "OpenRouter configuration is unavailable",
-            retryable: false,
-          });
-        }
-        // Narrowing does not cross into the tryPromise closure below.
-        const selectedModel = provider.model;
         const completedSteps: StepResult<ToolSet>[] = [];
         const toolEvents: ToolEvent[] = [];
         const outputs = new Map<string, OUTPUT>();
@@ -161,7 +153,7 @@ export namespace Model {
               maxOutputTokens: clampOutputTokens(input.maxOutputTokens),
               maxRetries: 0,
               messages: prepareMessages(input.cacheBase, input.cachePrefixMessageCount ?? 0, input.messages),
-              model: selectedModel.value,
+              model: provider.model,
               onStepEnd: (step) => {
                 completedSteps.push(step);
               },
@@ -290,7 +282,9 @@ export namespace Model {
     }),
   );
 
-  export const defaultLayer: Layer.Layer<Service> = layer.pipe(Layer.provide(ModelProvider.defaultLayer));
+  export function defaultLayer(apiKey: string): Layer.Layer<Service> {
+    return layer.pipe(Layer.provide(ModelProvider.defaultLayer(apiKey)));
+  }
 
   function prepareMessages(
     cacheBase: string | undefined,
