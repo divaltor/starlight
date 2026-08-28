@@ -5,20 +5,20 @@ import { randomImages, searchImages } from "./search";
 import { deletePhoto, listUserTweets } from "./tweets";
 
 export const appRouter = {
-	profiles: {
-		visibility: changeProfileVisibility,
-		get: getUserProfile,
-	},
-	cookies: {
-		save: saveCookies,
-		delete: deleteCookies,
-	},
-	tweets: {
-		list: listUserTweets,
-		delete: deletePhoto,
-		search: searchImages,
-		random: randomImages,
-	},
+  profiles: {
+    visibility: changeProfileVisibility,
+    get: getUserProfile,
+  },
+  cookies: {
+    save: saveCookies,
+    delete: deleteCookies,
+  },
+  tweets: {
+    list: listUserTweets,
+    delete: deletePhoto,
+    search: searchImages,
+    random: randomImages,
+  },
 };
 export type AppRouter = typeof appRouter;
 export type AppRouterClient = RouterClient<typeof appRouter>;

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from time import perf_counter
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import uuid4
 
 import structlog
@@ -13,7 +13,7 @@ from opentelemetry.context import attach, detach
 
 from app.config import config
 from app.logger import configure_logger
-from app.otel import setup_otel
+from app.otel import setup_otel, shutdown_otel
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Coroutine
@@ -31,6 +31,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await application.state.http_session.close()
+        shutdown_otel()
 
 
 app = FastAPI(
@@ -86,13 +87,18 @@ async def log_request_duration(
 
 
 def verify_api_token(
-    x_api_token: str = Header(..., alias='X-API-Token'),  # pyright: ignore[reportCallInDefaultInitializer]
-) -> None:  # pragma: no cover - simple guard
-    if config.DEBUG:
+    x_api_token: Annotated[str | None, Header(alias='X-API-Token')] = None,
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
+    # Either credential independently proves the caller: Hindsight's OpenAI/Cohere
+    # clients send Authorization: Bearer, existing clients send X-API-Token. A
+    # stale value in one header must not veto the valid one in the other.
+    bearer = authorization.removeprefix('Bearer ') if authorization else ''
+
+    if config.CLASSIFICATION_API_TOKEN in {x_api_token, bearer}:
         return
 
-    if x_api_token != config.API_TOKEN:
-        raise HTTPException(status_code=401, detail='Invalid API token')
+    raise HTTPException(status_code=401, detail='Invalid API token')
 
 
 protected_router = APIRouter(prefix='/v1', dependencies=[Depends(verify_api_token)])
@@ -112,5 +118,15 @@ if config.ENABLE_EMBEDDINGS:
     from app.routes.embeddings import router as embeddings_router
 
     protected_router.include_router(embeddings_router)
+
+if config.ENABLE_TEXT_EMBEDDINGS:
+    from app.routes.text_embeddings import router as text_embeddings_router
+
+    protected_router.include_router(text_embeddings_router)
+
+if config.ENABLE_RERANKER:
+    from app.routes.rerank import router as rerank_router
+
+    protected_router.include_router(rerank_router)
 
 app.include_router(protected_router)

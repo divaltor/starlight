@@ -14,141 +14,133 @@ const BATCH_SIZE = Math.trunc(Number(process.env.BATCH_SIZE || "25"));
 type DimensionUpdateResult = "updated" | "failed" | "skipped";
 
 async function updatePhotoDimension(photo: {
-	id: string;
-	userId: string;
-	s3Path: string | null;
+  id: string;
+  userId: string;
+  s3Path: string | null;
 }): Promise<DimensionUpdateResult> {
-	try {
-		if (!photo.s3Path) {
-			logger.warn({ photoId: photo.id, userId: photo.userId }, "Photo has no s3Path");
-			return "skipped";
-		}
+  try {
+    if (!photo.s3Path) {
+      logger.warn({ photoId: photo.id, userId: photo.userId }, "Photo has no s3Path");
+      return "skipped";
+    }
 
-		// Download image from S3
-		const imageBuffer = await s3.file(photo.s3Path).arrayBuffer();
+    // Download image from S3
+    const imageBuffer = await s3.file(photo.s3Path).arrayBuffer();
 
-		const metadata = await new Bun.Image(imageBuffer)
-			.metadata()
-			.catch(() => ({ height: null, width: null }));
+    const metadata = await new Bun.Image(imageBuffer).metadata().catch(() => ({ height: null, width: null }));
 
-		if (!(metadata.height && metadata.width)) {
-			logger.warn(
-				{ photoId: photo.id, userId: photo.userId, metadata },
-				"Failed to extract dimensions",
-			);
-			return "failed";
-		}
+    if (!(metadata.height && metadata.width)) {
+      logger.warn({ photoId: photo.id, userId: photo.userId, metadata }, "Failed to extract dimensions");
+      return "failed";
+    }
 
-		if (!DRY_RUN) {
-			// Update photo with dimensions
-			await prisma.photo.update({
-				where: { photoId: { id: photo.id, userId: photo.userId } },
-				data: {
-					height: metadata.height,
-					width: metadata.width,
-				},
-			});
-		}
+    if (!DRY_RUN) {
+      // Update photo with dimensions
+      await prisma.photo.update({
+        where: { photoId: { id: photo.id, userId: photo.userId } },
+        data: {
+          height: metadata.height,
+          width: metadata.width,
+        },
+      });
+    }
 
-		logger.debug(
-			{
-				photoId: photo.id,
-				userId: photo.userId,
-				height: metadata.height,
-				width: metadata.width,
-				dryRun: DRY_RUN,
-			},
-			"Updated photo dimensions",
-		);
+    logger.debug(
+      {
+        photoId: photo.id,
+        userId: photo.userId,
+        height: metadata.height,
+        width: metadata.width,
+        dryRun: DRY_RUN,
+      },
+      "Updated photo dimensions",
+    );
 
-		return "updated";
-	} catch (error) {
-		logger.error(
-			{ error, photoId: photo.id, userId: photo.userId },
-			"Failed to update photo dimensions",
-		);
-		return "failed";
-	}
+    return "updated";
+  } catch (error) {
+    logger.error({ error, photoId: photo.id, userId: photo.userId }, "Failed to update photo dimensions");
+    return "failed";
+  }
 }
 
 async function main() {
-	logger.info(
-		{
-			dryRun: DRY_RUN,
-			batchSize: BATCH_SIZE,
-		},
-		"Starting photo dimensions update",
-	);
+  logger.info(
+    {
+      dryRun: DRY_RUN,
+      batchSize: BATCH_SIZE,
+    },
+    "Starting photo dimensions update",
+  );
 
-	// Find photos with null height or width that have s3Path
-	const photos = await prisma.photo.findMany({
-		where: {
-			deletedAt: null,
-			s3Path: { not: null },
-			OR: [{ height: null }, { width: null }],
-		},
-		select: {
-			id: true,
-			userId: true,
-			s3Path: true,
-			height: true,
-			width: true,
-		},
-		orderBy: { createdAt: "asc" },
-	});
+  // Find photos with null height or width that have s3Path
+  const photos = await prisma.photo.findMany({
+    where: {
+      deletedAt: null,
+      s3Path: { not: null },
+      OR: [{ height: null }, { width: null }],
+    },
+    select: {
+      id: true,
+      userId: true,
+      s3Path: true,
+      height: true,
+      width: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
 
-	logger.info({ count: photos.length }, "Found photos missing dimensions");
+  logger.info({ count: photos.length }, "Found photos missing dimensions");
 
-	if (photos.length === 0) {
-		logger.info("No photos need dimension updates");
-		return;
-	}
+  if (photos.length === 0) {
+    logger.info("No photos need dimension updates");
+    return;
+  }
 
-	let updated = 0;
-	let failed = 0;
+  let updated = 0;
+  let failed = 0;
 
-	// Process in batches
-	for (let i = 0; i < photos.length; i += BATCH_SIZE) {
-		const batch = photos.slice(i, i + BATCH_SIZE);
+  // Process in batches
+  for (let i = 0; i < photos.length; i += BATCH_SIZE) {
+    const batch = photos.slice(i, i + BATCH_SIZE);
 
-		logger.info(
-			{
-				batch: Math.floor(i / BATCH_SIZE) + 1,
-				totalBatches: Math.ceil(photos.length / BATCH_SIZE),
-			},
-			"Processing batch",
-		);
+    logger.info(
+      {
+        batch: Math.floor(i / BATCH_SIZE) + 1,
+        totalBatches: Math.ceil(photos.length / BATCH_SIZE),
+      },
+      "Processing batch",
+    );
 
-		const results = await Promise.all(batch.map((photo) => updatePhotoDimension(photo)));
+    const results = await Promise.all(batch.map((photo) => updatePhotoDimension(photo)));
 
-		for (const result of results) {
-			if (result === "updated") {
-				updated++;
-			} else if (result === "failed") {
-				failed++;
-			}
-		}
-	}
+    for (const result of results) {
+      if (result === "updated") {
+        updated++;
+      } else if (result === "failed") {
+        failed++;
+      }
+    }
+  }
 
-	logger.info(
-		{
-			total: photos.length,
-			updated,
-			failed,
-			dryRun: DRY_RUN,
-			batchSize: BATCH_SIZE,
-		},
-		"Finished photo dimensions update",
-	);
+  logger.info(
+    {
+      total: photos.length,
+      updated,
+      failed,
+      dryRun: DRY_RUN,
+      batchSize: BATCH_SIZE,
+    },
+    "Finished photo dimensions update",
+  );
 }
 
 main()
-	.catch((error) => {
-		logger.error({ error }, "Photo dimensions update script failed");
-		process.exitCode = 1;
-	})
-	.finally(async () => {
-		await prisma.$disconnect().catch((error) => {
-			logger.error({ error }, "Failed to disconnect from database");
-		});
-	});
+  .catch((error) => {
+    logger.error({ error }, "Photo dimensions update script failed");
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect().catch((error) => {
+      logger.error({ error }, "Failed to disconnect from database");
+    });
+  });

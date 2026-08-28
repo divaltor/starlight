@@ -100,7 +100,7 @@ def ts_lru_cache(
         @wraps(func)
         def _cached_func(
             *args: Any,
-            __context_key: int | tuple[int, int] | None = None,
+            _context_key: int | tuple[int, int] | None = None,
             **kwargs: Any,
         ) -> Any:
             """
@@ -134,14 +134,10 @@ def ts_lru_cache(
             with lock:
                 context_lock = lock_pool[context_key]
             with context_lock:
-                return _cached_func(*args, __context_key=context_key, **kwargs)
+                return _cached_func(*args, _context_key=context_key, **kwargs)
 
-        # Preserve cache_info and cache_clear methods if they exist
-        if hasattr(_cached_func, 'cache_info'):
-            _new_func.cache_info = _cached_func.cache_info
-        if hasattr(_cached_func, 'cache_clear'):
-            _new_func.cache_clear = _cached_func.cache_clear
-
+        _new_func.cache_info = _cached_func.cache_info  # ty: ignore[unresolved-attribute]
+        _new_func.cache_clear = _cached_func.cache_clear  # ty: ignore[unresolved-attribute]
         return _new_func
 
     return _decorator

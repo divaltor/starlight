@@ -8,6 +8,7 @@ services:
     env_file:
       - ${CLASSIFICATION_ENV_FILE:-.env}
     environment:
+      CLASSIFICATION_API_TOKEN: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
       MODEL_DEVICE: cuda
       TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL: "1"
     devices:
@@ -21,6 +22,18 @@ services:
       - seccomp=unconfined
     expose:
       - 8000
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/code/.venv/bin/python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+      start_period: 300s
     volumes:
       - classification_models:/cache/huggingface
     restart: unless-stopped

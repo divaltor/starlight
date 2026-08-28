@@ -1,25 +1,31 @@
 services:
   valkey:
-    image: reg.mini.dev/valkey:v9.1.1
-    ports:
-      - 6379:6379
+    image: valkey/valkey:9.1.1-alpine
+    command: ["valkey-server", "--requirepass", "${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}"]
     volumes:
       - valkey_data:/data
     networks:
       - starlight
+    healthcheck:
+      test: ["CMD", "valkey-cli", "-a", "${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   postgresql:
-    image: pgvector/pgvector:pg17-trixie
+    image: supabase/postgres:17.6.1.165
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-starlight-admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-starlight}
-      POSTGRES_DB: ${POSTGRES_DB:-starlight}
-    ports:
-      - 5432:5432
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
     volumes:
       - postgresql_data:/var/lib/postgresql/data
     networks:
       - starlight
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   server:
     build:
@@ -27,9 +33,34 @@ services:
       dockerfile: apps/server/Dockerfile
     env_file:
       - apps/server/.env
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      ML_API_TOKEN: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
+      REDIS_URL: redis://:${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}@valkey:6379
     depends_on:
-      - valkey
-      - postgresql
+      valkey:
+        condition: service_healthy
+      postgresql:
+        condition: service_healthy
+    networks:
+      - starlight
+
+  starlight-bot:
+    build:
+      context: .
+      dockerfile: apps/starlight/Dockerfile
+    env_file:
+      - apps/starlight/.env
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      REDIS_URL: redis://:${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}@valkey:6379
+    depends_on:
+      valkey:
+        condition: service_healthy
+      postgresql:
+        condition: service_healthy
+      hindsight:
+        condition: service_healthy
     networks:
       - starlight
 
@@ -39,10 +70,13 @@ services:
       dockerfile: apps/web/Dockerfile
     env_file:
       - apps/web/.env
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
     ports:
       - 3000:3000
     depends_on:
-      - postgresql
+      postgresql:
+        condition: service_healthy
     networks:
       - starlight
 
@@ -52,10 +86,85 @@ services:
       dockerfile: Dockerfile
     env_file:
       - classification/.env
-    ports:
-      - 8081:8000
+    environment:
+      CLASSIFICATION_API_TOKEN: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
+      DISABLE_OPENAPI: "true"
+      ENABLE_RERANKER: "true"
+      ENABLE_TEXT_EMBEDDINGS: "true"
     networks:
       - starlight
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/code/.venv/bin/python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+      start_period: 300s
+    restart: unless-stopped
+
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:0.9.2
+    environment:
+      HINDSIGHT_API_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      HINDSIGHT_API_DATABASE_SCHEMA: hindsight
+      HINDSIGHT_API_VECTOR_EXTENSION: pgvector
+      HINDSIGHT_API_WORKER_ID: hindsight
+      HINDSIGHT_API_STORE_DOCUMENT_TEXT: "false"
+      HINDSIGHT_API_ENABLE_AUTO_CONSOLIDATION: "false"
+      HINDSIGHT_API_RETAIN_CHUNK_SIZE: "12000"
+      HINDSIGHT_API_RETAIN_STRUCTURED_CHUNK_SIZE: "12000"
+      HINDSIGHT_API_TENANT_EXTENSION: hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension
+      HINDSIGHT_API_TENANT_API_KEY: ${HINDSIGHT_API_KEY:?HINDSIGHT_API_KEY is required}
+      HINDSIGHT_API_LLM_PROVIDER: openrouter
+      HINDSIGHT_API_LLM_BASE_URL: https://openrouter.ai/api/v1
+      HINDSIGHT_API_LLM_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required}
+      HINDSIGHT_API_LLM_MODEL: google/gemini-3.7-flash
+      HINDSIGHT_API_LLM_EXTRA_BODY: '{"provider":{"allow_fallbacks":false,"data_collection":"deny","only":["google-vertex/global"],"order":["google-vertex/global"],"require_parameters":true}}'
+      HINDSIGHT_API_EMBEDDINGS_PROVIDER: openai
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL: ${CLASSIFICATION_URL:-http://classification:8000}/v1/openai
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL: BAAI/bge-m3
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_BATCH_SIZE: "64"
+      HINDSIGHT_API_RERANKER_PROVIDER: cohere
+      HINDSIGHT_API_COHERE_API_KEY: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
+      HINDSIGHT_API_RERANKER_COHERE_BASE_URL: ${CLASSIFICATION_URL:-http://classification:8000}/v1/rerank
+      HINDSIGHT_API_RERANKER_COHERE_MODEL: BAAI/bge-reranker-v2-m3
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      classification:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8888/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+      start_period: 300s
+    networks:
+      - starlight
+    restart: unless-stopped
+
+  migrate:
+    profiles: ["operations"]
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    command: ["bun", "run", "--cwd", "packages/utils", "db:deploy"]
+    env_file:
+      - apps/server/.env
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    networks:
+      - starlight
+    restart: "no"
 
 volumes:
   valkey_data:

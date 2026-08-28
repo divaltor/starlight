@@ -1,5 +1,6 @@
-import { env, extractTweetId, isTwitterUrl } from "@starlight/utils";
+import { extractTweetId, isTwitterUrl } from "@starlight/utils";
 import { Composer, GrammyError, InlineKeyboard, InlineQueryResultBuilder, InputFile } from "grammy";
+import env from "@/env";
 import { renderTweetImage } from "@/services/render";
 import { generateTweetImage, prepareTweetData } from "@/services/tweet/tweet-image.service";
 import type { Theme } from "@/services/tweet/tweet-image.service";
@@ -15,275 +16,262 @@ const TWEET_NOT_FOUND_MESSAGE = "Tweet not found";
 const IMAGE_JPEG_TYPE = "image/jpeg";
 
 function createThemeKeyboard(tweetId: string, currentTheme: Theme, userId: number): InlineKeyboard {
-	const nextTheme = currentTheme === "dark" ? "light" : "dark";
-	const buttonText = currentTheme === "dark" ? "☀️ Light" : "🌙 Dark";
+  const nextTheme = currentTheme === "dark" ? "light" : "dark";
+  const buttonText = currentTheme === "dark" ? "☀️ Light" : "🌙 Dark";
 
-	return new InlineKeyboard().text(
-		buttonText,
-		`tweet_img:toggle:${tweetId}:${nextTheme}:${userId}`,
-	);
+  return new InlineKeyboard().text(buttonText, `tweet_img:toggle:${tweetId}:${nextTheme}:${userId}`);
 }
 
 chats
-	.command("quote")
-	.filter((ctx) => ctx.match.trim() !== "" && extractTweetId(ctx.match.trim()) === null)
-	.use(async (ctx) => {
-		ctx.logger.debug(
-			{ userId: ctx.from.id, input: ctx.match.trim() },
-			"Invalid tweet URL provided",
-		);
-		await ctx.reply("Please provide a valid tweet link");
-	});
+  .command("quote")
+  .filter((ctx) => ctx.match.trim() !== "" && extractTweetId(ctx.match.trim()) === null)
+  .use(async (ctx) => {
+    ctx.logger.debug({ userId: ctx.from.id, input: ctx.match.trim() }, "Invalid tweet URL provided");
+    await ctx.reply("Please provide a valid tweet link");
+  });
 
 chats
-	.command("quote")
-	.filter((ctx) => extractTweetId(ctx.match.trim()) !== null)
-	.use(async (ctx) => {
-		const tweetId = extractTweetId(ctx.match.trim()) as string;
+  .command("quote")
+  .filter((ctx) => extractTweetId(ctx.match.trim()) !== null)
+  .use(async (ctx) => {
+    const tweetId = extractTweetId(ctx.match.trim()) as string;
 
-		ctx.logger.info({ userId: ctx.from.id, tweetId }, "Processing /q command");
+    ctx.logger.info({ userId: ctx.from.id, tweetId }, "Processing /q command");
 
-		await ctx.replyWithChatAction("upload_photo");
+    await ctx.replyWithChatAction("upload_photo");
 
-		try {
-			const result = await runtime.runPromise(generateTweetImage(tweetId, "light"));
+    try {
+      const result = await runtime.runPromise(generateTweetImage(tweetId, "light"));
 
-			ctx.logger.debug({ tweetId }, "Tweet image generated successfully");
+      ctx.logger.debug({ tweetId }, "Tweet image generated successfully");
 
-			await ctx.replyWithPhoto(new InputFile(result.buffer, `tweet-${tweetId}.jpg`), {
-				caption: `https://x.com/i/status/${tweetId}`,
-				reply_markup: createThemeKeyboard(tweetId, "light", ctx.from.id),
-				message_thread_id: ctx.msg.message_thread_id,
-			});
+      await ctx.replyWithPhoto(new InputFile(result.buffer, `tweet-${tweetId}.jpg`), {
+        caption: `https://x.com/i/status/${tweetId}`,
+        reply_markup: createThemeKeyboard(tweetId, "light", ctx.from.id),
+        message_thread_id: ctx.msg.message_thread_id,
+      });
 
-			try {
-				await ctx.deleteMessage();
-			} catch (error) {
-				if (error instanceof GrammyError) {
-					ctx.logger.debug(
-						{ error: error.message },
-						"Could not delete user message (missing permissions)",
-					);
-				} else {
-					throw error;
-				}
-			}
-		} catch (error) {
-			ctx.logger.error({ error, tweetId }, "Failed to generate tweet image");
+      try {
+        await ctx.deleteMessage();
+      } catch (error) {
+        if (error instanceof GrammyError) {
+          ctx.logger.debug({ error: error.message }, "Could not delete user message (missing permissions)");
+        } else {
+          throw error;
+        }
+      }
+    } catch (error) {
+      ctx.logger.error({ error, tweetId }, "Failed to generate tweet image");
 
-			if (error instanceof Error && error.message === TWEET_NOT_FOUND_MESSAGE) {
-				await ctx.reply(
-					"Could not fetch this tweet. It may be:\n" +
-						"• Private or from a protected account\n" +
-						"• Deleted\n" +
-						"• Invalid URL",
-				);
-				return;
-			}
+      if (error instanceof Error && error.message === TWEET_NOT_FOUND_MESSAGE) {
+        await ctx.reply(
+          "Could not fetch this tweet. It may be:\n" +
+            "• Private or from a protected account\n" +
+            "• Deleted\n" +
+            "• Invalid URL",
+        );
+        return;
+      }
 
-			await ctx.reply(
-				error instanceof GrammyError
-					? "Failed to send image. Please try again."
-					: "Something went wrong. Please try again later.",
-			);
-		}
-	});
+      await ctx.reply(
+        error instanceof GrammyError
+          ? "Failed to send image. Please try again."
+          : "Something went wrong. Please try again later.",
+      );
+    }
+  });
 
 composer
-	.on("inline_query")
-	.filter((ctx) => isTwitterUrl(ctx.inlineQuery.query.trim()))
-	.use(async (ctx) => {
-		const query = ctx.inlineQuery.query.trim();
-		const tweetId = extractTweetId(query);
+  .on("inline_query")
+  .filter((ctx) => isTwitterUrl(ctx.inlineQuery.query.trim()))
+  .use(async (ctx) => {
+    const query = ctx.inlineQuery.query.trim();
+    const tweetId = extractTweetId(query);
 
-		ctx.logger.info({ userId: ctx.from.id, query, tweetId }, "Processing inline query for tweet");
+    ctx.logger.info({ userId: ctx.from.id, query, tweetId }, "Processing inline query for tweet");
 
-		if (!tweetId) {
-			ctx.logger.debug({ query }, "Failed to extract tweet ID from inline query");
-			await ctx.answerInlineQuery([]);
-			return;
-		}
+    if (!tweetId) {
+      ctx.logger.debug({ query }, "Failed to extract tweet ID from inline query");
+      await ctx.answerInlineQuery([]);
+      return;
+    }
 
-		try {
-			const tweetData = await runtime.runPromise(prepareTweetData(tweetId));
+    try {
+      const tweetData = await runtime.runPromise(prepareTweetData(tweetId));
 
-			const [lightResult, darkResult] = await Promise.all([
-				renderTweetImage(tweetData, "light"),
-				renderTweetImage(tweetData, "dark"),
-			]);
+      const [lightResult, darkResult] = await Promise.all([
+        renderTweetImage(tweetData, "light"),
+        renderTweetImage(tweetData, "dark"),
+      ]);
 
-			const lightS3Path = `tweets/${tweetId}/light.jpg`;
-			const darkS3Path = `tweets/${tweetId}/dark.jpg`;
+      const lightS3Path = `tweets/${tweetId}/light.jpg`;
+      const darkS3Path = `tweets/${tweetId}/dark.jpg`;
 
-			await Promise.all([
-				s3.write(lightS3Path, lightResult.buffer, { type: IMAGE_JPEG_TYPE }),
-				s3.write(darkS3Path, darkResult.buffer, { type: IMAGE_JPEG_TYPE }),
-			]);
+      await Promise.all([
+        s3.write(lightS3Path, lightResult.buffer, { type: IMAGE_JPEG_TYPE }),
+        s3.write(darkS3Path, darkResult.buffer, { type: IMAGE_JPEG_TYPE }),
+      ]);
 
-			ctx.logger.debug({ tweetId, lightS3Path, darkS3Path }, "Uploaded tweet images to S3");
+      ctx.logger.debug({ tweetId, lightS3Path, darkS3Path }, "Uploaded tweet images to S3");
 
-			const lightUrl = `${env.BASE_CDN_URL}/${lightS3Path}`;
-			const darkUrl = `${env.BASE_CDN_URL}/${darkS3Path}`;
+      const lightUrl = `${env.BASE_CDN_URL}/${lightS3Path}`;
+      const darkUrl = `${env.BASE_CDN_URL}/${darkS3Path}`;
 
-			const results = [
-				InlineQueryResultBuilder.photo(`tweet:${tweetId}:light`, lightUrl, {
-					thumbnail_url: lightUrl,
-					caption: `https://x.com/i/status/${tweetId}`,
-					photo_width: lightResult.width,
-					photo_height: lightResult.height,
-				}),
-				InlineQueryResultBuilder.photo(`tweet:${tweetId}:dark`, darkUrl, {
-					thumbnail_url: darkUrl,
-					caption: `https://x.com/i/status/${tweetId}`,
-					photo_width: darkResult.width,
-					photo_height: darkResult.height,
-				}),
-			];
+      const results = [
+        InlineQueryResultBuilder.photo(`tweet:${tweetId}:light`, lightUrl, {
+          thumbnail_url: lightUrl,
+          caption: `https://x.com/i/status/${tweetId}`,
+          photo_width: lightResult.width,
+          photo_height: lightResult.height,
+        }),
+        InlineQueryResultBuilder.photo(`tweet:${tweetId}:dark`, darkUrl, {
+          thumbnail_url: darkUrl,
+          caption: `https://x.com/i/status/${tweetId}`,
+          photo_width: darkResult.width,
+          photo_height: darkResult.height,
+        }),
+      ];
 
-			const generatedImages = [
-				{
-					height: lightResult.height,
-					sizeBytes: lightResult.buffer.length,
-					theme: "light",
-					width: lightResult.width,
-				},
-				{
-					height: darkResult.height,
-					sizeBytes: darkResult.buffer.length,
-					theme: "dark",
-					width: darkResult.width,
-				},
-			];
+      const generatedImages = [
+        {
+          height: lightResult.height,
+          sizeBytes: lightResult.buffer.length,
+          theme: "light",
+          width: lightResult.width,
+        },
+        {
+          height: darkResult.height,
+          sizeBytes: darkResult.buffer.length,
+          theme: "dark",
+          width: darkResult.width,
+        },
+      ];
 
-			if (tweetData.replyChain?.length) {
-				const tweetDataWithoutChain = {
-					...tweetData,
-					replyChain: [],
-					hasMoreInChain: false,
-				};
+      if (tweetData.replyChain?.length) {
+        const tweetDataWithoutChain = {
+          ...tweetData,
+          replyChain: [],
+          hasMoreInChain: false,
+        };
 
-				const [lightNoChainResult, darkNoChainResult] = await Promise.all([
-					renderTweetImage(tweetDataWithoutChain, "light"),
-					renderTweetImage(tweetDataWithoutChain, "dark"),
-				]);
+        const [lightNoChainResult, darkNoChainResult] = await Promise.all([
+          renderTweetImage(tweetDataWithoutChain, "light"),
+          renderTweetImage(tweetDataWithoutChain, "dark"),
+        ]);
 
-				const lightNoChainS3Path = `tweets/${tweetId}/light-no-chain.jpg`;
-				const darkNoChainS3Path = `tweets/${tweetId}/dark-no-chain.jpg`;
+        const lightNoChainS3Path = `tweets/${tweetId}/light-no-chain.jpg`;
+        const darkNoChainS3Path = `tweets/${tweetId}/dark-no-chain.jpg`;
 
-				await Promise.all([
-					s3.write(lightNoChainS3Path, lightNoChainResult.buffer, { type: IMAGE_JPEG_TYPE }),
-					s3.write(darkNoChainS3Path, darkNoChainResult.buffer, { type: IMAGE_JPEG_TYPE }),
-				]);
+        await Promise.all([
+          s3.write(lightNoChainS3Path, lightNoChainResult.buffer, { type: IMAGE_JPEG_TYPE }),
+          s3.write(darkNoChainS3Path, darkNoChainResult.buffer, { type: IMAGE_JPEG_TYPE }),
+        ]);
 
-				ctx.logger.debug(
-					{ tweetId, lightNoChainS3Path, darkNoChainS3Path },
-					"Uploaded tweet images without chain to S3",
-				);
+        ctx.logger.debug(
+          { tweetId, lightNoChainS3Path, darkNoChainS3Path },
+          "Uploaded tweet images without chain to S3",
+        );
 
-				const lightNoChainUrl = `${env.BASE_CDN_URL}/${lightNoChainS3Path}`;
-				const darkNoChainUrl = `${env.BASE_CDN_URL}/${darkNoChainS3Path}`;
+        const lightNoChainUrl = `${env.BASE_CDN_URL}/${lightNoChainS3Path}`;
+        const darkNoChainUrl = `${env.BASE_CDN_URL}/${darkNoChainS3Path}`;
 
-				results.push(
-					InlineQueryResultBuilder.photo(`tweet:${tweetId}:light:no-chain`, lightNoChainUrl, {
-						thumbnail_url: lightNoChainUrl,
-						caption: `https://x.com/i/status/${tweetId}`,
-						photo_width: lightNoChainResult.width,
-						photo_height: lightNoChainResult.height,
-					}),
-					InlineQueryResultBuilder.photo(`tweet:${tweetId}:dark:no-chain`, darkNoChainUrl, {
-						thumbnail_url: darkNoChainUrl,
-						caption: `https://x.com/i/status/${tweetId}`,
-						photo_width: darkNoChainResult.width,
-						photo_height: darkNoChainResult.height,
-					}),
-				);
+        results.push(
+          InlineQueryResultBuilder.photo(`tweet:${tweetId}:light:no-chain`, lightNoChainUrl, {
+            thumbnail_url: lightNoChainUrl,
+            caption: `https://x.com/i/status/${tweetId}`,
+            photo_width: lightNoChainResult.width,
+            photo_height: lightNoChainResult.height,
+          }),
+          InlineQueryResultBuilder.photo(`tweet:${tweetId}:dark:no-chain`, darkNoChainUrl, {
+            thumbnail_url: darkNoChainUrl,
+            caption: `https://x.com/i/status/${tweetId}`,
+            photo_width: darkNoChainResult.width,
+            photo_height: darkNoChainResult.height,
+          }),
+        );
 
-				generatedImages.push(
-					{
-						height: lightNoChainResult.height,
-						sizeBytes: lightNoChainResult.buffer.length,
-						theme: "light-no-chain",
-						width: lightNoChainResult.width,
-					},
-					{
-						height: darkNoChainResult.height,
-						sizeBytes: darkNoChainResult.buffer.length,
-						theme: "dark-no-chain",
-						width: darkNoChainResult.width,
-					},
-				);
-			}
+        generatedImages.push(
+          {
+            height: lightNoChainResult.height,
+            sizeBytes: lightNoChainResult.buffer.length,
+            theme: "light-no-chain",
+            width: lightNoChainResult.width,
+          },
+          {
+            height: darkNoChainResult.height,
+            sizeBytes: darkNoChainResult.buffer.length,
+            theme: "dark-no-chain",
+            width: darkNoChainResult.width,
+          },
+        );
+      }
 
-			ctx.logger.info({ generatedImages, tweetId }, "Generated tweet images");
+      ctx.logger.info({ generatedImages, tweetId }, "Generated tweet images");
 
-			await ctx.answerInlineQuery(results);
+      await ctx.answerInlineQuery(results);
 
-			ctx.logger.info({ tweetId }, "Inline query answered successfully");
-		} catch (error) {
-			ctx.logger.error({ error, tweetId }, "Failed to generate inline tweet images");
+      ctx.logger.info({ tweetId }, "Inline query answered successfully");
+    } catch (error) {
+      ctx.logger.error({ error, tweetId }, "Failed to generate inline tweet images");
 
-			if (error instanceof Error && error.message === TWEET_NOT_FOUND_MESSAGE) {
-				await ctx.answerInlineQuery([
-					InlineQueryResultBuilder.article(
-						`tweet-not-found:${tweetId}`,
-						TWEET_NOT_FOUND_MESSAGE,
-					).text("Could not fetch this tweet. It may be private or deleted."),
-				]);
-				return;
-			}
+      if (error instanceof Error && error.message === TWEET_NOT_FOUND_MESSAGE) {
+        await ctx.answerInlineQuery([
+          InlineQueryResultBuilder.article(`tweet-not-found:${tweetId}`, TWEET_NOT_FOUND_MESSAGE).text(
+            "Could not fetch this tweet. It may be private or deleted.",
+          ),
+        ]);
+        return;
+      }
 
-			await ctx.answerInlineQuery([]);
-		}
-	});
+      await ctx.answerInlineQuery([]);
+    }
+  });
 
-chats.callbackQuery(
-	/^tweet_img:toggle:(?<tweetId>\d+):(?<theme>light|dark):(?<userId>\d+)$/u,
-	async (ctx) => {
-		// The regex callback query route guarantees all named match groups are present
-		const { theme, tweetId, userId } = (ctx.match as RegExpMatchArray).groups as Record<
-			"theme" | "tweetId" | "userId",
-			string
-		>;
-		const newTheme = theme as Theme;
-		const ownerId = userId;
+chats.callbackQuery(/^tweet_img:toggle:(?<tweetId>\d+):(?<theme>light|dark):(?<userId>\d+)$/u, async (ctx) => {
+  // The regex callback query route guarantees all named match groups are present
+  const { theme, tweetId, userId } = (ctx.match as RegExpMatchArray).groups as Record<
+    "theme" | "tweetId" | "userId",
+    string
+  >;
+  const newTheme = theme as Theme;
+  const ownerId = userId;
 
-		if (ctx.from.id !== Number(ownerId)) {
-			await ctx.answerCallbackQuery({
-				text: "Only the person who requested this image can change the theme",
-				show_alert: true,
-			});
-			return;
-		}
+  if (ctx.from.id !== Number(ownerId)) {
+    await ctx.answerCallbackQuery({
+      text: "Only the person who requested this image can change the theme",
+      show_alert: true,
+    });
+    return;
+  }
 
-		ctx.logger.info({ userId: ctx.from.id, tweetId, newTheme }, "Processing theme toggle callback");
+  ctx.logger.info({ userId: ctx.from.id, tweetId, newTheme }, "Processing theme toggle callback");
 
-		await ctx.answerCallbackQuery({
-			text: `Generating ${newTheme} theme...`,
-		});
+  await ctx.answerCallbackQuery({
+    text: `Generating ${newTheme} theme...`,
+  });
 
-		try {
-			const result = await runtime.runPromise(generateTweetImage(tweetId, newTheme));
+  try {
+    const result = await runtime.runPromise(generateTweetImage(tweetId, newTheme));
 
-			ctx.logger.debug({ tweetId, newTheme }, "Theme toggle image generated");
+    ctx.logger.debug({ tweetId, newTheme }, "Theme toggle image generated");
 
-			await ctx.editMessageMedia(
-				{
-					type: "photo",
-					media: new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
-					caption: ctx.msg?.caption,
-				},
-				{
-					reply_markup: createThemeKeyboard(tweetId, newTheme, ctx.from.id),
-				},
-			);
-		} catch (error) {
-			if (error instanceof GrammyError) {
-				ctx.logger.warn({ error, tweetId }, "Failed to edit message for theme toggle");
-			} else {
-				throw error;
-			}
-		}
-	},
-);
+    await ctx.editMessageMedia(
+      {
+        type: "photo",
+        media: new InputFile(result.buffer, `tweet-${tweetId}.jpg`),
+        caption: ctx.msg?.caption,
+      },
+      {
+        reply_markup: createThemeKeyboard(tweetId, newTheme, ctx.from.id),
+      },
+    );
+  } catch (error) {
+    if (error instanceof GrammyError) {
+      ctx.logger.warn({ error, tweetId }, "Failed to edit message for theme toggle");
+    } else {
+      throw error;
+    }
+  }
+});
 
 export default composer;

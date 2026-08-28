@@ -1,6 +1,6 @@
 ---
 name: effect
-description: Starlight Effect v4 house conventions - flat service modules, layers, runtime assembly, typed errors, and ast-grep enforcement. Load when writing or reviewing any Effect TypeScript code in this repo.
+description: Starlight Effect v4 house conventions - namespace-wrapped service modules, layers, runtime assembly, typed errors, and ast-grep enforcement. Load when writing or reviewing any Effect TypeScript code in this repo.
 ---
 
 # Effect in starlight
@@ -9,38 +9,40 @@ House conventions for the Effect surfaces (`apps/server/src/services`, `apps/ser
 
 ## Service module anatomy
 
-One service per file, flat top-level exports, no namespace wrapper:
+One service per file. All exports live inside one `export namespace <CanonicalName>` block that matches the consumer-facing name (usually the PascalCase file name); imports stay at module scope:
 
 ```ts
 import { Context, Effect, Layer, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
-export interface Interface {
-  readonly method: (input: Input) => Effect.Effect<Output, ServiceError>;
-}
+export namespace Name {
+  export interface Interface {
+    readonly method: (input: Input) => Effect.Effect<Output, ServiceError>;
+  }
 
-export class Service extends Context.Service<Service, Interface>()("starlight/Name") {}
+  export class Service extends Context.Service<Service, Interface>()("starlight/Name") {}
 
-export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient; // bind deps once, close over them
-    const helper = Effect.fn("Name.helper")(function* helper() {
-      /* ... */
-    });
-    return Service.of({
-      method: Effect.fn("Name.method")(function* method(input) {
+  export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient; // bind deps once, close over them
+      const helper = Effect.fn("Name.helper")(function* helper() {
         /* ... */
-      }),
-    });
-  }),
-);
+      });
+      return Service.of({
+        method: Effect.fn("Name.method")(function* method(input) {
+          /* ... */
+        }),
+      });
+    }),
+  );
 
-export const defaultLayer: Layer.Layer<Service> = layer.pipe(Layer.provide(FetchHttpClient.layer));
+  export const defaultLayer: Layer.Layer<Service> = layer.pipe(Layer.provide(FetchHttpClient.layer));
+}
 ```
 
-- Consumers import the whole module (`import * as Exa from "@/services/exa"`) and access `Exa.Service`, `Exa.defaultLayer`. Do not re-introduce `export namespace X { }` wrappers.
-- Missing optional config degrades at layer construction (see `Exa` returning empty results when `EXA_API_KEY` is unset).
+- Consumers import the exported namespace by name (`import { Exa } from "@/services/exa"`) and access `Exa.Service`, `Exa.defaultLayer`. Star imports (`import * as X from "..."`) are forbidden and rejected by the oxlint `import/no-namespace` rule.
+- Top-level `await` cannot live inside a namespace body; keep such bindings as module-scope private consts above the namespace and re-export them through it (`ChatReply.systemPrompt`).
 
 ## Errors
 

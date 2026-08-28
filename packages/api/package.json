@@ -2,11 +2,11 @@
   "name": "@starlight/api",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/index.d.mts",
       "default": "./src/index.ts"
     },
     "./*": {
-      "types": "./dist/*.d.ts",
+      "types": "./dist/*.d.mts",
       "default": "./src/*.ts"
     }
   },
@@ -14,6 +14,7 @@
   "scripts": {
     "build": "bun run -b tsdown",
     "lint": "tsc -b",
+    "typecheck": "tsc -b",
     "format": "oxfmt"
   },
   "devDependencies": {
@@ -21,16 +22,18 @@
     "@types/bun": "1.4.0"
   },
   "peerDependencies": {
-    "typescript": "^7.0.2"
+    "typescript": "7.0.2"
   },
   "dependencies": {
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
+    "@opentelemetry/api": "1.9.1",
     "@starlight/crypto": "workspace:*",
     "@starlight/utils": "workspace:*",
-    "@telegram-apps/init-data-node": "^2.0.10",
-    "date-fns": "^4.4.0",
-    "effect": "4.0.0-rc.111",
+    "@t3-oss/env-core": "0.13.11",
+    "@telegram-apps/init-data-node": "2.0.10",
+    "date-fns": "4.4.0",
+    "effect": "4.0.0-rc.112",
     "zod": "catalog:"
   }
 }

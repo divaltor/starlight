@@ -3,94 +3,94 @@ import { logger } from "@/logger";
 import { calculateHashDistance, calculatePerceptualHash } from "./image";
 
 interface SimilarPhoto {
-	distance: number;
-	id: string;
-	originalUrl: string;
-	perceptualHash: string;
-	s3Path?: string;
-	tweetId: string;
-	userId: string;
+  distance: number;
+  id: string;
+  originalUrl: string;
+  perceptualHash: string;
+  s3Path?: string;
+  tweetId: string;
+  userId: string;
 }
 
 export async function findSimilarPhotos(
-	targetHash: string,
-	maxDistance = 10,
-	excludePhotoId?: string,
-	excludeUserId?: string,
+  targetHash: string,
+  maxDistance = 10,
+  excludePhotoId?: string,
+  excludeUserId?: string,
 ): Promise<SimilarPhoto[]> {
-	const buckets = [
-		{ len: 12, field: "hashBucket12" as const, maxCandidates: 50 },
-		{ len: 8, field: "hashBucket8" as const, maxCandidates: 200 },
-		{ len: 4, field: "hashBucket4" as const, maxCandidates: 1000 },
-	];
+  const buckets = [
+    { len: 12, field: "hashBucket12" as const, maxCandidates: 50 },
+    { len: 8, field: "hashBucket8" as const, maxCandidates: 200 },
+    { len: 4, field: "hashBucket4" as const, maxCandidates: 1000 },
+  ];
 
-	for (const { len, field, maxCandidates } of buckets) {
-		const prefix = targetHash.slice(0, len);
+  for (const { len, field, maxCandidates } of buckets) {
+    const prefix = targetHash.slice(0, len);
 
-		logger.debug({ prefix, field, maxCandidates }, "Searching for similar photos");
+    logger.debug({ prefix, field, maxCandidates }, "Searching for similar photos");
 
-		const candidates = await prisma.photo.findMany({
-			where: {
-				[field]: prefix,
-				perceptualHash: { not: null },
-				deletedAt: null,
-				NOT:
-					excludePhotoId && excludeUserId
-						? {
-								AND: [{ id: excludePhotoId }, { userId: excludeUserId }],
-							}
-						: undefined,
-			},
-			select: {
-				id: true,
-				userId: true,
-				perceptualHash: true,
-				s3Path: true,
-				originalUrl: true,
-				tweetId: true,
-			},
-			take: maxCandidates,
-		});
+    const candidates = await prisma.photo.findMany({
+      where: {
+        [field]: prefix,
+        perceptualHash: { not: null },
+        deletedAt: null,
+        NOT:
+          excludePhotoId && excludeUserId
+            ? {
+                AND: [{ id: excludePhotoId }, { userId: excludeUserId }],
+              }
+            : undefined,
+      },
+      select: {
+        id: true,
+        userId: true,
+        perceptualHash: true,
+        s3Path: true,
+        originalUrl: true,
+        tweetId: true,
+      },
+      take: maxCandidates,
+    });
 
-		if (candidates.length === 0) {
-			continue;
-		}
+    if (candidates.length === 0) {
+      continue;
+    }
 
-		// If we got results and didn't hit the limit, process them
-		if (candidates.length < maxCandidates) {
-			const similarPhotos: SimilarPhoto[] = [];
+    // If we got results and didn't hit the limit, process them
+    if (candidates.length < maxCandidates) {
+      const similarPhotos: SimilarPhoto[] = [];
 
-			for (const candidate of candidates) {
-				const distance = calculateHashDistance(targetHash, candidate.perceptualHash!);
+      for (const candidate of candidates) {
+        const distance = calculateHashDistance(targetHash, candidate.perceptualHash!);
 
-				if (distance <= maxDistance) {
-					similarPhotos.push({
-						id: candidate.id,
-						userId: candidate.userId,
-						perceptualHash: candidate.perceptualHash!,
-						distance,
-						s3Path: candidate.s3Path || undefined,
-						originalUrl: candidate.originalUrl,
-						tweetId: candidate.tweetId,
-					});
-				}
-			}
+        if (distance <= maxDistance) {
+          similarPhotos.push({
+            id: candidate.id,
+            userId: candidate.userId,
+            perceptualHash: candidate.perceptualHash!,
+            distance,
+            s3Path: candidate.s3Path || undefined,
+            originalUrl: candidate.originalUrl,
+            tweetId: candidate.tweetId,
+          });
+        }
+      }
 
-			// Sort by distance (most similar first)
-			return similarPhotos.toSorted((a, b) => a.distance - b.distance);
-		}
-	}
+      // Sort by distance (most similar first)
+      return similarPhotos.toSorted((a, b) => a.distance - b.distance);
+    }
+  }
 
-	return [];
+  return [];
 }
 
 export async function findDuplicatesByImageContent(
-	imageContent: Parameters<typeof calculatePerceptualHash>[0],
-	maxDistance = 10,
+  imageContent: Parameters<typeof calculatePerceptualHash>[0],
+  maxDistance = 10,
 ): Promise<SimilarPhoto[]> {
-	const targetHash = await calculatePerceptualHash(imageContent);
+  const targetHash = await calculatePerceptualHash(imageContent);
 
-	logger.debug({ targetHash }, "Calculated target hash");
+  logger.debug({ targetHash }, "Calculated target hash");
 
-	return await findSimilarPhotos(targetHash, maxDistance);
+  return await findSimilarPhotos(targetHash, maxDistance);
 }

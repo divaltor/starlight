@@ -1,40 +1,40 @@
 export interface SearchResult {
-	photo_id: string;
-	original_url: string;
-	s3_path: string;
-	username: string;
-	tweet_id: string;
-	tweet_created_at: Date;
-	is_nsfw: boolean;
-	height: number;
-	width: number;
-	final_score: number;
+  photo_id: string;
+  original_url: string;
+  s3_path: string;
+  username: string;
+  tweet_id: string;
+  tweet_created_at: Date;
+  is_nsfw: boolean;
+  height: number;
+  width: number;
+  final_score: number;
 }
 
 export interface PhotoData {
-	id: string;
-	url: string;
-	is_nsfw?: boolean;
-	height?: number;
-	width?: number;
-	alt: string;
+  id: string;
+  url: string;
+  is_nsfw?: boolean;
+  height?: number;
+  width?: number;
+  alt: string;
 }
 
 export interface TweetData {
-	id: string;
-	artist: string;
-	date: string;
-	photos: PhotoData[];
-	hasMultipleImages: boolean;
-	sourceUrl?: string;
+  id: string;
+  artist: string;
+  date: string;
+  photos: PhotoData[];
+  hasMultipleImages: boolean;
+  sourceUrl?: string;
 }
 
 export interface TweetsPageResult {
-	tweets: TweetData[];
-	nextCursor: string | null;
+  tweets: TweetData[];
+  nextCursor: string | null;
 }
 
 export interface SearchPageResult {
-	results: TweetData[];
-	nextCursor: string | null;
+  results: TweetData[];
+  nextCursor: string | null;
 }
