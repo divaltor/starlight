@@ -143,7 +143,6 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable attribute
         expect(counts.memoryObservations).toEqual([
           {
             content: {
-              addressed: true,
               author: {
                 firstName: "Alice",
                 isBot: false,
@@ -153,20 +152,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable attribute
               messageId: 51,
               reply: null,
               text: "Hello",
-            },
-          },
-          {
-            content: {
-              addressed: true,
-              author: {
-                firstName: "Alice",
-                isBot: false,
-                lastName: null,
-                username: "alice",
-              },
-              messageId: 51,
-              reply: null,
-              text: "Hello",
+              timestamp: "2023-11-14T22:13:20.000Z",
             },
           },
         ]);
@@ -391,7 +377,6 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
                 currentDate: "2026-08-24",
                 sessionId: "frozen-hash-session",
                 toolProfile: [],
-                userMemory: [],
               },
               replyEligible: true,
               status: "invoking",

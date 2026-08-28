@@ -59,8 +59,8 @@ Extend `ConversationInput`, prepared-run artifacts, and `Model.Message` with app
 
 Before replacement:
 
-- run text, direct-reply, album, media, tool, checkpoint, delivery-retry, queue-outage, DM, privacy, and forget scenarios on a whitelist-only deployment;
-- run live Hindsight retain/profile/forget checks and pin its OpenRouter provider/ZDR policy;
+- run text, direct-reply, album, media, tool, checkpoint, delivery-retry, queue-outage, DM, and privacy scenarios on a whitelist-only deployment;
+- run live Hindsight boundary-retain and recall checks and pin its OpenRouter provider/ZDR policy;
 - remove classification's debug auth bypass, unify its API token, and stop publishing PostgreSQL, Valkey, and classification ports;
 - move Prisma deployment out of application startup into one approved migration job with backup/restore ownership;
 - add queue/lane/delivery/checkpoint/privacy metrics and short recovery/cutover runbooks;
@@ -75,5 +75,5 @@ Assign and verify a PostgreSQL backup/restore owner; stop and drain legacy admis
 - Queue outage: stop admission growth, restore Valkey, and let the durable outbox republish.
 - Expired lane: verify no live owner, then let normal lease fencing resume it.
 - Unknown delivery: retry the stored delivery once; never regenerate.
-- Privacy incident: stop retention, revoke keys, execute forget, verify audience filtering, then restart.
+- Privacy incident: stop retention, revoke keys, remove affected Hindsight banks, verify lane isolation, then restart.
 - Migration failure: keep apps stopped and restore the approved backup or apply a reviewed forward fix.

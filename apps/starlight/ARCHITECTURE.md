@@ -47,10 +47,14 @@ Recovery paths in `drain`: `generated`/`dispatching` resumes at dispatch (delive
 `ConversationRun.preparedRequest` is the durable boundary between mutable external state and deterministic retries. A new run freezes only values that can change with time; immutable batch inputs remain normalized `ConversationInput` rows.
 
 ```text
-claimed run ──▶ preparedRequest null? ── yes ──▶ sync pending retention ──▶ recall relevant banks
-                          │                                                   │
-                          │                                                   ▼
-                          │                                       freeze results + date + affinity
+claimed run ──▶ preparedRequest null? ── yes ──▶ context checkpoint exists?
+                          │                                      │
+                          │                                  yes │ no
+                          │                                      ▼
+                          │                         recall one lane bank / no recall
+                          │                                      │
+                          │                                      ▼
+                          │                            freeze result + date + affinity
                           │                                                   │
                           │                                                   ▼
                           │                                              persist JSONB
@@ -60,15 +64,17 @@ claimed run ──▶ preparedRequest null? ── yes ──▶ sync pending re
                 PreparedRequestSchema.decode
                          │
                          ▼
-       Context.prepare renders date + recalled context/user memory
+           Context.prepare renders date + recalled context memory
                          │
                          ▼
              same stored values on every retry
 ```
 
-The stored shape is `{ contextMemory, currentDate, sessionId, toolProfile, userMemory: [{ userId, text }] }`. On first preparation, the current input batch becomes a bounded Hindsight recall query. Pending observations in the relevant namespaces are retained first; recall then runs against the permitted user/chat/topic banks. `contextMemory` carries chat/topic results, while `userMemory` carries audience-scoped results per sender. `Context.prepare` injects the frozen context block once and each sender block before that sender's first live message. Retries decode the stored result and never repeat recall.
+The stored shape is `{ contextMemory, currentDate, sessionId, toolProfile }`. Before the first checkpoint, the lane transcript already contains complete history, so preparation does not call Hindsight. After a checkpoint, the current input batch becomes a bounded recall query against the lane's single conversation bank. `Context.prepare` injects that frozen block once; retries decode the stored result and never repeat recall.
 
 The model receives query-relevant memory from `preparedRequest` and checkpoint continuity from `ConversationContext.frozenMemory`; no mental-model profile is maintained. Generation persists actions before Telegram dispatch. Successful and terminal model-failure paths append available transcript/context turns. Every terminal path advances `processedRevision`, clears the lane lease and `activeRunId`, and schedules another wake if later revisions exist.
+
+Finalization writes canonical message observations to PostgreSQL only. The memory worker scans every 30 seconds and flushes a lane after 15 minutes idle, 8K pending characters, or a correction; hard-safety checkpoint flows flush before compaction. A flush sends one full canonical transcript as one `replace` item to the lane's stable `transcript` document. Hindsight keeps derived facts but not raw document text, and advances the local watermark only after the async operation completes.
 
 ## Model invocation and the tool budget
 

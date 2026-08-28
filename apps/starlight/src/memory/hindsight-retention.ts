@@ -1,23 +1,37 @@
 import type { MemoryItemInput } from "@vectorize-io/hindsight-client";
-import type { Prisma } from "@starlight/utils/generated/prisma/client";
 import { Context, Effect, Layer, Schedule, Schema, Semaphore } from "effect";
 import { Prompt } from "@/context/prompt";
+import type { Lane } from "@/conversation/lane";
 import { Hindsight } from "@/memory/hindsight";
 import { Database } from "@/services/database";
 
 export namespace HindsightRetention {
-  const BATCH_SIZE = 100;
   const NAMESPACE_CONCURRENCY = 5;
-  const ObservationContent = Schema.Struct({ messageId: Schema.Int });
+  const RETENTION_RENDER_VERSION = "conversation-retention-v1";
+  const WORKER_SCAN_INTERVAL = "30 seconds";
+  const ObservationContent = Schema.Struct({
+    author: Schema.Struct({
+      firstName: Schema.String,
+      isBot: Schema.Boolean,
+      lastName: Schema.NullOr(Schema.String),
+      username: Schema.NullOr(Schema.String),
+    }),
+    messageId: Schema.Int,
+    reply: Schema.NullOr(Schema.Struct({ messageId: Schema.Int })),
+    text: Schema.String,
+    timestamp: Schema.String,
+  });
+
+  export interface WorkerOptions {
+    readonly idleMs: number;
+    readonly maxPendingChars: number;
+  }
 
   export interface Interface {
+    readonly flush: (key: Lane.LaneKey) => Effect.Effect<void, Database.QueryError | Hindsight.HindsightError>;
     readonly retainPending: (
       namespaceId: string,
     ) => Effect.Effect<bigint | null, Database.QueryError | Hindsight.HindsightError>;
-    readonly retainThrough: (
-      namespaceId: string,
-      observationId: bigint,
-    ) => Effect.Effect<void, Database.QueryError | Hindsight.HindsightError>;
   }
 
   export class Service extends Context.Service<Service, Interface>()("starlight/HindsightRetention") {}
@@ -33,88 +47,56 @@ export namespace HindsightRetention {
         namespaceId: string,
       ) {
         const namespace = yield* database.query(async (client) => {
-          const stored = await client.memoryNamespace.findUniqueOrThrow({ where: { id: namespaceId } });
-          const pending = await client.memoryObservation.findMany({
-            where: { id: { gt: stored.retentionWatermark ?? 0n }, namespaceId },
-            orderBy: { id: "asc" },
-            take: BATCH_SIZE,
-          });
-          const observations: typeof pending = [];
-          for (const observation of pending) {
-            observations.push(observation);
-            if (observation.kind === "forget") break;
-          }
-          const forget = observations.find((observation) => observation.kind === "forget");
-          const forgotten =
-            forget?.subjectUserId === null || forget?.subjectUserId === undefined
-              ? []
-              : await client.memoryObservation.findMany({
-                  where: {
-                    id: { lt: forget.id },
-                    kind: { not: "forget" },
-                    namespaceId,
-                    subjectUserId: forget.subjectUserId,
-                  },
-                  orderBy: { id: "asc" },
-                });
-          return { ...stored, forgotten, observations };
+          const [stored, observations] = await Promise.all([
+            client.memoryNamespace.findUniqueOrThrow({ where: { id: namespaceId } }),
+            client.memoryObservation.findMany({
+              where: { namespaceId },
+              orderBy: { id: "asc" },
+            }),
+          ]);
+          return { ...stored, observations };
         });
-        if (namespace.observations.length === 0) return null;
+        const pending = namespace.observations.filter(
+          (observation) => observation.id > (namespace.retentionWatermark ?? 0n),
+        );
+        if (pending.length === 0) return null;
 
-        const sourceThrough = namespace.observations.at(-1)!.id;
-        const banks = new Map<string, Map<string, MemoryItemInput>>();
+        const sourceThrough = pending.at(-1)!.id;
+        const messagesById = new Map<number, typeof ObservationContent.Type>();
         for (const observation of namespace.observations) {
-          if (observation.kind === "forget") continue;
-          const bankId = bankFor(namespace, observation);
-          const documents = banks.get(bankId) ?? new Map<string, MemoryItemInput>();
-          const documentId = `message:${observation.sourceChatId}:${Schema.decodeUnknownSync(ObservationContent)(observation.content).messageId}`;
-          documents.set(documentId, {
-            content: Prompt.canonicalEncode({
-              content: observation.content,
-              kind: observation.kind,
-              observationId: observation.id.toString(),
-              sourceChatId: observation.sourceChatId.toString(),
-              sourceThreadKey: observation.sourceThreadKey,
-              subjectUserId: observation.subjectUserId,
-            }),
-            context: `Starlight ${namespace.kind} memory observation. content.author is the Telegram message author; first-person language refers to content.author. Mentioned and replied-to people are not the author.`,
-            document_id: documentId,
-            metadata: {
-              observation_id: observation.id.toString(),
-              source_chat_id: observation.sourceChatId.toString(),
-              source_thread_key: observation.sourceThreadKey.toString(),
-              visibility: observation.visibility,
-            },
-            timestamp: observation.createdAt,
-            update_mode: "replace",
-          });
-          banks.set(bankId, documents);
+          const content = Schema.decodeUnknownSync(ObservationContent)(observation.content);
+          messagesById.set(content.messageId, content);
         }
-
-        const deletions = new Map<string, Set<string>>();
-        for (const observation of namespace.forgotten) {
-          const bankId = bankFor(namespace, observation);
-          const documentIds = deletions.get(bankId) ?? new Set<string>();
-          documentIds.add(
-            `message:${observation.sourceChatId}:${Schema.decodeUnknownSync(ObservationContent)(observation.content).messageId}`,
-          );
-          deletions.set(bankId, documentIds);
-        }
-        yield* Effect.all(
-          [...banks].map(([bankId, documents]) =>
-            hindsight.retain({
-              bankId,
-              items: [...documents.values()],
-              operationId: Bun.randomUUIDv5(`${namespace.id}:${bankId}:${sourceThrough}`, "url"),
-            }),
-          ),
-          { concurrency: 3, discard: true },
-        );
-        yield* Effect.all(
-          [...deletions].map(([bankId, documentIds]) => hindsight.deleteDocuments(bankId, [...documentIds])),
-          { concurrency: 3, discard: true },
-        );
-        const touchedBanks = new Set([...banks.keys(), ...deletions.keys()]);
+        const messages = [...messagesById.values()]
+          .toSorted((left, right) => left.messageId - right.messageId)
+          .map((content) => ({
+            author: content.author,
+            content: content.text,
+            message_id: content.messageId,
+            reply: content.reply,
+            role: "user",
+            timestamp: content.timestamp,
+          }));
+        const rendered = Prompt.canonicalEncode(messages);
+        const item: MemoryItemInput = {
+          content: rendered,
+          context:
+            "Ordered Telegram conversation. Each user turn carries its exact author; assistant messages are omitted.",
+          document_id: "transcript",
+          metadata: {
+            memory_namespace_id: namespace.id,
+            render_version: RETENTION_RENDER_VERSION,
+            source_chat_id: namespace.chatId!.toString(),
+            source_thread_key: namespace.threadKey!.toString(),
+          },
+          timestamp: new Date(messages[0]!.timestamp),
+          update_mode: "replace",
+        };
+        yield* hindsight.retain({
+          bankId: namespace.ownerKey,
+          items: [item],
+          operationId: Bun.randomUUIDv5(`${namespace.id}:${sourceThrough}:${RETENTION_RENDER_VERSION}`, "url"),
+        });
         yield* database.query((client) =>
           client.memoryNamespace.updateMany({
             where: {
@@ -124,12 +106,12 @@ export namespace HindsightRetention {
             data: { retentionWatermark: sourceThrough },
           }),
         );
-        yield* Effect.logInfo("Hindsight retention completed").pipe(
+        yield* Effect.logInfo("Hindsight conversation retention completed").pipe(
           Effect.annotateLogs({
-            banks: touchedBanks.size,
-            deletedDocuments: namespace.forgotten.length,
+            bankId: namespace.ownerKey,
+            messages: messages.length,
             namespaceId,
-            observations: namespace.observations.length,
+            pendingObservations: pending.length,
           }),
         );
         return sourceThrough;
@@ -142,80 +124,80 @@ export namespace HindsightRetention {
         return yield* lock.withPermit(processPending(namespaceId));
       });
 
-      const retainThrough = Effect.fn("HindsightRetention.retainThrough")(function* retainThrough(
-        namespaceId: string,
-        observationId: bigint,
-      ) {
-        for (;;) {
-          const retainedThrough = yield* retainPending(namespaceId);
-          if (retainedThrough === null || retainedThrough >= observationId) return;
+      const flush = Effect.fn("HindsightRetention.flush")(function* flush(key: Lane.LaneKey) {
+        const namespace = yield* database.query((client) =>
+          client.memoryNamespace.findUnique({
+            where: { ownerKey: `conversation:${key.assistantId}:${key.chatId}:${key.threadKey}` },
+            select: { id: true },
+          }),
+        );
+        if (namespace === null) return;
+        while ((yield* retainPending(namespace.id)) !== null) {
+          // A finalized observation can arrive after one retain completed.
         }
       });
 
-      return Service.of({ retainPending, retainThrough });
+      return Service.of({ flush, retainPending });
     }),
   );
 
-  export const workerLayer: Layer.Layer<never, never, Database.Service | Service> = Layer.effectDiscard(
-    Effect.gen(function* make() {
-      const database = yield* Database.Service;
-      const retention = yield* Service;
+  export function workerLayer(options: WorkerOptions): Layer.Layer<never, never, Database.Service | Service> {
+    return Layer.effectDiscard(
+      Effect.gen(function* make() {
+        const database = yield* Database.Service;
+        const retention = yield* Service;
 
-      const retainBatch = database
-        .query(
-          (client) =>
-            client.$queryRaw<{ readonly id: string }[]>`
-              SELECT namespace.id
-              FROM memory_namespaces AS namespace
-              WHERE EXISTS (
-                SELECT 1
-                FROM memory_observations AS observation
-                WHERE observation.namespace_id = namespace.id
-                  AND observation.id > COALESCE(namespace.retention_watermark, 0)
-              )
-              ORDER BY namespace.updated_at ASC, namespace.id ASC
-              LIMIT ${BATCH_SIZE}
-            `,
-        )
-        .pipe(
-          Effect.flatMap((namespaces) =>
-            Effect.all(
-              namespaces.map((namespace) =>
-                retention.retainPending(namespace.id).pipe(
-                  // One malformed shadow bank must not prevent unrelated namespaces from progressing.
-                  // oxlint-disable-next-line sonarjs/no-nested-functions
-                  Effect.catch((error) =>
-                    Effect.logError("Hindsight retention failed").pipe(
-                      Effect.annotateLogs({ error: error.message, errorTag: error._tag, namespaceId: namespace.id }),
+        const retainReady = database
+          .query(
+            (client) =>
+              client.$queryRaw<{ readonly id: string }[]>`
+                SELECT namespace.id
+                FROM memory_namespaces AS namespace
+                JOIN LATERAL (
+                  SELECT
+                    MAX(observation.created_at) AS newest_at,
+                    COALESCE(SUM(LENGTH(observation.content ->> 'text')), 0) AS pending_chars,
+                    BOOL_OR(observation.kind = 'correction') AS has_correction
+                  FROM memory_observations AS observation
+                  WHERE observation.namespace_id = namespace.id
+                    AND observation.id > COALESCE(namespace.retention_watermark, 0)
+                ) AS pending ON pending.newest_at IS NOT NULL
+                WHERE namespace.owner_key LIKE 'conversation:%'
+                  AND (
+                    pending.newest_at <= NOW() - (${options.idleMs} * INTERVAL '1 millisecond')
+                    OR pending.pending_chars >= ${options.maxPendingChars}
+                    OR pending.has_correction
+                  )
+                ORDER BY pending.newest_at ASC, namespace.id ASC
+                LIMIT 100
+              `,
+          )
+          .pipe(
+            Effect.flatMap((namespaces) =>
+              Effect.all(
+                namespaces.map((namespace) =>
+                  retention.retainPending(namespace.id).pipe(
+                    // One unavailable bank must not prevent unrelated conversations from progressing.
+                    // oxlint-disable-next-line sonarjs/no-nested-functions
+                    Effect.catch((error) =>
+                      Effect.logError("Hindsight conversation retention failed").pipe(
+                        Effect.annotateLogs({ error: error.message, errorTag: error._tag, namespaceId: namespace.id }),
+                      ),
                     ),
                   ),
                 ),
+                { concurrency: NAMESPACE_CONCURRENCY, discard: true },
               ),
-              { concurrency: NAMESPACE_CONCURRENCY, discard: true },
             ),
-          ),
-          Effect.catch((error) =>
-            Effect.logError("Hindsight retention scan failed").pipe(
-              Effect.annotateLogs({ error: error.message, errorTag: error._tag }),
+            Effect.catch((error) =>
+              Effect.logError("Hindsight retention scan failed").pipe(
+                Effect.annotateLogs({ error: error.message, errorTag: error._tag }),
+              ),
             ),
-          ),
-        );
+          );
 
-      yield* Effect.forkScoped(retainBatch.pipe(Effect.repeat(Schedule.spaced("1 second"))));
-    }),
-  );
-
-  export function bankFor(
-    namespace: Pick<Prisma.MemoryNamespaceGetPayload<object>, "kind" | "ownerKey" | "userId">,
-    observation: Pick<Prisma.MemoryObservationGetPayload<object>, "sourceChatId" | "sourceThreadKey" | "visibility">,
-  ): string {
-    if (namespace.kind !== "user") return namespace.ownerKey;
-    if (namespace.userId === null) throw new Error("User memory namespace has no user");
-    if (observation.visibility === "privateUser") return `user:${namespace.userId}:private`;
-    if (observation.visibility === "sameChat") return `user:${namespace.userId}:chat:${observation.sourceChatId}`;
-    if (observation.visibility === "sameTopic") {
-      return `user:${namespace.userId}:topic:${observation.sourceChatId}:${observation.sourceThreadKey}`;
-    }
-    return `user:${namespace.userId}:public`;
+        yield* Effect.forkScoped(retainReady.pipe(Effect.repeat(Schedule.spaced(WORKER_SCAN_INTERVAL))));
+      }),
+    );
   }
 }

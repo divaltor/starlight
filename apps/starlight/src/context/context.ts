@@ -324,31 +324,19 @@ export namespace ConversationContext {
               transcriptTurns.flatMap((turn) => (turn.sourceMessageId === null ? [] : [turn.sourceMessageId])),
             );
             const frozen = Schema.decodeUnknownSync(PreparedRequestSchema)(run.preparedRequest);
-            const userMemory = new Map(frozen.userMemory.map((snapshot) => [snapshot.userId, snapshot.text]));
-            const renderedMemoryUsers = new Set<string>();
             const current: Model.Message[] = [
               {
                 role: "user" as const,
                 text: `TRUSTED REQUEST METADATA\nCurrent date: ${frozen.currentDate}`,
               },
               ...(frozen.contextMemory === null ? [] : [{ role: "user" as const, text: frozen.contextMemory }]),
-              ...run.inputs.flatMap((runInput) => {
+              ...run.inputs.map((runInput) => {
                 const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
-                const memory =
-                  runInput.input.senderUserId === null || renderedMemoryUsers.has(runInput.input.senderUserId)
-                    ? []
-                    : userMemory.get(runInput.input.senderUserId);
-                if (runInput.input.senderUserId !== null) renderedMemoryUsers.add(runInput.input.senderUserId);
-                return [
-                  ...(memory === undefined
-                    ? []
-                    : [{ role: "user" as const, text: `${payload.senderFirstName}: ${memory}` }]),
-                  {
-                    media: loadedMedia.get(runInput.input.id) ?? [],
-                    role: "user" as const,
-                    text: Prompt.renderLiveMessage(payload, knownMessageIds),
-                  },
-                ];
+                return {
+                  media: loadedMedia.get(runInput.input.id) ?? [],
+                  role: "user" as const,
+                  text: Prompt.renderLiveMessage(payload, knownMessageIds),
+                };
               }),
             ];
             const finalized: Model.Message[] = turns.map((turn) => ({
@@ -485,17 +473,33 @@ export namespace ConversationContext {
             client.conversationCheckpointAttempt.findFirst({
               where: {
                 OR: [
-                  { status: { in: ["prepared", "summarizing", "summarized"] } },
+                  { status: { in: ["prepared", "summarizing", "summarized", "committed"] } },
                   { reason: "hardSafety", status: "failed" },
                 ],
                 runId: checkpointInput.runId,
               },
-              include: { parentContext: true },
               orderBy: { createdAt: "desc" },
             }),
           )
           .pipe(Effect.mapError(failed("Failed to find resumable context checkpoint")));
         if (!attempt) return null;
+        if (attempt.status === "committed") {
+          const { childContextId } = attempt;
+          if (childContextId === null) throw new Error("Committed checkpoint has no child context");
+          return yield* database
+            .query(async (client) => {
+              const [child, retainedTurns] = await Promise.all([
+                client.conversationContext.findUniqueOrThrow({ where: { id: childContextId } }),
+                client.conversationContextTurn.count({ where: { contextId: childContextId } }),
+              ]);
+              return {
+                childContextId: child.id,
+                generation: child.generation,
+                retainedTurns,
+              };
+            })
+            .pipe(Effect.mapError(failed("Failed to read committed context checkpoint")));
+        }
         return yield* checkpoint({ ...checkpointInput, reason: attempt.reason });
       });
 
@@ -507,21 +511,15 @@ export namespace ConversationContext {
           .query((client) =>
             client.conversationLane.findUniqueOrThrow({
               where: { assistantId_chatId_threadKey: key },
-              select: { activeContextId: true, contextResetPending: true },
+              select: { activeContextId: true },
             }),
           )
           .pipe(Effect.mapError(failed("Failed to inspect transitioned context")));
-        const frozenMemory =
-          state.activeContextId === null || state.contextResetPending
-            ? Prompt.renderMemory({ checkpoint: "", scopes: [] })
-            : "";
+        const frozenMemory = state.activeContextId === null ? Prompt.renderMemory({ checkpoint: "", scopes: [] }) : "";
         return yield* database
           .transaction(async (transaction) => {
             await Lane.lockLane(transaction, key);
             if (input.run) await Lane.assertFence(transaction, key, input.run);
-            const lane = await transaction.conversationLane.findUniqueOrThrow({
-              where: { assistantId_chatId_threadKey: key },
-            });
             const profileFingerprint = Prompt.profileFingerprint(input.toolProfile);
             const run = input.run
               ? await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.run.runId } })
@@ -530,40 +528,6 @@ export namespace ConversationContext {
             const envelope = Prompt.renderEnvelope({
               toolProfile: input.toolProfile,
             });
-            if (lane.contextResetPending) {
-              await transaction.conversationContext.update({
-                where: { id: parent.id },
-                data: { activeKey: null, sealedAt: new Date(), status: "invalid" },
-              });
-              const child = await transaction.conversationContext.create({
-                data: {
-                  ...key,
-                  activeKey: ConversationKey.format(input.key),
-                  generation: parent.generation + 1,
-                  modelProfileFingerprint: profileFingerprint,
-                  parentContextId: parent.id,
-                  resetReason: "memory-forget",
-                  ...Prompt.stableSeed(envelope, frozenMemory),
-                },
-              });
-              await transaction.conversationLane.update({
-                where: { assistantId_chatId_threadKey: key },
-                data: { activeContextId: child.id, contextResetPending: false },
-              });
-              if (input.run) {
-                await transaction.conversationRun.update({
-                  where: { id: input.run.runId },
-                  data: {
-                    contextId: child.id,
-                    // Frozen revisions stay: rendering drops any whose namespace still
-                    // carries an unprocessed forget observation, so other senders keep
-                    // their memory instead of losing it until a rebuild republishes.
-                    requestHash: null,
-                  },
-                });
-              }
-              return { generation: child.generation, id: child.id, profileFingerprint };
-            }
             if (run?.contextId) {
               const pinned = await transaction.conversationContext.findUniqueOrThrow({
                 where: { id: run.contextId },
@@ -609,7 +573,9 @@ export namespace ConversationContext {
                 generation: parent.generation + 1,
                 modelProfileFingerprint: profileFingerprint,
                 parentContextId: parent.id,
+                retainedFromTurnOrdinal: parent.retainedFromTurnOrdinal,
                 resetReason: input.reason,
+                summaryThroughInputSequence: parent.summaryThroughInputSequence,
                 ...Prompt.stableSeed(envelope, memory),
               },
             });

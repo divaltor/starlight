@@ -3,7 +3,6 @@ import { Effect, pipe } from "effect";
 import { bot } from "@/bot";
 import { createBotEnv } from "@/env";
 import { createMessageHandler } from "@/handlers/message";
-import { createMemoryHandler } from "@/handlers/memory";
 import { createStartHandler } from "@/handlers/start";
 import { createUpdateTracer, initTelemetry, shutdownTelemetry } from "@/instrumentation";
 import { runtime } from "@/services/runtime";
@@ -36,7 +35,6 @@ const boundary = bot.errorBoundary((error) =>
 );
 
 boundary.use(createStartHandler(env.WHITELIST_DM_USER_IDS));
-boundary.use(createMemoryHandler(env.WHITELIST_DM_USER_IDS));
 boundary.use(
   createMessageHandler({
     whitelistedChatIds: env.WHITELIST_CHAT_IDS,

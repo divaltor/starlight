@@ -33,6 +33,8 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       CONVERSATION_BATCH_QUIET_MS: z.coerce.number().int().positive().default(1000),
       CONVERSATION_BATCH_MAX_WAIT_MS: z.coerce.number().int().positive().default(3000),
       CONVERSATION_LANE_LEASE_MS: z.coerce.number().int().positive().default(180_000),
+      MEMORY_RETENTION_IDLE_MS: z.coerce.number().int().positive().default(900_000),
+      MEMORY_RETENTION_MAX_PENDING_CHARS: z.coerce.number().int().positive().default(8000),
 
       // Checkpoint before model invocation, then reject the request if it still reaches this limit.
       CONTEXT_HARD_TOKEN_CAP: z.coerce.number().int().positive().default(48_000),

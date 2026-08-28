@@ -2,8 +2,8 @@
 
 Continuation plan for serving memory-retrieval models from `classification/` and wiring
 them into the Starlight bot via Hindsight. Written 2026-08-24 after implementing phase 1.
-The model endpoints were smoke-tested on the homelab ROCm host on 2026-08-25; live
-Hindsight integration remains pending.
+The model endpoints were smoke-tested on the homelab ROCm host on 2026-08-25; Hindsight
+is the active Starlight memory backend.
 
 ## Status: done
 
@@ -25,17 +25,17 @@ all fixed (auth precedence, blank query → now `QueryText` validator, `top_n` c
 
 Phase 2 — complete Hindsight memory replacement (implemented 2026-08-24):
 
-| Area        | Change                                                                                                                                                                                                         |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deployment  | Hindsight server/client pinned to `0.9.2`; Compose service uses the existing pgvector Postgres, OpenRouter `google/gemini-3.7-flash`, and classification embedding/rerank routes                               |
-| App client  | `Hindsight` Effect service wraps async batch retain, query-time recall, deterministic document deletion, and removal of legacy profile models                                                                  |
-| Retention   | The single long-polling bot process scans at most 100 observations per namespace; reads synchronously drain relevant namespaces before recall                                                                  |
-| Isolation   | User banks are audience-scoped (`private`, per-chat, per-topic, `public`); chat/topic banks keep their namespace keys                                                                                          |
-| Durability  | `MemoryNamespace.retentionWatermark` advances only after deterministic retain/delete operations complete; retries resume the same retain operation                                                             |
-| Privacy     | Memory Defense explicitly redacts Hindsight's recognized secret/structured-PII patterns; `/forget` deletes every pre-request source document attributed to the requester instead of relying on semantic recall |
-| Corrections | Hindsight document IDs use Telegram chat/message identity, so edits replace the original retained document                                                                                                     |
-| Reads       | Query-relevant user/chat/topic recall results are frozen in `preparedRequest`; `ConversationContext.frozenMemory` contains only checkpoint continuity; retries never repeat recall                             |
-| Removal     | `MemoryRevision`, `MemoryBuildAttempt`, `MemoryQueue`, builder configuration, and revision rendering were removed; Hindsight is mandatory                                                                      |
+| Area        | Change                                                                                                                                                                           |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployment  | Hindsight server/client pinned to `0.9.2`; Compose service uses the existing pgvector Postgres, OpenRouter `google/gemini-3.7-flash`, and classification embedding/rerank routes |
+| App client  | `Hindsight` Effect service wraps async retain and query-time recall; legacy profile models are removed on first access                                                           |
+| Retention   | Finalized turns enter PostgreSQL without an LLM call; a 15-minute idle boundary, 8K pending characters, a correction, or a context checkpoint boundary flushes them              |
+| Isolation   | One Hindsight bank and one stable `transcript` document belong to each conversation lane (assistant/chat/topic tuple)                                                            |
+| Durability  | Full-document replace plus deterministic operation IDs makes retries idempotent; `retentionWatermark` advances only after Hindsight completes                                    |
+| Privacy     | Memory Defense redacts recognized secret/structured-PII patterns; Hindsight does not persist the raw document text                                                               |
+| Corrections | The canonical transcript keeps the latest revision of each Telegram message; full replace removes superseded extraction results                                                  |
+| Reads       | Recall runs only after context has been checkpointed, targets one conversation bank, and freezes results in `preparedRequest` for deterministic retries                          |
+| Removal     | `MemoryRevision`, `MemoryBuildAttempt`, `MemoryQueue`, builder configuration, and revision rendering were removed; Hindsight is mandatory                                        |
 
 Real-data preflight used a recent production Langfuse Starlight trace: a 50-message Russian
 topic window with corrections, repeated entities, financial facts, dates, and hard-negative
@@ -94,9 +94,12 @@ Compose configuration lives in `docker-compose.yaml`. Exact release: `0.9.2`.
     `http://classification:<port>/v1/openai` (+ our API token as the key).
   - Reranker: provider `cohere` + `COHERE_BASE_URL=http://classification:<port>/v1/rerank`.
   - Memory Defense is fixed to redact recognized secrets and structured PII.
-- Retain cadence stays app-driven: the single bot process scans in batches (≤100 observations
-  per namespace wake-up) → one async retain per bank batch. Low-volume traffic can produce
-  singleton batches; this affects extraction cost but never triggers mental-model reflection.
+- Retain cadence stays app-driven. The worker scans for due conversation boundaries every
+  30 seconds but does not retain every finalized run. Each flush sends one ordered canonical
+  transcript item to one bank using the stable `transcript` document ID and full replace.
+- `HINDSIGHT_API_RETAIN_CHUNK_SIZE=12000` keeps ordinary sessions in one extraction call;
+  larger transcripts are chunked and delta retain reuses unchanged chunks.
+- Automatic observations/consolidation are disabled. Recall uses extracted `world` facts.
 
 ### D. Memory retrieval bake-off — complete
 
@@ -115,17 +118,17 @@ Licensing is explicitly out of scope for this deployment. Keep the selected mode
 
 ### F. Starlight app integration (`apps/starlight`)
 
-Hindsight is the only memory backend. PostgreSQL keeps `MemoryNamespace` and
-`MemoryObservation` as the transactional provenance/outbox ledger.
+Hindsight is the only long-term retrieval backend. PostgreSQL keeps `MemoryNamespace` and
+`MemoryObservation` as the transactional source-of-truth ledger.
 
-- Pending relevant observations are retained, then the current immutable input batch queries
-  the permitted user/chat/topic banks through Hindsight recall.
+- Finalization captures one canonical observation in the conversation lane; it does not call
+  Hindsight.
+- Idle, size, correction, and checkpoint boundaries rebuild one stable conversation document.
+- Recall never drains pending retention. Active transcript history remains authoritative; only
+  checkpointed contexts query long-term memory.
 - Bounded recall results are frozen in `preparedRequest`; retries reuse identical bytes.
 - Conversation checkpoints remain in `ConversationContext.frozenMemory` and are independent
   of Hindsight mental models.
-- `/forget` writes ordered markers under lane locks, drains every affected namespace through
-  those markers, deletes requester-authored pre-marker documents, resets affected contexts, and
-  only then confirms to the user.
 - The destructive replacement migration was generated and applied to the local development DB.
 
 ### G. Later / ops

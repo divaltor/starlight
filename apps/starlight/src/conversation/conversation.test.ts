@@ -91,11 +91,11 @@ test.skipIf(!databaseUrl)("reuses frozen recalled memory after a retryable model
   let recallCount = 0;
   const recallQueries: string[] = [];
   const memory: Memory.Interface = {
-    forget: () => Effect.die(new Error("Memory forget must not run in conversation tests")),
+    flush: () => Effect.void,
     recall: (input) => {
       recallCount += 1;
       recallQueries.push(input.query);
-      return Effect.succeed({ contextMemory: `recalled version ${recallCount}`, userMemory: [] });
+      return Effect.succeed({ contextMemory: `recalled version ${recallCount}` });
     },
   };
   const model: Model.Interface = {
@@ -514,9 +514,10 @@ test.skipIf(!databaseUrl)(
   },
 );
 
-test.skipIf(!databaseUrl)("provider context overflow checkpoints and retries once", async () => {
+test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flush", async () => {
   const requests: Model.GenerateInput<unknown>[] = [];
   let chatAttempts = 0;
+  let flushAttempts = 0;
   const model: Model.Interface = {
     generate: <Output>(input: Model.GenerateInput<Output>) => {
       requests.push(input);
@@ -553,10 +554,25 @@ test.skipIf(!databaseUrl)("provider context overflow checkpoints and retries onc
     deliver: () => Effect.succeed({ telegramMessageId: 901 }),
     indicateTyping: () => Effect.void,
   };
+  const memory: Memory.Interface = {
+    flush: () => {
+      flushAttempts += 1;
+      return flushAttempts === 1
+        ? Effect.fail(new Memory.MemoryError({ message: "Retry checkpoint retention", retryable: true }))
+        : Effect.void;
+    },
+    recall: () => Effect.succeed({ contextMemory: null }),
+  };
   const runtime = ManagedRuntime.make(
-    testLayer(databaseUrl!, model, delivery, {
-      contextRetainedTokenTarget: 1,
-    }),
+    testLayer(
+      databaseUrl!,
+      model,
+      delivery,
+      {
+        contextRetainedTokenTarget: 1,
+      },
+      memory,
+    ),
   );
   const assistantId = 8_000_000_097;
   const chatId = -8_000_000_097;
@@ -755,6 +771,19 @@ test.skipIf(!databaseUrl)("provider context overflow checkpoints and retries onc
             data: { nextWakeAt: new Date(0) },
           }),
         );
+      }),
+    );
+    await expect(
+      runtime.runPromise(
+        Effect.gen(function* failCheckpointFlush() {
+          const conversation = yield* Conversation.Service;
+          return yield* conversation.drain({ key });
+        }),
+      ),
+    ).rejects.toMatchObject({ retryable: true });
+    await runtime.runPromise(
+      Effect.gen(function* resumeCheckpointFlush() {
+        const conversation = yield* Conversation.Service;
         yield* conversation.drain({ key });
       }),
     );
@@ -781,6 +810,7 @@ test.skipIf(!databaseUrl)("provider context overflow checkpoints and retries onc
     expect(requests[0]!.instructions.startsWith("Summarize")).toBe(false);
     expect(requests[1]!.instructions.startsWith("Summarize")).toBe(true);
     expect(requests[2]!.instructions.startsWith("Summarize")).toBe(false);
+    expect(flushAttempts).toBe(2);
     expect(state.attempt.reason).toBe("hardSafety");
     expect(state.attempt.status).toBe("committed");
     expect(state.latestRun.contextId).toBe(state.contexts[1]!.id);
@@ -1324,8 +1354,8 @@ const unavailableModel: Model.Interface = {
 };
 
 const unavailableMemory: Memory.Interface = {
-  forget: () => Effect.die(new Error("Memory forget must not run in conversation tests")),
-  recall: () => Effect.succeed({ contextMemory: null, userMemory: [] }),
+  flush: () => Effect.void,
+  recall: () => Effect.succeed({ contextMemory: null }),
 };
 
 const unavailableDelivery: TelegramDelivery.Interface = {

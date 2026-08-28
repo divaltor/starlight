@@ -132,7 +132,10 @@ const domain = Layer.mergeAll(infrastructure, memory, hindsightRetention, contex
 const background = Layer.mergeAll(
   WakeOutbox.publisherLayer,
   WakeQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
-  HindsightRetention.workerLayer,
+  HindsightRetention.workerLayer({
+    idleMs: env.MEMORY_RETENTION_IDLE_MS,
+    maxPendingChars: env.MEMORY_RETENTION_MAX_PENDING_CHARS,
+  }),
 ).pipe(Layer.provideMerge(domain), Layer.provideMerge(observability));
 
 export const runtime = ManagedRuntime.make(Layer.mergeAll(observability, background));

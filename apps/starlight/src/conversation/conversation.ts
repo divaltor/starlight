@@ -280,7 +280,7 @@ export namespace Conversation {
           // A permanent checkpoint failure (e.g. summarization that can never succeed) would
           // otherwise be redriven forever: failed hardSafety attempts are deliberately
           // resumable with no attempt bound.
-          yield* blockOnPermanent(
+          const resumedCheckpoint = yield* blockOnPermanent(
             context.resumeCheckpoint({
               fencingToken: claimed.fencingToken,
               leaseMs: options.leaseMs,
@@ -290,6 +290,9 @@ export namespace Conversation {
             claimed,
             "checkpoint-failed",
           );
+          if (resumedCheckpoint !== null) {
+            yield* memory.flush(claimed.dbKey).pipe(Effect.mapError(domainFailed));
+          }
           if (claimed.status === "generated" || claimed.status === "dispatching") {
             yield* dispatchRun(claimed);
             return yield* finalizeClaimed(claimed);
@@ -342,6 +345,7 @@ export namespace Conversation {
               claimed,
               OVERSIZED_INPUT_ERROR_TAG,
             );
+            yield* memory.flush(claimed.dbKey).pipe(Effect.mapError(domainFailed));
             contextRequest = yield* context
               .prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId })
               .pipe(Effect.mapError(domainFailed));
@@ -569,22 +573,6 @@ export namespace Conversation {
                         )
                         .join("\n")
                         .slice(-MAX_MEMORY_QUERY_CHARS) || "Relevant context for the current conversation",
-                    userIds: [
-                      ...claimed.inputs
-                        .toReversed()
-                        .flatMap((input) =>
-                          (input.payload as InputPayload).addressed && input.senderUserId !== null
-                            ? [input.senderUserId]
-                            : [],
-                        ),
-                      ...claimed.inputs
-                        .toReversed()
-                        .flatMap((input) =>
-                          !(input.payload as InputPayload).addressed && input.senderUserId !== null
-                            ? [input.senderUserId]
-                            : [],
-                        ),
-                    ],
                   })
                   .pipe(Effect.mapError(domainFailed))
               : null;
@@ -598,7 +586,6 @@ export namespace Conversation {
                 .digest("hex")
                 .slice(0, 32),
               toolProfile: pinnedToolProfile,
-              userMemory: recalled!.userMemory,
             } satisfies typeof PreparedRequestSchema.Type);
           if (stored === null) {
             yield* database
@@ -712,6 +699,7 @@ export namespace Conversation {
           claimed,
           OVERSIZED_INPUT_ERROR_TAG,
         ).pipe(
+          Effect.andThen(memory.flush(claimed.dbKey).pipe(Effect.mapError(domainFailed))),
           Effect.andThen(
             context
               .prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId })

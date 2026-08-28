@@ -34,12 +34,6 @@ export const InputPayloadSchema = Schema.Struct({
 
 export type InputPayload = typeof InputPayloadSchema.Type & Prisma.InputJsonObject;
 
-export const FrozenUserMemorySchema = Schema.Struct({
-  text: Schema.String,
-  userId: Schema.String,
-});
-export type FrozenUserMemory = typeof FrozenUserMemorySchema.Type;
-
 export const PreparedToolProfileSchema = Schema.Struct({
   toolProfile: Schema.Array(Schema.String),
 });
@@ -52,5 +46,4 @@ export const PreparedRequestSchema = Schema.Struct({
   currentDate: Schema.String,
   sessionId: Schema.String,
   toolProfile: Schema.Array(Schema.String),
-  userMemory: Schema.Array(FrozenUserMemorySchema),
 });
