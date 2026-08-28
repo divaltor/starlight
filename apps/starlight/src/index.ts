@@ -7,6 +7,7 @@ import messageHandler from "@/handlers/message";
 import startHandler from "@/handlers/start";
 import { createUpdateTracer, initTelemetry, shutdownTelemetry } from "@/instrumentation";
 import premiumAccess from "@/middlewares/premium-access";
+import startChat from "@/middlewares/start-chat";
 import { runtime } from "@/services/runtime";
 
 const env = createBotEnv();
@@ -36,6 +37,7 @@ const boundary = bot.errorBoundary((error) =>
   ),
 );
 
+boundary.use(startChat);
 boundary.use(premiumAccess);
 boundary.use(startHandler);
 boundary.use(guestMessageHandler);
