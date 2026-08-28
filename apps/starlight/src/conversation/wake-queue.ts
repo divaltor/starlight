@@ -179,6 +179,7 @@ export namespace WakeQueue {
   }
 
   function closeQueue(queue: Queue<JobData>, redis: ReturnType<typeof createBunRedisClient>) {
+    // Graceful close; if it times out, disconnect hard, then still try to quit Redis.
     return Effect.promise(() => queue.close()).pipe(
       Effect.timeout(Duration.seconds(10)),
       Effect.catch(() => Effect.sync(() => redis.disconnect())),
@@ -187,6 +188,7 @@ export namespace WakeQueue {
   }
 
   function closeWorker(worker: Worker<JobData>, redis: ReturnType<typeof createBunRedisClient>) {
+    // Graceful close; if it times out, force-close, disconnect hard, then still try to quit Redis.
     return Effect.promise(() => worker.close()).pipe(
       Effect.timeout(Duration.seconds(10)),
       Effect.catch(() =>

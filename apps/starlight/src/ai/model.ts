@@ -150,7 +150,11 @@ export namespace Model {
               abortSignal: signal,
               headers: { "x-session-id": input.sessionId },
               instructions: `${input.instructions}\n\n${FINAL_OUTPUT_INSTRUCTION}`,
-              maxOutputTokens: clampOutputTokens(input.maxOutputTokens),
+              // Clamp the requested output budget into the configured provider limits.
+              maxOutputTokens: Math.min(
+                Math.max(input.maxOutputTokens ?? selected.limits.defaultOutputTokens, 1),
+                selected.limits.maximumOutputTokens,
+              ),
               maxRetries: 0,
               messages: prepareMessages(input.cacheBase, input.cachePrefixMessageCount ?? 0, input.messages),
               model: provider.model,
@@ -165,7 +169,14 @@ export namespace Model {
               providerOptions: input.promptCacheKey
                 ? { openrouter: { prompt_cache_key: input.promptCacheKey } }
                 : undefined,
-              stopWhen: [hasStandaloneFinalOutput, isStepCount(MAX_GENERATION_STEPS)],
+              stopWhen: [
+                // A step whose only tool call is final_output means the answer is complete.
+                (step) => {
+                  const toolCalls = step.steps.at(-1)?.toolCalls;
+                  return toolCalls?.length === 1 && toolCalls[0]?.toolName === FINAL_OUTPUT_TOOL_NAME;
+                },
+                isStepCount(MAX_GENERATION_STEPS),
+              ],
               telemetry: {
                 functionId: "chat-reply",
                 isEnabled: true,
@@ -198,7 +209,28 @@ export namespace Model {
               }),
             ),
           ),
-          Effect.tapError((error) => logFailure(error, completedSteps, toolEvents)),
+          Effect.tapError((error) => {
+            // Dot notation is the project convention; destructuring is intentionally disabled.
+            // oxlint-disable-next-line prefer-destructuring
+            const cause = error.cause;
+            const usage = Usage.aggregate(
+              completedSteps.map((step) => Usage.normalizeStep(step.usage, step.providerMetadata)),
+            );
+
+            return Effect.logError(INVOCATION_FAILED_MESSAGE).pipe(
+              Effect.annotateLogs({
+                billingCostUsd: usage.billing.costUsd,
+                billingInputTokens: usage.billing.inputTokens,
+                completedStepCount: completedSteps.length,
+                contextInputTokens: usage.contextInputTokens,
+                errorTag: error._tag,
+                providerErrorName: Predicate.isError(cause) ? cause.name : "UnknownError",
+                retryable: error.retryable,
+                statusCode: APICallError.isInstance(cause) ? cause.statusCode : undefined,
+                toolEventCount: toolEvents.length,
+              }),
+            );
+          }),
         );
         const generated = yield* invocation;
         // Dot notation is the project convention; destructuring is intentionally disabled.
@@ -398,19 +430,11 @@ export namespace Model {
   }
 
   function limitToolSteps(steps: readonly StepResult<ToolSet>[], maximumSteps: number) {
+    // Once the tool-step budget is spent, only final_output stays active so the model must answer.
     const toolStepCount = steps.filter((step) =>
       step.toolCalls.some((toolCall) => toolCall.toolName !== FINAL_OUTPUT_TOOL_NAME),
     ).length;
     return toolStepCount >= Math.max(maximumSteps, 0) ? { activeTools: [FINAL_OUTPUT_TOOL_NAME] as const } : undefined;
-  }
-
-  function hasStandaloneFinalOutput({ steps }: { steps: StepResult<ToolSet>[] }) {
-    const toolCalls = steps.at(-1)?.toolCalls;
-    return toolCalls?.length === 1 && toolCalls[0]?.toolName === FINAL_OUTPUT_TOOL_NAME;
-  }
-
-  function clampOutputTokens(value: number | undefined): number {
-    return Math.min(Math.max(value ?? selected.limits.defaultOutputTokens, 1), selected.limits.maximumOutputTokens);
   }
 
   function createToolEvent(event: {
@@ -480,7 +504,13 @@ export namespace Model {
       });
     }
 
-    if (beforeOutput && isContextOverflow(cause)) {
+    if (
+      beforeOutput &&
+      (cause.statusCode === 400 || cause.statusCode === 413) &&
+      /context(?: length| window)|input.*too long|prompt.*too long|too many tokens|token limit exceeded/iu.test(
+        `${cause.message}\n${cause.responseBody ?? ""}`,
+      )
+    ) {
       return new ContextOverflow({
         cause,
         message: "Model context limit exceeded",
@@ -509,35 +539,5 @@ export namespace Model {
       message: INVOCATION_FAILED_MESSAGE,
       retryable: cause.isRetryable,
     });
-  }
-
-  function isContextOverflow(error: APICallError) {
-    if (error.statusCode !== 400 && error.statusCode !== 413) return false;
-    const message = `${error.message}\n${error.responseBody ?? ""}`;
-    return /context(?: length| window)|input.*too long|prompt.*too long|too many tokens|token limit exceeded/iu.test(
-      message,
-    );
-  }
-
-  function logFailure(error: Error, steps: readonly StepResult<ToolSet>[], toolEvents: readonly ToolEvent[]) {
-    const stepUsage = steps.map((step) => Usage.normalizeStep(step.usage, step.providerMetadata));
-    const usage = Usage.aggregate(stepUsage);
-    // Dot notation is the project convention; destructuring is intentionally disabled.
-    // oxlint-disable-next-line prefer-destructuring
-    const cause = error.cause;
-
-    return Effect.logError(INVOCATION_FAILED_MESSAGE).pipe(
-      Effect.annotateLogs({
-        billingCostUsd: usage.billing.costUsd,
-        billingInputTokens: usage.billing.inputTokens,
-        completedStepCount: steps.length,
-        contextInputTokens: usage.contextInputTokens,
-        errorTag: error._tag,
-        providerErrorName: Predicate.isError(cause) ? cause.name : "UnknownError",
-        retryable: error.retryable,
-        statusCode: APICallError.isInstance(cause) ? cause.statusCode : undefined,
-        toolEventCount: toolEvents.length,
-      }),
-    );
   }
 }

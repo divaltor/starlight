@@ -69,26 +69,22 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
   });
   return {
     ...raw,
-    langfuse: resolveLangfuse(raw),
-    otlp: resolveOtlp(raw),
-  };
-}
-
-/** Tracing enables only when both Langfuse keys are present. */
-function resolveLangfuse(raw: {
-  NODE_ENV: "development" | "production";
-  LANGFUSE_PUBLIC_KEY?: string;
-  LANGFUSE_SECRET_KEY?: string;
-  LANGFUSE_BASE_URL: string;
-  LANGFUSE_TRACING_ENVIRONMENT?: string;
-}): LangfuseConfig | undefined {
-  if (!raw.LANGFUSE_PUBLIC_KEY || !raw.LANGFUSE_SECRET_KEY) return undefined;
-
-  return {
-    publicKey: raw.LANGFUSE_PUBLIC_KEY,
-    secretKey: raw.LANGFUSE_SECRET_KEY,
-    baseUrl: raw.LANGFUSE_BASE_URL,
-    environment: raw.LANGFUSE_TRACING_ENVIRONMENT ?? raw.NODE_ENV,
+    // Tracing enables only when both Langfuse keys are present.
+    langfuse:
+      raw.LANGFUSE_PUBLIC_KEY && raw.LANGFUSE_SECRET_KEY
+        ? {
+            publicKey: raw.LANGFUSE_PUBLIC_KEY,
+            secretKey: raw.LANGFUSE_SECRET_KEY,
+            baseUrl: raw.LANGFUSE_BASE_URL,
+            environment: raw.LANGFUSE_TRACING_ENVIRONMENT ?? raw.NODE_ENV,
+          }
+        : undefined,
+    otlp: raw.OTEL_EXPORTER_OTLP_ENDPOINT
+      ? {
+          endpoint: raw.OTEL_EXPORTER_OTLP_ENDPOINT,
+          headers: parseOtlpHeaders(raw.OTEL_EXPORTER_OTLP_HEADERS),
+        }
+      : undefined,
   };
 }
 
@@ -104,18 +100,6 @@ function parseOtlpHeaders(rawHeaders: string): Record<string, string> {
       return key.length > 0 && value.length > 0 ? [[key, value] as const] : [];
     }),
   );
-}
-
-function resolveOtlp(raw: {
-  OTEL_EXPORTER_OTLP_ENDPOINT?: string;
-  OTEL_EXPORTER_OTLP_HEADERS: string;
-}): OtlpConfig | undefined {
-  if (!raw.OTEL_EXPORTER_OTLP_ENDPOINT) return undefined;
-
-  return {
-    endpoint: raw.OTEL_EXPORTER_OTLP_ENDPOINT,
-    headers: parseOtlpHeaders(raw.OTEL_EXPORTER_OTLP_HEADERS),
-  };
 }
 
 export type BotEnv = ReturnType<typeof createBotEnv>;

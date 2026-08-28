@@ -73,7 +73,23 @@ export function buildTweetCard(params: BuildCardParams): Node {
     ...(params.tweet.quote
       ? [quoteBox(params.colors, params.failedUrls, CARD_WIDTH_INNER, params.tweet.quote, hasTweetExtras(params.tweet))]
       : []),
-    statsRow(params.colors, CARD_WIDTH_INNER, params.tweet),
+    // Timestamp and engagement counters footer.
+    box({
+      children: [
+        text(
+          [
+            params.tweet.createdAt ? format(params.tweet.createdAt, "MMM d, yyyy") : null,
+            `${formatNumber(params.tweet.replies)} replies`,
+            `${formatNumber(params.tweet.retweets)} reposts`,
+            `${formatNumber(params.tweet.likes)} likes`,
+          ]
+            .filter((part): part is string => part !== null)
+            .join("  ·  "),
+          { color: params.colors.secondaryText, fontSize: LAYOUT.FONT_SIZE_STATS },
+        ),
+      ],
+      style: { marginTop: LAYOUT.AVATAR_GAP, width: CARD_WIDTH_INNER },
+    }),
   ];
 
   const card = box({
@@ -92,13 +108,6 @@ export function buildTweetCard(params: BuildCardParams): Node {
   return box({
     children: [card],
     style: { backgroundColor: params.colors.background, width: LAYOUT.WIDTH },
-  });
-}
-
-function statsRow(colors: ThemeColors, width: number, tweet: TweetData): Node {
-  return box({
-    children: [text(statsLine(tweet), { color: colors.secondaryText, fontSize: LAYOUT.FONT_SIZE_STATS })],
-    style: { marginTop: LAYOUT.AVATAR_GAP, width },
   });
 }
 
@@ -160,7 +169,11 @@ export function stripUnavailableImages(node: Node, fetchedBytes: Map<string, Uin
 // line forced before a trailing hashtag block, "\n\n" starts a spaced paragraph,
 // single "\n" a plain line break.
 export function buildTextParagraphs(rawText: string, style: Style): Node[] {
-  const cleaned = stripLeadingMentions(rawText).replace(HASHTAG_BLOCK_RE, "\n\n$<hashtagBlock>");
+  const cleaned = rawText
+    // Strip leading "@mention " prefixes before paragraph processing.
+    .replace(/^(?:@\w+\s*)+/u, "")
+    .trimStart()
+    .replace(HASHTAG_BLOCK_RE, "\n\n$<hashtagBlock>");
   const paragraphs = cleaned.split(/\n\n+/u);
 
   return paragraphs.flatMap((paragraph, pIndex) => {
@@ -247,6 +260,11 @@ function translationBadge(language: string, colors: ThemeColors, fontSize: numbe
 }
 
 function replyChainItem(colors: ThemeColors, failedUrls: Set<string>, tweet: TweetData): Node {
+  const avatar = avatarOrFallback(tweet.authorAvatarUrl, LAYOUT.AVATAR_SIZE, colors, failedUrls);
+  // Reply avatars must not take space in the flex column and push the chain down.
+  if (avatar.type !== "text") {
+    avatar.style = { ...avatar.style, left: 0, top: 0, position: "absolute" };
+  }
   return box({
     style: {
       marginBottom: LAYOUT.AVATAR_GAP,
@@ -254,10 +272,7 @@ function replyChainItem(colors: ThemeColors, failedUrls: Set<string>, tweet: Twe
       position: "relative",
     },
     children: [
-      positioned(avatarOrFallback(tweet.authorAvatarUrl, LAYOUT.AVATAR_SIZE, colors, failedUrls), {
-        left: 0,
-        top: 0,
-      }),
+      avatar,
       box({
         style: {
           backgroundColor: colors.border,
@@ -525,37 +540,22 @@ function playButtonOverlay(boxWidth: number, boxHeight: number): Node {
   });
 }
 
-function avatarNode(url: string, size: number): Node {
+function avatarOrFallback(url: string, size: number, colors: ThemeColors, failedUrls?: Set<string>): Node {
+  // Missing/blocked avatar URLs render as a plain circular placeholder.
+  if (failedUrls?.has(url)) {
+    return box({
+      style: {
+        backgroundColor: colors.secondaryText,
+        borderRadius: size / 2,
+        height: size,
+        width: size,
+      },
+    });
+  }
   return image({
     src: url,
     style: { borderRadius: size / 2, height: size, width: size },
   });
-}
-
-function avatarFallback(colors: ThemeColors, size: number): Node {
-  return box({
-    style: {
-      backgroundColor: colors.secondaryText,
-      borderRadius: size / 2,
-      height: size,
-      width: size,
-    },
-  });
-}
-
-function avatarOrFallback(url: string, size: number, colors: ThemeColors, failedUrls?: Set<string>): Node {
-  if (failedUrls?.has(url)) {
-    return avatarFallback(colors, size);
-  }
-  return avatarNode(url, size);
-}
-
-function positioned(node: Node, inset: { left: number; top: number }): Node {
-  if (node.type !== "text") {
-    // Reply avatars must not take space in the flex column and push the chain down.
-    node.style = { ...node.style, ...inset, position: "absolute" };
-  }
-  return node;
 }
 
 type MediaItem =
@@ -612,17 +612,6 @@ function getMediaImageUrl(media: MediaItem): string {
   return media.thumbnailUrl;
 }
 
-function statsLine(tweet: TweetData): string {
-  return [
-    tweet.createdAt ? format(tweet.createdAt, "MMM d, yyyy") : null,
-    `${formatNumber(tweet.replies)} replies`,
-    `${formatNumber(tweet.retweets)} reposts`,
-    `${formatNumber(tweet.likes)} likes`,
-  ]
-    .filter((part): part is string => part !== null)
-    .join("  ·  ");
-}
-
 const ONE_MILLION = 1_000_000;
 const ONE_THOUSAND = 1000;
 
@@ -652,10 +641,6 @@ function getTranslationLanguage(tweet: Pick<TweetData, "translation">): string |
   } catch {
     return sourceLanguage;
   }
-}
-
-function stripLeadingMentions(value: string): string {
-  return value.replace(/^(?<mention>@\w+\s*)+/u, "").trimStart();
 }
 
 const HASHTAG_BLOCK_RE = /\n(?<hashtagBlock>#\S+(?:\s+#\S+)*\s*)$/u;

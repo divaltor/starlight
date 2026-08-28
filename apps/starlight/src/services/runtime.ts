@@ -1,5 +1,4 @@
 import { isSpanContextValid, ROOT_CONTEXT, trace } from "@opentelemetry/api";
-import type { Context } from "@opentelemetry/api";
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import type { LogRecord } from "@opentelemetry/api-logs";
 import { OtelTracer, Resource } from "@effect/opentelemetry";
@@ -56,12 +55,15 @@ function otelSink(): Logger.Logger<unknown, void> {
 
   function emitLogRecord(output: StructuredLogOutput): void {
     const message = Array.isArray(output.message) ? output.message.join(" ") : String(output.message);
+    // Attaches the active span so SigNoz links the log to its trace.
+    const spanContext = trace.getActiveSpan()?.spanContext();
     otel.emit({
       severityNumber: SEVERITY[output.level] ?? SeverityNumber.INFO,
       severityText: output.level,
       body: message,
       timestamp: Date.parse(output.timestamp),
-      context: activeTraceContext(),
+      context:
+        spanContext && isSpanContextValid(spanContext) ? trace.setSpanContext(ROOT_CONTEXT, spanContext) : undefined,
       attributes: {
         ...output.annotations,
         cause: output.cause,
@@ -72,12 +74,6 @@ function otelSink(): Logger.Logger<unknown, void> {
   }
 
   return pipe(Logger.formatStructured, Logger.map(emitLogRecord));
-}
-
-// Attaches the active span so SigNoz links the log to its trace.
-function activeTraceContext(): Context | undefined {
-  const spanContext = trace.getActiveSpan()?.spanContext();
-  return spanContext && isSpanContextValid(spanContext) ? trace.setSpanContext(ROOT_CONTEXT, spanContext) : undefined;
 }
 
 const production = env.NODE_ENV === "production";

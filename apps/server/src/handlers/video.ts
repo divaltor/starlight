@@ -26,7 +26,6 @@ const whitelistedGroupChat = groupChat.filter((ctx) => WHITELISTED_CHAT_IDS.has(
 const whitelistedChats = chats.filter((ctx) => ctx.chat?.type === "private" || WHITELISTED_CHAT_IDS.has(ctx.chat.id));
 
 type SendMessageOptions = Parameters<Context["api"]["sendMessage"]>[2];
-type SendPhotoOptions = Parameters<Context["api"]["sendPhoto"]>[2];
 type SendVideoOptions = Parameters<Context["api"]["sendVideo"]>[2];
 
 function sendTextMessage(ctx: Context, text: string, options?: SendMessageOptions) {
@@ -35,14 +34,6 @@ function sendTextMessage(ctx: Context, text: string, options?: SendMessageOption
   }
 
   return bot.api.sendMessage(ctx.chatId!, text, options);
-}
-
-function sendPhotoMessage(ctx: Context, photo: InputFile, options?: SendPhotoOptions) {
-  if (ctx.chat?.type === "private") {
-    return ctx.replyWithPhoto(photo, options);
-  }
-
-  return bot.api.sendPhoto(ctx.chatId!, photo, options);
 }
 
 function sendVideoMessage(ctx: Context, video: string | InputFile, options?: SendVideoOptions) {
@@ -237,10 +228,11 @@ async function sendTweetImageFallback(ctx: Context, tweetId: string, messageThre
 
   try {
     const result = await runtime.runPromise(generateTweetImage(tweetId, "light"));
-    await sendPhotoMessage(ctx, new InputFile(result.buffer, `tweet-${tweetId}.jpg`), {
-      caption: getTweetUrl(tweetId),
-      message_thread_id: messageThreadId,
-    });
+    const photo = new InputFile(result.buffer, `tweet-${tweetId}.jpg`);
+    const options = { caption: getTweetUrl(tweetId), message_thread_id: messageThreadId };
+    await (ctx.chat?.type === "private"
+      ? ctx.replyWithPhoto(photo, options)
+      : bot.api.sendPhoto(ctx.chatId!, photo, options));
   } catch (imgError) {
     ctx.logger.error({ error: imgError, tweetId }, "Failed to generate tweet image");
     await sendTextMessage(ctx, "Can't process this tweet, sorry.", {

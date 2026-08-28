@@ -76,7 +76,12 @@ const UNITLESS_STYLE_PROPERTIES = new Set(["flexGrow", "fontWeight", "lineHeight
 
 function scaleNode(node: Node, factor: number): Node {
   if (node.style) {
-    scaleStyle(node.style, factor);
+    for (const [prop, value] of Object.entries(node.style)) {
+      if (typeof value === "number" && !UNITLESS_STYLE_PROPERTIES.has(prop)) {
+        // Style objects come from our own literals, so a numeric index view is safe here.
+        (node.style as Record<string, number>)[prop] = value * factor;
+      }
+    }
   }
   if (node.type === "container") {
     node.children = (node.children ?? []).map((child) => scaleNode(child, factor));
@@ -84,38 +89,24 @@ function scaleNode(node: Node, factor: number): Node {
   return node;
 }
 
-function scaleStyle(style: NonNullable<Node["style"]>, factor: number): void {
-  for (const [prop, value] of Object.entries(style)) {
-    if (typeof value === "number" && !UNITLESS_STYLE_PROPERTIES.has(prop)) {
-      // Style objects come from our own literals, so a numeric index view is safe here.
-      (style as Record<string, number>)[prop] = value * factor;
-    }
-  }
-}
-
-// Fonts live next to the process working directory (see apps/server README);
-// Takumi never reads system fonts, so every family below ships in the repo.
-function fontAssets(): { file: string; name: string; weight?: number }[] {
-  const fontPath = path.join(process.cwd(), "assets", "fonts");
-
-  return [
-    { name: "Inter", weight: 400, file: "Inter-Regular.ttf" },
-    { name: "Inter", weight: 700, file: "Inter-Bold.ttf" },
-    { name: "Noto Sans", file: "NotoSans-Regular.ttf" },
-    { name: "Noto Sans CJK", file: "NotoSansCJKsc-Regular.otf" },
-    { name: "Noto Sans Math", file: "NotoSansMath-Regular.ttf" },
-  ].map((font) => ({ ...font, file: path.join(fontPath, font.file) }));
-}
-
 let rendererPromise: Promise<Renderer> | null = null;
 
 function getRenderer(): Promise<Renderer> {
   rendererPromise ??= (async () => {
     const renderer = new Renderer();
+    // Fonts live next to the process working directory (see apps/server README);
+    // Takumi never reads system fonts, so every family below ships in the repo.
+    const fontPath = path.join(process.cwd(), "assets", "fonts");
     await Promise.all(
-      fontAssets().map(async (font) => {
+      [
+        { name: "Inter", weight: 400, file: "Inter-Regular.ttf" },
+        { name: "Inter", weight: 700, file: "Inter-Bold.ttf" },
+        { name: "Noto Sans", file: "NotoSans-Regular.ttf" },
+        { name: "Noto Sans CJK", file: "NotoSansCJKsc-Regular.otf" },
+        { name: "Noto Sans Math", file: "NotoSansMath-Regular.ttf" },
+      ].map(async (font) => {
         try {
-          const data = await Bun.file(font.file).arrayBuffer();
+          const data = await Bun.file(path.join(fontPath, font.file)).arrayBuffer();
           await renderer.registerFont({ name: font.name, weight: font.weight, data });
         } catch (error) {
           logger.warn({ error, name: font.name }, "Failed to register font");
