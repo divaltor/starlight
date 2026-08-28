@@ -1,6 +1,5 @@
 import { Api, GrammyError } from "grammy";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
-import { OperationalTelemetry } from "@/operational-telemetry";
 
 export namespace TelegramDelivery {
   // Telegram only accepts this fixed reaction emoji set; model output is validated
@@ -86,7 +85,6 @@ export namespace TelegramDelivery {
       const deliver = Effect.fn("TelegramDelivery.deliver")(function* deliver(input: DeliveryInput) {
         const { action } = input;
         if (action.type === "ignore") return { telegramMessageId: null };
-        const startedAt = performance.now();
 
         return yield* Effect.tryPromise({
           try: async () => {
@@ -115,18 +113,6 @@ export namespace TelegramDelivery {
                   retryable: true,
                 }),
           ),
-          Effect.map((receipt) => {
-            OperationalTelemetry.recordDuration("delivery", "delivered", performance.now() - startedAt);
-            return receipt;
-          }),
-          Effect.tapError((error) => {
-            OperationalTelemetry.recordDuration(
-              "delivery",
-              error.outcomeUnknown ? "unknown" : "failed",
-              performance.now() - startedAt,
-            );
-            return Effect.void;
-          }),
         );
       });
 

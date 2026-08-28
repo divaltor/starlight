@@ -13,7 +13,6 @@ import { Lane } from "@/conversation/lane";
 import { PreparedRequestSchema, StoredPayloadSchema } from "@/conversation/run-artifacts";
 import { Memory } from "@/memory/memory";
 import { Media } from "@/media/media";
-import { OperationalTelemetry } from "@/operational-telemetry";
 import { Database } from "@/services/database";
 
 export namespace ConversationContext {
@@ -423,16 +422,13 @@ export namespace ConversationContext {
       const checkpoint = Effect.fn("ConversationContext.checkpoint")(function* checkpoint(
         checkpointInput: CheckpointInput,
       ) {
-        const startedAt = performance.now();
         const prepared = yield* database
           .transaction((client) => prepareCheckpoint(client, checkpointInput))
           .pipe(Effect.mapError(failed("Failed to prepare context checkpoint")));
         if (prepared.kind === "notPossible") {
-          OperationalTelemetry.recordDuration("checkpoint", "not-possible", performance.now() - startedAt);
           return yield* new ContextError({ message: prepared.message, retryable: false });
         }
         if (prepared.kind === "committed") {
-          OperationalTelemetry.recordDuration("checkpoint", "already-committed", performance.now() - startedAt);
           return prepared.result;
         }
 
@@ -461,7 +457,6 @@ export namespace ConversationContext {
             retainedTurns: result.retainedTurns,
           }),
         );
-        OperationalTelemetry.recordDuration("checkpoint", "committed", performance.now() - startedAt);
         return result;
       });
 

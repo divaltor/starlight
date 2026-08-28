@@ -12,7 +12,7 @@ import type { InputPayload } from "@/conversation/run-artifacts";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { Memory } from "@/memory/memory";
 import { Database } from "@/services/database";
-import { OperationalTelemetry } from "@/operational-telemetry";
+import { context, propagation } from "@opentelemetry/api";
 
 export namespace Conversation {
   const MAX_BATCH_MESSAGES = 20;
@@ -84,14 +84,19 @@ export namespace Conversation {
       const database = yield* Database.Service;
       const chatReply = yield* ChatReply.Service;
       const chatTools = yield* ChatTools.Service;
-      const context = yield* ConversationContext.Service;
+      const conversationContext = yield* ConversationContext.Service;
       const delivery = yield* TelegramDelivery.Service;
       const memory = yield* Memory.Service;
       const options = yield* OptionsService;
       const whitelistedDmUserIds = new Set(options.whitelistedDmUserIds);
 
       const admit = Effect.fn("Conversation.admit")(function* admit(input: AdmissionInput) {
-        const traceContext = OperationalTelemetry.currentTraceContext();
+        const traceCarrier: Record<string, string> = {};
+        propagation.inject(context.active(), traceCarrier);
+        const traceContext = {
+          traceparent: traceCarrier.traceparent ?? null,
+          tracestate: traceCarrier.tracestate ?? null,
+        };
         const batchQuietMs = input.payload.mediaGroupId === null ? options.quietMs : ALBUM_SETTLE_MS;
         const batchMaxWaitMs = input.payload.mediaGroupId === null ? options.maxWaitMs : ALBUM_SETTLE_MS;
         const mediaReferences =
@@ -250,7 +255,6 @@ export namespace Conversation {
             ),
           );
 
-        OperationalTelemetry.recordEvent("admission", admitted.duplicate ? "duplicate" : "created");
         yield* Effect.logInfo("Conversation input admitted").pipe(
           Effect.annotateLogs({
             conversationKey: ConversationKey.format(input.key),
@@ -273,7 +277,6 @@ export namespace Conversation {
               (entry) => entry.senderTelegramId === null || !whitelistedDmUserIds.has(Number(entry.senderTelegramId)),
             )
           ) {
-            OperationalTelemetry.recordEvent("dm-authorization", "revoked");
             yield* blockRun(claimed, "dm-authorization-revoked", "Direct-message access is not allowed");
             return { kind: "completed" as const, runId: claimed.runId };
           }
@@ -281,7 +284,7 @@ export namespace Conversation {
           // otherwise be redriven forever: failed hardSafety attempts are deliberately
           // resumable with no attempt bound.
           const resumedCheckpoint = yield* blockOnPermanent(
-            context.resumeCheckpoint({
+            conversationContext.resumeCheckpoint({
               fencingToken: claimed.fencingToken,
               leaseMs: options.leaseMs,
               retainedTokenTarget: options.contextRetainedTokenTarget,
@@ -314,7 +317,7 @@ export namespace Conversation {
             [
               prepareRun(claimed, toolProfile),
               blockOnPermanent(
-                context.transitionProfile({
+                conversationContext.transitionProfile({
                   key: claimed.key,
                   reason: "profile-change",
                   run: { fencingToken: claimed.fencingToken, runId: claimed.runId },
@@ -329,13 +332,13 @@ export namespace Conversation {
           if (!claimed.replyEligible) return yield* finalizeClaimed(claimed);
 
           let contextRequest = yield* blockOnPermanent(
-            context.prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId }),
+            conversationContext.prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId }),
             claimed,
             "context-prepare-failed",
           );
           if (exceedsUsableContext(contextRequest, options)) {
             yield* blockOnPermanent(
-              context.checkpoint({
+              conversationContext.checkpoint({
                 fencingToken: claimed.fencingToken,
                 leaseMs: options.leaseMs,
                 reason: "hardSafety",
@@ -346,7 +349,7 @@ export namespace Conversation {
               OVERSIZED_INPUT_ERROR_TAG,
             );
             yield* memory.flush(claimed.dbKey).pipe(Effect.mapError(domainFailed));
-            contextRequest = yield* context
+            contextRequest = yield* conversationContext
               .prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId })
               .pipe(Effect.mapError(domainFailed));
             if (exceedsUsableContext(contextRequest, options)) {
@@ -385,7 +388,7 @@ export namespace Conversation {
       });
 
       const finalizeClaimed = Effect.fn("Conversation.finalizeClaimed")(function* finalizeClaimed(claimed: ClaimedRun) {
-        yield* context
+        yield* conversationContext
           .appendFinalized({ fencingToken: claimed.fencingToken, runId: claimed.runId })
           .pipe(Effect.mapError(domainFailed));
         yield* finalizeRun(claimed);
@@ -689,7 +692,7 @@ export namespace Conversation {
 
       function recoverContextOverflow(claimed: ClaimedRun, prepared: PreparedRun) {
         return blockOnPermanent(
-          context.checkpoint({
+          conversationContext.checkpoint({
             fencingToken: claimed.fencingToken,
             leaseMs: options.leaseMs,
             reason: "hardSafety",
@@ -701,7 +704,7 @@ export namespace Conversation {
         ).pipe(
           Effect.andThen(memory.flush(claimed.dbKey).pipe(Effect.mapError(domainFailed))),
           Effect.andThen(
-            context
+            conversationContext
               .prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId })
               .pipe(Effect.mapError(domainFailed)),
           ),
