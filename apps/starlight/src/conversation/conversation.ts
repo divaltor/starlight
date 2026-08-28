@@ -379,7 +379,7 @@ export namespace Conversation {
             });
           }
 
-          yield* persistGeneration(claimed, invocation.generated, prepared.allowedTargetIds);
+          yield* persistGeneration(claimed, invocation.generated);
           yield* dispatchRun(claimed);
           return yield* finalizeClaimed(claimed);
         }).pipe(Effect.tapError(() => expireLease(claimed)));
@@ -547,15 +547,6 @@ export namespace Conversation {
       function prepareRun(claimed: ClaimedRun, pinnedToolProfile: ChatTools.Profile) {
         return Effect.gen(function* prepare() {
           const payloads = claimed.inputs.map((input) => input.payload as InputPayload);
-          const allowedTargetIds = [
-            ...new Set(
-              payloads.flatMap((payload) =>
-                payload.addressed
-                  ? [payload.messageId, ...(payload.replyToMessageId === null ? [] : [payload.replyToMessageId])]
-                  : [],
-              ),
-            ),
-          ];
           const stored = Option.getOrNull(Schema.decodeUnknownOption(PreparedRequestSchema)(claimed.preparedRequest));
           // Only what time erodes is frozen; rendering rebuilds deterministically from the
           // immutable batch in ConversationContext.prepare.
@@ -603,7 +594,6 @@ export namespace Conversation {
               .pipe(Effect.mapError(failed("Failed to prepare conversation run")));
           }
           return {
-            allowedTargetIds,
             sessionId: frozen.sessionId,
             toolProfile: frozen.toolProfile,
           } satisfies PreparedRun;
@@ -726,12 +716,7 @@ export namespace Conversation {
         );
       }
 
-      function persistGeneration(
-        claimed: ClaimedRun,
-        generated: ChatReply.GenerateResult,
-        allowedTargetIds: readonly number[],
-      ) {
-        const allowedTargets = new Set(allowedTargetIds);
+      function persistGeneration(claimed: ClaimedRun, generated: ChatReply.GenerateResult) {
         const transcript: Prisma.InputJsonArray = generated.transcript.map((event) => ({
           text: event.text,
           type: event.type,
@@ -781,10 +766,9 @@ export namespace Conversation {
                   };
                 }
                 const target = action.type === "reaction" ? action.messageId : action.replyTo;
-                const invalidTarget = target !== null && target !== undefined && !allowedTargets.has(target);
                 return {
-                  deliveryStatus: invalidTarget ? ("failed" as const) : ("pending" as const),
-                  lastError: invalidTarget ? "Model selected a target outside the frozen batch" : null,
+                  deliveryStatus: "pending" as const,
+                  lastError: null,
                   ordinal,
                   payload: action as Prisma.InputJsonObject,
                   runId: claimed.runId,
@@ -1146,7 +1130,6 @@ export namespace Conversation {
   }
 
   interface PreparedRun {
-    readonly allowedTargetIds: readonly number[];
     readonly sessionId: string;
     readonly toolProfile: ChatTools.Profile;
   }

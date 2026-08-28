@@ -86,6 +86,103 @@ test.skipIf(!databaseUrl)("duplicate Telegram delivery creates one immutable inp
   }
 });
 
+test.skipIf(!databaseUrl)("model-selected reply targets are passed to Telegram delivery", async () => {
+  const targetMessageId = 9_999_999;
+  const delivered: TelegramDelivery.Action[] = [];
+  const model: Model.Interface = {
+    generate: <Output>() =>
+      Effect.succeed({
+        finishReason: "stop",
+        output: { replies: [{ replyTo: targetMessageId, text: "Hi", type: "text" }] } as Output,
+        steps: [],
+        toolEvents: [],
+        transcript: [{ text: "Hi", type: "assistant-text" }],
+        usage: {
+          billing: {
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            costUsd: 0,
+            inputTokens: 10,
+            outputTokens: 2,
+            reasoningTokens: 0,
+          },
+          contextInputTokens: 10,
+          stepCount: 0,
+        },
+      }),
+  };
+  const delivery: TelegramDelivery.Interface = {
+    deliver: (input) => {
+      delivered.push(input.action);
+      return Effect.succeed({ telegramMessageId: 901 });
+    },
+    indicateTyping: () => Effect.void,
+  };
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+  const assistantId = 8_000_000_104;
+  const chatId = -8_000_000_104;
+  const key = { assistantId, chatId, threadKey: 0 };
+
+  try {
+    const result = await runtime.runPromise(
+      Effect.gen(function* run() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* conversation.admit({
+          chatTitle: "Reply target test",
+          chatUsername: null,
+          key,
+          payload: {
+            addressed: true,
+            date: 1_700_000_000,
+            editDate: null,
+            forwardOrigin: null,
+            media: [],
+            mediaGroupId: null,
+            messageId: 104,
+            repliedMedia: [],
+            repliedText: null,
+            replyToMessageId: null,
+            senderFirstName: "Alice",
+            senderId: 42,
+            senderUsername: "alice",
+            text: "Hello",
+          },
+          updateId: 204,
+        });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+        return yield* conversation.drain({ key });
+      }),
+    );
+
+    expect(result.kind).toBe("completed");
+    expect(delivered).toEqual([{ replyTo: targetMessageId, text: "Hi", type: "text" }]);
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
 test.skipIf(!databaseUrl)("reuses frozen recalled memory after a retryable model failure", async () => {
   const requests: Model.GenerateInput<unknown>[] = [];
   let recallCount = 0;
