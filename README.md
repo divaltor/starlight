@@ -75,4 +75,4 @@ Alternative deployment: Dokploy, Fly.io, Railway, or manual Docker. Generate enc
 
 ## License
 
-GPL-3.0
+MIT
