@@ -17,7 +17,7 @@ export namespace Exa {
       }),
     },
     web_search_exa: {
-      description: "Search the web for current information.",
+      description: "Search the web for current, niche, ambiguous, or uncertain factual information.",
       inputSchema: z.object({
         numResults: z.number().int().positive().max(5).default(3),
         query: z.string().min(3).max(300),
