@@ -165,14 +165,14 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
 
   const measured = await renderer.measure(node, { width: LAYOUT.WIDTH * SCALE_FACTOR });
 
-  const buffer = await renderer.render(node, {
+  const rendered = await renderer.render(node, {
     fontFamilies: FONT_FAMILIES,
-    format: "jpeg",
+    format: "png",
     height: measured.height,
     images: [...bytesBySrc.entries()].map(([src, data]) => ({ data, src })),
-    quality: 100,
     width: LAYOUT.WIDTH * SCALE_FACTOR,
   });
+  const buffer = await sharp(rendered).flatten({ background: colors.background }).jpeg({ quality: 100 }).toBuffer();
 
   logger.debug(
     {
@@ -184,7 +184,7 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
   );
 
   return {
-    buffer: Buffer.from(buffer),
+    buffer,
     height: measured.height,
     width: LAYOUT.WIDTH * SCALE_FACTOR,
   };
