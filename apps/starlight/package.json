@@ -13,6 +13,7 @@
     "@ai-sdk/mcp": "2.0.39",
     "@ai-sdk/otel": "1.0.83",
     "@effect/opentelemetry": "4.0.0-rc.112",
+    "@effect/platform-bun": "4.0.0-rc.112",
     "@grammyjs/auto-retry": "2.0.2",
     "@grammyjs/files": "1.2.0",
     "@grammyjs/runner": "2.0.3",

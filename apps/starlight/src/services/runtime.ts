@@ -3,6 +3,7 @@ import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import type { LogRecord } from "@opentelemetry/api-logs";
 import { OtelTracer, Resource } from "@effect/opentelemetry";
 import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
 import type { LogLevel } from "effect/LogLevel";
 import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";
@@ -96,26 +97,29 @@ const tracing =
     : OtelTracer.layerGlobal.pipe(Layer.provide(Resource.layer({ serviceName: "starlight-bot" })));
 const observability = Layer.mergeAll(logging, tracing);
 
-const infrastructure = Layer.mergeAll(
-  Database.layer(env.DATABASE_URL),
-  chatTools,
-  replies,
-  TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
-  WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
-  Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),
-  Media.layer({
-    accessKeyId: env.AWS_ACCESS_KEY_ID,
-    endpoint: env.AWS_ENDPOINT,
-    secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-    telegramApi: fileApi,
-  }),
-  Conversation.optionsLayer({
-    contextHardTokenCap: env.CONTEXT_HARD_TOKEN_CAP,
-    contextRetainedTokenTarget: env.CONTEXT_RETAINED_TOKEN_TARGET,
-    leaseMs: env.CONVERSATION_LANE_LEASE_MS,
-    maxWaitMs: env.CONVERSATION_BATCH_MAX_WAIT_MS,
-    quietMs: env.CONVERSATION_BATCH_QUIET_MS,
-  }),
+const infrastructure = Layer.provide(
+  Layer.mergeAll(
+    Database.layer(env.DATABASE_URL),
+    chatTools,
+    replies,
+    TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
+    WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
+    Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),
+    Media.layer({
+      accessKeyId: env.AWS_ACCESS_KEY_ID,
+      endpoint: env.AWS_ENDPOINT,
+      secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+      telegramApi: fileApi,
+    }),
+    Conversation.optionsLayer({
+      contextHardTokenCap: env.CONTEXT_HARD_TOKEN_CAP,
+      contextRetainedTokenTarget: env.CONTEXT_RETAINED_TOKEN_TARGET,
+      leaseMs: env.CONVERSATION_LANE_LEASE_MS,
+      maxWaitMs: env.CONVERSATION_BATCH_MAX_WAIT_MS,
+      quietMs: env.CONVERSATION_BATCH_QUIET_MS,
+    }),
+  ),
+  FetchHttpClient.layer,
 );
 const hindsightRetention = HindsightRetention.layer.pipe(Layer.provideMerge(infrastructure));
 const memory = Memory.layer.pipe(Layer.provideMerge(hindsightRetention), Layer.provideMerge(infrastructure));

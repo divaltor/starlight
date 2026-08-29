@@ -1,5 +1,6 @@
 import type { FileApiFlavor } from "@grammyjs/files";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Schema } from "effect";
+import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 import type { Api } from "grammy";
 import type { Message } from "grammy/types";
 
@@ -8,6 +9,8 @@ export namespace Media {
   const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
   const MAX_IMAGE_PIXELS = 40_000_000;
   const REQUEST_TIMEOUT_MS = 30_000;
+  const DOWNLOAD_FAILED = "Failed to download Telegram media";
+  const SOURCE_TOO_LARGE = "Telegram media exceeds the 20 MiB download boundary";
   const JPEG_QUALITIES = [85, 70, 55, 40] as const;
 
   export const Type = Schema.Literals([
@@ -160,11 +163,17 @@ export namespace Media {
     return [];
   }
 
-  export function layer(options: Options): Layer.Layer<Service> {
-    return Layer.succeed(Service, Service.of(make(options)));
+  export function layer(options: Options): Layer.Layer<Service, never, HttpClient.HttpClient> {
+    return Layer.effect(
+      Service,
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        return Service.of(make(options, client));
+      }),
+    );
   }
 
-  function make(options: Options): Interface {
+  function make(options: Options, client: HttpClient.HttpClient): Interface {
     const s3 = new Bun.S3Client({
       accessKeyId: options.accessKeyId,
       endpoint: options.endpoint,
@@ -172,29 +181,40 @@ export namespace Media {
     });
 
     const download = Effect.fn("Media.download")(function* download(source: Source | Reference) {
-      return yield* Effect.tryPromise({
-        try: async () => {
-          const file = await options.telegramApi.getFile(
-            source.telegramFileId,
-            AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-          );
-          const response = await fetch(file.getUrl(), { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-          if (!response.ok) throw new Error(`Telegram file download returned ${response.status}`);
-          const contentLength = Number(response.headers.get("content-length"));
-          if (Number.isFinite(contentLength) && contentLength > MAX_SOURCE_BYTES) {
-            throw new Error("Telegram media exceeds the 20 MiB download boundary");
-          }
-          const bytes = await response.bytes();
-          if (bytes.byteLength > MAX_SOURCE_BYTES)
-            throw new Error("Telegram media exceeds the 20 MiB download boundary");
-          return bytes;
-        },
-        catch: (cause) => new MediaError({ cause, message: "Failed to download Telegram media", retryable: true }),
-      }).pipe(
-        Effect.withSpan("Telegram media download", {
-          attributes: { "media.mime_type": source.mimeType, "media.type": source.type },
-        }),
+      yield* Effect.annotateCurrentSpan({ "media.mime_type": source.mimeType, "media.type": source.type });
+      const file = yield* Effect.tryPromise({
+        try: () => options.telegramApi.getFile(source.telegramFileId, AbortSignal.timeout(REQUEST_TIMEOUT_MS)),
+        catch: (cause) => new MediaError({ cause, message: DOWNLOAD_FAILED, retryable: true }),
+      });
+      const response = yield* client.execute(HttpClientRequest.get(file.getUrl())).pipe(
+        Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
+        Effect.mapError((cause) => new MediaError({ cause, message: DOWNLOAD_FAILED, retryable: true })),
       );
+      if (response.status < 200 || response.status >= 300) {
+        return yield* new MediaError({
+          message: `Telegram file download returned ${response.status}`,
+          retryable: true,
+        });
+      }
+      const contentLength = Number(response.headers["content-length"]);
+      if (Number.isFinite(contentLength) && contentLength > MAX_SOURCE_BYTES) {
+        return yield* new MediaError({
+          message: SOURCE_TOO_LARGE,
+          retryable: true,
+        });
+      }
+      const bytes = new Uint8Array(
+        yield* response.arrayBuffer.pipe(
+          Effect.mapError((cause) => new MediaError({ cause, message: DOWNLOAD_FAILED, retryable: true })),
+        ),
+      );
+      if (bytes.byteLength > MAX_SOURCE_BYTES) {
+        return yield* new MediaError({
+          message: SOURCE_TOO_LARGE,
+          retryable: true,
+        });
+      }
+      return bytes;
     });
 
     const ingest = Effect.fn("Media.ingest")(function* ingest(source: Source) {

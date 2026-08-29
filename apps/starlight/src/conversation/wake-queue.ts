@@ -1,7 +1,7 @@
-import { RedisClient } from "bun";
 import { createBunRedisClient, Queue, UnrecoverableError, Worker } from "bullmq";
 import { context, propagation, ROOT_CONTEXT, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import type { Span } from "@opentelemetry/api";
+import { BunRedis } from "@effect/platform-bun";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
 import { Conversation } from "@/conversation/conversation";
 import { ConversationKey } from "@/conversation/key";
@@ -48,9 +48,9 @@ export namespace WakeQueue {
     return Layer.effect(
       Service,
       Effect.gen(function* make() {
-        const redis = createBunRedisClient(new RedisClient(redisUrl));
+        const redis = yield* BunRedis.BunRedis;
         const queue = new Queue<JobData>(`${prefix}-lane-wake`, {
-          connection: redis,
+          connection: createBunRedisClient(redis.client),
           defaultJobOptions: {
             attempts: 5,
             backoff: { type: "exponential", delay: 1000 },
@@ -58,7 +58,7 @@ export namespace WakeQueue {
             removeOnFail: 5000,
           },
         });
-        yield* Effect.addFinalizer(() => closeQueue(queue, redis));
+        yield* Effect.addFinalizer(() => closeQueue(queue));
         yield* Effect.tryPromise({
           try: () => queue.waitUntilReady(),
           catch: (cause) => new WorkerStartupError({ cause, message: "Conversation queue failed to start" }),
@@ -102,7 +102,7 @@ export namespace WakeQueue {
 
         return Service.of({ publish });
       }),
-    );
+    ).pipe(Layer.provide(BunRedis.layer({ url: redisUrl })));
   }
 
   export function workerLayer(
@@ -113,13 +113,13 @@ export namespace WakeQueue {
       Effect.gen(function* makeWorker() {
         const conversation = yield* Conversation.Service;
         const runPromise: typeof Effect.runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
-        const redis = createBunRedisClient(new RedisClient(redisUrl));
+        const redis = yield* BunRedis.BunRedis;
         const worker = new Worker<JobData>(
           `${prefix}-lane-wake`,
           (job, _token, signal) =>
             processJob(conversation, Schema.decodeUnknownSync(JobData)(job.data), runPromise, signal),
           {
-            connection: redis,
+            connection: createBunRedisClient(redis.client),
             concurrency: 10,
             lockDuration: 240_000,
           },
@@ -129,7 +129,7 @@ export namespace WakeQueue {
             Effect.logError("Conversation worker error").pipe(Effect.annotateLogs({ error: error.message })),
           );
         });
-        yield* Effect.addFinalizer(() => closeWorker(worker, redis));
+        yield* Effect.addFinalizer(() => closeWorker(worker));
         yield* Effect.tryPromise({
           try: () => worker.waitUntilReady(),
           catch: (cause) => new WorkerStartupError({ cause, message: "Conversation worker failed to start" }),
@@ -145,7 +145,7 @@ export namespace WakeQueue {
           ),
         );
       }),
-    );
+    ).pipe(Layer.provide(BunRedis.layer({ url: redisUrl })));
   }
 
   function processJob(
@@ -184,26 +184,23 @@ export namespace WakeQueue {
     }
   }
 
-  function closeQueue(queue: Queue<JobData>, redis: ReturnType<typeof createBunRedisClient>) {
-    // Graceful close; if it times out, disconnect hard, then still try to quit Redis.
-    return Effect.promise(() => queue.close()).pipe(
-      Effect.timeout(Duration.seconds(10)),
-      Effect.catch(() => Effect.sync(() => redis.disconnect())),
-      Effect.andThen(Effect.promise(() => redis.quit()).pipe(Effect.ignore)),
-    );
+  function closeQueue(queue: Queue<JobData>) {
+    // Graceful close; the BunRedis layer finalizer quits the underlying client afterwards.
+    return Effect.promise(() => queue.close()).pipe(Effect.timeout(Duration.seconds(10)), Effect.ignore);
   }
 
-  function closeWorker(worker: Worker<JobData>, redis: ReturnType<typeof createBunRedisClient>) {
-    // Graceful close; if it times out, force-close, disconnect hard, then still try to quit Redis.
+  function closeWorker(worker: Worker<JobData>) {
+    // Graceful close; if it times out, force-close, then the BunRedis layer
+    // finalizer quits the underlying client.
     return Effect.promise(() => worker.close()).pipe(
       Effect.timeout(Duration.seconds(10)),
       Effect.catch(() =>
-        Effect.sync(() => {
-          void worker.close(true);
-          redis.disconnect();
+        Effect.tryPromise({
+          try: () => worker.close(true),
+          catch: () => null,
         }),
       ),
-      Effect.andThen(Effect.promise(() => redis.quit()).pipe(Effect.ignore)),
+      Effect.ignore,
     );
   }
 }
