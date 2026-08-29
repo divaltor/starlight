@@ -287,14 +287,11 @@ model Photo {
   user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@id(name: "photoId", [id, userId])
-  @@index([tweetId])
-  @@index([perceptualHash])
+  @@index([tweetId, userId])
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([hashBucket4])
   @@index([hashBucket8])
   @@index([hashBucket12])
-  @@index([s3Path])
-  @@index([deletedAt])
-  @@index([createdAt(sort: Desc)])
   @@map("photos")
 }
 
@@ -377,7 +374,6 @@ model Message {
   @@index([chatId, date(sort: Desc)])
   @@index([fromId])
   @@index([mediaType])
-  @@index([deletedAt])
   @@index([chatId, messageThreadId, messageId])
   @@index([chatId, messageId])
   @@map("messages")
@@ -425,7 +421,6 @@ model Attachment {
   @@index([chatId, messageId])
   @@index([attachmentType])
   @@index([mimeType])
-  @@index([s3Path])
   @@map("attachments")
 }
 
@@ -561,6 +556,7 @@ model ConversationRun {
   checkpointAttempts ConversationCheckpointAttempt[]
 
   @@index([assistantId, chatId, threadKey, status])
+  @@index([contextId])
   @@map("conversation_runs")
 }
 
@@ -574,6 +570,7 @@ model ConversationRunInput {
 
   @@id([runId, ordinal])
   @@unique([runId, inputId])
+  @@index([inputId])
   @@map("conversation_run_inputs")
 }
 
@@ -729,6 +726,7 @@ model ConversationContextTurn {
 
   @@id([contextId, ordinal])
   @@unique([contextId, transcriptTurnId])
+  @@index([transcriptTurnId])
   @@map("conversation_context_turns")
 }
 
@@ -750,6 +748,8 @@ model MemoryNamespace {
 
   @@index([kind, userId])
   @@index([kind, chatId, threadKey])
+  @@index([userId])
+  @@index([chatId])
   @@map("memory_namespaces")
 }
 
@@ -789,5 +789,6 @@ model MemoryObservation {
   @@index([namespaceId, id])
   @@index([subjectUserId, id])
   @@index([sourceRunId])
+  @@index([sourceInputId])
   @@map("memory_observations")
 }
