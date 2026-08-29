@@ -1,11 +1,11 @@
 # Hindsight deployment
 
-Copy `.env.example` to `.env`, replace every value, and put the same
+Copy the root `.env.example` to `.env`, replace every value, and put the same
 `HINDSIGHT_API_KEY` in `apps/starlight/.env`.
 
 ```sh
 docker compose \
-  --env-file hindsight/.env \
+  --env-file .env \
   up -d
 ```
 

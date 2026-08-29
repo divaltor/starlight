@@ -24,7 +24,7 @@ Telegram ─▶ apps/starlight (bot)          user chat, AI conversations, media
 
 **`apps/web`** — the browsing UI: TanStack Start app with oRPC over PostgreSQL for browsing classified media and searching it by tags and embeddings. Setup: copy `.env.example` to `.env` and fill in `DATABASE_URL`, `REDIS_URL`, and `BASE_CDN_URL`; run with `bun dev` (port 3001).
 
-**`hindsight`** — the memory service behind the bot's conversations, pulled as a prebuilt image. Setup: copy `hindsight/.env.example` to `hindsight/.env`.
+**`hindsight`** — the memory service behind the bot's conversations, pulled as a prebuilt image. Setup: copy the root `.env.example` to `.env` (compose-wide secrets).
 
 ### How memory works
 
@@ -57,18 +57,18 @@ Each conversation gets one memory namespace (`assistantId:chatId:threadKey`). Ra
 
 ### Hindsight configuration
 
-`hindsight/.env` (copy from `.env.example`) holds only the secrets the Compose file interpolates: `OPENROUTER_API_KEY` (LLM that extracts and consolidates memories), `CLASSIFICATION_API_TOKEN` (must match `ML_API_TOKEN` in `apps/server/.env`), `HINDSIGHT_API_KEY` (must match `apps/starlight/.env`), plus `POSTGRES_PASSWORD`, `POSTGRES_DB`, and `VALKEY_PASSWORD`. All non-secret `HINDSIGHT_API_*` settings — LLM provider and model, embeddings/reranker endpoints, retain chunk sizes, OTel — are set inline in the `hindsight:` service of `docker-compose.yaml`, so the whole stack ships one reviewed configuration.
+The root `.env` (copy from `.env.example`) holds only the secrets the Compose file interpolates: `OPENROUTER_API_KEY` (LLM that extracts and consolidates memories), `CLASSIFICATION_API_TOKEN` (must match `ML_API_TOKEN` in `apps/server/.env`), `HINDSIGHT_API_KEY` (must match `apps/starlight/.env`), plus `POSTGRES_PASSWORD`, `POSTGRES_DB`, and `VALKEY_PASSWORD`. All non-secret `HINDSIGHT_API_*` settings — LLM provider and model, embeddings/reranker endpoints, retain chunk sizes, OTel — are set inline in the `hindsight:` service of `docker-compose.yaml`, so the whole stack ships one reviewed configuration.
 
 ## Deployment
 
-Configure service env files and copy `hindsight/.env.example` to `hindsight/.env`. Use URL-safe generated secrets because PostgreSQL and Valkey credentials are interpolated into internal URLs.
+Configure service env files and copy the root `.env.example` to `.env`. Use URL-safe generated secrets because PostgreSQL and Valkey credentials are interpolated into internal URLs.
 
 For local development in a git clone, install hooks manually once with `bunx lefthook install`.
 
 ```bash
 # Apply reviewed migrations once, then start services
-docker compose --env-file hindsight/.env --profile operations run --rm migrate
-docker compose --env-file hindsight/.env up -d
+docker compose --env-file .env --profile operations run --rm migrate
+docker compose --env-file .env up -d
 ```
 
 Alternative deployment: Dokploy, Fly.io, Railway, or manual Docker. Generate encryption key with `openssl rand -hex 32`.
