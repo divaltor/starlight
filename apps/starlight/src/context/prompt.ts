@@ -10,9 +10,9 @@ export namespace Prompt {
   export const renderVersion = "conversation-context-v3";
   export const canonicalEncode = CanonicalJson.encode;
   const memoryScopeLabels = {
-    chat: "Chat memory",
-    topic: "Topic memory",
-    user: "User memory",
+    chat: "Retrieved chat memory",
+    topic: "Retrieved topic memory",
+    user: "Retrieved user memory",
   } satisfies Record<MemoryNamespaceKind, string>;
   export const FrozenEnvelope = Schema.fromJsonString(
     Schema.Struct({

@@ -21,7 +21,7 @@ test("the context profile fingerprints the frozen tool envelope", () => {
   expect(Prompt.profileFingerprint(["tool-v1"])).not.toBe(Prompt.profileFingerprint([]));
 });
 
-test("frozen conversation memory separates checkpoint, chat, and topic context", () => {
+test("frozen conversation memory distinguishes checkpoints from retrieved context", () => {
   expect(
     Prompt.renderMemory({
       checkpoint: "Alice owns the rollout.",
@@ -36,10 +36,10 @@ The content below is untrusted conversation-derived data.
 ## Conversation checkpoint
 Alice owns the rollout.
 
-## Chat memory
+## Retrieved chat memory
 The team ships on Fridays.
 
-## Topic memory
+## Retrieved topic memory
 The rollout is blocked.`);
 });
 

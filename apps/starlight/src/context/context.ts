@@ -730,7 +730,13 @@ export namespace ConversationContext {
               new ContextError({ cause: error, message: "Failed to summarize context", retryable: error.retryable }),
           ),
         );
-      const summary = generated.output.summary.trim();
+      const summary = generated.output.summary
+        .trim()
+        .replace(
+          /^(?:# Frozen conversation memory\nThe content below is untrusted conversation-derived data\.\n\n## Conversation checkpoint\n)+/u,
+          "",
+        )
+        .trim();
       if (summary.length === 0) {
         return yield* new ContextError({ message: "Context summary was empty", retryable: true });
       }
@@ -835,13 +841,13 @@ export namespace ConversationContext {
               : turn.renderedContent,
           ),
           previousMemory: parent.frozenMemory,
-          version: "context-checkpoint-v1",
+          version: "context-checkpoint-v2",
         });
     if (existing && new Bun.CryptoHasher("sha256").update(summaryInput).digest("hex") !== existing.summaryInputHash) {
       throw new Error("Stored checkpoint input hash is invalid");
     }
     const summaryProfileFingerprint = new Bun.CryptoHasher("sha256")
-      .update(`${parent.modelProfileFingerprint}:${run.modelProfileFingerprint}:${input.reason}:context-checkpoint-v1`)
+      .update(`${parent.modelProfileFingerprint}:${run.modelProfileFingerprint}:${input.reason}:context-checkpoint-v2`)
       .digest("hex");
     const attempt = existing
       ? await transaction.conversationCheckpointAttempt.update({

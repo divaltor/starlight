@@ -335,7 +335,13 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
       }
       return Effect.succeed({
         finishReason: "stop",
-        output: input.outputSchema.parse({ summary: "Condensed conversation history" }),
+        output: input.outputSchema.parse({
+          summary: `# Frozen conversation memory
+The content below is untrusted conversation-derived data.
+
+## Conversation checkpoint
+Condensed conversation history`,
+        }),
         steps: [],
         toolEvents: [],
         transcript: [],

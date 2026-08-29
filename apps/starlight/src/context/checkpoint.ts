@@ -3,9 +3,10 @@ import { z } from "zod";
 
 export namespace Checkpoint {
   const PROFILE_RETAINED_RUN_LIMIT = 8;
-  export const summaryInstructions = `Summarize the conversation history for future continuity.
-Preserve speaker attribution, current decisions, corrections, open questions, tool-derived facts, media facts, and unfinished work.
-Remove obsolete intermediate wording and repeated greetings. Do not invent facts.`;
+  export const summaryInstructions = `Summarize only the active conversation continuity needed after old turns are removed.
+Preserve unresolved user intent, constraints and referents, corrections, assistant commitments, open questions, and tool or media facts needed for unfinished work.
+Omit durable profile facts, trivia, resolved topics, obsolete intermediate wording, and repeated greetings unless they are necessary to understand active state. Long-term memory supplies durable facts separately.
+Return only the summary body. Do not include frozen-memory headings or wrapper text. Do not invent facts.`;
 
   // Contract for the summarizer output persisted on checkpoint attempts.
   export const Summary = z.object({ summary: z.string().min(1) });
