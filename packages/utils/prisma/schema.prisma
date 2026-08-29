@@ -367,9 +367,6 @@ model Message {
 
   // Relations
   chat        Chat         @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  attachments Attachment[]
-  parts       MessagePart[]
-
   @@id([messageId, chatId])
   @@index([chatId, date(sort: Desc)])
   @@index([fromId])
@@ -377,51 +374,6 @@ model Message {
   @@index([chatId, messageThreadId, messageId])
   @@index([chatId, messageId])
   @@map("messages")
-}
-
-/// @deprecated Unused. Long-term media ledger is `ConversationInput.mediaReferences` JSON + S3 (`telegram-media/<sha256>`).
-model MessagePart {
-  id String @id @default(uuid(7)) @db.Uuid
-
-  messageId Int    @map("message_id")
-  chatId    BigInt @map("chat_id")
-
-  type String
-
-  /// [MessagePartDataType]
-  data Json
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  message Message @relation(fields: [messageId, chatId], references: [messageId, chatId], onDelete: Cascade)
-
-  @@index([messageId, chatId])
-  @@index([chatId, type, createdAt(sort: Desc)])
-  @@map("message_parts")
-}
-
-/// @deprecated Unused. Long-term media ledger is `ConversationInput.mediaReferences` JSON + S3 (`telegram-media/<sha256>`).
-model Attachment {
-  id Int @id @default(autoincrement())
-
-  messageId Int    @map("message_id")
-  chatId    BigInt @map("chat_id")
-
-  attachmentType String  @map("attachment_type")
-  mimeType       String  @map("mime_type")
-  s3Path         String  @map("s3_path")
-  summary        String? @db.Text
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  message Message @relation(fields: [messageId, chatId], references: [messageId, chatId], onDelete: Cascade)
-
-  @@index([chatId, messageId])
-  @@index([attachmentType])
-  @@index([mimeType])
-  @@map("attachments")
 }
 
 model ConversationLane {

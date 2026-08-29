@@ -66,14 +66,6 @@ export const prisma = new PrismaClient({
     },
   },
   result: {
-    attachment: {
-      base64Data: {
-        needs: { id: true },
-        compute() {
-          return undefined as string | undefined;
-        },
-      },
-    },
     photo: {
       externalId: {
         needs: {
