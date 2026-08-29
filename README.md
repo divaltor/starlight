@@ -1,4 +1,4 @@
-# Starlight
+## Starlight
 
 Telegram bot that turns liked tweets into a searchable, self-hosted media library — collect, classify, and browse Twitter images with AI.
 
@@ -12,7 +12,7 @@ Telegram ─▶ apps/starlight (bot)          user chat, AI conversations, media
             PostgreSQL ◀── apps/web        TanStack Start UI to browse and search
 ```
 
-## Layers
+### Layers
 
 Each service has an `.env.example`; copy it to `.env` and fill in the secrets.
 
@@ -24,7 +24,7 @@ Each service has an `.env.example`; copy it to `.env` and fill in the secrets.
 
 Run any TypeScript app with `bun dev`; classification installs with `uv sync`.
 
-## How memory works
+### How memory works
 
 ```mermaid
 flowchart TB
@@ -43,7 +43,7 @@ One memory namespace per conversation (`assistantId:chatId:threadKey`). Raw tran
 
 The ML layer is optional: `classification` is a replaceable implementation of OpenAI-shaped embeddings and Cohere-shaped rerank, so any compatible service works. Non-secret Hindsight settings are inline in `docker-compose.yaml`; the root `.env` only holds compose-wide secrets.
 
-## Deployment
+### Deployment
 
 Copy `.env.example` files and generate secrets (`openssl rand -hex 32`). In a git clone, install hooks once with `bunx lefthook install`.
 
@@ -55,6 +55,6 @@ docker compose --env-file .env up -d
 
 Alternative deployment: Dokploy, Fly.io, Railway, or manual Docker.
 
-## License
+### License
 
 MIT
