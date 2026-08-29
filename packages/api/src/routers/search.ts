@@ -131,7 +131,10 @@ export const searchImages = maybeAuthProcedure
 			)`
       : Prisma.empty;
 
-    const images = await prisma.$queryRaw<SearchResult[]>(Prisma.sql`
+    const images = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true)`;
+
+      return tx.$queryRaw<SearchResult[]>(Prisma.sql`
 			WITH image_candidates AS (
 				SELECT p.id, p.user_id
 				FROM photos p
@@ -313,6 +316,7 @@ export const searchImages = maybeAuthProcedure
 			WHERE p.deleted_at IS NULL AND p.s3_path IS NOT NULL
 			ORDER BY paged_posts.final_score DESC NULLS LAST, paged_posts.tweet_id DESC, p.created_at DESC, p.id DESC
 		`);
+    });
 
     const page = paginateSearchResults(images, limit);
     const transformedResults = transformSearchResults(page.rows, context.config.baseCdnUrl);
