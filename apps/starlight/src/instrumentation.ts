@@ -12,6 +12,7 @@ import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
+import { heapSize, memoryUsage } from "bun:jsc";
 import { registerTelemetry } from "ai";
 import type { Context, MiddlewareFn } from "grammy";
 import type { LangfuseConfig, OtlpConfig } from "@/env";
@@ -78,6 +79,23 @@ export function initTelemetry(backends: TelemetryConfig): void {
       ],
     });
     metrics.setGlobalMeterProvider(meterProvider);
+    const memoryGauge = meterProvider
+      .getMeter(INSTRUMENTATION_NAME)
+      .createObservableGauge("process.runtime.bun.memory.usage", {
+        description: "Bun process memory by category",
+        unit: "By",
+      });
+    memoryGauge.addCallback((result) => {
+      const processMemory = process.memoryUsage();
+      const bunMemory = memoryUsage();
+      result.observe(processMemory.rss, { type: "rss" });
+      result.observe(processMemory.heapUsed, { type: "heap_used" });
+      result.observe(processMemory.heapTotal, { type: "heap_total" });
+      result.observe(processMemory.external, { type: "external" });
+      result.observe(processMemory.arrayBuffers, { type: "array_buffers" });
+      result.observe(heapSize(), { type: "jsc_heap" });
+      result.observe(bunMemory.currentCommit, { type: "mimalloc_committed" });
+    });
 
     logProvider = new LoggerProvider({
       resource,
