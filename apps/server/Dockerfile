@@ -9,7 +9,7 @@ ENV YOUTUBE_DL_SKIP_DOWNLOAD=true
 ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=true
 
 # For Prisma and the standalone yt-dlp download
-RUN apk add --no-cache openssl=3.5.7-r0 zlib=1.3.2-r0 curl=8.14.1-r3
+RUN apk add --no-cache openssl zlib curl
 
 # yt-dlp ships self-contained binaries, so no Python runtime is needed
 ARG TARGETARCH
