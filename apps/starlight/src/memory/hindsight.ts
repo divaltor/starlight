@@ -2,6 +2,18 @@ import { createClient, createConfig, HindsightClient, sdk } from "@vectorize-io/
 import type { MemoryItemInput, RecallResult } from "@vectorize-io/hindsight-client";
 import { Context, Effect, Layer, Schema } from "effect";
 
+/**
+ * Thin wrapper around the external Hindsight service (the "cloud brain").
+ *
+ *   Hindsight.retain  ──▶ "remember this transcript" (async op, polled
+ *                          every 2s, one retry on failure, 10min timeout)
+ *   Hindsight.recall  ──▶ "what do you remember about X?" → relevant facts
+ *
+ * Before either call, ensureBank lazily creates the conversation's memory
+ * bank with the retain mission ("extract durable facts, ignore greetings
+ * and banter"); it runs once per bank per process, deduplicated via an
+ * in-flight map so concurrent calls don't race.
+ */
 export namespace Hindsight {
   const LEGACY_PROFILE_ID = "profile";
   const OPERATION_POLL_INTERVAL_MS = 2000;

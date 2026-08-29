@@ -7,6 +7,51 @@ import { Hindsight } from "@/memory/hindsight";
 import { HindsightRetention } from "@/memory/hindsight-retention";
 import { Database } from "@/services/database";
 
+/**
+ * Long-term memory front door: records finalized conversation inputs as
+ * observations and recalls relevant facts from Hindsight into the prompt.
+ *
+ * The whole loop (see hindsight-retention.ts and hindsight.ts for details):
+ *
+ *   user message finalized
+ *           │
+ *           ▼
+ *   Memory.recordFinalized
+ *   (save observation row in Postgres, kind: fact | correction)
+ *           │
+ *           │  worker scans every 30s
+ *           ▼
+ *   processPending (hindsight-retention.ts)
+ *           │
+ *           ▼
+ *   Hindsight.retain ────────────▶  cloud brain
+ *           │  success only
+ *           ▼
+ *   retentionWatermark = observation #N   ◀── the bookmark
+ *
+ *   next run ──▶ Memory.recall: all bookmarks set? ──▶ Hindsight.recall
+ *
+ * The recall gate checks three bookmarks, all asking "has anything worth
+ * remembering actually landed yet?":
+ *
+ *   new run ──▶ recall
+ *                 │
+ *                 ├─ lane.activeContextId?          no ──▶ skip (no active context)
+ *                 │
+ *                 ├─ summaryThroughInputSequence?   no ──▶ skip (no checkpoint ever ran)
+ *                 │
+ *                 ├─ memoryNamespace exists?        no ──▶ skip (nothing ever finalized)
+ *                 │
+ *                 ├─ retentionWatermark?            no ──▶ skip (retain never succeeded)
+ *                 │
+ *                 └─ all yes ──▶ Hindsight.recall(query)
+ *
+ * The two bookmarks:
+ * - summaryThroughInputSequence (ConversationContext): highest input ID
+ *   covered by the checkpoint summary. null = never checkpointed.
+ * - retentionWatermark (MemoryNamespace): highest observation ID
+ *   successfully retained by Hindsight. null = retain never succeeded.
+ */
 export namespace Memory {
   const MAX_CONTEXT_MEMORY_CHARS = 3200;
   const RECALL_MAX_TOKENS = 800;

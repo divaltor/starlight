@@ -5,6 +5,38 @@ import type { Lane } from "@/conversation/lane";
 import { Hindsight } from "@/memory/hindsight";
 import { Database } from "@/services/database";
 
+/**
+ * Ships recorded observations from Postgres to Hindsight ("retain") and
+ * advances the retention watermark bookmark on success.
+ *
+ *   pending observations in Postgres
+ *           │
+ *           │  worker scans every 30s
+ *           ▼
+ *   ready when:  idleMs passed  OR  ≥ maxPendingChars  OR  correction arrived
+ *           │
+ *           ▼
+ *   processPending
+ *   (render full transcript, update_mode: "replace")
+ *           │
+ *           ▼
+ *   Hindsight.retain ────────────▶  cloud brain
+ *           │  success only
+ *           ▼
+ *   retentionWatermark = observation #N   ◀── the bookmark
+ *
+ * Triggers:
+ * - idleMs: the conversation has been quiet for that long (normal case).
+ * - maxPendingChars: pressure valve. A chat that never goes idle keeps
+ *   piling up un-retained text; once the summed text length of pending
+ *   observations crosses this threshold, retain immediately instead of
+ *   waiting (not per-run, a global worker trigger).
+ * - correction: a Telegram edited message (editDate set) invalidates facts
+ *   already shipped, so retain flushes right away rather than waiting.
+ *
+ * On failure nothing advances: the watermark only moves after a successful
+ * retain round-trip, so the next scan retries the same observations.
+ */
 export namespace HindsightRetention {
   const NAMESPACE_CONCURRENCY = 5;
   const RETENTION_RENDER_VERSION = "conversation-retention-v1";
