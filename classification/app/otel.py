@@ -38,7 +38,8 @@ def setup_otel(app: FastAPI) -> None:
         provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 
     trace.set_tracer_provider(provider)
-    FastAPIInstrumentor().instrument_app(app)
+    # exclude_spans drops the per-ASGI-event "http receive"/"http send" child spans
+    FastAPIInstrumentor().instrument_app(app, exclude_spans=['receive', 'send'])
     ThreadingInstrumentor().instrument()
     TransformersInstrumentor().instrument()
 
