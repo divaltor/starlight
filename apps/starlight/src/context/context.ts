@@ -432,7 +432,7 @@ export namespace ConversationContext {
         if (previous !== undefined) annotations.previousMessageCount = previous.messages.length;
         yield* (
           verdict.status === "changed"
-            ? Effect.logDebug("Prepared context prefix changed")
+            ? Effect.logWarning("Prepared context prefix changed")
             : Effect.logDebug("Prepared context prefix compared")
         ).pipe(Effect.annotateLogs(annotations));
         return outcome.prepared;
