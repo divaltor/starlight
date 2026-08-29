@@ -21,7 +21,7 @@ groupChat
 groupChat
   .on("edited_message")
   .filter(hasAdmittableEditedContent)
-  .use((ctx) => admitMessage(ctx, ctx.editedMessage, isAddressedToBot(ctx, ctx.editedMessage)));
+  .use((ctx) => admitMessage(ctx, ctx.editedMessage, false));
 privateChat
   .on("message")
   .filter(hasAdmittableContent)
@@ -29,7 +29,7 @@ privateChat
 privateChat
   .on("edited_message")
   .filter(hasAdmittableEditedContent)
-  .use((ctx) => admitMessage(ctx, ctx.editedMessage, true));
+  .use((ctx) => admitMessage(ctx, ctx.editedMessage, false));
 
 export default composer;
 
