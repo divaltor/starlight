@@ -112,8 +112,7 @@ const infrastructure = Layer.provide(
       telegramApi: fileApi,
     }),
     Conversation.optionsLayer({
-      contextCompactionBufferTokens: env.CONTEXT_COMPACTION_BUFFER_TOKENS,
-      contextHardTokenCap: env.CONTEXT_HARD_TOKEN_CAP,
+      contextCompactionTriggerTokens: env.CONTEXT_COMPACTION_TRIGGER_TOKENS,
       contextRetainedTokenTarget: env.CONTEXT_RETAINED_TOKEN_TARGET,
       leaseMs: env.CONVERSATION_LANE_LEASE_MS,
       maxWaitMs: env.CONVERSATION_BATCH_MAX_WAIT_MS,

@@ -33,10 +33,8 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       MEMORY_RETENTION_IDLE_MS: z.coerce.number().int().positive().default(900_000),
       MEMORY_RETENTION_MAX_PENDING_CHARS: z.coerce.number().int().positive().default(8000),
 
-      // Checkpoint before model invocation, then reject the request if it still reaches this limit.
-      CONTEXT_HARD_TOKEN_CAP: z.coerce.number().int().positive().default(48_000),
-      // Reserve room below the hard cap; compaction starts at hard cap minus this buffer.
-      CONTEXT_COMPACTION_BUFFER_TOKENS: z.coerce.number().int().positive().default(20_000),
+      // Reject/compact a prepared request once it exceeds this size; keep reply headroom below the model limit.
+      CONTEXT_COMPACTION_TRIGGER_TOKENS: z.coerce.number().int().positive().default(28_000),
       // Amount of recent and relevant context a checkpoint aims to preserve.
       CONTEXT_RETAINED_TOKEN_TARGET: z.coerce.number().int().positive().default(6000),
 

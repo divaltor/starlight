@@ -973,7 +973,7 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
   };
   const runtime = ManagedRuntime.make(
     testLayer(databaseUrl!, model, delivery, {
-      contextHardTokenCap: 22_000,
+      contextCompactionTriggerTokens: 2000,
     }),
   );
   const assistantId = 8_000_000_098;
@@ -1453,8 +1453,7 @@ function testLayer(
     }),
     Layer.succeed(Memory.Service)(memory),
     Conversation.optionsLayer({
-      contextCompactionBufferTokens: 20_000,
-      contextHardTokenCap: 900_000,
+      contextCompactionTriggerTokens: 880_000,
       contextRetainedTokenTarget: 8000,
       leaseMs: 180_000,
       maxWaitMs: 3000,

@@ -71,8 +71,7 @@ export namespace Conversation {
   export class Service extends Context.Service<Service, Interface>()("starlight/Conversation") {}
 
   export interface Options {
-    readonly contextCompactionBufferTokens: number;
-    readonly contextHardTokenCap: number;
+    readonly contextCompactionTriggerTokens: number;
     readonly contextRetainedTokenTarget: number;
     readonly leaseMs: number;
     readonly maxWaitMs: number;
@@ -1184,13 +1183,7 @@ export namespace Conversation {
       new ConversationError({ cause, message, retryable: true });
 
   function exceedsUsableContext(request: ConversationContext.PreparedContextRequest, options: Options) {
-    return (
-      request.estimatedTokens >
-      Math.max(
-        0,
-        options.contextHardTokenCap - Math.max(ChatReply.maxOutputTokens, options.contextCompactionBufferTokens),
-      )
-    );
+    return request.estimatedTokens > options.contextCompactionTriggerTokens;
   }
 
   function domainFailed(
