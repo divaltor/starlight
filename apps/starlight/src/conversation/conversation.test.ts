@@ -1453,6 +1453,7 @@ function testLayer(
     }),
     Layer.succeed(Memory.Service)(memory),
     Conversation.optionsLayer({
+      contextCompactionBufferTokens: 20_000,
       contextHardTokenCap: 900_000,
       contextRetainedTokenTarget: 8000,
       leaseMs: 180_000,

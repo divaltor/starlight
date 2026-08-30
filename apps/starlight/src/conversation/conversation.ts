@@ -21,7 +21,6 @@ export namespace Conversation {
   const MAX_DELIVERY_ATTEMPTS = 5;
   const MAX_MODEL_ATTEMPTS = 5;
   const MAX_MEMORY_QUERY_CHARS = 4000;
-  const CONTEXT_COMPACTION_BUFFER_TOKENS = 20_000;
   const OVERSIZED_INPUT_ERROR_TAG = "oversized-input";
   const ALBUM_SETTLE_MS = 35_000;
 
@@ -72,6 +71,7 @@ export namespace Conversation {
   export class Service extends Context.Service<Service, Interface>()("starlight/Conversation") {}
 
   export interface Options {
+    readonly contextCompactionBufferTokens: number;
     readonly contextHardTokenCap: number;
     readonly contextRetainedTokenTarget: number;
     readonly leaseMs: number;
@@ -1186,7 +1186,10 @@ export namespace Conversation {
   function exceedsUsableContext(request: ConversationContext.PreparedContextRequest, options: Options) {
     return (
       request.estimatedTokens >
-      Math.max(0, options.contextHardTokenCap - Math.max(ChatReply.maxOutputTokens, CONTEXT_COMPACTION_BUFFER_TOKENS))
+      Math.max(
+        0,
+        options.contextHardTokenCap - Math.max(ChatReply.maxOutputTokens, options.contextCompactionBufferTokens),
+      )
     );
   }
 
