@@ -56,7 +56,8 @@ async function admitMessage(ctx: Context, message: Message, addressed: boolean) 
           key: {
             assistantId: ctx.me.id,
             chatId: ctx.chat!.id,
-            threadKey: message.message_thread_id ?? 0,
+            // Only forum topics open a distinct lane; ordinary reply threads stay in the chat lane.
+            threadKey: message.is_topic_message === true ? (message.message_thread_id ?? 0) : 0,
           },
           payload: {
             addressed,
