@@ -42,6 +42,7 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       // oxlint-disable-next-line sonarjs/no-clear-text-protocols
       HINDSIGHT_BASE_URL: z.url().default("http://hindsight:8888"),
       HINDSIGHT_API_KEY: z.string(),
+      HINDSIGHT_RECALL_MAX_QUERY_TOKENS: z.coerce.number().int().positive().default(800),
 
       OPENROUTER_API_KEY: z.string().trim().min(1),
 

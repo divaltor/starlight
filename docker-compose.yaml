@@ -53,6 +53,7 @@ services:
       - apps/starlight/.env
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      HINDSIGHT_RECALL_MAX_QUERY_TOKENS: ${HINDSIGHT_RECALL_MAX_QUERY_TOKENS:-800}
       REDIS_URL: redis://:${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}@valkey:6379
     depends_on:
       valkey:
@@ -116,7 +117,7 @@ services:
       HINDSIGHT_API_WORKER_ID: hindsight
       HINDSIGHT_API_STORE_DOCUMENT_TEXT: "false"
       HINDSIGHT_API_ENABLE_AUTO_CONSOLIDATION: "false"
-      HINDSIGHT_API_RECALL_MAX_QUERY_TOKENS: "800"
+      HINDSIGHT_API_RECALL_MAX_QUERY_TOKENS: ${HINDSIGHT_RECALL_MAX_QUERY_TOKENS:-800}
       HINDSIGHT_API_RETAIN_CHUNK_SIZE: "12000"
       HINDSIGHT_API_RETAIN_STRUCTURED_CHUNK_SIZE: "12000"
       HINDSIGHT_API_TENANT_EXTENSION: hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension

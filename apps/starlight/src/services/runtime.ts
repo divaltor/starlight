@@ -117,6 +117,7 @@ const infrastructure = Layer.provide(
       leaseMs: env.CONVERSATION_LANE_LEASE_MS,
       maxWaitMs: env.CONVERSATION_BATCH_MAX_WAIT_MS,
       quietMs: env.CONVERSATION_BATCH_QUIET_MS,
+      recallMaxQueryTokens: env.HINDSIGHT_RECALL_MAX_QUERY_TOKENS,
     }),
   ),
   FetchHttpClient.layer,

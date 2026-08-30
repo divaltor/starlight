@@ -12,6 +12,7 @@ import { PreparedRequestSchema, PreparedToolProfileSchema } from "@/conversation
 import type { InputPayload } from "@/conversation/run-artifacts";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { Memory } from "@/memory/memory";
+import { RecallQuery } from "@/memory/recall-query";
 import { Database } from "@/services/database";
 import { context, propagation } from "@opentelemetry/api";
 
@@ -75,6 +76,7 @@ export namespace Conversation {
     readonly leaseMs: number;
     readonly maxWaitMs: number;
     readonly quietMs: number;
+    readonly recallMaxQueryTokens: number;
   }
 
   export const layer = Layer.effect(
@@ -409,12 +411,9 @@ export namespace Conversation {
           yield* persistGeneration(claimed, invocation.generated);
           yield* dispatchRun(claimed);
           return yield* finalizeClaimed(claimed);
-        }).pipe(Effect.tapError(() => expireLease(claimed)));
-        return yield* Effect.scoped(
-          Effect.gen(function* drainWithLeaseHeartbeat() {
-            yield* maintainLease(claimed).pipe(Effect.forkScoped);
-            return yield* claimedDrain;
-          }),
+        });
+        return yield* Effect.raceFirst(claimedDrain, maintainLease(claimed)).pipe(
+          Effect.tapError(() => expireLease(claimed)),
         );
       });
 
@@ -431,15 +430,17 @@ export namespace Conversation {
             }),
           )
           .pipe(
-            Effect.flatMap((result) => (result.count === 1 ? Effect.void : Effect.interrupt)),
-            Effect.catch((error) =>
-              Effect.logError("Failed to renew conversation lease").pipe(
-                Effect.annotateLogs({ errorTag: error._tag, runId: claimed.runId }),
-              ),
+            Effect.mapError(failed("Failed to renew conversation lease")),
+            Effect.flatMap((result) =>
+              result.count === 1
+                ? Effect.void
+                : Effect.fail(
+                    new ConversationError({ message: "Conversation lease ownership was lost", retryable: true }),
+                  ),
             ),
             Effect.delay(Duration.millis(Math.floor(options.leaseMs / 3))),
           );
-        yield* Effect.forever(renew);
+        return yield* Effect.forever(renew);
       });
 
       const finalizeClaimed = Effect.fn("Conversation.finalizeClaimed")(function* finalizeClaimed(claimed: ClaimedRun) {
@@ -613,16 +614,7 @@ export namespace Conversation {
               ? yield* memory
                   .recall({
                     key: claimed.dbKey,
-                    query:
-                      payloads
-                        .map(
-                          (payload) =>
-                            `${payload.senderFirstName}: ${payload.text}${
-                              payload.repliedText === null ? "" : `\nReplied to: ${payload.repliedText}`
-                            }`,
-                        )
-                        .join("\n")
-                        .trim() || "Relevant context for the current conversation",
+                    query: RecallQuery.build({ inputs: payloads, maxTokens: options.recallMaxQueryTokens }),
                   })
                   .pipe(Effect.mapError(domainFailed))
               : null;

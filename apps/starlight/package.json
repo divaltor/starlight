@@ -37,6 +37,7 @@
     "ai": "7.0.83",
     "bullmq": "6.3.1",
     "effect": "4.0.0-rc.112",
+    "gpt-tokenizer": "4.0.0",
     "grammy": "catalog:",
     "zod": "catalog:"
   },

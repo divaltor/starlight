@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "@starlight/utils/generated/prisma/client";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Deferred, Effect, Fiber, Layer, ManagedRuntime } from "effect";
+import { TestClock } from "effect/testing";
 import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
@@ -575,6 +576,104 @@ test.skipIf(!databaseUrl)("permanent recall rejection blocks only its run and re
     expect(state.runs.map((run) => run.status)).toEqual(["blocked", "finalized"]);
     expect(state.lane.activeRunId).toBeNull();
     expect(state.lane.processedRevision).toBe(2);
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
+test.skipIf(!databaseUrl)("lease ownership loss interrupts active model work", async () => {
+  const modelStarted = Deferred.makeUnsafe<true>();
+  const modelInterrupted = Deferred.makeUnsafe<true>();
+  const model: Model.Interface = {
+    generate: () =>
+      Deferred.succeed(modelStarted, true).pipe(
+        Effect.andThen(Effect.never),
+        Effect.onInterrupt(() => Deferred.succeed(modelInterrupted, true).pipe(Effect.asVoid)),
+      ),
+  };
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, unavailableDelivery, { leaseMs: 3000 }));
+  const assistantId = 8_000_000_107;
+  const chatId = -8_000_000_107;
+  const key = { assistantId, chatId, threadKey: 0 };
+
+  try {
+    const result = await runtime.runPromise(
+      Effect.gen(function* loseLeaseOwnership() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* conversation.admit({
+          chatTitle: "Lease ownership test",
+          chatType: "supergroup",
+          chatUsername: null,
+          key,
+          payload: {
+            addressed: true,
+            date: 1_700_000_000,
+            editDate: null,
+            forwardOrigin: null,
+            media: [],
+            mediaGroupId: null,
+            messageId: 108,
+            repliedMedia: [],
+            repliedText: null,
+            replyToMessageId: null,
+            senderFirstName: "Alice",
+            senderId: 42,
+            senderUsername: "alice",
+            text: "Wait for the model",
+          },
+          updateId: 208,
+        });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+
+        const drain = yield* Effect.forkChild(conversation.drain({ key }).pipe(Effect.flip));
+        yield* Deferred.await(modelStarted);
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { fencingToken: { increment: 1 } },
+          }),
+        );
+        yield* TestClock.adjust("1 second");
+        return {
+          error: yield* Fiber.join(drain),
+          modelInterrupted: yield* Deferred.isDone(modelInterrupted),
+        };
+      }).pipe(Effect.provide(TestClock.layer())),
+    );
+
+    expect(result.error).toMatchObject({
+      message: "Conversation lease ownership was lost",
+      retryable: true,
+    });
+    expect(result.modelInterrupted).toBe(true);
   } finally {
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
@@ -1731,6 +1830,7 @@ function testLayer(
       leaseMs: 180_000,
       maxWaitMs: 3000,
       quietMs: 1000,
+      recallMaxQueryTokens: 800,
       ...optionOverrides,
     }),
   );
