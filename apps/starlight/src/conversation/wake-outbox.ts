@@ -48,7 +48,10 @@ export namespace WakeOutbox {
           .query((client) =>
             client.conversationWakeOutbox.findMany({
               where: {
-                publishedAt: { lt: new Date(now.getTime() - STRANDED_WAKE_MS) },
+                OR: [
+                  { publishedAt: { lt: new Date(now.getTime() - STRANDED_WAKE_MS) } },
+                  { lane: { activeRunId: { not: null }, leaseUntil: { lte: now } } },
+                ],
               },
               include: { lane: true },
               take: limit,

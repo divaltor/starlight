@@ -105,23 +105,25 @@ export namespace WakeQueue {
     ).pipe(Layer.provide(BunRedis.layer({ url: redisUrl })));
   }
 
-  export function workerLayer(
-    redisUrl: string,
-    prefix: string,
-  ): Layer.Layer<never, WorkerStartupError, Conversation.Service> {
+  export function workerLayer(options: {
+    readonly laneLeaseMs: number;
+    readonly prefix: string;
+    readonly redisUrl: string;
+  }): Layer.Layer<never, WorkerStartupError, Conversation.Service> {
     return Layer.effectDiscard(
       Effect.gen(function* makeWorker() {
         const conversation = yield* Conversation.Service;
         const runPromise: typeof Effect.runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const redis = yield* BunRedis.BunRedis;
         const worker = new Worker<JobData>(
-          `${prefix}-lane-wake`,
+          `${options.prefix}-lane-wake`,
           (job, _token, signal) =>
             processJob(conversation, Schema.decodeUnknownSync(JobData)(job.data), runPromise, signal),
           {
             connection: createBunRedisClient(redis.client),
             concurrency: 10,
-            lockDuration: 240_000,
+            lockDuration: options.laneLeaseMs,
+            stalledInterval: Math.floor(options.laneLeaseMs / 3),
           },
         );
         worker.on("error", (error) => {
@@ -145,7 +147,7 @@ export namespace WakeQueue {
           ),
         );
       }),
-    ).pipe(Layer.provide(BunRedis.layer({ url: redisUrl })));
+    ).pipe(Layer.provide(BunRedis.layer({ url: options.redisUrl })));
   }
 
   function processJob(

@@ -133,7 +133,11 @@ const outbox = WakeOutbox.layer.pipe(Layer.provideMerge(infrastructure));
 const domain = Layer.mergeAll(infrastructure, memory, hindsightRetention, context, conversation, outbox);
 const background = Layer.mergeAll(
   WakeOutbox.publisherLayer,
-  WakeQueue.workerLayer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
+  WakeQueue.workerLayer({
+    laneLeaseMs: env.CONVERSATION_LANE_LEASE_MS,
+    prefix: env.CONVERSATION_QUEUE_PREFIX,
+    redisUrl: env.REDIS_URL,
+  }),
   HindsightRetention.workerLayer({
     idleMs: env.MEMORY_RETENTION_IDLE_MS,
     maxPendingChars: env.MEMORY_RETENTION_MAX_PENDING_CHARS,

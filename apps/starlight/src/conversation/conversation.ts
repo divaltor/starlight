@@ -270,7 +270,7 @@ export namespace Conversation {
         const claimed = yield* claimRun(input.key);
         if (claimed.kind !== "claimed") return { kind: claimed.kind };
 
-        return yield* Effect.gen(function* drainClaimed() {
+        const claimedDrain = Effect.gen(function* drainClaimed() {
           const chat = yield* database
             .query((client) =>
               client.chat.findUnique({
@@ -410,6 +410,36 @@ export namespace Conversation {
           yield* dispatchRun(claimed);
           return yield* finalizeClaimed(claimed);
         }).pipe(Effect.tapError(() => expireLease(claimed)));
+        return yield* Effect.scoped(
+          Effect.gen(function* drainWithLeaseHeartbeat() {
+            yield* maintainLease(claimed).pipe(Effect.forkScoped);
+            return yield* claimedDrain;
+          }),
+        );
+      });
+
+      const maintainLease = Effect.fn("Conversation.maintainLease")(function* maintainLease(claimed: ClaimedRun) {
+        const renew = database
+          .query((client) =>
+            client.conversationLane.updateMany({
+              where: {
+                ...claimed.dbKey,
+                activeRunId: claimed.runId,
+                fencingToken: claimed.fencingToken,
+              },
+              data: { leaseUntil: new Date(Date.now() + options.leaseMs) },
+            }),
+          )
+          .pipe(
+            Effect.flatMap((result) => (result.count === 1 ? Effect.void : Effect.interrupt)),
+            Effect.catch((error) =>
+              Effect.logError("Failed to renew conversation lease").pipe(
+                Effect.annotateLogs({ errorTag: error._tag, runId: claimed.runId }),
+              ),
+            ),
+            Effect.delay(Duration.millis(Math.floor(options.leaseMs / 3))),
+          );
+        yield* Effect.forever(renew);
       });
 
       const finalizeClaimed = Effect.fn("Conversation.finalizeClaimed")(function* finalizeClaimed(claimed: ClaimedRun) {
