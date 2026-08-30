@@ -10,8 +10,8 @@
     "test": "bun test src"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "2.0.39",
-    "@ai-sdk/otel": "1.0.83",
+    "@ai-sdk/mcp": "2.0.41",
+    "@ai-sdk/otel": "1.0.85",
     "@effect/opentelemetry": "4.0.0-rc.112",
     "@effect/platform-bun": "4.0.0-rc.112",
     "@grammyjs/auto-retry": "2.0.2",
@@ -34,8 +34,8 @@
     "@starlight/utils": "workspace:*",
     "@t3-oss/env-core": "0.13.11",
     "@vectorize-io/hindsight-client": "0.9.2",
-    "ai": "7.0.83",
-    "bullmq": "6.3.1",
+    "ai": "7.0.85",
+    "bullmq": "6.3.2",
     "effect": "4.0.0-rc.112",
     "gpt-tokenizer": "4.0.0",
     "grammy": "catalog:",
