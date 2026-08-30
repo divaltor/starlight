@@ -1,6 +1,6 @@
 import { createClient, createConfig, HindsightClient, sdk } from "@vectorize-io/hindsight-client";
 import type { MemoryItemInput, RecallResult } from "@vectorize-io/hindsight-client";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Schema } from "effect";
 
 /**
  * Thin wrapper around the external Hindsight service (the "cloud brain").
@@ -119,78 +119,127 @@ export namespace Hindsight {
 
     const retain = Effect.fn("Hindsight.retain")(function* retain(input: RetainInput) {
       yield* Effect.tryPromise({
-        try: async (signal) => {
-          await ensureBank(input.bankId, signal);
-          const submission = await client.retainBatch(input.bankId, [...input.items], {
+        try: (signal) => ensureBank(input.bankId, signal),
+        catch: (cause) => HindsightError.fromCause("Failed to initialize Hindsight bank", cause),
+      });
+      const submission = yield* Effect.tryPromise({
+        try: (signal) =>
+          client.retainBatch(input.bankId, [...input.items], {
             async: true,
             operationId: input.operationId,
-            signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
-          });
-          const operationIds =
-            submission.operation_ids ??
-            (submission.operation_id === null || submission.operation_id === undefined
-              ? []
-              : [submission.operation_id]);
-          if (operationIds.length === 0) throw new Error("Hindsight async retain returned no operation ID");
-          await Promise.all(operationIds.map((operationId) => waitForOperation(input.bankId, operationId, signal)));
-        },
+            signal,
+          }),
         catch: (cause) => HindsightError.fromCause("Failed to retain Hindsight memories", cause),
-      }).pipe(Effect.withSpan("Hindsight retain", { attributes: { "memory.item_count": input.items.length } }));
+      }).pipe(
+        Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
+        Effect.mapError(foldTimeout("Failed to retain Hindsight memories")),
+      );
+      const operationIds =
+        submission.operation_ids ??
+        (submission.operation_id === null || submission.operation_id === undefined ? [] : [submission.operation_id]);
+      if (operationIds.length === 0) {
+        return yield* Effect.fail(
+          HindsightError.fromCause("Hindsight async retain returned no operation ID", submission),
+        );
+      }
+      // oxlint-disable-next-line github/array-foreach -- Effect.forEach, not Array.prototype.forEach
+      yield* Effect.forEach(operationIds, (operationId) => waitForOperation(input.bankId, operationId), {
+        concurrency: "unbounded",
+        discard: true,
+      }).pipe(
+        Effect.timeout(Duration.millis(OPERATION_TIMEOUT_MS)),
+        Effect.mapError(foldTimeout("Hindsight retain timed out waiting for operations")),
+        Effect.withSpan("Hindsight retain", { attributes: { "memory.item_count": input.items.length } }),
+      );
     });
 
     const recall = Effect.fn("Hindsight.recall")(function* recall(input: RecallInput) {
-      return yield* Effect.tryPromise({
-        try: async (signal) => {
-          await ensureBank(input.bankId, signal);
-          const response = await client.recall(input.bankId, input.query, {
+      yield* Effect.tryPromise({
+        try: (signal) => ensureBank(input.bankId, signal),
+        catch: (cause) => HindsightError.fromCause("Failed to initialize Hindsight bank", cause),
+      });
+      const response = yield* Effect.tryPromise({
+        try: (signal) =>
+          client.recall(input.bankId, input.query, {
             budget: "low",
             includeEntities: false,
             maxTokens: input.maxTokens,
             preferObservations: false,
-            signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+            signal,
             types: ["world"],
-          });
-          return response.results;
-        },
+          }),
         catch: (cause) => HindsightError.fromCause("Failed to recall Hindsight memory", cause),
-      }).pipe(Effect.withSpan("Hindsight recall"));
+      }).pipe(
+        Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
+        Effect.mapError(foldTimeout("Failed to recall Hindsight memory")),
+        Effect.withSpan("Hindsight recall"),
+      );
+      return response.results;
     });
 
-    async function waitForOperation(bankId: string, operationId: string, signal: AbortSignal): Promise<void> {
-      const deadline = Date.now() + OPERATION_TIMEOUT_MS;
+    const waitForOperation = Effect.fn("Hindsight.waitForOperation")(function* waitForOperation(
+      bankId: string,
+      operationId: string,
+    ) {
       let retried = false;
       for (;;) {
-        const response = await sdk.getOperationStatus({
-          client: generatedClient,
-          path: { bank_id: bankId, operation_id: operationId },
-          signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
-        });
+        const response = yield* Effect.tryPromise({
+          try: (signal) =>
+            sdk.getOperationStatus({
+              client: generatedClient,
+              path: { bank_id: bankId, operation_id: operationId },
+              signal,
+            }),
+          catch: (cause) => HindsightError.fromCause(`Hindsight operation ${operationId} lookup failed`, cause),
+        }).pipe(
+          Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
+          Effect.mapError(foldTimeout(`Hindsight operation ${operationId} lookup failed`)),
+        );
         if (response.data === undefined) {
-          throw new Error(`Hindsight operation lookup failed: ${JSON.stringify(response.error)}`);
+          return yield* Effect.fail(
+            HindsightError.fromCause(`Hindsight operation ${operationId} lookup failed`, response.error),
+          );
         }
         // oxlint-disable-next-line prefer-destructuring -- project style keeps property access explicit
         const status = response.data.status;
         if (status === "completed") return;
         if (status === "failed" && !retried) {
-          const retry = await sdk.retryOperation({
-            client: generatedClient,
-            path: { bank_id: bankId, operation_id: operationId },
-            signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
-          });
+          const retry = yield* Effect.tryPromise({
+            try: (signal) =>
+              sdk.retryOperation({
+                client: generatedClient,
+                path: { bank_id: bankId, operation_id: operationId },
+                signal,
+              }),
+            catch: (cause) => HindsightError.fromCause(`Hindsight operation ${operationId} retry failed`, cause),
+          }).pipe(
+            Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
+            Effect.mapError(foldTimeout(`Hindsight operation ${operationId} retry failed`)),
+          );
           if (retry.data === undefined) {
-            throw new Error(`Hindsight operation retry failed: ${JSON.stringify(retry.error)}`);
+            return yield* Effect.fail(
+              HindsightError.fromCause(`Hindsight operation ${operationId} retry failed`, retry.error),
+            );
           }
           retried = true;
           continue;
         }
         if (["cancelled", "failed", "not_found"].includes(status)) {
-          throw new Error(`Hindsight operation ${operationId} ${status}: ${response.data.error_message}`);
+          return yield* Effect.fail(
+            HindsightError.fromCause(
+              `Hindsight operation ${operationId} ${status}: ${response.data.error_message}`,
+              response.data.error_message,
+            ),
+          );
         }
-        if (Date.now() >= deadline) throw new Error(`Hindsight operation ${operationId} timed out`);
-        await Bun.sleep(OPERATION_POLL_INTERVAL_MS);
+        yield* Effect.sleep(Duration.millis(OPERATION_POLL_INTERVAL_MS));
       }
-    }
+    });
 
     return { recall, retain };
+  }
+
+  function foldTimeout(message: string) {
+    return (cause: unknown) => (cause instanceof HindsightError ? cause : HindsightError.fromCause(message, cause));
   }
 }
