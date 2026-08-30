@@ -7,7 +7,7 @@ WORKDIR /code
 ENV NODE_ENV=production
 
 # For Prisma and build dependencies
-RUN apk add --no-cache openssl=3.5.7-r0 zlib=1.3.2-r0
+RUN apk add --no-cache openssl zlib
 
 COPY package.json bun.lock ./
 COPY apps/web/package.json ./apps/web/package.json
