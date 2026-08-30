@@ -183,7 +183,11 @@ export namespace Media {
     const download = Effect.fn("Media.download")(function* download(source: Source | Reference) {
       yield* Effect.annotateCurrentSpan({ "media.mime_type": source.mimeType, "media.type": source.type });
       const file = yield* Effect.tryPromise({
-        try: () => options.telegramApi.getFile(source.telegramFileId, AbortSignal.timeout(REQUEST_TIMEOUT_MS)),
+        try: (signal) =>
+          options.telegramApi.getFile(
+            source.telegramFileId,
+            AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+          ),
         catch: (cause) => new MediaError({ cause, message: DOWNLOAD_FAILED, retryable: true }),
       });
       const response = yield* client.execute(HttpClientRequest.get(file.getUrl())).pipe(
