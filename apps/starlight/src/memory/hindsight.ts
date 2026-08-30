@@ -41,9 +41,18 @@ export namespace Hindsight {
   export class HindsightError extends Schema.TaggedError<HindsightError>()("HindsightError", {
     cause: Schema.optional(Schema.Defect()),
     message: Schema.String,
+    retryable: Schema.Boolean,
   }) {
     static fromCause(message: string, cause: unknown) {
-      return new HindsightError({ cause, message });
+      const statusCode =
+        cause instanceof Error && "statusCode" in cause && typeof cause.statusCode === "number"
+          ? cause.statusCode
+          : undefined;
+      return new HindsightError({
+        cause,
+        message,
+        retryable: statusCode === undefined || statusCode === 408 || statusCode === 429 || statusCode >= 500,
+      });
     }
   }
 

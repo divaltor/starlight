@@ -20,7 +20,6 @@ export namespace Conversation {
   const MAX_ALBUM_MESSAGES = 10;
   const MAX_DELIVERY_ATTEMPTS = 5;
   const MAX_MODEL_ATTEMPTS = 5;
-  const MAX_MEMORY_QUERY_CHARS = 4000;
   const OVERSIZED_INPUT_ERROR_TAG = "oversized-input";
   const ALBUM_SETTLE_MS = 35_000;
 
@@ -323,6 +322,10 @@ export namespace Conversation {
             return { kind: "completed" as const, runId: claimed.runId };
           }
 
+          // Silent batches still belong in the transcript, but model-only preparation must
+          // not pin their lane and suppress a later message that explicitly addresses the bot.
+          if (!claimed.replyEligible) return yield* finalizeClaimed(claimed);
+
           const frozenProfile = Schema.decodeUnknownSync(PreparedToolProfileSchema)(claimed.preparedRequest);
           const transitioned = yield* blockOnPermanent(
             conversationContext.transitionProfile({
@@ -341,8 +344,13 @@ export namespace Conversation {
           if (transitioned.summarized) {
             yield* memory.flush(claimed.dbKey).pipe(Effect.mapError(domainFailed));
           }
-          const prepared = yield* prepareRun(claimed, frozenProfile);
-          if (!claimed.replyEligible) return yield* finalizeClaimed(claimed);
+          const prepared = yield* prepareRun(claimed, frozenProfile).pipe(
+            Effect.catch((error) =>
+              error.retryable
+                ? Effect.fail(error)
+                : blockRun(claimed, "memory-recall-failed", error.message).pipe(Effect.andThen(Effect.fail(error))),
+            ),
+          );
 
           let contextRequest = yield* blockOnPermanent(
             conversationContext.prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId }),
@@ -584,7 +592,7 @@ export namespace Conversation {
                             }`,
                         )
                         .join("\n")
-                        .slice(-MAX_MEMORY_QUERY_CHARS) || "Relevant context for the current conversation",
+                        .trim() || "Relevant context for the current conversation",
                   })
                   .pipe(Effect.mapError(domainFailed))
               : null;

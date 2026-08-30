@@ -313,6 +313,279 @@ test.skipIf(!databaseUrl)("reuses frozen recalled memory after a retryable model
   }
 });
 
+test.skipIf(!databaseUrl)("silent batches finalize without invoking mandatory memory recall", async () => {
+  let recallCount = 0;
+  const memory: Memory.Interface = {
+    flush: () => Effect.void,
+    recall: () => {
+      recallCount += 1;
+      return Effect.fail(new Memory.MemoryError({ message: "Recall unavailable", retryable: true }));
+    },
+  };
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, unavailableModel, unavailableDelivery, {}, memory));
+  const assistantId = 8_000_000_105;
+  const chatId = -8_000_000_105;
+  const key = { assistantId, chatId, threadKey: 0 };
+
+  try {
+    const result = await runtime.runPromise(
+      Effect.gen(function* run() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* conversation.admit({
+          chatTitle: "Silent batch test",
+          chatType: "supergroup",
+          chatUsername: null,
+          key,
+          payload: {
+            addressed: false,
+            date: 1_700_000_000,
+            editDate: null,
+            forwardOrigin: null,
+            media: [],
+            mediaGroupId: null,
+            messageId: 105,
+            repliedMedia: [],
+            repliedText: null,
+            replyToMessageId: null,
+            senderFirstName: "Alice",
+            senderId: 42,
+            senderUsername: "alice",
+            text: "Background chat",
+          },
+          updateId: 205,
+        });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+        return yield* conversation.drain({ key });
+      }),
+    );
+    const lane = await runtime.runPromise(
+      Effect.gen(function* inspect() {
+        const database = yield* Database.Service;
+        return yield* database.query((client) =>
+          client.conversationLane.findUniqueOrThrow({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+          }),
+        );
+      }),
+    );
+
+    expect(result.kind).toBe("completed");
+    expect(recallCount).toBe(0);
+    expect(lane.activeRunId).toBeNull();
+    expect(lane.processedRevision).toBe(1);
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
+test.skipIf(!databaseUrl)("permanent recall rejection blocks only its run and releases the successor", async () => {
+  let recallCount = 0;
+  const memory: Memory.Interface = {
+    flush: () => Effect.void,
+    recall: () => {
+      recallCount += 1;
+      return recallCount === 1
+        ? Effect.fail(new Memory.MemoryError({ message: "Recall rejected", retryable: false }))
+        : Effect.succeed({ contextMemory: null });
+    },
+  };
+  const model: Model.Interface = {
+    generate: <Output>() =>
+      Effect.succeed({
+        finishReason: "stop",
+        output: { replies: [{ replyTo: null, text: "Recovered", type: "text" }] } as Output,
+        steps: [],
+        toolEvents: [],
+        transcript: [],
+        usage: {
+          billing: {
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            costUsd: 0,
+            inputTokens: 10,
+            outputTokens: 2,
+            reasoningTokens: 0,
+          },
+          contextInputTokens: 10,
+          stepCount: 0,
+        },
+      }),
+  };
+  const delivered: TelegramDelivery.Action[] = [];
+  const delivery: TelegramDelivery.Interface = {
+    deliver: (input) => {
+      delivered.push(input.action);
+      return Effect.succeed({ telegramMessageId: 906 });
+    },
+    indicateTyping: () => Effect.void,
+  };
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery, {}, memory));
+  const assistantId = 8_000_000_106;
+  const chatId = -8_000_000_106;
+  const key = { assistantId, chatId, threadKey: 0 };
+
+  try {
+    await runtime.runPromise(
+      Effect.gen(function* admitFirst() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* conversation.admit({
+          chatTitle: "Permanent recall test",
+          chatType: "supergroup",
+          chatUsername: null,
+          key,
+          payload: {
+            addressed: true,
+            date: 1_700_000_000,
+            editDate: null,
+            forwardOrigin: null,
+            media: [],
+            mediaGroupId: null,
+            messageId: 106,
+            repliedMedia: [],
+            repliedText: null,
+            replyToMessageId: null,
+            senderFirstName: "Alice",
+            senderId: 42,
+            senderUsername: "alice",
+            text: "First request",
+          },
+          updateId: 206,
+        });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+      }),
+    );
+
+    await expect(
+      runtime.runPromise(
+        Effect.gen(function* rejectFirst() {
+          const conversation = yield* Conversation.Service;
+          return yield* conversation.drain({ key });
+        }),
+      ),
+    ).rejects.toMatchObject({ retryable: false });
+
+    await runtime.runPromise(
+      Effect.gen(function* admitSuccessor() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* conversation.admit({
+          chatTitle: "Permanent recall test",
+          chatType: "supergroup",
+          chatUsername: null,
+          key,
+          payload: {
+            addressed: true,
+            date: 1_700_000_001,
+            editDate: null,
+            forwardOrigin: null,
+            media: [],
+            mediaGroupId: null,
+            messageId: 107,
+            repliedMedia: [],
+            repliedText: null,
+            replyToMessageId: null,
+            senderFirstName: "Alice",
+            senderId: 42,
+            senderUsername: "alice",
+            text: "Second request",
+          },
+          updateId: 207,
+        });
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+        return yield* conversation.drain({ key });
+      }),
+    );
+    const state = await runtime.runPromise(
+      Effect.gen(function* inspect() {
+        const database = yield* Database.Service;
+        return yield* database.query(async (client) => ({
+          lane: await client.conversationLane.findUniqueOrThrow({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+          }),
+          runs: await client.conversationRun.findMany({
+            where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) },
+            orderBy: { createdAt: "asc" },
+          }),
+        }));
+      }),
+    );
+
+    expect(delivered).toEqual([{ replyTo: null, text: "Recovered", type: "text" }]);
+    expect(state.runs.map((run) => run.status)).toEqual(["blocked", "finalized"]);
+    expect(state.lane.activeRunId).toBeNull();
+    expect(state.lane.processedRevision).toBe(2);
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
 test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating the model output", async () => {
   const model: Model.Interface = {
     generate: <Output>() =>

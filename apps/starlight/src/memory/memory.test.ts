@@ -10,6 +10,24 @@ import { Database } from "@/services/database";
 
 const databaseUrl = process.env.DATABASE_URL;
 
+test("classifies deterministic Hindsight rejections as permanent", () => {
+  const error = Hindsight.HindsightError.fromCause(
+    "Recall rejected",
+    Object.assign(new Error("Bad request"), { statusCode: 400 }),
+  );
+
+  expect(error.retryable).toBe(false);
+});
+
+test("classifies Hindsight throttling as retryable", () => {
+  const error = Hindsight.HindsightError.fromCause(
+    "Recall throttled",
+    Object.assign(new Error("Too many requests"), { statusCode: 429 }),
+  );
+
+  expect(error.retryable).toBe(true);
+});
+
 test.skipIf(!databaseUrl)("recalls only the current conversation bank", async () => {
   const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl! }) });
   const assistantId = 8_100_000_101n;
@@ -74,6 +92,79 @@ test.skipIf(!databaseUrl)("recalls only the current conversation bank", async ()
 
     expect(recalledBankIds).toEqual([ownerKey]);
     expect(recalled.contextMemory).toContain("Alice chose Postgres");
+  } finally {
+    await runtime.dispose();
+    await client.memoryNamespace.deleteMany({ where: { ownerKey } });
+    await client.conversationLane.deleteMany({ where: { assistantId, chatId, threadKey } });
+    await client.chat.deleteMany({ where: { id: chatId } });
+    await client.$disconnect();
+  }
+});
+
+test.skipIf(!databaseUrl)("propagates permanent Hindsight recall failures", async () => {
+  const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl! }) });
+  const assistantId = 8_100_000_102n;
+  const chatId = -8_100_000_102n;
+  const threadKey = 18;
+  const ownerKey = `conversation:${assistantId}:${chatId}:${threadKey}`;
+  const databaseLayer = Database.layer(databaseUrl!);
+  const hindsightLayer = Layer.succeed(Hindsight.Service)({
+    recall: () =>
+      Effect.fail(
+        Hindsight.HindsightError.fromCause(
+          "Recall rejected",
+          Object.assign(new Error("Bad request"), { statusCode: 400 }),
+        ),
+      ),
+    retain: () => Effect.void,
+  });
+  const retentionLayer = Layer.succeed(HindsightRetention.Service)({
+    flush: () => Effect.void,
+    retainPending: () => Effect.succeed(null),
+  });
+  const runtime = ManagedRuntime.make(
+    Memory.layer.pipe(Layer.provide(Layer.mergeAll(databaseLayer, hindsightLayer, retentionLayer))),
+  );
+
+  try {
+    await client.chat.create({ data: { id: chatId } });
+    await client.conversationLane.create({ data: { assistantId, chatId, threadKey } });
+    const context = await client.conversationContext.create({
+      data: {
+        assistantId,
+        chatId,
+        generation: 0,
+        modelProfileFingerprint: Prompt.profileFingerprint([]),
+        summaryThroughInputSequence: 1n,
+        threadKey,
+        ...Prompt.stableSeed(Prompt.renderEnvelope({ toolProfile: [] }), ""),
+      },
+    });
+    await client.conversationLane.update({
+      where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey } },
+      data: { activeContextId: context.id },
+    });
+    await client.memoryNamespace.create({
+      data: {
+        chatId,
+        kind: "topic",
+        ownerKey,
+        retentionWatermark: 1n,
+        threadKey,
+      },
+    });
+
+    await expect(
+      runtime.runPromise(
+        Effect.gen(function* recallMemory() {
+          const memory = yield* Memory.Service;
+          return yield* memory.recall({
+            key: { assistantId, chatId, threadKey },
+            query: "What should Alice remember?",
+          });
+        }),
+      ),
+    ).rejects.toMatchObject({ retryable: false });
   } finally {
     await runtime.dispose();
     await client.memoryNamespace.deleteMany({ where: { ownerKey } });

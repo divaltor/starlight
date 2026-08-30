@@ -115,7 +115,16 @@ export namespace Memory {
 
           const results = yield* hindsight
             .recall({ bankId: namespace.ownerKey, maxTokens: RECALL_MAX_TOKENS, query: input.query })
-            .pipe(Effect.mapError(failed("Failed to recall Hindsight memory")));
+            .pipe(
+              Effect.mapError(
+                (error) =>
+                  new MemoryError({
+                    cause: error,
+                    message: "Failed to recall Hindsight memory",
+                    retryable: error.retryable,
+                  }),
+              ),
+            );
           const seen = new Set<string>();
           const lines: string[] = [];
           for (const result of results) {
