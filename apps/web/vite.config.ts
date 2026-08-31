@@ -22,9 +22,7 @@ export default defineConfig({
     viteReact({ compiler: true }),
   ],
   ssr: {
-    // Bundle lucide-react into the server build so only used icons ship,
-    // instead of the whole CJS package being copied verbatim.
-    noExternal: ["lucide-react"],
+    noExternal: ["@hugeicons/react"],
   },
   resolve: { tsconfigPaths: true },
   server: { allowedHosts: true },

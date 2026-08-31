@@ -1,7 +1,8 @@
 import type { TweetData } from "@starlight/api/types/tweets";
+import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
 import { useEffect, useState, lazy, Suspense, useMemo } from "react";
@@ -162,7 +163,7 @@ export default function DiscoverPage() {
                           {isLoading ? (
                             <span className="loading loading-spinner size-4" />
                           ) : (
-                            <Search className="size-4" />
+                            <HugeiconsIcon className="size-4" icon={Search01Icon} />
                           )}
                           <span className="hidden sm:inline">Search</span>
                         </Button>
@@ -235,7 +236,11 @@ export default function DiscoverPage() {
                   disabled={isLoading}
                   type="submit"
                 >
-                  {isLoading ? <span className="loading loading-spinner size-4" /> : <Search className="size-4" />}
+                  {isLoading ? (
+                    <span className="loading loading-spinner size-4" />
+                  ) : (
+                    <HugeiconsIcon className="size-4" icon={Search01Icon} />
+                  )}
                   <span className="hidden sm:inline">Search</span>
                 </Button>
               </div>

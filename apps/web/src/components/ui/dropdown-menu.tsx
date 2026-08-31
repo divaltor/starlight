@@ -1,4 +1,7 @@
-import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
+import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
+import CircleIcon from "@hugeicons/core-free-icons/CircleIcon";
+import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
+import { HugeiconsIcon } from "@hugeicons/react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Button } from "react-aria-components/Button";
@@ -84,7 +87,7 @@ function DropdownMenuCheckboxItem({
       {...props}
     >
       <span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">
-        {checked && <CheckIcon className="size-4" />}
+        {checked && <HugeiconsIcon className="size-4" icon={Tick02Icon} />}
       </span>
       {children}
     </MenuItem>
@@ -116,7 +119,7 @@ function DropdownMenuRadioItem({
       {...props}
     >
       <span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">
-        {selected && <CircleIcon className="size-3 fill-current" />}
+        {selected && <HugeiconsIcon className="size-3 fill-current" icon={CircleIcon} />}
       </span>
       {children}
     </MenuItem>
@@ -179,7 +182,7 @@ function DropdownMenuSubTrigger({
       {...props}
     >
       {children}
-      <ChevronRightIcon className="ml-auto size-4" />
+      <HugeiconsIcon className="ml-auto size-4" icon={ArrowRight01Icon} />
     </MenuItem>
   );
 }

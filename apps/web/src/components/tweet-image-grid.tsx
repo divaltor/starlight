@@ -1,5 +1,6 @@
 import type { TweetData } from "@starlight/api/types/tweets";
-import { X } from "lucide-react";
+import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
+import { HugeiconsIcon } from "@hugeicons/react";
 import type { UIElementData } from "photoswipe";
 import type { PhotoSwipe } from "photoswipe/lightbox";
 import { useState } from "react";
@@ -165,7 +166,7 @@ export function TweetImageGrid({
                         size="sm"
                         variant="ghost"
                       >
-                        <X className="size-3" />
+                        <HugeiconsIcon className="size-3" icon={Cancel01Icon} />
                       </Button>
                     )}
                   </div>
@@ -268,7 +269,7 @@ export function TweetImageGrid({
                           size="sm"
                           variant="ghost"
                         >
-                          <X className="size-3" />
+                          <HugeiconsIcon className="size-3" icon={Cancel01Icon} />
                         </Button>
                       )}
                     </div>

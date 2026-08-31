@@ -1,8 +1,10 @@
 import type { ProfileResult } from "@starlight/api/routers/index";
 import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
+import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
+import TriangleAlertIcon from "@hugeicons/core-free-icons/TriangleAlertIcon";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, Search } from "lucide-react";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
 import { useEffect, useState, lazy, Suspense } from "react";
@@ -132,7 +134,7 @@ function TwitterArtViewer() {
       <div className="flex min-h-dvh items-center justify-center">
         <NotFound
           description="An error occurred while loading tweets. Please try again later."
-          icon={<AlertTriangle className="size-10 text-base-content/20" />}
+          icon={<HugeiconsIcon className="size-10 text-base-content/20" icon={TriangleAlertIcon} />}
           title="Failed to load tweets (｡•́︿•̀｡)"
         />
       </div>
@@ -203,7 +205,11 @@ function TwitterArtViewer() {
                 disabled={displayLoading}
                 type="submit"
               >
-                {displayLoading ? <span className="loading loading-spinner size-4" /> : <Search className="size-4" />}
+                {displayLoading ? (
+                  <span className="loading loading-spinner size-4" />
+                ) : (
+                  <HugeiconsIcon className="size-4" icon={Search01Icon} />
+                )}
                 <span className="hidden sm:inline">Search</span>
               </Button>
             </div>

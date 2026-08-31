@@ -1,4 +1,5 @@
-import { X } from "lucide-react";
+import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
+import { HugeiconsIcon } from "@hugeicons/react";
 import type * as React from "react";
 import { Button as AriaButton } from "react-aria-components/Button";
 import type { DialogProps } from "react-aria-components/Dialog";
@@ -38,7 +39,7 @@ function DialogContent({ className, children, showCloseButton = true, ...props }
             className={cn("btn btn-circle btn-ghost btn-sm absolute top-2 right-2 [&>svg]:h-4 [&>svg]:w-4")}
             slot="close"
           >
-            <X />
+            <HugeiconsIcon icon={Cancel01Icon} />
             <span className="sr-only">Close</span>
           </AriaButton>
         )}

@@ -1,7 +1,10 @@
 import type { ProfileResult } from "@starlight/api/routers/index";
+import AlertCircleIcon from "@hugeicons/core-free-icons/AlertCircleIcon";
+import CookieIcon from "@hugeicons/core-free-icons/CookieIcon";
+import Delete02Icon from "@hugeicons/core-free-icons/Delete02Icon";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertCircle, Cookie, Trash2 } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -177,7 +180,7 @@ function SettingsLoadError({ onRetry }: { onRetry: () => void }) {
       <Card>
         <CardContent className="py-8">
           <Alert variant="destructive">
-            <AlertCircle className="size-4" />
+            <HugeiconsIcon className="size-4" icon={AlertCircleIcon} />
             <AlertTitle>Failed to load settings</AlertTitle>
             <div className="mt-2">
               <Button onClick={onRetry} size="sm" variant="outline">
@@ -221,17 +224,17 @@ function CookiesSection({
       {/* Cookie Success/Error Messages */}
       {cookieError && (
         <Alert variant="destructive">
-          <AlertCircle className="size-4" />
+          <HugeiconsIcon className="size-4" icon={AlertCircleIcon} />
           <span>{cookieError.message}</span>
         </Alert>
       )}
       {profile?.hasValidCookies ? (
         <Alert className="alert-horizontal">
-          <Cookie className="size-4 shrink-0" />
+          <HugeiconsIcon className="size-4 shrink-0" icon={CookieIcon} />
           <span>Authentication cookies are saved.</span>
           <div>
             <Button disabled={isSubmitting} isSoft={true} onClick={onDelete} size="sm" variant="destructive">
-              <Trash2 className="size-4" /> Remove
+              <HugeiconsIcon className="size-4" icon={Delete02Icon} /> Remove
             </Button>
           </div>
         </Alert>
@@ -239,7 +242,7 @@ function CookiesSection({
         <div className="space-y-4">
           {!profile?.hasValidCookies && (
             <Alert variant="default">
-              <AlertCircle className="size-4" />
+              <HugeiconsIcon className="size-4" icon={AlertCircleIcon} />
               <AlertDescription>Connect your Twitter account by adding authentication cookies</AlertDescription>
             </Alert>
           )}

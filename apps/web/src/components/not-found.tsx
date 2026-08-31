@@ -1,4 +1,5 @@
-import { Ghost } from "lucide-react";
+import GhostIcon from "@hugeicons/core-free-icons/GhostIcon";
+import { HugeiconsIcon } from "@hugeicons/react";
 import type { ComponentProps, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -31,7 +32,7 @@ export function NotFound({
     <div className={`flex h-full items-center justify-center p-4 ${className}`}>
       <div className="mx-auto max-w-lg text-center">
         <div className="mb-6 inline-flex size-20 items-center justify-center rounded-full bg-base-200">
-          {icon ?? <Ghost className="size-10 text-base-content/20" />}
+          {icon ?? <HugeiconsIcon className="size-10 text-base-content/20" icon={GhostIcon} />}
         </div>
         <h1 className="font-semibold text-3xl text-base-content">{title}</h1>
         {description && <p className="mt-3 text-base-content/60">{description}</p>}
