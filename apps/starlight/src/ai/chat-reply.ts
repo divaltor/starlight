@@ -16,16 +16,16 @@ export namespace ChatReply {
   const reactionEmojiSchema = z.enum(TelegramDelivery.reactionEmojis);
 
   export const actionSchema = z.union([
-    z.object({ type: z.literal("ignore").describe("Stay silent") }),
+    z.object({ type: z.enum(["ignore"]).describe("Stay silent") }),
     z.object({
       replyTo: z.number().int().nullable().optional().describe("LIVE MESSAGE ID to reply to, or null"),
       text: z.string().min(1).describe("Plain-text Telegram reply without Markdown"),
-      type: z.literal("text"),
+      type: z.enum(["text"]),
     }),
     z.object({
       emoji: reactionEmojiSchema.describe("Telegram reaction emoji"),
       messageId: z.number().int().describe("LIVE MESSAGE ID to react to"),
-      type: z.literal("reaction"),
+      type: z.enum(["reaction"]),
     }),
   ]);
 

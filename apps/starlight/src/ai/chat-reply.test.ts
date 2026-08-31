@@ -14,12 +14,45 @@ test("caps a chatbot reply at 4,096 provider output tokens", async () => {
   expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(4096);
 });
 
-function modelLayer(model: LanguageModel) {
-  return Model.layer.pipe(
-    Layer.provide(
-      Layer.succeed(ModelProvider.Service)({ model, profile: ModelProfile.profiles["google/gemini-3.7-flash"] }),
-    ),
-  );
+test("uses Gemini-compatible enum discriminators for JSON schema replies", async () => {
+  const model = new MockLanguageModelV3({
+    doGenerate: {
+      content: [{ text: '{"replies":[{"text":"hi","type":"text"}]}', type: "text" }],
+      finishReason: { raw: "stop", unified: "stop" },
+      response: { id: "response-1", modelId: "mock-model" },
+      usage: {
+        inputTokens: { cacheRead: 0, cacheWrite: 0, noCache: 10, total: 10 },
+        outputTokens: { reasoning: 0, text: 5, total: 5 },
+      },
+      warnings: [],
+    },
+  });
+  await runReply(model, ModelProfile.profiles["google/gemini-3-flash-preview"]);
+
+  expect(model.doGenerateCalls[0]?.responseFormat).toMatchObject({
+    schema: {
+      properties: {
+        replies: {
+          items: {
+            anyOf: [
+              { properties: { type: { enum: ["ignore"] } } },
+              { properties: { type: { enum: ["text"] } } },
+              { properties: { type: { enum: ["reaction"] } } },
+            ],
+          },
+        },
+      },
+    },
+    type: "json",
+  });
+  expect(JSON.stringify(model.doGenerateCalls[0]?.responseFormat)).not.toContain('"const"');
+});
+
+function modelLayer(
+  model: LanguageModel,
+  profile: ModelProfile.Profile = ModelProfile.profiles["google/gemini-3.7-flash"],
+) {
+  return Model.layer.pipe(Layer.provide(Layer.succeed(ModelProvider.Service)({ model, profile })));
 }
 
 function replyModel() {
@@ -44,7 +77,10 @@ function replyModel() {
   });
 }
 
-function runReply(model: LanguageModel) {
+function runReply(
+  model: LanguageModel,
+  profile: ModelProfile.Profile = ModelProfile.profiles["google/gemini-3.7-flash"],
+) {
   return Effect.runPromise(
     Effect.gen(function* () {
       const chatReply = yield* ChatReply.Service;
@@ -53,6 +89,6 @@ function runReply(model: LanguageModel) {
         sessionId: "chat-reply-test",
         toolset: { profile: [], tools: {} },
       });
-    }).pipe(Effect.provide(ChatReply.layer.pipe(Layer.provide(modelLayer(model))))),
+    }).pipe(Effect.provide(ChatReply.layer.pipe(Layer.provide(modelLayer(model, profile))))),
   );
 }
