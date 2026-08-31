@@ -27,7 +27,10 @@ test("uses Gemini-compatible enum discriminators for JSON schema replies", async
       warnings: [],
     },
   });
-  await runReply(model, ModelProfile.profiles["google/gemini-3-flash-preview"]);
+  await runReply(model, {
+    ...ModelProfile.profiles["google/gemini-3-flash-preview"],
+    output: { protocol: ModelProfile.outputProtocols.jsonSchemaResponse },
+  });
 
   expect(model.doGenerateCalls[0]?.responseFormat).toMatchObject({
     schema: {

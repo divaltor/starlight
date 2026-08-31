@@ -107,7 +107,10 @@ test("returns schema output after research without recording its JSON carrier", 
     {
       maxToolSteps: 1,
       outputSchema: z.object({ answer: z.string() }),
-      profile: ModelProfile.profiles["google/gemini-3-flash-preview"],
+      profile: {
+        ...ModelProfile.profiles["google/gemini-3-flash-preview"],
+        output: { protocol: ModelProfile.outputProtocols.jsonSchemaResponse },
+      },
       tools: {
         web_lookup: {
           description: "Return a fixture",

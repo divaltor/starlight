@@ -44,7 +44,7 @@ export namespace ModelProfile {
     [ids.gemini3FlashPreview]: {
       ...common,
       model: ids.gemini3FlashPreview,
-      output: { protocol: outputProtocols.jsonSchemaResponse },
+      output: { protocol: outputProtocols.finalOutputTool },
     },
     [ids.gemini37Flash]: {
       ...common,
