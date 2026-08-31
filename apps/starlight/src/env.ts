@@ -1,5 +1,6 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod/v4";
+import { ModelProfile } from "@/ai/model-profile";
 
 export interface LangfuseConfig {
   readonly baseUrl: string;
@@ -45,6 +46,7 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       HINDSIGHT_RECALL_MAX_QUERY_TOKENS: z.coerce.number().int().positive().default(800),
 
       OPENROUTER_API_KEY: z.string().trim().min(1),
+      STARLIGHT_MODEL: z.enum(ModelProfile.modelIds).default(ModelProfile.ids.gemini37Flash),
 
       AWS_ACCESS_KEY_ID: z.string(),
       AWS_SECRET_ACCESS_KEY: z.string(),

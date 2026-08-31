@@ -4,6 +4,7 @@ import { MockLanguageModelV3 } from "ai/test";
 import { Effect, Layer } from "effect";
 import { ChatReply } from "@/ai/chat-reply";
 import { Model } from "@/ai/model";
+import { ModelProfile } from "@/ai/model-profile";
 import { ModelProvider } from "@/ai/model-provider";
 
 test("caps a chatbot reply at 4,096 provider output tokens", async () => {
@@ -14,7 +15,11 @@ test("caps a chatbot reply at 4,096 provider output tokens", async () => {
 });
 
 function modelLayer(model: LanguageModel) {
-  return Model.layer.pipe(Layer.provide(Layer.succeed(ModelProvider.Service)({ model })));
+  return Model.layer.pipe(
+    Layer.provide(
+      Layer.succeed(ModelProvider.Service)({ model, profile: ModelProfile.profiles["google/gemini-3.7-flash"] }),
+    ),
+  );
 }
 
 function replyModel() {

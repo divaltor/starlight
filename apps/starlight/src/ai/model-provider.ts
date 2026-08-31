@@ -1,33 +1,38 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
 import { Context, Layer } from "effect";
-import { selected } from "@/ai/model-profile";
+import { ModelProfile } from "@/ai/model-profile";
 
 export namespace ModelProvider {
   export interface Interface {
     readonly model: LanguageModel;
+    readonly profile: ModelProfile.Profile;
   }
 
   export class Service extends Context.Service<Service, Interface>()("starlight/ModelProvider") {}
 
-  export function defaultLayer(apiKey: string): Layer.Layer<Service> {
+  export function defaultLayer(
+    apiKey: string,
+    profile: ModelProfile.Profile = ModelProfile.selected,
+  ): Layer.Layer<Service> {
     return Layer.succeed(Service)(
       Service.of({
         model: createOpenRouter({
           apiKey,
           appName: "Starlight",
           compatibility: "strict",
-        }).chat(selected.model, {
+        }).chat(profile.model, {
           provider: {
-            allow_fallbacks: selected.route.allowFallbacks,
+            allow_fallbacks: profile.route.allowFallbacks,
             data_collection: "deny",
-            only: [...selected.route.only],
-            order: [...selected.route.only],
-            require_parameters: selected.route.requireParameters,
+            only: [...profile.route.only],
+            order: [...profile.route.only],
+            require_parameters: profile.route.requireParameters,
           },
-          reasoning: selected.reasoning,
+          reasoning: profile.reasoning,
           usage: { include: true },
         }),
+        profile,
       }),
     );
   }

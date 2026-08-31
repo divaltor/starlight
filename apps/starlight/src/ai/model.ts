@@ -6,13 +6,14 @@ import {
   isStepCount,
   NoObjectGeneratedError,
   NoOutputGeneratedError,
+  Output,
   tool,
   TypeValidationError,
 } from "ai";
 import type { ModelMessage, StepResult, ToolSet } from "ai";
 import { Context, Duration, Effect, Layer, Predicate, Schema } from "effect";
 import type { ZodType } from "zod";
-import { selected } from "@/ai/model-profile";
+import { ModelProfile } from "@/ai/model-profile";
 import { ModelProvider } from "@/ai/model-provider";
 import { Usage } from "@/ai/usage";
 import type { Media } from "@/media/media";
@@ -138,27 +139,35 @@ export namespace Model {
         const completedSteps: StepResult<ToolSet>[] = [];
         const toolEvents: ToolEvent[] = [];
         const outputs = new Map<string, OUTPUT>();
-        const tools = {
-          ...boundTools(input.tools, input.maxToolOutputBytes),
-          [FINAL_OUTPUT_TOOL_NAME]: tool({
-            description: FINAL_OUTPUT_TOOL_DESCRIPTION,
-            execute: (output, execution) => {
-              outputs.set(execution.toolCallId, output);
-              return Promise.resolve({ captured: true });
-            },
-            inputSchema: input.outputSchema,
-          }),
-        };
+        const boundedTools = boundTools(input.tools, input.maxToolOutputBytes);
+        const outputProtocol = provider.profile.output.protocol;
+        const tools =
+          outputProtocol === ModelProfile.outputProtocols.finalOutputTool
+            ? {
+                ...boundedTools,
+                [FINAL_OUTPUT_TOOL_NAME]: tool({
+                  description: FINAL_OUTPUT_TOOL_DESCRIPTION,
+                  execute: (output, execution) => {
+                    outputs.set(execution.toolCallId, output);
+                    return Promise.resolve({ captured: true });
+                  },
+                  inputSchema: input.outputSchema,
+                }),
+              }
+            : boundedTools;
         const invocation = Effect.tryPromise({
           try: (signal) =>
             generateText({
               abortSignal: signal,
               headers: { "x-session-id": input.sessionId },
-              instructions: `${input.instructions}\n\n${FINAL_OUTPUT_INSTRUCTION}`,
+              instructions:
+                outputProtocol === ModelProfile.outputProtocols.finalOutputTool
+                  ? `${input.instructions}\n\n${FINAL_OUTPUT_INSTRUCTION}`
+                  : input.instructions,
               // Clamp the requested output budget into the configured provider limits.
               maxOutputTokens: Math.min(
-                Math.max(input.maxOutputTokens ?? selected.limits.defaultOutputTokens, 1),
-                selected.limits.maximumOutputTokens,
+                Math.max(input.maxOutputTokens ?? provider.profile.limits.defaultOutputTokens, 1),
+                provider.profile.limits.maximumOutputTokens,
               ),
               maxRetries: 0,
               messages: prepareMessages(input.cacheBase, input.cachePrefixMessageCount ?? 0, input.messages),
@@ -167,10 +176,18 @@ export namespace Model {
                 completedSteps.push(step);
               },
               onToolExecutionEnd: (event) => {
-                if (event.toolOutput.toolName === FINAL_OUTPUT_TOOL_NAME) return;
+                if (
+                  outputProtocol === ModelProfile.outputProtocols.finalOutputTool &&
+                  event.toolOutput.toolName === FINAL_OUTPUT_TOOL_NAME
+                ) {
+                  return;
+                }
                 toolEvents.push(createToolEvent(event));
               },
-              prepareStep: (step) => limitToolSteps(step.steps, input.maxToolSteps),
+              ...(outputProtocol === ModelProfile.outputProtocols.jsonSchemaResponse && {
+                output: Output.object({ schema: input.outputSchema }),
+              }),
+              prepareStep: (step) => limitToolSteps(step.steps, input.maxToolSteps, outputProtocol),
               providerOptions: input.promptCacheKey
                 ? { openrouter: { prompt_cache_key: input.promptCacheKey } }
                 : undefined,
@@ -181,23 +198,32 @@ export namespace Model {
                 ...(input.telemetryUserId !== undefined && { "langfuse.user.id": input.telemetryUserId }),
                 ...(input.private === true && { "starlight.private": true }),
               },
-              stopWhen: [
-                // A step whose only tool call is final_output means the answer is complete.
-                (step) => {
-                  const toolCalls = step.steps.at(-1)?.toolCalls;
-                  return toolCalls?.length === 1 && toolCalls[0]?.toolName === FINAL_OUTPUT_TOOL_NAME;
-                },
-                isStepCount(MAX_GENERATION_STEPS),
-              ],
+              stopWhen:
+                outputProtocol === ModelProfile.outputProtocols.finalOutputTool
+                  ? [
+                      // A step whose only tool call is final_output means the answer is complete.
+                      (step) => {
+                        const toolCalls = step.steps.at(-1)?.toolCalls;
+                        return toolCalls?.length === 1 && toolCalls[0]?.toolName === FINAL_OUTPUT_TOOL_NAME;
+                      },
+                      isStepCount(MAX_GENERATION_STEPS),
+                    ]
+                  : isStepCount(MAX_GENERATION_STEPS),
               telemetry: {
                 functionId: input.telemetryFunctionId ?? "chat-reply",
                 isEnabled: true,
                 recordInputs: input.private !== true,
                 recordOutputs: input.private !== true,
               },
-              toolChoice: "required",
+              ...(outputProtocol === ModelProfile.outputProtocols.finalOutputTool && {
+                toolChoice: "required" as const,
+              }),
               tools,
             }).then((result) => {
+              if (outputProtocol === ModelProfile.outputProtocols.jsonSchemaResponse) {
+                return { output: result.output, result };
+              }
+
               const finalStep = result.steps.at(-1);
               const finalCall =
                 finalStep?.toolCalls.length === 1 && finalStep.toolCalls[0]?.toolName === FINAL_OUTPUT_TOOL_NAME
@@ -257,7 +283,7 @@ export namespace Model {
                 actualModel: step.response.modelId,
                 cacheReadTokens: stepUsage[index]?.cacheReadTokens ?? null,
                 cacheWriteTokens: stepUsage[index]?.cacheWriteTokens ?? null,
-                configuredModel: selected.model,
+                configuredModel: provider.profile.model,
                 finishReason: step.finishReason,
                 inputTokens: stepUsage[index]?.inputTokens ?? null,
                 latencyMs: step.performance.stepTimeMs,
@@ -294,7 +320,7 @@ export namespace Model {
             billingInputTokens: usage.billing.inputTokens,
             billingOutputTokens: usage.billing.outputTokens,
             billingReasoningTokens: usage.billing.reasoningTokens,
-            configuredModel: selected.model,
+            configuredModel: provider.profile.model,
             contextInputTokens: usage.contextInputTokens,
             finishReason: result.finishReason,
             stepCount: result.steps.length,
@@ -315,9 +341,9 @@ export namespace Model {
             usage: stepUsage[index]!,
           })),
           toolEvents,
-          transcript: result.steps.flatMap((step) =>
-            step.text ? [{ text: step.text, type: "assistant-text" as const }] : [],
-          ),
+          transcript: result.steps
+            .slice(0, outputProtocol === ModelProfile.outputProtocols.jsonSchemaResponse ? -1 : undefined)
+            .flatMap((step) => (step.text ? [{ text: step.text, type: "assistant-text" as const }] : [])),
           usage,
         };
       });
@@ -326,8 +352,11 @@ export namespace Model {
     }),
   );
 
-  export function defaultLayer(apiKey: string): Layer.Layer<Service> {
-    return layer.pipe(Layer.provide(ModelProvider.defaultLayer(apiKey)));
+  export function defaultLayer(
+    apiKey: string,
+    profile: ModelProfile.Profile = ModelProfile.selected,
+  ): Layer.Layer<Service> {
+    return layer.pipe(Layer.provide(ModelProvider.defaultLayer(apiKey, profile)));
   }
 
   function prepareMessages(
@@ -441,12 +470,23 @@ export namespace Model {
     return bounded.output;
   }
 
-  function limitToolSteps(steps: readonly StepResult<ToolSet>[], maximumSteps: number) {
-    // Once the tool-step budget is spent, only final_output stays active so the model must answer.
+  function limitToolSteps(
+    steps: readonly StepResult<ToolSet>[],
+    maximumSteps: number,
+    outputProtocol: ModelProfile.OutputProtocol,
+  ) {
     const toolStepCount = steps.filter((step) =>
-      step.toolCalls.some((toolCall) => toolCall.toolName !== FINAL_OUTPUT_TOOL_NAME),
+      step.toolCalls.some((toolCall) =>
+        outputProtocol === ModelProfile.outputProtocols.finalOutputTool
+          ? toolCall.toolName !== FINAL_OUTPUT_TOOL_NAME
+          : true,
+      ),
     ).length;
-    return toolStepCount >= Math.max(maximumSteps, 0) ? { activeTools: [FINAL_OUTPUT_TOOL_NAME] as const } : undefined;
+    if (toolStepCount < Math.max(maximumSteps, 0)) return;
+    if (outputProtocol === ModelProfile.outputProtocols.finalOutputTool) {
+      return { activeTools: [FINAL_OUTPUT_TOOL_NAME] as const };
+    }
+    return { activeTools: [], toolChoice: "none" as const };
   }
 
   function createToolEvent(event: {

@@ -1,13 +1,13 @@
 import { ChatReply } from "@/ai/chat-reply";
 import type { ChatTools } from "@/ai/chat-tools";
-import { selected } from "@/ai/model-profile";
+import { ModelProfile } from "@/ai/model-profile";
 import type { ConversationContextRole, MemoryNamespaceKind } from "@starlight/utils/generated/prisma/client";
 import { Schema } from "effect";
 import { CanonicalJson } from "@/context/canonical-json";
 import type { Media } from "@/media/media";
 
 export namespace Prompt {
-  export const renderVersion = "conversation-context-v3";
+  export const renderVersion = "conversation-context-v4";
   export const canonicalEncode = CanonicalJson.encode;
   const memoryScopeLabels = {
     chat: "Retrieved chat memory",
@@ -61,11 +61,12 @@ export namespace Prompt {
       cacheStrategy: "explicit-fixed-base",
       instructions: ChatReply.systemPrompt,
       mediaStrategy: "stable-metadata-v2-live-bytes",
-      model: selected.model,
+      model: ModelProfile.selected.model,
       outputSchemaVersion: ChatReply.outputSchemaVersion,
-      reasoning: selected.reasoning,
+      outputProtocol: ModelProfile.selected.output.protocol,
+      reasoning: ModelProfile.selected.reasoning,
       renderVersion,
-      route: selected.route,
+      route: ModelProfile.selected.route,
       tools: input.toolProfile,
     });
   }

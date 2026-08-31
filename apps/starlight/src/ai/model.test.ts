@@ -6,6 +6,7 @@ import { Effect, Fiber, Layer, Logger } from "effect";
 import { TestClock } from "effect/testing";
 import { z } from "zod";
 import { Model } from "@/ai/model";
+import { ModelProfile } from "@/ai/model-profile";
 import { ModelProvider } from "@/ai/model-provider";
 
 test("returns an immutable completed tool event", async () => {
@@ -96,6 +97,30 @@ test("returns a failed tool event when generation recovers", async () => {
       toolName: "web_lookup",
     },
   ]);
+});
+
+test("returns schema output after research without recording its JSON carrier", async () => {
+  const result = await runModel(
+    new MockLanguageModelV3({
+      doGenerate: [toolCallResult("call-1"), textResult('{"answer":"fresh"}')],
+    }),
+    {
+      maxToolSteps: 1,
+      outputSchema: z.object({ answer: z.string() }),
+      profile: ModelProfile.profiles["google/gemini-3-flash-preview"],
+      tools: {
+        web_lookup: {
+          description: "Return a fixture",
+          execute: () => Promise.resolve({ value: "fresh fact" }),
+          inputSchema: z.object({ query: z.string() }),
+        },
+      },
+    },
+  );
+
+  expect(result.output).toEqual({ answer: "fresh" });
+  expect(result.toolEvents).toHaveLength(1);
+  expect(result.transcript).toEqual([]);
 });
 
 test("requires final output after at most three external tool steps", async () => {
@@ -332,6 +357,7 @@ interface ModelTestInput<OUTPUT> {
   readonly maxToolSteps?: number;
   readonly messages?: readonly Model.Message[];
   readonly outputSchema: z.ZodType<OUTPUT>;
+  readonly profile?: ModelProfile.Profile;
   readonly tools?: ToolSet;
 }
 
@@ -351,7 +377,28 @@ function runModelEffect<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTP
       sessionId: "model-test",
       tools: input.tools ?? {},
     });
-  }).pipe(Effect.provide(Model.layer.pipe(Layer.provide(Layer.succeed(ModelProvider.Service)({ model })))));
+  }).pipe(
+    Effect.provide(
+      Model.layer.pipe(
+        Layer.provide(
+          Layer.succeed(ModelProvider.Service)({
+            model,
+            profile: input.profile ?? ModelProfile.profiles["google/gemini-3.7-flash"],
+          }),
+        ),
+      ),
+    ),
+  );
+}
+
+function textResult(text: string) {
+  return {
+    content: [{ text, type: "text" as const }],
+    finishReason: { raw: "stop", unified: "stop" as const },
+    response: { id: "text-response", modelId: "mock-model" },
+    usage: modelUsage,
+    warnings: [],
+  };
 }
 
 function finalOutputResult(answer: string | number) {

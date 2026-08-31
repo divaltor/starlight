@@ -1,6 +1,6 @@
 import type { ConversationCheckpointReason, Prisma } from "@starlight/utils/generated/prisma/client";
 import { Context, Effect, Layer, Number, Predicate, Schema } from "effect";
-import { selected } from "@/ai/model-profile";
+import { ModelProfile } from "@/ai/model-profile";
 import { Model } from "@/ai/model";
 import { ActiveContext } from "@/context/active-context";
 import { CacheDiagnostics } from "@/context/cache-diagnostics";
@@ -393,7 +393,7 @@ export namespace ConversationContext {
               messages: cachePrefixIdentities.map((identity) =>
                 new Bun.CryptoHasher("sha256").update(Prompt.canonicalEncode(identity)).digest("hex"),
               ),
-              settings: `${selected.model}:${selected.reasoning}:${envelope.tools.length > 0}`,
+              settings: `${ModelProfile.selected.model}:${ModelProfile.selected.reasoning.effort}:${ModelProfile.selected.output.protocol}:${envelope.tools.length > 0}`,
               system: [
                 new Bun.CryptoHasher("sha256").update(context.stableEnvelope).digest("hex"),
                 new Bun.CryptoHasher("sha256").update(cacheBase).digest("hex"),
