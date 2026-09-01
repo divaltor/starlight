@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "@starlight/utils/generated/prisma/client";
-import { Deferred, Effect, Fiber, Layer, ManagedRuntime } from "effect";
+import { Clock, Deferred, Duration, Effect, Fiber, Layer, ManagedRuntime, Random } from "effect";
 import { TestClock } from "effect/testing";
 import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";
@@ -175,6 +175,131 @@ test.skipIf(!databaseUrl)("model-selected reply targets are passed to Telegram d
 
     expect(result.kind).toBe("completed");
     expect(delivered).toEqual([{ replyTo: targetMessageId, text: "Hi", type: "text" }]);
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
+test.skipIf(!databaseUrl)("consecutive text replies wait 1.5 to 2.5 seconds after the first message", async () => {
+  const model: Model.Interface = {
+    generate: <Output>() =>
+      Effect.succeed({
+        finishReason: "stop",
+        output: {
+          replies: [
+            { replyTo: 111, text: "First", type: "text" },
+            { replyTo: null, text: "Second", type: "text" },
+            { replyTo: null, text: "Third", type: "text" },
+          ],
+        } as Output,
+        steps: [],
+        toolEvents: [],
+        transcript: [],
+        usage: {
+          billing: {
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            costUsd: 0,
+            inputTokens: 10,
+            outputTokens: 6,
+            reasoningTokens: 0,
+          },
+          contextInputTokens: 10,
+          stepCount: 0,
+        },
+      }),
+  };
+  const delivered: TelegramDelivery.Action[] = [];
+  const sleeps: number[] = [];
+  let telegramMessageId = 911;
+  const delivery: TelegramDelivery.Interface = {
+    deliver: (input) => {
+      delivered.push(input.action);
+      const receipt = { telegramMessageId };
+      telegramMessageId += 1;
+      return Effect.succeed(receipt);
+    },
+    indicateTyping: () => Effect.void,
+  };
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+  const assistantId = 8_000_000_111;
+  const chatId = -8_000_000_111;
+  const key = { assistantId, chatId, threadKey: 0 };
+
+  try {
+    const liveClock = await runtime.runPromise(Clock.Clock);
+    const clock: Clock.Clock = {
+      currentTimeMillis: liveClock.currentTimeMillis,
+      currentTimeMillisUnsafe: () => liveClock.currentTimeMillisUnsafe(),
+      currentTimeNanos: liveClock.currentTimeNanos,
+      currentTimeNanosUnsafe: () => liveClock.currentTimeNanosUnsafe(),
+      monotonicTimeNanos: liveClock.monotonicTimeNanos,
+      monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
+      sleep: (duration) => {
+        const milliseconds = Duration.toMillis(duration);
+        if (milliseconds < 1500 || milliseconds > 2500) return liveClock.sleep(duration);
+        return Effect.sync(() => {
+          sleeps.push(milliseconds);
+        });
+      },
+    };
+    const result = await runtime.runPromise(
+      Effect.gen(function* run() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* conversation.admit({
+          chatTitle: "Response pacing test",
+          chatType: "supergroup",
+          chatUsername: null,
+          key,
+          payload: {
+            addressed: true,
+            date: 1_700_000_000,
+            editDate: null,
+            forwardOrigin: null,
+            media: [],
+            mediaGroupId: null,
+            messageId: 111,
+            repliedMedia: [],
+            repliedText: null,
+            replyToMessageId: null,
+            senderFirstName: "Alice",
+            senderId: 42,
+            senderUsername: "alice",
+            text: "Explain this",
+          },
+          updateId: 211,
+        });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+        return yield* conversation.drain({ key });
+      }).pipe(Effect.provideService(Clock.Clock, clock), Random.withSeed("response-pacing")),
+    );
+
+    expect(result.kind).toBe("completed");
+    expect(delivered.map((action) => action.type)).toEqual(["text", "text", "text"]);
+    expect(sleeps).toHaveLength(2);
+    expect(sleeps.every((duration) => duration >= 1500 && duration <= 2500)).toBe(true);
   } finally {
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
@@ -685,7 +810,7 @@ test.skipIf(!databaseUrl)("lease ownership loss interrupts active model work", a
   }
 });
 
-test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating the model output", async () => {
+test.skipIf(!databaseUrl)("unknown delivery gets only one cautious retry without regenerating output", async () => {
   const model: Model.Interface = {
     generate: <Output>() =>
       Effect.succeed({
@@ -722,14 +847,6 @@ test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating th
         cause: new Error("Telegram unavailable"),
         message: "Telegram rejected delivery",
         outcomeUnknown: false,
-        retryable: true,
-      }),
-    ),
-    Effect.fail(
-      new TelegramDelivery.DeliveryError({
-        cause: new Error("Telegram timeout"),
-        message: "Telegram delivery outcome is unknown",
-        outcomeUnknown: true,
         retryable: true,
       }),
     ),
@@ -789,18 +906,8 @@ test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating th
       }),
     );
 
-    await expect(
-      runtime.runPromise(
-        Effect.gen(function* firstAttempt() {
-          const conversation = yield* Conversation.Service;
-          return yield* conversation.drain({
-            key: { assistantId, chatId, threadKey: 0 },
-          });
-        }),
-      ),
-    ).rejects.toBeInstanceOf(Conversation.ConversationError);
-    const resumed = await runtime.runPromise(
-      Effect.gen(function* resume() {
+    const completed = await runtime.runPromise(
+      Effect.gen(function* drain() {
         const conversation = yield* Conversation.Service;
         return yield* conversation.drain({
           key: { assistantId, chatId, threadKey: 0 },
@@ -819,10 +926,10 @@ test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating th
       }),
     );
 
-    expect(resumed.kind).toBe("completed");
+    expect(completed.kind).toBe("completed");
     expect(persisted.attemptCount).toBe(1);
     expect(persisted.status).toBe("finalized");
-    expect(persisted.actions[0]?.attemptCount).toBe(3);
+    expect(persisted.actions[0]?.attemptCount).toBe(2);
     expect(persisted.actions[0]?.deliveryStatus).toBe("failed");
     expect(persisted.actions[0]?.unknownRetryCount).toBe(1);
   } finally {
@@ -836,7 +943,138 @@ test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating th
   }
 });
 
-test.skipIf(!databaseUrl)("later response chunks are skipped after a permanent delivery failure", async () => {
+test.skipIf(!databaseUrl)("known transient delivery failures retry after 1, 2.5, and 5 seconds", async () => {
+  const model: Model.Interface = {
+    generate: <Output>() =>
+      Effect.succeed({
+        finishReason: "stop",
+        output: { replies: [{ replyTo: 112, text: "Retried", type: "text" }] } as Output,
+        steps: [],
+        toolEvents: [],
+        transcript: [],
+        usage: {
+          billing: {
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            costUsd: 0,
+            inputTokens: 10,
+            outputTokens: 2,
+            reasoningTokens: 0,
+          },
+          contextInputTokens: 10,
+          stepCount: 0,
+        },
+      }),
+  };
+  let deliveryAttempts = 0;
+  const sleeps: number[] = [];
+  const delivery: TelegramDelivery.Interface = {
+    deliver: () => {
+      deliveryAttempts += 1;
+      if (deliveryAttempts > 3) return Effect.succeed({ telegramMessageId: 912 });
+      return Effect.fail(
+        new TelegramDelivery.DeliveryError({
+          cause: new Error("Telegram unavailable"),
+          message: "Telegram rejected delivery",
+          outcomeUnknown: false,
+          retryable: true,
+        }),
+      );
+    },
+    indicateTyping: () => Effect.void,
+  };
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+  const assistantId = 8_000_000_112;
+  const chatId = -8_000_000_112;
+  const key = { assistantId, chatId, threadKey: 0 };
+
+  try {
+    const liveClock = await runtime.runPromise(Clock.Clock);
+    const clock: Clock.Clock = {
+      currentTimeMillis: liveClock.currentTimeMillis,
+      currentTimeMillisUnsafe: () => liveClock.currentTimeMillisUnsafe(),
+      currentTimeNanos: liveClock.currentTimeNanos,
+      currentTimeNanosUnsafe: () => liveClock.currentTimeNanosUnsafe(),
+      monotonicTimeNanos: liveClock.monotonicTimeNanos,
+      monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
+      sleep: (duration) => {
+        const milliseconds = Duration.toMillis(duration);
+        if (![1000, 2500, 5000].includes(milliseconds)) return liveClock.sleep(duration);
+        return Effect.sync(() => {
+          sleeps.push(milliseconds);
+        });
+      },
+    };
+    const result = await runtime.runPromise(
+      Effect.gen(function* run() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* conversation.admit({
+          chatTitle: "Delivery retry test",
+          chatType: "supergroup",
+          chatUsername: null,
+          key,
+          payload: {
+            addressed: true,
+            date: 1_700_000_000,
+            editDate: null,
+            forwardOrigin: null,
+            media: [],
+            mediaGroupId: null,
+            messageId: 112,
+            repliedMedia: [],
+            repliedText: null,
+            replyToMessageId: null,
+            senderFirstName: "Alice",
+            senderId: 42,
+            senderUsername: "alice",
+            text: "Retry this",
+          },
+          updateId: 212,
+        });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+        const drain = yield* conversation.drain({ key });
+        const action = yield* database.query((client) =>
+          client.conversationRunAction.findFirstOrThrow({
+            where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
+          }),
+        );
+        return { action, drain };
+      }).pipe(Effect.provideService(Clock.Clock, clock)),
+    );
+
+    expect(result.drain.kind).toBe("completed");
+    expect(deliveryAttempts).toBe(4);
+    expect(sleeps).toEqual([1000, 2500, 5000]);
+    expect(result.action.attemptCount).toBe(4);
+    expect(result.action.deliveryStatus).toBe("delivered");
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
+test.skipIf(!databaseUrl)("later response actions are skipped after a permanent delivery failure", async () => {
   const model: Model.Interface = {
     generate: <Output>() =>
       Effect.succeed({
@@ -844,7 +1082,7 @@ test.skipIf(!databaseUrl)("later response chunks are skipped after a permanent d
         output: {
           replies: [
             { replyTo: 110, text: "First", type: "text" },
-            { replyTo: null, text: "Second", type: "text" },
+            { emoji: "👍", messageId: 110, type: "reaction" },
             { replyTo: null, text: "Third", type: "text" },
           ],
         } as Output,
@@ -865,13 +1103,12 @@ test.skipIf(!databaseUrl)("later response chunks are skipped after a permanent d
         },
       }),
   };
-  const attempted: string[] = [];
+  const attempted: TelegramDelivery.Action["type"][] = [];
   let telegramMessageId = 910;
   const delivery: TelegramDelivery.Interface = {
     deliver: (input) => {
-      if (input.action.type !== "text") return Effect.succeed({ telegramMessageId: null });
-      attempted.push(input.action.text);
-      if (input.action.text === "Second") {
+      attempted.push(input.action.type);
+      if (input.action.type === "reaction") {
         return Effect.fail(
           new TelegramDelivery.DeliveryError({
             cause: new Error("Telegram rejected delivery"),
@@ -948,7 +1185,7 @@ test.skipIf(!databaseUrl)("later response chunks are skipped after a permanent d
     );
 
     expect(result.drain.kind).toBe("completed");
-    expect(attempted).toEqual(["First", "Second"]);
+    expect(attempted).toEqual(["text", "reaction"]);
     expect(result.actions.map((action) => action.deliveryStatus)).toEqual(["delivered", "failed", "failed"]);
     expect(result.actions[2]?.lastError).toBe("Skipped because an earlier response action failed");
   } finally {

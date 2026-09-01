@@ -1,5 +1,5 @@
 import type { ConversationRunStatus, Prisma } from "@starlight/utils/generated/prisma/client";
-import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Option, Random, Schedule, Schema } from "effect";
 import type { Chat as TelegramChat } from "grammy/types";
 import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";
@@ -19,8 +19,14 @@ import { context, propagation } from "@opentelemetry/api";
 export namespace Conversation {
   const MAX_BATCH_MESSAGES = 20;
   const MAX_ALBUM_MESSAGES = 10;
-  const MAX_DELIVERY_ATTEMPTS = 5;
+  const MAX_DELIVERY_RETRIES = 3;
+  const DELIVERY_RETRY_SCHEDULE = Schedule.exponential("1 second", 2.5).pipe(
+    Schedule.modifyDelay((metadata) => Effect.succeed(Duration.min(metadata.duration, Duration.seconds(5)))),
+    Schedule.upTo({ times: MAX_DELIVERY_RETRIES }),
+  );
   const MAX_MODEL_ATTEMPTS = 5;
+  const MAX_RESPONSE_MESSAGE_DELAY_MS = 2500;
+  const MIN_RESPONSE_MESSAGE_DELAY_MS = 1500;
   const OVERSIZED_INPUT_ERROR_TAG = "oversized-input";
   const SKIPPED_DELIVERY_MESSAGE = "Skipped because an earlier response action failed";
   const ALBUM_SETTLE_MS = 35_000;
@@ -895,29 +901,69 @@ export namespace Conversation {
 
           yield* Effect.reduce(
             actions,
-            () => true,
-            (deliveryOpen, stored) => {
-              if (!deliveryOpen) {
-                if (stored.deliveryStatus === "delivered" || stored.deliveryStatus === "failed") {
-                  return Effect.succeed(false);
-                }
-                return skipStoredAction(claimed, stored.ordinal).pipe(Effect.as(false));
-              }
-              if (stored.deliveryStatus === "delivered") return Effect.succeed(true);
-              if (stored.deliveryStatus === "failed") return Effect.succeed(false);
-              if (stored.deliveryStatus === "unknown" && stored.unknownRetryCount > 0) {
-                return failUnknownDelivery(claimed, stored.ordinal).pipe(Effect.as(false));
-              }
-              return deliverStoredAction(claimed, {
-                action: ChatReply.actionSchema.parse(stored.payload),
-                attemptCount: stored.attemptCount,
-                deliveryStatus: stored.deliveryStatus,
-                ordinal: stored.ordinal,
-                unknownRetryCount: stored.unknownRetryCount,
-              });
-            },
+            (): DeliveryState => ({ deliveryOpen: true, textDelivered: false }),
+            (deliveryState, stored) => dispatchStoredAction(claimed, deliveryState, stored),
           );
         });
+      }
+
+      function dispatchStoredAction(
+        claimed: ClaimedRun,
+        deliveryState: DeliveryState,
+        stored: Prisma.ConversationRunActionGetPayload<object>,
+      ) {
+        if (!deliveryState.deliveryOpen) {
+          if (stored.deliveryStatus === "delivered" || stored.deliveryStatus === "failed") {
+            return Effect.succeed(deliveryState);
+          }
+          return skipStoredAction(claimed, stored.ordinal).pipe(Effect.as(deliveryState));
+        }
+        if (stored.deliveryStatus === "delivered") {
+          return Effect.succeed({
+            ...deliveryState,
+            textDelivered: deliveryState.textDelivered || stored.type === "text",
+          });
+        }
+        if (stored.deliveryStatus === "failed") {
+          return Effect.succeed({ ...deliveryState, deliveryOpen: false });
+        }
+        if (stored.deliveryStatus === "unknown" && stored.unknownRetryCount > 0) {
+          return failUnknownDelivery(claimed, stored.ordinal).pipe(
+            Effect.as({ ...deliveryState, deliveryOpen: false }),
+          );
+        }
+        const action = ChatReply.actionSchema.parse(stored.payload);
+        const { deliveryStatus } = stored;
+        const delay =
+          deliveryState.textDelivered && action.type === "text"
+            ? Random.nextIntBetween(MIN_RESPONSE_MESSAGE_DELAY_MS, MAX_RESPONSE_MESSAGE_DELAY_MS).pipe(
+                Effect.map(Duration.millis),
+                Effect.flatMap(Effect.sleep),
+              )
+            : Effect.void;
+        return Schedule.toStepWithSleep(DELIVERY_RETRY_SCHEDULE).pipe(
+          Effect.flatMap((retry) =>
+            delay.pipe(
+              Effect.andThen(
+                deliverStoredAction(
+                  claimed,
+                  {
+                    action,
+                    attemptCount: stored.attemptCount,
+                    deliveryStatus,
+                    ordinal: stored.ordinal,
+                    unknownRetryCount: stored.unknownRetryCount,
+                  },
+                  retry,
+                ),
+              ),
+              Effect.map((delivered) => ({
+                deliveryOpen: delivered,
+                textDelivered: deliveryState.textDelivered || (delivered && action.type === "text"),
+              })),
+            ),
+          ),
+        );
       }
 
       function skipStoredAction(claimed: ClaimedRun, ordinal: number) {
@@ -959,6 +1005,7 @@ export namespace Conversation {
           readonly ordinal: number;
           readonly unknownRetryCount: number;
         },
+        retry: (error: TelegramDelivery.DeliveryError) => Effect.Effect<unknown, unknown>,
       ): Effect.Effect<boolean, ConversationError> {
         return database
           .transaction(async (transaction) => {
@@ -1006,29 +1053,36 @@ export namespace Conversation {
             ),
             Effect.catchTag("DeliveryError", (error) =>
               Effect.gen(function* recover() {
-                yield* recordDeliveryFailure(claimed, stored, error, stored.attemptCount + 1 >= MAX_DELIVERY_ATTEMPTS);
+                const retriesExhausted = stored.attemptCount >= MAX_DELIVERY_RETRIES;
+                const cautiousRetryFailed = stored.unknownRetryCount > 0;
+                yield* recordDeliveryFailure(claimed, stored, error, retriesExhausted || cautiousRetryFailed);
                 if (
                   error.outcomeUnknown &&
                   stored.deliveryStatus === "pending" &&
                   stored.unknownRetryCount === 0 &&
-                  stored.attemptCount + 1 < MAX_DELIVERY_ATTEMPTS
+                  !retriesExhausted
                 ) {
-                  return yield* deliverStoredAction(claimed, {
+                  return yield* deliverStoredAction(
+                    claimed,
+                    {
+                      ...stored,
+                      attemptCount: stored.attemptCount + 1,
+                      deliveryStatus: "unknown",
+                      unknownRetryCount: 1,
+                    },
+                    retry,
+                  );
+                }
+                if (!error.retryable || error.outcomeUnknown || retriesExhausted || cautiousRetryFailed) return false;
+                yield* retry(error).pipe(Effect.orDie);
+                return yield* deliverStoredAction(
+                  claimed,
+                  {
                     ...stored,
                     attemptCount: stored.attemptCount + 1,
-                    deliveryStatus: "unknown",
-                    unknownRetryCount: 1,
-                  });
-                }
-                if (!(error.retryable && !error.outcomeUnknown) || stored.attemptCount + 1 >= MAX_DELIVERY_ATTEMPTS) {
-                  return false;
-                }
-                return yield* Effect.fail(
-                  new ConversationError({
-                    cause: error,
-                    message: "Telegram delivery failed",
-                    retryable: true,
-                  }),
+                    deliveryStatus: "pending",
+                  },
+                  retry,
                 );
               }),
             ),
@@ -1193,6 +1247,11 @@ export namespace Conversation {
   export class OptionsService extends Context.Service<OptionsService, Options>()("starlight/ConversationOptions") {}
 
   export const optionsLayer = Layer.succeed(OptionsService);
+
+  interface DeliveryState {
+    readonly deliveryOpen: boolean;
+    readonly textDelivered: boolean;
+  }
 
   interface ClaimedRun {
     readonly dbKey: Lane.LaneKey;
