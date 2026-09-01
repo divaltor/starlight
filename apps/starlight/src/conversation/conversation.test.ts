@@ -836,6 +836,132 @@ test.skipIf(!databaseUrl)("unknown delivery retries once without regenerating th
   }
 });
 
+test.skipIf(!databaseUrl)("later response chunks are skipped after a permanent delivery failure", async () => {
+  const model: Model.Interface = {
+    generate: <Output>() =>
+      Effect.succeed({
+        finishReason: "stop",
+        output: {
+          replies: [
+            { replyTo: 110, text: "First", type: "text" },
+            { replyTo: null, text: "Second", type: "text" },
+            { replyTo: null, text: "Third", type: "text" },
+          ],
+        } as Output,
+        steps: [],
+        toolEvents: [],
+        transcript: [],
+        usage: {
+          billing: {
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            costUsd: 0,
+            inputTokens: 10,
+            outputTokens: 6,
+            reasoningTokens: 0,
+          },
+          contextInputTokens: 10,
+          stepCount: 0,
+        },
+      }),
+  };
+  const attempted: string[] = [];
+  let telegramMessageId = 910;
+  const delivery: TelegramDelivery.Interface = {
+    deliver: (input) => {
+      if (input.action.type !== "text") return Effect.succeed({ telegramMessageId: null });
+      attempted.push(input.action.text);
+      if (input.action.text === "Second") {
+        return Effect.fail(
+          new TelegramDelivery.DeliveryError({
+            cause: new Error("Telegram rejected delivery"),
+            message: "Telegram rejected delivery",
+            outcomeUnknown: false,
+            retryable: false,
+          }),
+        );
+      }
+      const receipt = { telegramMessageId };
+      telegramMessageId += 1;
+      return Effect.succeed(receipt);
+    },
+    indicateTyping: () => Effect.void,
+  };
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+  const assistantId = 8_000_000_110;
+  const chatId = -8_000_000_110;
+  const key = { assistantId, chatId, threadKey: 0 };
+
+  try {
+    const result = await runtime.runPromise(
+      Effect.gen(function* run() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* conversation.admit({
+          chatTitle: "Ordered response delivery test",
+          chatType: "supergroup",
+          chatUsername: null,
+          key,
+          payload: {
+            addressed: true,
+            date: 1_700_000_000,
+            editDate: null,
+            forwardOrigin: null,
+            media: [],
+            mediaGroupId: null,
+            messageId: 110,
+            repliedMedia: [],
+            repliedText: null,
+            replyToMessageId: null,
+            senderFirstName: "Alice",
+            senderId: 42,
+            senderUsername: "alice",
+            text: "Explain this",
+          },
+          updateId: 210,
+        });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+        const drain = yield* conversation.drain({ key });
+        const actions = yield* database.query((client) =>
+          client.conversationRunAction.findMany({
+            where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
+            orderBy: { ordinal: "asc" },
+          }),
+        );
+        return { actions, drain };
+      }),
+    );
+
+    expect(result.drain.kind).toBe("completed");
+    expect(attempted).toEqual(["First", "Second"]);
+    expect(result.actions.map((action) => action.deliveryStatus)).toEqual(["delivered", "failed", "failed"]);
+    expect(result.actions[2]?.lastError).toBe("Skipped because an earlier response action failed");
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
 test.skipIf(!databaseUrl)(
   "finalized responses remain active until the next request requires preflight context compaction",
   async () => {

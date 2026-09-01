@@ -22,6 +22,7 @@ export namespace Conversation {
   const MAX_DELIVERY_ATTEMPTS = 5;
   const MAX_MODEL_ATTEMPTS = 5;
   const OVERSIZED_INPUT_ERROR_TAG = "oversized-input";
+  const SKIPPED_DELIVERY_MESSAGE = "Skipped because an earlier response action failed";
   const ALBUM_SETTLE_MS = 35_000;
 
   export interface AdmissionInput {
@@ -892,13 +893,20 @@ export namespace Conversation {
             )
             .pipe(Effect.mapError(failed("Failed to load conversation actions")));
 
-          yield* Effect.all(
-            actions.map((stored) => {
-              if (stored.deliveryStatus === "delivered" || stored.deliveryStatus === "failed") {
-                return Effect.void;
+          yield* Effect.reduce(
+            actions,
+            () => true,
+            (deliveryOpen, stored) => {
+              if (!deliveryOpen) {
+                if (stored.deliveryStatus === "delivered" || stored.deliveryStatus === "failed") {
+                  return Effect.succeed(false);
+                }
+                return skipStoredAction(claimed, stored.ordinal).pipe(Effect.as(false));
               }
+              if (stored.deliveryStatus === "delivered") return Effect.succeed(true);
+              if (stored.deliveryStatus === "failed") return Effect.succeed(false);
               if (stored.deliveryStatus === "unknown" && stored.unknownRetryCount > 0) {
-                return failUnknownDelivery(claimed, stored.ordinal);
+                return failUnknownDelivery(claimed, stored.ordinal).pipe(Effect.as(false));
               }
               return deliverStoredAction(claimed, {
                 action: ChatReply.actionSchema.parse(stored.payload),
@@ -907,10 +915,24 @@ export namespace Conversation {
                 ordinal: stored.ordinal,
                 unknownRetryCount: stored.unknownRetryCount,
               });
-            }),
-            { concurrency: 1, discard: true },
+            },
           );
         });
+      }
+
+      function skipStoredAction(claimed: ClaimedRun, ordinal: number) {
+        return database
+          .transaction(async (transaction) => {
+            await Lane.assertFence(transaction, claimed.dbKey, claimed);
+            await transaction.conversationRunAction.update({
+              where: { runId_ordinal: { ordinal, runId: claimed.runId } },
+              data: {
+                deliveryStatus: "failed",
+                lastError: SKIPPED_DELIVERY_MESSAGE,
+              },
+            });
+          })
+          .pipe(Effect.mapError(failed("Failed to skip Telegram delivery after an earlier action failed")));
       }
 
       function failUnknownDelivery(claimed: ClaimedRun, ordinal: number) {
@@ -937,7 +959,7 @@ export namespace Conversation {
           readonly ordinal: number;
           readonly unknownRetryCount: number;
         },
-      ): Effect.Effect<void, ConversationError> {
+      ): Effect.Effect<boolean, ConversationError> {
         return database
           .transaction(async (transaction) => {
             await Lane.assertFence(transaction, claimed.dbKey, claimed);
@@ -972,6 +994,7 @@ export namespace Conversation {
                 });
               }),
             ),
+            Effect.as(true),
             Effect.mapError((error) =>
               error instanceof TelegramDelivery.DeliveryError
                 ? error
@@ -998,7 +1021,7 @@ export namespace Conversation {
                   });
                 }
                 if (!(error.retryable && !error.outcomeUnknown) || stored.attemptCount + 1 >= MAX_DELIVERY_ATTEMPTS) {
-                  return;
+                  return false;
                 }
                 return yield* Effect.fail(
                   new ConversationError({
