@@ -186,7 +186,8 @@ export namespace Media {
         try: (signal) =>
           options.telegramApi.getFile(
             source.telegramFileId,
-            AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
+            // grammY declares the legacy abort-controller type, while Bun accepts the native signal at runtime.
+            AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]) as Parameters<Api["getFile"]>[1],
           ),
         catch: (cause) => new MediaError({ cause, message: DOWNLOAD_FAILED, retryable: true }),
       });

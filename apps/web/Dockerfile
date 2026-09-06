@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.4.0-alpine AS base
+FROM oven/bun:1.4.2-alpine AS base
 
 WORKDIR /code
 
@@ -29,7 +29,7 @@ RUN find apps/web/.output/server/node_modules -name "*.development.js" -delete
 # so workspace installs and build caches are dead weight in the runtime image
 RUN rm -rf node_modules bun.lock apps/*/node_modules packages/*/node_modules
 
-FROM oven/bun:1.4.0-alpine AS runtime
+FROM oven/bun:1.4.2-alpine AS runtime
 
 WORKDIR /code
 

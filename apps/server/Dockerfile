@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.4.0-alpine AS base
+FROM oven/bun:1.4.2-alpine AS base
 
 WORKDIR /code
 
@@ -42,7 +42,7 @@ RUN rm -rf node_modules/typescript node_modules/@typescript node_modules/@babel 
 
 FROM mwader/static-ffmpeg:9.0 AS ffmpeg
 
-FROM oven/bun:1.4.0-alpine AS runtime
+FROM oven/bun:1.4.2-alpine AS runtime
 
 WORKDIR /code
 
