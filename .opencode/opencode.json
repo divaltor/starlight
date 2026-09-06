@@ -5,7 +5,7 @@
       "type": "remote",
       "url": "{env:LANGFUSE_BASE_URL}/api/public/mcp",
       "headers": {
-        "Authorization": "Basic {file:mcp-langfuse-token}"
+        "Authorization": "Basic {env:LANGFUSE_MCP_TOKEN}"
       },
       "oauth": false,
       "enabled": true,
