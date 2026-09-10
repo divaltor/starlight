@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "tsdown": "catalog:",
-    "@types/bun": "1.4.1"
+    "@types/bun": "1.4.2"
   },
   "peerDependencies": {
     "typescript": "7.0.2"
