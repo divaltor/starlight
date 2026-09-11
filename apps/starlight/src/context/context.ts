@@ -714,7 +714,7 @@ export namespace ConversationContext {
           instructions: Checkpoint.summaryInstructions,
           maxOutputTokens: 2048,
           maxToolOutputBytes: 0,
-          maxToolSteps: 0,
+          maxToolCalls: 0,
           messages: [{ role: "user", text: prepared.summaryInput }],
           outputSchema: Checkpoint.Summary,
           private: checkpointInput.telemetryPrivate,

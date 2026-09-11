@@ -78,9 +78,7 @@ Finalization writes canonical message observations to PostgreSQL only. The memor
 
 ## Model invocation and the tool budget
 
-The reply generation allows at most `maxToolCalls` tool **rounds**, not individual calls. A round is one assistant message containing tool calls; all parallel calls inside a round execute together. Enforcement is two-sided in `ai/model.ts`: `stopWhen: isStepCount(maxToolCalls + 1)` ends the loop, and `prepareStep`/`limitTools` deactivates tools once completed rounds reach the cap.
-
-This is deliberate, not a missing guard: the product rule is "at most one web-research round per reply", because Exa cost per _round_ is what matters and models may legitimately fan a round into a few parallel lookups. Per-call atomic enforcement was considered and rejected — it would need an executor-side gate and would reject valid parallel fan-outs without reducing spend meaningfully. Do not "fix" the step-count check to count individual calls without revisiting that decision.
+Each reply allows at most three Exa tool **calls** (`MAX_TOOL_CALLS` in `ai/chat-reply.ts`, enforced as `maxToolCalls` in `ai/model.ts`): enough for an initial search plus one follow-up — a refined search or a page fetch — before the final answer. The budget counts individual tool executions across all steps, so parallel calls inside one step each consume it. Enforcement lands on the next step boundary via `prepareStep`/`limitToolCalls`: once completed non-`final_output` calls reach the cap, only the `final_output` tool stays active and the model must answer from what it has. A single parallel fan-out can overshoot the cap by its own width; executor-side rejection was considered and rejected as complexity on a path models rarely hit.
 
 ## Context generations (`context/context.ts`, `context/active-context.ts`)
 

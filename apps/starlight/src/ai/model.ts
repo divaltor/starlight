@@ -64,7 +64,7 @@ export namespace Model {
     readonly instructions: string;
     readonly maxOutputTokens?: number;
     readonly maxToolOutputBytes: number;
-    readonly maxToolSteps: number;
+    readonly maxToolCalls: number;
     readonly messages: readonly Message[];
     readonly outputSchema: ZodType<OUTPUT>;
     // Private chats keep cost/usage telemetry but never export input/output content.
@@ -187,7 +187,7 @@ export namespace Model {
               ...(outputProtocol === ModelProfile.outputProtocols.jsonSchemaResponse && {
                 output: Output.object({ schema: input.outputSchema }),
               }),
-              prepareStep: (step) => limitToolSteps(step.steps, input.maxToolSteps, outputProtocol),
+              prepareStep: (step) => limitToolCalls(step.steps, input.maxToolCalls, outputProtocol),
               providerOptions: input.promptCacheKey
                 ? { openrouter: { prompt_cache_key: input.promptCacheKey } }
                 : undefined,
@@ -470,19 +470,25 @@ export namespace Model {
     return bounded.output;
   }
 
-  function limitToolSteps(
+  function limitToolCalls(
     steps: readonly StepResult<ToolSet>[],
-    maximumSteps: number,
+    maximumCalls: number,
     outputProtocol: ModelProfile.OutputProtocol,
   ) {
-    const toolStepCount = steps.filter((step) =>
-      step.toolCalls.some((toolCall) =>
-        outputProtocol === ModelProfile.outputProtocols.finalOutputTool
-          ? toolCall.toolName !== FINAL_OUTPUT_TOOL_NAME
-          : true,
-      ),
-    ).length;
-    if (toolStepCount < Math.max(maximumSteps, 0)) return;
+    // The budget counts individual tool executions, not steps: parallel calls
+    // inside one step each consume it. Enforcement lands on the next step
+    // boundary, so one parallel fan-out can overshoot by its own width.
+    const toolCallCount = steps.reduce(
+      (count, step) =>
+        count +
+        step.toolCalls.filter((toolCall) =>
+          outputProtocol === ModelProfile.outputProtocols.finalOutputTool
+            ? toolCall.toolName !== FINAL_OUTPUT_TOOL_NAME
+            : true,
+        ).length,
+      0,
+    );
+    if (toolCallCount < Math.max(maximumCalls, 0)) return;
     if (outputProtocol === ModelProfile.outputProtocols.finalOutputTool) {
       return { activeTools: [FINAL_OUTPUT_TOOL_NAME] as const };
     }

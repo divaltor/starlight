@@ -33,7 +33,7 @@ export namespace GuestReply {
             instructions: `${personaPromptText}\n\n${guestPromptText}`,
             maxOutputTokens: MAX_OUTPUT_TOKENS,
             maxToolOutputBytes: 0,
-            maxToolSteps: 0,
+            maxToolCalls: 0,
             messages: [
               {
                 role: "user",

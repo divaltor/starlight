@@ -16,7 +16,7 @@ test("returns an immutable completed tool event", async () => {
       doGenerate: [toolCallResult("call-1"), finalOutputResult("done")],
     }),
     {
-      maxToolSteps: 1,
+      maxToolCalls: 1,
       outputSchema: z.object({ answer: z.string() }),
       tools: {
         web_lookup: {
@@ -48,7 +48,7 @@ test("bounds cumulative tool output before another model step", async () => {
     }),
     {
       maxToolOutputBytes: 200,
-      maxToolSteps: 1,
+      maxToolCalls: 1,
       outputSchema: z.object({ answer: z.string() }),
       tools: {
         web_lookup: {
@@ -73,7 +73,7 @@ test("returns a failed tool event when generation recovers", async () => {
       doGenerate: [toolCallResult("call-1"), finalOutputResult("recovered")],
     }),
     {
-      maxToolSteps: 1,
+      maxToolCalls: 1,
       outputSchema: z.object({ answer: z.string() }),
       tools: {
         web_lookup: {
@@ -105,7 +105,7 @@ test("returns schema output after research without recording its JSON carrier", 
       doGenerate: [toolCallResult("call-1"), textResult('{"answer":"fresh"}')],
     }),
     {
-      maxToolSteps: 1,
+      maxToolCalls: 1,
       outputSchema: z.object({ answer: z.string() }),
       profile: {
         ...ModelProfile.profiles["google/gemini-3-flash-preview"],
@@ -126,7 +126,7 @@ test("returns schema output after research without recording its JSON carrier", 
   expect(result.transcript).toEqual([]);
 });
 
-test("requires final output after at most three external tool steps", async () => {
+test("executes parallel research calls before the final answer", async () => {
   let executionCount = 0;
   const result = await runModel(
     new MockLanguageModelV3({
@@ -138,7 +138,7 @@ test("requires final output after at most three external tool steps", async () =
       ],
     }),
     {
-      maxToolSteps: 3,
+      maxToolCalls: 6,
       outputSchema: z.object({ answer: z.string() }),
       tools: {
         web_lookup: {
@@ -155,6 +155,60 @@ test("requires final output after at most three external tool steps", async () =
 
   expect(result.output).toEqual({ answer: "done" });
   expect(executionCount).toBe(6);
+});
+
+test("allows a second sequential research call before the final answer", async () => {
+  let executionCount = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: [toolCallResult("call-1"), toolCallResult("call-2"), finalOutputResult("done")],
+  });
+  const result = await runModel(model, {
+    maxToolCalls: 2,
+    outputSchema: z.object({ answer: z.string() }),
+    tools: {
+      web_lookup: {
+        description: "Count executions",
+        execute: (input) => {
+          executionCount += 1;
+          return Promise.resolve(input);
+        },
+        inputSchema: z.object({ query: z.string() }),
+      },
+    },
+  });
+
+  expect(result.output).toEqual({ answer: "done" });
+  expect(executionCount).toBe(2);
+  expect(offeredTools(model)).toEqual([
+    ["final_output", "web_lookup"],
+    ["final_output", "web_lookup"],
+    ["final_output"],
+  ]);
+});
+
+test("counts parallel research calls toward the two-call budget", async () => {
+  let executionCount = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: [parallelToolCallResult("call-1", "call-2"), finalOutputResult("done")],
+  });
+  const result = await runModel(model, {
+    maxToolCalls: 2,
+    outputSchema: z.object({ answer: z.string() }),
+    tools: {
+      web_lookup: {
+        description: "Count executions",
+        execute: (input) => {
+          executionCount += 1;
+          return Promise.resolve(input);
+        },
+        inputSchema: z.object({ query: z.string() }),
+      },
+    },
+  });
+
+  expect(result.output).toEqual({ answer: "done" });
+  expect(executionCount).toBe(2);
+  expect(offeredTools(model)).toEqual([["final_output", "web_lookup"], ["final_output"]]);
 });
 
 test("waits for external tool results before accepting final output", async () => {
@@ -185,7 +239,7 @@ test("waits for external tool results before accepting final output", async () =
       ],
     }),
     {
-      maxToolSteps: 1,
+      maxToolCalls: 1,
       outputSchema: z.object({ answer: z.string() }),
       tools: {
         web_lookup: {
@@ -219,7 +273,7 @@ test("stops after 32 model steps", async () => {
       },
     }),
     {
-      maxToolSteps: 100,
+      maxToolCalls: 100,
       outputSchema: z.object({ answer: z.string() }),
       tools: {
         web_lookup: {
@@ -249,7 +303,7 @@ test("does not put prompt or tool-result content in model logs", async () => {
     }),
     {
       instructions: "TOP_SECRET_PROMPT",
-      maxToolSteps: 1,
+      maxToolCalls: 1,
       messages: [{ role: "user", text: "TOP_SECRET_MESSAGE" }],
       outputSchema: z.object({ answer: z.string() }),
       tools: {
@@ -328,7 +382,7 @@ test("aborts an active tool when the total deadline expires", async () => {
     Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(
         runModelEffect(new MockLanguageModelV3({ doGenerate: toolCallResult("call-1") }), {
-          maxToolSteps: 1,
+          maxToolCalls: 1,
           outputSchema: z.object({ answer: z.string() }),
           tools: {
             web_lookup: {
@@ -357,7 +411,7 @@ test("aborts an active tool when the total deadline expires", async () => {
 interface ModelTestInput<OUTPUT> {
   readonly instructions?: string;
   readonly maxToolOutputBytes?: number;
-  readonly maxToolSteps?: number;
+  readonly maxToolCalls?: number;
   readonly messages?: readonly Model.Message[];
   readonly outputSchema: z.ZodType<OUTPUT>;
   readonly profile?: ModelProfile.Profile;
@@ -374,7 +428,7 @@ function runModelEffect<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTP
     return yield* service.generate({
       instructions: input.instructions ?? "fixture instructions",
       maxToolOutputBytes: input.maxToolOutputBytes ?? 16 * 1024,
-      maxToolSteps: input.maxToolSteps ?? 0,
+      maxToolCalls: input.maxToolCalls ?? 0,
       messages: input.messages ?? [{ role: "user", text: "fixture message" }],
       outputSchema: input.outputSchema,
       sessionId: "model-test",
@@ -459,6 +513,10 @@ function parallelToolCallResult(firstToolCallId: string, secondToolCallId: strin
     usage: modelUsage,
     warnings: [],
   };
+}
+
+function offeredTools(model: MockLanguageModelV3) {
+  return model.doGenerateCalls.map((call) => (call.tools ?? []).map((tool) => tool.name).toSorted());
 }
 
 const modelUsage = {
