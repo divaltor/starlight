@@ -43,8 +43,8 @@ export namespace Exa {
   export const layer: Layer.Layer<Service, ExaError> = Layer.effect(
     Service,
     Effect.gen(function* layer() {
-      const configuredApiKey = yield* Config.option(Config.redacted("EXA_API_KEY"));
-      const configuredMcpUrl = yield* Config.string("EXA_MCP_URL").pipe(Config.withDefault(DEFAULT_MCP_URL));
+      const configuredApiKey = yield* Config.option(Config.Redacted("EXA_API_KEY"));
+      const configuredMcpUrl = yield* Config.String("EXA_MCP_URL").pipe(Config.withDefault(DEFAULT_MCP_URL));
       const apiKey = configuredApiKey.pipe(
         Option.flatMap((value) => {
           const key = Redacted.value(value).trim();
