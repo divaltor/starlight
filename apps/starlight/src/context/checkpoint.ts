@@ -6,6 +6,7 @@ export namespace Checkpoint {
   export const summaryInstructions = `Summarize only the active conversation continuity needed after old turns are removed.
 Preserve unresolved user intent, constraints and referents, corrections, assistant commitments, open questions, and tool or media facts needed for unfinished work.
 Omit durable profile facts, trivia, resolved topics, obsolete intermediate wording, and repeated greetings unless they are necessary to understand active state. Long-term memory supplies durable facts separately.
+Never preserve assistant jokes, laughter, tone, persona performance, banter, or stylistic descriptions. They are not conversation continuity.
 Return only the summary body. Do not include frozen-memory headings or wrapper text. Do not invent facts.`;
 
   // Contract for the summarizer output persisted on checkpoint attempts.
