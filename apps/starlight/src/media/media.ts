@@ -1,4 +1,4 @@
-import type { FileApiFlavor } from "@grammyjs/files";
+import { classifyPdfAsync } from "@firecrawl/pdf-inspector";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 import type { Api } from "grammy";
@@ -8,10 +8,12 @@ export namespace Media {
   const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
   const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
   const MAX_IMAGE_PIXELS = 40_000_000;
+  const MAX_PDF_PAGES = 25;
   const REQUEST_TIMEOUT_MS = 30_000;
   const DOWNLOAD_FAILED = "Failed to download Telegram media";
   const SOURCE_TOO_LARGE = "Telegram media exceeds the 20 MiB download boundary";
   const JPEG_QUALITIES = [85, 70, 55, 40] as const;
+  const SUPPORTED_MIME_PREFIXES = ["image/", "text/", "video/", "audio/"] as const;
 
   export const Type = Schema.Literals([
     "animation",
@@ -73,7 +75,12 @@ export namespace Media {
     readonly accessKeyId: string;
     readonly endpoint?: string;
     readonly secretAccessKey: string;
-    readonly telegramApi: FileApiFlavor<Api>;
+    readonly telegramApi: {
+      readonly getFile: (
+        fileId: string,
+        signal?: Parameters<Api["getFile"]>[1],
+      ) => Promise<{ readonly getUrl: () => string }>;
+    };
   }
 
   export interface Interface {
@@ -226,10 +233,18 @@ export namespace Media {
       if (source.declaredSize !== null && source.declaredSize > MAX_SOURCE_BYTES) {
         return unavailable(source, "media exceeds the 20 MiB boundary");
       }
-      if (source.mimeType === "application/pdf") return unavailable(source, "PDF processing pipeline is planned");
       if (!isSupported(source)) return unavailable(source, "media type is not supported by the model pipeline");
 
       const downloaded = yield* download(source);
+      if (source.mimeType === "application/pdf") {
+        const classification = yield* Effect.tryPromise({
+          try: () => classifyPdfAsync(Buffer.from(downloaded)),
+          catch: (cause) => new MediaError({ cause, message: "Failed to inspect PDF", retryable: false }),
+        });
+        if (classification.pageCount > MAX_PDF_PAGES) {
+          return unavailable(source, `PDF exceeds the ${MAX_PDF_PAGES}-page boundary`);
+        }
+      }
       const bytes = isNormalizableImage(source) ? yield* normalizeImage(downloaded) : downloaded;
       const sha256 = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
       const s3Key = `telegram-media/${sha256}`;
@@ -345,10 +360,8 @@ export namespace Media {
 
   function isSupported(source: Source): boolean {
     return (
-      source.mimeType.startsWith("image/") ||
-      source.mimeType.startsWith("text/") ||
-      source.mimeType.startsWith("video/") ||
-      source.mimeType.startsWith("audio/")
+      source.mimeType === "application/pdf" ||
+      SUPPORTED_MIME_PREFIXES.some((prefix) => source.mimeType.startsWith(prefix))
     );
   }
 
