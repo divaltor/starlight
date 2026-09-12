@@ -4,11 +4,14 @@ import type { Message } from "grammy/types";
 import { Duration, Effect, Schedule } from "effect";
 import { Conversation } from "@/conversation/conversation";
 import { Prompt } from "@/context/prompt";
+import { createBotEnv } from "@/env";
+import { MessageReply } from "@/handlers/message-reply";
 import { Media } from "@/media/media";
 import { runtime } from "@/services/runtime";
 
 // 5 retries after the initial attempt; exponential delays 500ms → 8s.
 const ADMISSION_RETRIES = 5;
+const randomResponseChance = createBotEnv().RANDOM_RESPONSE_CHANCE;
 
 const composer = new Composer<Context>();
 const groupChat = composer.chatType(["group", "supergroup"]);
@@ -17,7 +20,20 @@ const privateChat = composer.chatType("private");
 groupChat
   .on("message")
   .filter(hasAdmittableContent)
-  .use((ctx) => admitMessage(ctx, ctx.message, isAddressedToBot(ctx, ctx.message)));
+  .use((ctx) =>
+    admitMessage(
+      ctx,
+      ctx.message,
+      MessageReply.shouldRespond({
+        explicitlyAddressed: isAddressedToBot(ctx, ctx.message),
+        hasSticker: ctx.message.sticker !== undefined,
+        isReply: ctx.message.reply_to_message !== undefined,
+        random: Math.random,
+        randomResponseChance,
+        text: ctx.message.text ?? ctx.message.caption ?? "",
+      }),
+    ),
+  );
 groupChat
   .on("edited_message")
   .filter(hasAdmittableEditedContent)
