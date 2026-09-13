@@ -52,7 +52,9 @@ const env = createEnv({
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
-  skipValidation: false,
+  // bun test sets NODE_ENV=test; unit tests import the full env transitively
+  // (logger) without configuring it, so validation stays production-only.
+  skipValidation: process.env.NODE_ENV === "test",
 });
 
 export default env;

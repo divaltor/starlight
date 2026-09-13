@@ -25,6 +25,18 @@ time bun install --frozen-lockfile
 echo "Generating the Prisma client"
 time bun run db:generate
 
+# oxlint's JS-plugin arena reserves a ~4 GiB-aligned virtual memory region per
+# worker; the Linux overcommit heuristic denies that when RAM + swap is below
+# 4 GiB, crashing lint with an allocator panic. Ensure a swapfile exists so
+# RAM + swap covers the reservation.
+if ! swapon --show 2>/dev/null | grep -Fq .; then
+  echo "Creating a 4G swapfile for oxlint's arena reservation"
+  sudo fallocate -l 4G /swapfile
+  sudo chmod 600 /swapfile
+  sudo mkswap /swapfile
+  sudo swapon /swapfile
+fi
+
 echo "Installing classification dependencies"
 missing_packages=()
 for package in libatomic1 libgomp1 libnuma1; do

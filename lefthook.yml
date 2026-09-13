@@ -9,4 +9,4 @@ pre-commit:
       stage_fixed: true
     ast-grep:
       glob: "*.{ts,tsx}"
-      run: ast-grep scan -c script/ast-grep/sgconfig.yml "{staged_files}"
+      run: bunx ast-grep scan -c script/ast-grep/sgconfig.yml "{staged_files}"

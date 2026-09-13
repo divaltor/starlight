@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import sharp from "sharp";
 
 test("falls back when an image URL returns invalid bytes", async () => {
-  process.env.NODE_ENV = "development";
   const { renderTweetImage } = await import(".");
   const server = Bun.serve({
     port: 0,
@@ -30,7 +29,6 @@ test("falls back when an image URL returns invalid bytes", async () => {
 });
 
 test("renders light card bottom corners without dark pixels", async () => {
-  process.env.NODE_ENV = "development";
   const { renderTweetImage } = await import(".");
   const server = Bun.serve({
     port: 0,
@@ -64,7 +62,6 @@ test("renders light card bottom corners without dark pixels", async () => {
 });
 
 test("renders light card bottom corners without dark pixels", async () => {
-  process.env.NODE_ENV = "development";
   const { renderTweetImage } = await import(".");
   const server = Bun.serve({
     port: 0,
