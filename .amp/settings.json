@@ -7,6 +7,12 @@
         "GRAFANA_URL": "${GRAFANA_URL}",
         "GRAFANA_SERVICE_ACCOUNT_TOKEN": "${GRAFANA_API_KEY}"
       }
+    },
+    "langfuse": {
+      "url": "${LANGFUSE_BASE_URL}/api/public/mcp",
+      "headers": {
+        "Authorization": "Basic ${LANGFUSE_MCP_TOKEN}"
+      }
     }
   }
 }
