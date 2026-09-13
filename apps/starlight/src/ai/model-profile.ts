@@ -17,12 +17,12 @@ export namespace ModelProfile {
       readonly defaultOutputTokens: number;
       readonly maximumOutputTokens: number;
     };
-    readonly model: ModelId;
+    readonly model: string;
     readonly output: { readonly protocol: OutputProtocol };
     readonly reasoning: { readonly effort: "low" };
     readonly route: {
-      readonly allowFallbacks: false;
-      readonly only: readonly ["google-vertex/global"];
+      readonly allowFallbacks: boolean;
+      readonly only: readonly string[];
       readonly requireParameters: true;
     };
   }

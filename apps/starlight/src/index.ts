@@ -5,6 +5,7 @@ import { createBotEnv } from "@/env";
 import guestMessageHandler from "@/handlers/guest-message";
 import messageHandler from "@/handlers/message";
 import startHandler from "@/handlers/start";
+import topicCreatedHandler from "@/handlers/topic-created";
 import { createUpdateTracer, initTelemetry, shutdownTelemetry } from "@/instrumentation";
 import premiumAccess from "@/middlewares/premium-access";
 import startChat from "@/middlewares/start-chat";
@@ -41,6 +42,7 @@ boundary.use(startChat);
 boundary.use(premiumAccess);
 boundary.use(startHandler);
 boundary.use(guestMessageHandler);
+boundary.use(topicCreatedHandler);
 boundary.use(messageHandler);
 
 const runner = run(bot);

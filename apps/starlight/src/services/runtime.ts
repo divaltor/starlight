@@ -9,6 +9,7 @@ import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";
 import { GuestReply } from "@/ai/guest-reply";
 import { Model } from "@/ai/model";
+import { TopicMetadata } from "@/ai/topic-metadata";
 import { fileApi } from "@/bot";
 import { Conversation } from "@/conversation/conversation";
 import { TelegramDelivery } from "@/conversation/delivery";
@@ -91,6 +92,9 @@ const chatTools = ChatTools.layer.pipe(Layer.provideMerge(Exa.defaultLayer));
 const replies = Layer.mergeAll(ChatReply.layer, GuestReply.layer).pipe(
   Layer.provideMerge(Model.defaultLayer(env.OPENROUTER_API_KEY)),
 );
+const topicMetadata = TopicMetadata.layer.pipe(
+  Layer.provide(Model.defaultLayer(env.OPENROUTER_API_KEY, TopicMetadata.profile)),
+);
 const tracing =
   env.langfuse === undefined && env.otlp === undefined
     ? Layer.empty
@@ -102,6 +106,7 @@ const infrastructure = Layer.provide(
     Database.layer(env.DATABASE_URL),
     chatTools,
     replies,
+    topicMetadata,
     TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
     WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
     Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),
