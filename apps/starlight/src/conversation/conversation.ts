@@ -683,8 +683,9 @@ export namespace Conversation {
             })
             .pipe(Effect.mapError(failed("Failed to start model attempt")));
 
+          // The catch lives inside the loop so one failed sendChatAction doesn't
+          // end the repetition and silence typing for the rest of generation.
           yield* delivery.indicateTyping({ chatId: claimed.key.chatId, threadKey: claimed.key.threadKey }).pipe(
-            Effect.repeat(Schedule.spaced(Duration.seconds(4))),
             Effect.catch((error) =>
               Effect.logWarning("Failed to send Telegram typing action").pipe(
                 Effect.annotateLogs({
@@ -694,6 +695,7 @@ export namespace Conversation {
                 }),
               ),
             ),
+            Effect.repeat(Schedule.spaced(Duration.seconds(4))),
             Effect.forkScoped,
           );
 
