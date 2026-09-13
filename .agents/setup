@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+export PATH="$HOME/.bun/bin:$PATH"
+
+echo "Installing Bun 1.4.2"
+if [[ "$(bun --version 2>/dev/null || true)" != "1.4.2" ]]; then
+  curl -fsSL https://bun.sh/install | bash -s -- bun-v1.4.2
+fi
+if ! grep -Fqx "# Starlight Bun" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<'EOF'
+
+# Starlight Bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+EOF
+fi
+
+echo "Installing JavaScript dependencies"
+time bun install --frozen-lockfile
+
+echo "Generating the Prisma client"
+time bun run db:generate
+
+echo "Installing classification dependencies"
+missing_packages=()
+for package in libatomic1 libgomp1 libnuma1; do
+  if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -Fq "install ok installed"; then
+    missing_packages+=("$package")
+  fi
+done
+if (( ${#missing_packages[@]} > 0 )); then
+  sudo apt-get update
+  sudo apt-get install -y --no-install-recommends "${missing_packages[@]}"
+fi
+time uv sync --project classification --frozen
+
+echo "Orb setup complete"

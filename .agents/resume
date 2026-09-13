@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# No authentication or reconnect steps are required after an orb wakes.
