@@ -6,11 +6,11 @@ import { ModelProfile } from "@/ai/model-profile";
 export namespace TopicMetadata {
   export const profile = {
     limits: {
-      defaultOutputTokens: 256,
+      defaultOutputTokens: 1024,
       maximumOutputTokens: 1024,
     },
     model: "openai/gpt-5.6-luna",
-    output: { protocol: ModelProfile.outputProtocols.finalOutputTool },
+    output: { protocol: ModelProfile.outputProtocols.jsonSchemaResponse },
     reasoning: { effort: "low" },
     route: {
       allowFallbacks: false,
