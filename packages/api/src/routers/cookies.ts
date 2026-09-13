@@ -1,81 +1,80 @@
 import { ORPCError } from "@orpc/client";
 import { prisma } from "@starlight/utils";
 import { z } from "zod";
-import { type AuthContext, protectedProcedure } from "../middlewares/auth";
+import { protectedProcedure } from "../middlewares/auth";
+import type { AuthContext } from "../middlewares/auth";
 import { normalizeTwitterCookies } from "../services/twitter-cookies";
 import { encryptTwitterCookies, getTwitterCookies } from "../services/twitter-credential";
 
 const cookiesSchema = z.object({
-	cookies: z.string(),
+  cookies: z.string(),
 });
 
-export const saveCookies = protectedProcedure
-	.input(cookiesSchema)
-	.handler(async ({ input, context }) => {
-		if (!(context.user && context.databaseUserId)) {
-			throw new ORPCError("UNAUTHORIZED", {
-				message: "Unauthorized",
-				status: 401,
-			});
-		}
+export const saveCookies = protectedProcedure.input(cookiesSchema).handler(async ({ input, context }) => {
+  if (!(context.user && context.databaseUserId)) {
+    throw new ORPCError("UNAUTHORIZED", {
+      message: "Unauthorized",
+      status: 401,
+    });
+  }
 
-		let cookies: string;
-		try {
-			cookies = normalizeTwitterCookies(input.cookies);
-		} catch {
-			throw new ORPCError("BAD_REQUEST", {
-				message: "Invalid cookies",
-				status: 400,
-			});
-		}
+  let cookies: string;
+  try {
+    cookies = normalizeTwitterCookies(input.cookies);
+  } catch {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Invalid cookies",
+      status: 400,
+    });
+  }
 
-		const userId = context.databaseUserId;
-		const encryptedCookies = encryptTwitterCookies(cookies, userId);
+  const userId = context.databaseUserId;
+  const encryptedCookies = encryptTwitterCookies(cookies, userId);
 
-		await prisma.providerCredential.upsert({
-			where: { userId_provider: { userId, provider: "twitter" } },
-			create: {
-				userId,
-				provider: "twitter",
-				credentialType: "cookies",
-				encryptedSecret: encryptedCookies,
-			},
-			update: {
-				credentialType: "cookies",
-				encryptedSecret: encryptedCookies,
-			},
-		});
-	});
+  await prisma.providerCredential.upsert({
+    where: { userId_provider: { userId, provider: "twitter" } },
+    create: {
+      userId,
+      provider: "twitter",
+      credentialType: "cookies",
+      encryptedSecret: encryptedCookies,
+    },
+    update: {
+      credentialType: "cookies",
+      encryptedSecret: encryptedCookies,
+    },
+  });
+});
 
 export const verifyCookies = async ({ context }: { context: AuthContext }) => {
-	try {
-		if (!(context.user && context.databaseUserId)) {
-			return { hasValidCookies: false };
-		}
+  try {
+    if (!(context.user && context.databaseUserId)) {
+      return { hasValidCookies: false };
+    }
 
-		const cookies = await getTwitterCookies(context.databaseUserId);
+    const cookies = await getTwitterCookies(context.databaseUserId);
 
-		if (!cookies) {
-			return { hasValidCookies: false };
-		}
+    if (!cookies) {
+      return { hasValidCookies: false };
+    }
 
-		return { hasValidCookies: true };
-	} catch {
-		return {
-			hasValidCookies: false,
-		};
-	}
+    return { hasValidCookies: true };
+  } catch {
+    return {
+      hasValidCookies: false,
+    };
+  }
 };
 
 export const deleteCookies = protectedProcedure.handler(async ({ context }) => {
-	if (!context.databaseUserId) {
-		throw new ORPCError("UNAUTHORIZED", {
-			message: "Unauthorized",
-			status: 401,
-		});
-	}
+  if (!context.databaseUserId) {
+    throw new ORPCError("UNAUTHORIZED", {
+      message: "Unauthorized",
+      status: 401,
+    });
+  }
 
-	await prisma.providerCredential.deleteMany({
-		where: { userId: context.databaseUserId, provider: "twitter" },
-	});
+  await prisma.providerCredential.deleteMany({
+    where: { userId: context.databaseUserId, provider: "twitter" },
+  });
 });

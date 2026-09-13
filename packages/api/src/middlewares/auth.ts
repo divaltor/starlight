@@ -1,98 +1,98 @@
 import { ORPCError } from "@orpc/client";
-import { env, prisma } from "@starlight/utils";
+import { prisma } from "@starlight/utils";
 import { parse, validate } from "@telegram-apps/init-data-node";
 import { o, publicProcedure } from "../index";
 
 export interface AuthContextUser {
-	first_name: string;
-	id: number;
-	is_premium?: boolean;
-	language_code?: string;
-	last_name?: string;
-	username?: string;
+  first_name: string;
+  id: number;
+  is_premium?: boolean;
+  language_code?: string;
+  last_name?: string;
+  username?: string;
 }
 
 export interface AuthContext {
-	databaseUserId?: string;
-	queryId?: string;
-	user?: AuthContextUser;
+  databaseUserId?: string;
+  queryId?: string;
+  user?: AuthContextUser;
 }
 
 export const authMiddleware = o.middleware(async ({ next, context }) => {
-	const auth = context.request.headers.get("Authorization");
+  const auth = context.request.headers.get("Authorization");
 
-	if (!auth) {
-		throw new ORPCError("UNAUTHORIZED", {
-			message: "Unauthorized: No init data provided",
-			status: 401,
-		});
-	}
+  if (!auth) {
+    throw new ORPCError("UNAUTHORIZED", {
+      message: "Unauthorized: No init data provided",
+      status: 401,
+    });
+  }
 
-	if (env.NODE_ENV === "production") {
-		try {
-			validate(auth, env.BOT_TOKEN);
-		} catch {
-			throw new ORPCError("BAD_REQUEST", {
-				message: "Invalid init data",
-				status: 400,
-			});
-		}
-	}
+  if (context.config.nodeEnv === "production") {
+    try {
+      validate(auth, context.config.botToken);
+    } catch {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Invalid init data",
+        status: 400,
+      });
+    }
+  }
 
-	const parsedData = parse(auth);
+  const parsedData = parse(auth);
 
-	if (!parsedData.user) {
-		throw new ORPCError("BAD_REQUEST", {
-			message: "Invalid init data: No user found",
-			status: 400,
-		});
-	}
+  if (!parsedData.user) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Invalid init data: No user found",
+      status: 400,
+    });
+  }
 
-	const databaseUser = await prisma.user.findUnique({
-		where: { telegramId: parsedData.user.id },
-		select: { id: true },
-	});
+  const databaseUser = await prisma.user.findUnique({
+    where: { telegramId: parsedData.user.id },
+    select: { id: true },
+  });
 
-	if (!databaseUser) {
-		throw new ORPCError("NOT_FOUND", {
-			message: "User not found",
-			status: 404,
-		});
-	}
+  if (!databaseUser) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "User not found",
+      status: 404,
+    });
+  }
 
-	return next({
-		context: {
-			...context,
-			user: parsedData.user,
-			databaseUserId: databaseUser.id,
-			queryId: parsedData.query_id,
-		},
-	});
+  return next({
+    context: {
+      ...context,
+      user: parsedData.user,
+      databaseUserId: databaseUser.id,
+      queryId: parsedData.query_id,
+    },
+  });
 });
 
 export const optionalAuthMiddleware = o.middleware(({ next, context }) => {
-	let user: AuthContextUser | undefined;
+  let user: AuthContextUser | undefined;
 
-	const auth = context.request.headers.get("Authorization");
+  const auth = context.request.headers.get("Authorization");
 
-	if (auth) {
-		try {
-			if (env.NODE_ENV === "production") {
-				validate(auth, env.BOT_TOKEN);
-			}
+  if (auth) {
+    try {
+      if (context.config.nodeEnv === "production") {
+        validate(auth, context.config.botToken);
+      }
 
-			({ user } = parse(auth));
-		} catch {
-			// Invalid init data leaves the request anonymous in optional auth
-		}
-	}
+      ({ user } = parse(auth));
+    } catch {
+      // Invalid init data leaves the request anonymous in optional auth
+    }
+  }
 
-	return next({
-		context: {
-			...context,
-			user,
-		},
-	});
+  return next({
+    context: {
+      ...context,
+      user,
+    },
+  });
 });
 
 export const protectedProcedure = publicProcedure.use(authMiddleware);

@@ -1,4 +1,4 @@
-import type { PostData, PostsPageResult } from "@starlight/api/src/types/posts";
+import type { PostData, PostsPageResult } from "@starlight/api/types/posts";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { lazy, Suspense } from "react";
@@ -97,13 +97,13 @@ export const Route = createFileRoute("/profile/$slug")({
 
 		await queryClient.fetchInfiniteQuery(
 			orpc.posts.list.infiniteOptions({
-				input: (pageParam: string | undefined) => ({
-					cursor: pageParam,
+				input: (pageParam: string | null) => ({
+					cursor: pageParam ?? undefined,
 					limit: 30,
 				}),
 				queryKey: ["posts", { username: slug }],
-				initialPageParam: undefined,
-				getNextPageParam: (lastPage: PostsPageResult) => lastPage.nextCursor ?? undefined,
+				initialPageParam: null,
+				getNextPageParam: (lastPage: PostsPageResult) => lastPage.nextCursor ?? null,
 				retry: false,
 				gcTime: 10 * 60 * 1000,
 			}),

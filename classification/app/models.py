@@ -1,8 +1,17 @@
 from abc import ABC
 from enum import StrEnum
-from typing import Any, Literal, Self, override
+from typing import Annotated, Any, Literal, Self, override
 
-from pydantic import BaseModel, ConfigDict, Field, model_serializer
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    StringConstraints,
+    model_serializer,
+    model_validator,
+)
 
 
 def transform_response(model_response: list[dict[str, Any]]) -> dict[str, float]:
@@ -184,6 +193,90 @@ class ClassificationResult(ResponseModel):
 class EncodingMode(StrEnum):
     DOCUMENT = 'document'
     QUERY = 'retrieval.query'
+
+
+# Wire-contract limits for the memory-model endpoints; enforced by Pydantic so
+# routes only handle checks that depend on loaded-model state.
+MAX_EMBEDDING_INPUTS = 64
+MAX_TEXT_CHARS = 16_000
+MAX_DOCUMENTS = 100
+MAX_QUERY_CHARS = 4_000
+MAX_DOCUMENT_CHARS = 16_000
+
+
+def _require_content(value: str) -> str:
+    if not value.strip():
+        raise ValueError('must contain non-whitespace characters')
+
+    return value
+
+
+MemoryText = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=MAX_TEXT_CHARS),
+    AfterValidator(_require_content),
+]
+QueryText = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=MAX_QUERY_CHARS),
+    AfterValidator(_require_content),
+]
+DocumentText = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=MAX_DOCUMENT_CHARS),
+    AfterValidator(_require_content),
+]
+EmbeddingInputs = Annotated[list[MemoryText], Field(min_length=1, max_length=MAX_EMBEDDING_INPUTS)]
+Documents = Annotated[list[DocumentText], Field(min_length=1, max_length=MAX_DOCUMENTS)]
+
+
+class OpenAIEmbeddingRequest(BaseModel):
+    model: str = Field(min_length=1)
+    input: MemoryText | EmbeddingInputs
+    dimensions: StrictInt | None = None
+    encoding_format: Literal['float', 'base64'] | None = None
+
+
+class OpenAIEmbeddingData(BaseModel):
+    object: Literal['embedding']
+    index: int
+    embedding: list[float] | str
+
+
+class OpenAIEmbeddingUsage(BaseModel):
+    prompt_tokens: int
+    total_tokens: int
+
+
+class OpenAIEmbeddingResponse(BaseModel):
+    object: Literal['list']
+    data: list[OpenAIEmbeddingData]
+    model: str
+    usage: OpenAIEmbeddingUsage
+
+
+class CohereRerankRequest(BaseModel):
+    model: str | None = None
+    query: QueryText
+    documents: Documents
+    top_n: StrictInt | None = None
+    return_documents: Literal[False] | None = None
+
+    @model_validator(mode='after')
+    def _check_top_n(self) -> Self:
+        if self.top_n is not None and not 1 <= self.top_n <= len(self.documents):
+            raise ValueError(f'top_n must be between 1 and {len(self.documents)}')
+
+        return self
+
+
+class CohereRerankResult(BaseModel):
+    index: int
+    relevance_score: float
+
+
+class CohereRerankResponse(BaseModel):
+    results: list[CohereRerankResult]
 
 
 class EmbeddingPayload(BaseModel):

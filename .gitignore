@@ -162,6 +162,7 @@ build/Release
 
 # Dependency directories
 node_modules/
+apps/starlight/.artifacts/
 jspm_packages/
 
 # Snowpack dependency directory (https://snowpack.dev/)
@@ -196,6 +197,7 @@ web_modules/
 
 # dotenv environment variable files
 .env
+.env-key
 .env.development.local
 .env.test.local
 .env.production.local

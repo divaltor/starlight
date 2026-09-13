@@ -1,106 +1,101 @@
 import { ORPCError } from "@orpc/client";
-import { env, Prisma, prisma } from "@starlight/utils";
+import { Prisma, prisma } from "@starlight/utils";
 import { z } from "zod";
 import { publicProcedure } from "..";
 import { maybeAuthProcedure } from "../middlewares/auth";
 import { resolveQueryEmbedding } from "../services/embedding-cache";
-import * as EmbeddingsService from "../services/embeddings";
-import { runtime } from "../services/runtime";
 import type { SearchResult } from "../types/posts";
-import { Cursor, SearchCursorPayloadSchema, type SearchCursorPayload } from "../utils/cursor";
+import { Cursor, SearchCursorPayloadSchema } from "../utils/cursor";
+import type { SearchCursorPayload } from "../utils/cursor";
 import { paginateSearchResults } from "../utils/search-pagination";
 import { transformSearchResults } from "../utils/transformations";
 
 const galleryDedupePartitionSql = "user_id, dedupe_key";
 const galleryRepresentativeOrderSql =
-	"final_score DESC NULLS LAST, provider DESC, media_id DESC, user_id DESC, post_created_at DESC, post_id DESC";
+  "final_score DESC NULLS LAST, provider DESC, media_id DESC, user_id DESC, post_created_at DESC, post_id DESC";
 
 const galleryDedupeKeySql = (mediaAlias: string) =>
-	`COALESCE(NULLIF(${mediaAlias}.perceptual_hash, ''), jsonb_build_array(${mediaAlias}.provider, ${mediaAlias}.external_id, ${mediaAlias}.user_id)::text)`;
+  `COALESCE(NULLIF(${mediaAlias}.perceptual_hash, ''), jsonb_build_array(${mediaAlias}.provider, ${mediaAlias}.external_id, ${mediaAlias}.user_id)::text)`;
 
 export const searchImages = maybeAuthProcedure
-	.input(
-		z.object({
-			query: z.string().max(256),
-			cursor: z.string().optional(),
-			limit: z.number().min(1).max(100).default(30),
-			ownOnly: z.boolean().optional().default(false),
-		}),
-	)
-	.handler(async ({ input, context }) => {
-		if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
-			throw new ORPCError("Service not available, sorry!");
-		}
+  .input(
+    z.object({
+      query: z.string().max(256),
+      cursor: z.string().optional(),
+      limit: z.number().min(1).max(100).default(30),
+      ownOnly: z.boolean().optional().default(false),
+    }),
+  )
+  .handler(async ({ input, context }) => {
+    if (!context.config.embeddingsEnabled) {
+      throw new ORPCError("Service not available, sorry!");
+    }
 
-		const { user } = context;
-		const query = input.query.trim();
-		const { cursor, limit, ownOnly } = input;
+    const { user } = context;
+    const query = input.query.trim();
+    const { cursor, limit, ownOnly } = input;
 
-		// If ownOnly is true, require authentication
-		if (ownOnly && !user) {
-			throw new ORPCError("UNAUTHORIZED", {
-				message: "Authentication required for personal search",
-				status: 401,
-			});
-		}
+    // If ownOnly is true, require authentication
+    if (ownOnly && !user) {
+      throw new ORPCError("UNAUTHORIZED", {
+        message: "Authentication required for personal search",
+        status: 401,
+      });
+    }
 
-		// Get database user ID if searching the authenticated user's posts
-		let databaseUserId: string | null = null;
-		if (ownOnly && user) {
-			const dbUser = await prisma.user.findUnique({
-				where: { telegramId: user.id },
-				select: { id: true },
-			});
-			if (!dbUser) {
-				throw new ORPCError("NOT_FOUND", {
-					message: "User not found",
-					status: 404,
-				});
-			}
-			databaseUserId = dbUser.id;
-		}
+    // Get database user ID if searching the authenticated user's posts
+    let databaseUserId: string | null = null;
+    if (ownOnly && user) {
+      const dbUser = await prisma.user.findUnique({
+        where: { telegramId: user.id },
+        select: { id: true },
+      });
+      if (!dbUser) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "User not found",
+          status: 404,
+        });
+      }
+      databaseUserId = dbUser.id;
+    }
 
-		const { requestId } = context;
-		const text = await resolveQueryEmbedding(
-			() =>
-				runtime.runPromise(EmbeddingsService.Service.use((s) => s.generateText(query, requestId))),
-			query,
-		);
+    const { requestId } = context;
+    const text = await resolveQueryEmbedding(() => context.generateTextEmbedding(query, requestId), query);
 
-		if (!text) {
-			throw new ORPCError("Failed to search images", {
-				status: 500,
-			});
-		}
+    if (!text) {
+      throw new ORPCError("Failed to search images", {
+        status: 500,
+      });
+    }
 
-		let cursorData: SearchCursorPayload | null = null;
-		if (cursor) {
-			cursorData = Cursor.parse(cursor, SearchCursorPayloadSchema);
+    let cursorData: SearchCursorPayload | null = null;
+    if (cursor) {
+      cursorData = Cursor.parse(cursor, SearchCursorPayloadSchema);
 
-			if (!cursorData) {
-				return {
-					results: [],
-					nextCursor: null,
-				};
-			}
-		}
+      if (!cursorData) {
+        return {
+          results: [],
+          nextCursor: null,
+        };
+      }
+    }
 
-		const queryTime = cursorData?.queryTime ?? new Date().toISOString();
-		const textQuery = `[${text.join(",")}]`;
-		const queryLower = query.toLowerCase();
-		const queryContains = `%${queryLower}%`;
-		const queryStartsWith = `${queryLower}%`;
-		const queryStartsWithSeries = `${queryLower} (%`;
-		const candidateLimit = Math.max(limit * 8, 200);
-		const hasLexicalQuery = queryLower.length > 0;
+    const queryTime = cursorData?.queryTime ?? new Date().toISOString();
+    const textQuery = `[${text.join(",")}]`;
+    const queryLower = query.toLowerCase();
+    const queryContains = `%${queryLower}%`;
+    const queryStartsWith = `${queryLower}%`;
+    const queryStartsWithSeries = `${queryLower} (%`;
+    const candidateLimit = Math.max(limit * 8, 200);
+    const hasLexicalQuery = queryLower.length > 0;
 
-		// Build user filter based on ownOnly flag
-		const userFilter =
-			ownOnly && databaseUserId
-				? Prisma.sql`p.user_id = ${databaseUserId}`
-				: Prisma.sql`p.user_id IN (SELECT id FROM users WHERE is_public = true)`;
+    // Build user filter based on ownOnly flag
+    const userFilter =
+      ownOnly && databaseUserId
+        ? Prisma.sql`p.user_id = ${databaseUserId}`
+        : Prisma.sql`p.user_id IN (SELECT id FROM users WHERE is_public = true)`;
 
-		const baseFilter = Prisma.sql`
+    const baseFilter = Prisma.sql`
 			p.deleted_at IS NULL
 			AND p.s3_path IS NOT NULL
 			AND p.kind = 'image'
@@ -110,8 +105,8 @@ export const searchImages = maybeAuthProcedure
 			AND ${userFilter}
 		`;
 
-		const lexicalMatch = hasLexicalQuery
-			? Prisma.sql`
+    const lexicalMatch = hasLexicalQuery
+      ? Prisma.sql`
 				(
 					EXISTS (
 						SELECT 1
@@ -141,18 +136,21 @@ export const searchImages = maybeAuthProcedure
 					)
 				)
 			`
-			: Prisma.sql`FALSE`;
+      : Prisma.sql`FALSE`;
 
-		const paginationClause = cursorData
-			? Prisma.sql`WHERE (
+    const paginationClause = cursorData
+      ? Prisma.sql`WHERE (
 				final_score < ${cursorData.lastScore}
 				OR (final_score = ${cursorData.lastScore} AND post_provider < ${cursorData.lastProvider})
 				OR (final_score = ${cursorData.lastScore} AND post_provider = ${cursorData.lastProvider} AND post_id < ${cursorData.lastPostId})
 				OR (final_score = ${cursorData.lastScore} AND post_provider = ${cursorData.lastProvider} AND post_id = ${cursorData.lastPostId} AND user_id < ${cursorData.lastUserId})
 			)`
-			: Prisma.empty;
+      : Prisma.empty;
 
-		const images = await prisma.$queryRaw<SearchResult[]>(Prisma.sql`
+    const images = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true)`;
+
+      return tx.$queryRaw<SearchResult[]>(Prisma.sql`
 			WITH image_candidates AS (
 				SELECT p.external_id AS id, p.user_id, p.provider
 				FROM media p
@@ -376,30 +374,31 @@ export const searchImages = maybeAuthProcedure
 			JOIN media p ON p.post_external_id = paged_posts.post_id AND p.user_id = paged_posts.user_id AND p.provider = paged_posts.post_provider
 			WHERE p.deleted_at IS NULL AND p.s3_path IS NOT NULL
 			ORDER BY paged_posts.final_score DESC NULLS LAST, paged_posts.post_provider DESC, paged_posts.post_id DESC, paged_posts.user_id DESC, p.position, p.created_at DESC, p.external_id DESC
-		`);
+			`);
+    });
 
-		const page = paginateSearchResults(images, limit);
-		const transformedResults = transformSearchResults(page.rows, env.BASE_CDN_URL);
+    const page = paginateSearchResults(images, limit);
+    const transformedResults = transformSearchResults(page.rows, context.config.baseCdnUrl);
 
-		let nextCursor: string | null = null;
-		if (page.hasNextPage && page.lastPost) {
-			nextCursor = Cursor.create<SearchCursorPayload>({
-				lastScore: page.lastPost.final_score,
-				lastProvider: page.lastPost.post_provider,
-				lastPostId: page.lastPost.post_id,
-				lastUserId: page.lastPost.user_id,
-				queryTime,
-			});
-		}
+    let nextCursor: string | null = null;
+    if (page.hasNextPage && page.lastPost) {
+      nextCursor = Cursor.create<SearchCursorPayload>({
+        lastScore: page.lastPost.final_score,
+        lastProvider: page.lastPost.post_provider,
+        lastPostId: page.lastPost.post_id,
+        lastUserId: page.lastPost.user_id,
+        queryTime,
+      });
+    }
 
-		return {
-			results: transformedResults,
-			nextCursor,
-		};
-	});
+    return {
+      results: transformedResults,
+      nextCursor,
+    };
+  });
 
-export const randomImages = publicProcedure.handler(async () => {
-	const images = await prisma.$queryRaw<SearchResult[]>`
+export const randomImages = publicProcedure.handler(async ({ context }) => {
+  const images = await prisma.$queryRaw<SearchResult[]>`
         WITH base AS (
             SELECT
                 p.external_id AS id,
@@ -502,5 +501,5 @@ export const randomImages = publicProcedure.handler(async () => {
         LIMIT 30;
 	`;
 
-	return transformSearchResults(images, env.BASE_CDN_URL);
+  return transformSearchResults(images, context.config.baseCdnUrl);
 });

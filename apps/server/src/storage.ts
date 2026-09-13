@@ -1,39 +1,39 @@
 import { getTwitterUserId, parseTwitterCookies } from "@starlight/api/services/twitter-cookies";
 import { RedisClient } from "bun";
-import { env } from "@starlight/utils";
 import { createBunRedisClient } from "bullmq";
 import { Cookie } from "tough-cookie";
+import env from "@/env";
 
 export const redis = createBunRedisClient(new RedisClient(env.REDIS_URL));
 
 export class Cookies {
-	readonly cookies: Cookie[];
+  readonly cookies: Cookie[];
 
-	constructor(cookies: Cookie[]) {
-		this.cookies = cookies;
-	}
+  constructor(cookies: Cookie[]) {
+    this.cookies = cookies;
+  }
 
-	toString() {
-		return this.cookies.map((cookie) => `${cookie.key}=${cookie.value}`).join("; ");
-	}
+  toString() {
+    return this.cookies.map((cookie) => `${cookie.key}=${cookie.value}`).join("; ");
+  }
 
-	static fromJSON(data: string): Cookies {
-		return new Cookies(parseTwitterCookies(data).map((cookie) => new Cookie(cookie)));
-	}
+  static fromJSON(data: string): Cookies {
+    return new Cookies(parseTwitterCookies(data).map((cookie) => new Cookie(cookie)));
+  }
 
-	userId() {
-		return getTwitterUserId(
-			this.cookies.map((cookie) => ({
-				domain: cookie.domain ?? "",
-				key: cookie.key,
-				value: cookie.value,
-			})),
-		);
-	}
+  userId() {
+    return getTwitterUserId(
+      this.cookies.map((cookie) => ({
+        domain: cookie.domain ?? "",
+        key: cookie.key,
+        value: cookie.value,
+      })),
+    );
+  }
 }
 
 export const s3 = new Bun.S3Client({
-	accessKeyId: env.AWS_ACCESS_KEY_ID,
-	secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-	endpoint: env.AWS_ENDPOINT,
+  accessKeyId: env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+  endpoint: env.AWS_ENDPOINT,
 });

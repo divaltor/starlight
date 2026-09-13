@@ -25,27 +25,26 @@ async def preprocess_image(image: str, session: AsyncSession) -> PILImage:
                 headers = {'Accept-Encoding': 'gzip'}
                 try:
                     response = await session.get(image, headers=headers, timeout=25)
-
-                    if not response.ok:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f'Failed to download image: HTTP {response.status_code}',
-                        )
-
-                    if response.content is None:
-                        raise HTTPException(
-                            status_code=400, detail='Failed to download image: empty body',
-                        )
-
-                    raw = response.content
-                except HTTPException:
-                    raise
                 except Exception as e:
                     logger.exception('Failed to download image %s', image)
                     raise HTTPException(
                         status_code=400,
                         detail=f'Failed to download image: {e}',
                     ) from e
+
+                if not response.ok:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f'Failed to download image: HTTP {response.status_code}',
+                    )
+
+                if response.content is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail='Failed to download image: empty body',
+                    )
+
+                raw = response.content
             case False:
                 try:
                     raw = base64.b64decode(image, validate=True)

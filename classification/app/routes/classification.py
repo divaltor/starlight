@@ -1,8 +1,7 @@
 from typing import Annotated, Any
 
-import structlog
 import torch
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, Body, Request
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 from transformers.pipelines import ImageClassificationPipeline, pipeline
 
@@ -12,7 +11,6 @@ from app.models import ClassificationResult, ImageRequest
 from app.otel import pipeline_span
 from app.utils import preprocess_image
 
-logger = structlog.get_logger()
 model_device = resolve_model_device()
 
 NSFW_MODEL_ID = 'Freepik/nsfw_image_detector'
@@ -67,27 +65,23 @@ async def classify(
         ),
     ],
 ) -> ClassificationResult:
-    try:
-        img = await preprocess_image(image.image, request.app.state.http_session)
-        with pipeline_span('nsfw_classification', NSFW_MODEL_ID):
-            nsfw_outputs = classify_nsfw(img)
+    img = await preprocess_image(image.image, request.app.state.http_session)
+    with pipeline_span('nsfw_classification', NSFW_MODEL_ID):
+        nsfw_outputs = classify_nsfw(img)
 
-        with pipeline_span('aesthetic_classification', AESTHETIC_MODEL_ID):
-            aestetic_outputs = aesthetic_pipe(img)
+    with pipeline_span('aesthetic_classification', AESTHETIC_MODEL_ID):
+        aestetic_outputs = aesthetic_pipe(img)
 
-        with pipeline_span('style_classification', STYLE_MODEL_ID):
-            style_outputs = style_pipe(img)
+    with pipeline_span('style_classification', STYLE_MODEL_ID):
+        style_outputs = style_pipe(img)
 
-        with pipeline_span('tag_generation', 'Camais03/camie-tagger-v2'):
-            tags = get_camie_tags(img)
+    with pipeline_span('tag_generation', 'Camais03/camie-tagger-v2'):
+        tags = get_camie_tags(img)
 
-        return ClassificationResult.from_response(
-            model_response={
-                'cafe': {'aesthetic': aestetic_outputs, 'style': style_outputs},
-                'nsfw': nsfw_outputs,
-                'tags': tags,
-            },
-        )
-    except Exception as e:  # pragma: no cover
-        logger.exception('Model inference failed', error=e)
-        raise HTTPException(status_code=500, detail=f'Model inference failed: {e}') from e
+    return ClassificationResult.from_response(
+        model_response={
+            'cafe': {'aesthetic': aestetic_outputs, 'style': style_outputs},
+            'nsfw': nsfw_outputs,
+            'tags': tags,
+        },
+    )

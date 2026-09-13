@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.4.0-alpine AS base
+FROM oven/bun:1.4.2-alpine AS base
 
 WORKDIR /code
 
 ENV NODE_ENV=production
 
 # For Prisma and build dependencies
-RUN apk add --no-cache openssl=3.5.7-r0 zlib=1.3.2-r0
+RUN apk add --no-cache openssl zlib
 
 COPY package.json bun.lock ./
 COPY apps/web/package.json ./apps/web/package.json
@@ -29,7 +29,7 @@ RUN find apps/web/.output/server/node_modules -name "*.development.js" -delete
 # so workspace installs and build caches are dead weight in the runtime image
 RUN rm -rf node_modules bun.lock apps/*/node_modules packages/*/node_modules
 
-FROM oven/bun:1.4.0-alpine AS runtime
+FROM oven/bun:1.4.2-alpine AS runtime
 
 WORKDIR /code
 

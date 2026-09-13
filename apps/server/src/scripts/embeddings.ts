@@ -18,21 +18,21 @@ const CLEAR_QUEUE = process.env.CLEAR_QUEUE === "1" || process.env.CLEAR === "1"
 const FORCE = process.env.FORCE === "1";
 
 async function main() {
-	logger.info(
-		{
-			dryRun: DRY_RUN,
-			clear: CLEAR_QUEUE,
-			force: FORCE,
-		},
-		"Starting enqueue of all photos for embeddings",
-	);
+  logger.info(
+    {
+      dryRun: DRY_RUN,
+      clear: CLEAR_QUEUE,
+      force: FORCE,
+    },
+    "Starting enqueue of all photos for embeddings",
+  );
 
-	if (CLEAR_QUEUE) {
-		await embeddingsQueue.drain(true);
-		logger.info("Embeddings queue drained");
-	}
+  if (CLEAR_QUEUE) {
+    await embeddingsQueue.drain(true);
+    logger.info("Embeddings queue drained");
+  }
 
-	const photos = await prisma.$queryRaw<{ id: string; provider: string; userId: string }[]>`
+  const photos = await prisma.$queryRaw<{ id: string; provider: string; userId: string }[]>`
 		SELECT external_id AS id, provider, user_id as "userId"
 		FROM media
 		WHERE deleted_at IS NULL
@@ -44,50 +44,50 @@ async function main() {
 		ORDER BY id ASC
 	`;
 
-	let enqueued = 0;
+  let enqueued = 0;
 
-	if (!DRY_RUN && photos.length > 0) {
-		await embeddingsQueue.addBulk(
-			photos.map((photo) => {
-				const base = `embed-${photo.provider}-${photo.id}-${photo.userId}`;
-				const jobId = FORCE ? `${base}-${Date.now()}` : base;
-				return {
-					name: `embed-${photo.provider}-${photo.id}`,
-					data: { photoId: photo.id, provider: photo.provider, userId: photo.userId },
-					opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
-				};
-			}),
-		);
-		enqueued = photos.length;
-	}
+  if (!DRY_RUN && photos.length > 0) {
+    await embeddingsQueue.addBulk(
+      photos.map((photo) => {
+        const base = `embed-${photo.provider}-${photo.id}-${photo.userId}`;
+        const jobId = FORCE ? `${base}-${Date.now()}` : base;
+        return {
+          name: `embed-${photo.provider}-${photo.id}`,
+          data: { photoId: photo.id, provider: photo.provider, userId: photo.userId },
+          opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
+        };
+      }),
+    );
+    enqueued = photos.length;
+  }
 
-	logger.info(
-		{
-			enqueued,
-			dryRun: DRY_RUN,
-			force: FORCE,
-			clearQueue: CLEAR_QUEUE,
-		},
-		"Finished enqueue script",
-	);
+  logger.info(
+    {
+      enqueued,
+      dryRun: DRY_RUN,
+      force: FORCE,
+      clearQueue: CLEAR_QUEUE,
+    },
+    "Finished enqueue script",
+  );
 }
 
 main()
-	.catch((error) => {
-		logger.error({ error }, "Enqueue script failed");
-		process.exitCode = 1;
-	})
-	.finally(async () => {
-		await embeddingsWorker.close().catch((error) => {
-			logger.error({ error }, "Failed to close embeddings worker");
-		});
-		await embeddingsQueue.close().catch((error) => {
-			logger.error({ error }, "Failed to close embeddings queue client");
-		});
-		await prisma.$disconnect().catch((error) => {
-			logger.error({ error }, "Failed to disconnect from database");
-		});
-		await redis.quit().catch((error: unknown) => {
-			logger.error({ error }, "Failed to quit Redis");
-		});
-	});
+  .catch((error) => {
+    logger.error({ error }, "Enqueue script failed");
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await embeddingsWorker.close().catch((error) => {
+      logger.error({ error }, "Failed to close embeddings worker");
+    });
+    await embeddingsQueue.close().catch((error) => {
+      logger.error({ error }, "Failed to close embeddings queue client");
+    });
+    await prisma.$disconnect().catch((error) => {
+      logger.error({ error }, "Failed to disconnect from database");
+    });
+    await redis.quit().catch((error) => {
+      logger.error({ error }, "Failed to quit Redis");
+    });
+  });

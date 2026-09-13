@@ -1,0 +1,86 @@
+import { Context, Effect, Layer } from "effect";
+import { z } from "zod";
+import type { ChatTools } from "@/ai/chat-tools";
+import { Model } from "@/ai/model";
+import { TelegramDelivery } from "@/conversation/delivery";
+import personaPromptText from "@/ai/persona-prompt.txt";
+import systemPromptText from "@/ai/system-prompt.txt";
+
+export namespace ChatReply {
+  export const systemPrompt = `${personaPromptText}\n\n${systemPromptText}`;
+  export const outputSchemaVersion = "chat-reply-v1";
+  export const maxOutputTokens = 4096;
+  const MAX_TOOL_OUTPUT_BYTES = 16 * 1024;
+  const MAX_TOOL_CALLS = 3;
+
+  const reactionEmojiSchema = z.enum(TelegramDelivery.reactionEmojis);
+
+  export const actionSchema = z.union([
+    z.object({ type: z.enum(["ignore"]).describe("Stay silent") }),
+    z.object({
+      replyTo: z.number().int().nullable().optional().describe("LIVE MESSAGE ID to reply to, or null"),
+      text: z.string().min(1).describe("Plain-text Telegram reply without Markdown"),
+      type: z.enum(["text"]),
+    }),
+    z.object({
+      emoji: reactionEmojiSchema.describe("Telegram reaction emoji"),
+      messageId: z.number().int().describe("LIVE MESSAGE ID to react to"),
+      type: z.enum(["reaction"]),
+    }),
+  ]);
+
+  export const responseSchema = z.object({
+    replies: z.array(actionSchema).min(1).max(3),
+  });
+
+  export type Response = z.infer<typeof responseSchema>;
+
+  export interface GenerateInput {
+    readonly cacheBase?: string;
+    readonly cachePrefixMessageCount?: number;
+    readonly instructions?: string;
+    // Private chats keep cost/usage telemetry but never export input/output content.
+    readonly private?: boolean;
+    readonly messages: readonly Model.Message[];
+    readonly promptCacheKey?: string;
+    readonly sessionId: string;
+    readonly telemetryTraceName?: string;
+    readonly telemetryUserId?: string;
+    readonly toolset: ChatTools.Resolved;
+  }
+
+  export type GenerateResult = Model.GenerationResult<Response>;
+
+  export interface Interface {
+    readonly generate: (input: GenerateInput) => Effect.Effect<GenerateResult, Model.Error>;
+  }
+
+  export class Service extends Context.Service<Service, Interface>()("starlight/ChatReply") {}
+
+  export const layer: Layer.Layer<Service, never, Model.Service> = Layer.effect(
+    Service,
+    Effect.gen(function* layer() {
+      const model = yield* Model.Service;
+      return Service.of({
+        generate: Effect.fn("ChatReply.generate")(function* generate(input) {
+          return yield* model.generate({
+            cacheBase: input.cacheBase,
+            cachePrefixMessageCount: input.cachePrefixMessageCount,
+            instructions: input.instructions ?? systemPrompt,
+            maxOutputTokens,
+            maxToolOutputBytes: MAX_TOOL_OUTPUT_BYTES,
+            maxToolCalls: Object.keys(input.toolset.tools).length > 0 ? MAX_TOOL_CALLS : 0,
+            messages: input.messages,
+            outputSchema: responseSchema,
+            private: input.private,
+            promptCacheKey: input.promptCacheKey,
+            sessionId: input.sessionId,
+            telemetryTraceName: input.telemetryTraceName,
+            telemetryUserId: input.telemetryUserId,
+            tools: input.toolset.tools,
+          });
+        }),
+      });
+    }),
+  );
+}

@@ -1,91 +1,100 @@
-import { env } from "@starlight/utils";
+import path from "node:path";
 import { http } from "@starlight/utils/http";
 import { create } from "youtube-dl-exec";
+import { Schema } from "effect";
 import { logger } from "@/logger";
+import env from "@/env";
 
 const filesGlob = new Bun.Glob("*.mp4");
+const VIDEO_DOWNLOAD_TIMEOUT_MS = 180_000;
 
-interface VideoMetadata {
-	height?: number;
-	width?: number;
-}
+export const VideoMetadata = Schema.Struct({
+  height: Schema.optional(Schema.Number),
+  width: Schema.optional(Schema.Number),
+});
+export type VideoMetadata = typeof VideoMetadata.Type;
 
 export interface VideoInformation {
-	filePath: string;
-	metadata: VideoMetadata;
+  filePath: string;
+  metadata: VideoMetadata;
 }
 
 async function createVideoInformation(filePath: string): Promise<VideoInformation> {
-	const infoJsonPath = filePath.replace(/\.mp4$/, ".info.json");
+  const parsedPath = path.parse(filePath);
+  const infoJsonPath = path.join(parsedPath.dir, `${parsedPath.name}.info.json`);
 
-	logger.debug({ infoJsonPath }, "Creating video information");
+  logger.debug({ infoJsonPath }, "Creating video information");
 
-	let metadata: VideoMetadata = {};
+  let metadata: VideoMetadata = {};
 
-	try {
-		metadata = (await Bun.file(infoJsonPath).json()) as VideoMetadata;
-	} catch (error) {
-		logger.error({ error, filePath }, "Failed to create video information");
-	}
+  try {
+    metadata = Schema.decodeUnknownSync(VideoMetadata)(await Bun.file(infoJsonPath).json());
+  } catch (error) {
+    logger.error({ error, filePath }, "Failed to create video information");
+  }
 
-	return {
-		filePath,
-		metadata,
-	};
+  return {
+    filePath,
+    metadata,
+  };
 }
 
 const youtubedl = create(env.YOUTUBE_DL_PATH);
 
 export async function downloadVideoFromUrl(
-	url: string,
-	folder: string,
-	metadata: VideoMetadata = {},
+  url: string,
+  folder: string,
+  metadata: VideoMetadata = {},
 ): Promise<VideoInformation> {
-	const uuid = Bun.randomUUIDv7();
-	const filePath = `${folder}/${uuid}.mp4`;
+  const uuid = Bun.randomUUIDv7();
+  const filePath = path.join(folder, `${uuid}.mp4`);
 
-	logger.debug({ url }, "Downloading video directly from URL");
+  logger.debug({ url }, "Downloading video directly from URL");
 
-	const response = await http(url);
+  const response = await http(url, { signal: AbortSignal.timeout(VIDEO_DOWNLOAD_TIMEOUT_MS) });
 
-	if (!(response.ok && response.body)) {
-		throw new Error(`Failed to download video from ${url}: ${response.status}`);
-	}
+  if (!(response.ok && response.body)) {
+    throw new Error(`Failed to download video from ${url}: ${response.status}`);
+  }
 
-	await Bun.write(filePath, response);
+  await Bun.write(filePath, response);
 
-	return { filePath, metadata };
+  return { filePath, metadata };
 }
 
 export async function downloadVideo(url: string, folder: string): Promise<VideoInformation[]> {
-	logger.debug({ folder, url }, "Downloading video");
+  logger.debug({ folder, url }, "Downloading video");
 
-	const uuid = Bun.randomUUIDv7();
+  const uuid = Bun.randomUUIDv7();
 
-	const subprocess = await youtubedl.exec(url, {
-		paths: folder,
-		quiet: true,
-		noWarnings: true,
-		noPostOverwrites: true,
-		noOverwrites: true,
-		format: "mp4",
-		writeInfoJson: true,
-		noCheckCertificates: true,
-		output: `${uuid}.%(ext)s`,
-	});
+  const subprocess = await youtubedl.exec(
+    url,
+    {
+      paths: folder,
+      quiet: true,
+      noWarnings: true,
+      noPostOverwrites: true,
+      noOverwrites: true,
+      format: "mp4",
+      writeInfoJson: true,
+      noCheckCertificates: true,
+      output: `${uuid}.%(ext)s`,
+    },
+    { timeout: VIDEO_DOWNLOAD_TIMEOUT_MS },
+  );
 
-	if (subprocess.error) {
-		logger.error({ url }, "Failed to download video");
-		throw subprocess.error;
-	}
+  if (subprocess.error) {
+    logger.error({ url }, "Failed to download video");
+    throw subprocess.error;
+  }
 
-	const mp4Files = filesGlob.scan({ cwd: folder });
+  const mp4Files = filesGlob.scan({ cwd: folder });
 
-	const videoInformations: VideoInformation[] = [];
+  const videoInformations: VideoInformation[] = [];
 
-	for await (const filePath of mp4Files) {
-		videoInformations.push(await createVideoInformation(`${folder}/${filePath}`));
-	}
+  for await (const filePath of mp4Files) {
+    videoInformations.push(await createVideoInformation(path.join(folder, filePath)));
+  }
 
-	return videoInformations;
+  return videoInformations;
 }

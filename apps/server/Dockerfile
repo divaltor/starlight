@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.4.0-alpine AS base
+FROM oven/bun:1.4.2-alpine AS base
 
 WORKDIR /code
 
@@ -9,7 +9,7 @@ ENV YOUTUBE_DL_SKIP_DOWNLOAD=true
 ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=true
 
 # For Prisma and the standalone yt-dlp download
-RUN apk add --no-cache openssl=3.5.7-r0 zlib=1.3.2-r0 curl=8.14.1-r3
+RUN apk add --no-cache openssl zlib curl
 
 # yt-dlp ships self-contained binaries, so no Python runtime is needed
 ARG TARGETARCH
@@ -35,12 +35,14 @@ RUN bun install --production --ignore-scripts --filter server
 
 COPY . .
 
+RUN bun run --cwd packages/utils db:generate
+
 # Build tooling can leak back via peers; the runtime never uses it
 RUN rm -rf node_modules/typescript node_modules/@typescript node_modules/@babel bun.lock
 
 FROM mwader/static-ffmpeg:9.0 AS ffmpeg
 
-FROM oven/bun:1.4.0-alpine AS runtime
+FROM oven/bun:1.4.2-alpine AS runtime
 
 WORKDIR /code
 
@@ -60,4 +62,4 @@ COPY --from=ffmpeg /usr/share/fonts /usr/share/fonts
 COPY --from=base /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
 COPY --from=base /code /code
 
-CMD ["sh", "-c", "bun run --cwd packages/utils db:generate && bun run --cwd packages/utils db:deploy && bun run --cwd apps/server start"]
+CMD ["bun", "run", "--cwd", "apps/server", "start"]

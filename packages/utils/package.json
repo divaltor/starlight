@@ -3,17 +3,19 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "types": "./dist/index.d.mts",
       "default": "./src/index.ts"
     },
     "./*": {
-      "types": "./dist/*.d.ts",
+      "types": "./dist/*.d.mts",
       "default": "./src/*.ts"
     }
   },
   "scripts": {
     "build": "bun run db:generate && bun run -b tsdown",
     "lint": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "bun test src",
     "format": "oxfmt",
     "db:deploy": "prisma --config prisma.config.ts migrate deploy",
     "db:generate": "prisma --config prisma.config.ts generate",
@@ -22,19 +24,18 @@
   "dependencies": {
     "@prisma/adapter-pg": "catalog:",
     "@prisma/client": "catalog:",
-    "@t3-oss/env-core": "^0.13.11",
-    "dotenv": "^17.4.2",
+    "@t3-oss/env-core": "0.13.11",
+    "dotenv": "17.4.2",
     "ky": "catalog:",
     "prisma": "catalog:",
     "prisma-json-types-generator": "catalog:",
-    "sqids": "^0.3.0",
-    "uuid": "^14.0.2",
+    "sqids": "0.3.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "tsdown": "catalog:"
   },
   "peerDependencies": {
-    "typescript": "^7.0.2"
+    "typescript": "7.0.2"
   }
 }

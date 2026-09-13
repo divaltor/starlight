@@ -8,12 +8,19 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AppRouteImport } from './routes/app'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as ProfileSlugRouteImport } from './routes/profile/$slug'
-import { Route as ApiRpcSplatRouteImport } from './routes/api/rpc.$'
+import * as rootRouteModule from './routes/__root'
+import * as IndexRouteModule from './routes/index'
+import * as AppRouteModule from './routes/app'
+import * as SettingsRouteModule from './routes/settings'
+import * as ProfileSlugRouteModule from './routes/profile/$slug'
+import * as ApiRpcSplatRouteModule from './routes/api/rpc.$'
+
+const rootRouteImport = rootRouteModule.Route
+const IndexRouteImport = IndexRouteModule.Route
+const AppRouteImport = AppRouteModule.Route
+const SettingsRouteImport = SettingsRouteModule.Route
+const ProfileSlugRouteImport = ProfileSlugRouteModule.Route
+const ApiRpcSplatRouteImport = ApiRpcSplatRouteModule.Route
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',

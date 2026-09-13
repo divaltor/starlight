@@ -3,27 +3,28 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "types": "./dist/index.d.mts",
       "default": "./src/index.ts"
     },
     "./*": {
-      "types": "./dist/*.d.ts",
+      "types": "./dist/*.d.mts",
       "default": "./src/*.ts"
     }
   },
   "scripts": {
     "build": "bun run -b tsdown",
     "lint": "tsc -b",
+    "typecheck": "tsc -b",
     "format": "oxfmt"
   },
   "devDependencies": {
     "tsdown": "catalog:"
   },
   "dependencies": {
-    "@noble/ciphers": "^2.3.0",
-    "@noble/hashes": "^2.3.0"
+    "@noble/ciphers": "2.4.0",
+    "@noble/hashes": "2.4.0"
   },
   "peerDependencies": {
-    "typescript": "^7.0.2"
+    "typescript": "7.0.2"
   }
 }
