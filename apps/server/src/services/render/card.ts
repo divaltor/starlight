@@ -268,6 +268,7 @@ function replyChainItem(colors: ThemeColors, failedUrls: Set<string>, tweet: Twe
   return box({
     style: {
       marginBottom: LAYOUT.AVATAR_GAP,
+      minHeight: LAYOUT.AVATAR_SIZE + LAYOUT.AVATAR_GAP,
       paddingLeft: LAYOUT.AVATAR_SIZE + LAYOUT.AVATAR_GAP,
       position: "relative",
     },
@@ -276,7 +277,7 @@ function replyChainItem(colors: ThemeColors, failedUrls: Set<string>, tweet: Twe
       box({
         style: {
           backgroundColor: colors.border,
-          bottom: LAYOUT.AVATAR_GAP / 2,
+          bottom: -LAYOUT.AVATAR_GAP / 2,
           left: (LAYOUT.AVATAR_SIZE - REPLY_LINE_WIDTH) / 2,
           position: "absolute",
           top: LAYOUT.AVATAR_SIZE + 4,
