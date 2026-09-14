@@ -1,6 +1,7 @@
 import type { ToolSet } from "ai";
 import { Context, Effect, Layer, Schema } from "effect";
 import { Exa } from "@/ai/tools/exa";
+import { Twitter } from "@/ai/tools/twitter";
 
 export namespace ChatTools {
   export type Profile = readonly string[];
@@ -22,11 +23,15 @@ export namespace ChatTools {
 
   export class Service extends Context.Service<Service, Interface>()("starlight/ChatTools") {}
 
-  export const layer: Layer.Layer<Service, never, Exa.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Exa.Service | Twitter.Service> = Layer.effect(
     Service,
     Effect.gen(function* layer() {
       const exa = yield* Exa.Service;
-      const sources = [{ id: Exa.profileId, tools: exa.tools }];
+      const twitter = yield* Twitter.Service;
+      const sources = [
+        { id: Exa.profileId, tools: exa.tools },
+        { id: Twitter.profileId, tools: twitter.tools },
+      ];
       const ids = sources.map((source) => source.id);
       if (new Set(ids).size !== ids.length) {
         return yield* Effect.die(new Error("Chat tool source profile IDs must be unique"));

@@ -3,8 +3,12 @@ import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { ChatTools } from "@/ai/chat-tools";
 import { Exa } from "@/ai/tools/exa";
+import { Twitter } from "@/ai/tools/twitter";
 
 const layer = ChatTools.layer.pipe(
+  Layer.provide(
+    Layer.succeed(Twitter.Service)({ tools: { read_twitter: { inputSchema: z.object({ url: z.url() }) } } }),
+  ),
   Layer.provide(
     Layer.succeed(Exa.Service)({
       tools: {
@@ -23,13 +27,15 @@ test("resolves the exact persisted tool profile", async () => {
       const tools = yield* ChatTools.Service;
       return {
         availableProfile: tools.availableProfile,
+        all: yield* tools.resolve(tools.availableProfile),
         current: yield* tools.resolve([Exa.profileId]),
         previous: yield* tools.resolve([]),
       };
     }).pipe(Effect.provide(layer)),
   );
 
-  expect(result.availableProfile).toEqual([Exa.profileId]);
+  expect(result.availableProfile).toEqual([Exa.profileId, Twitter.profileId]);
+  expect(Object.keys(result.all.tools)).toEqual(["web_search_exa", "read_twitter"]);
   expect(Object.keys(result.current.tools)).toEqual(["web_search_exa"]);
   expect(result.previous.tools).toEqual({});
 });

@@ -23,6 +23,7 @@ import { Memory } from "@/memory/memory";
 import { Media } from "@/media/media";
 import { Database } from "@/services/database";
 import { Exa } from "@/ai/tools/exa";
+import { Twitter } from "@/ai/tools/twitter";
 
 const env = createBotEnv();
 
@@ -88,7 +89,7 @@ const logging = Layer.mergeAll(
   ]),
   Layer.succeed(References.MinimumLogLevel)(parseLogLevel(env.LOG_LEVEL ?? (production ? "info" : "debug"))),
 );
-const chatTools = ChatTools.layer.pipe(Layer.provideMerge(Exa.defaultLayer));
+const chatTools = ChatTools.layer.pipe(Layer.provideMerge(Layer.mergeAll(Exa.defaultLayer, Twitter.layer)));
 const replies = Layer.mergeAll(ChatReply.layer, GuestReply.layer).pipe(
   Layer.provideMerge(Model.defaultLayer(env.OPENROUTER_API_KEY)),
 );
