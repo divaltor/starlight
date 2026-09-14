@@ -20,20 +20,19 @@ const privateChat = composer.chatType("private");
 groupChat
   .on("message")
   .filter(hasAdmittableContent)
-  .use((ctx) =>
-    admitMessage(
-      ctx,
-      ctx.message,
-      MessageReply.shouldRespond({
-        explicitlyAddressed: isAddressedToBot(ctx, ctx.message),
-        hasSticker: ctx.message.sticker !== undefined,
-        isReply: ctx.message.reply_to_message !== undefined,
-        random: Math.random,
-        randomResponseChance,
-        text: ctx.message.text ?? ctx.message.caption ?? "",
-      }),
-    ),
-  );
+  .use((ctx) => {
+    const explicitlyAddressed = isAddressedToBot(ctx, ctx.message);
+    const hasSticker = ctx.message.sticker !== undefined;
+    const responded = MessageReply.shouldRespond({
+      explicitlyAddressed,
+      hasSticker,
+      isReply: ctx.message.reply_to_message !== undefined,
+      random: Math.random,
+      randomResponseChance,
+      text: ctx.message.text ?? ctx.message.caption ?? "",
+    });
+    return admitMessage(ctx, ctx.message, responded, responded && !explicitlyAddressed && !hasSticker);
+  });
 groupChat
   .on("edited_message")
   .filter(hasAdmittableEditedContent)
@@ -49,13 +48,23 @@ privateChat
 
 export default composer;
 
-async function admitMessage(ctx: Context, message: Message, addressed: boolean) {
+async function admitMessage(ctx: Context, message: Message, addressed: boolean, randomResponseTriggered = false) {
   await runtime.runPromise(
     // Telegram message variants are normalized once at admission.
     // oxlint-disable-next-line eslint/complexity
     Effect.gen(function* admit() {
       const conversation = yield* Conversation.Service;
       const media = yield* Media.Service;
+      if (randomResponseTriggered) {
+        yield* Effect.logInfo("Random response chance triggered").pipe(
+          Effect.annotateLogs({
+            chatId: ctx.chat!.id,
+            messageId: message.message_id,
+            randomResponseChance,
+            senderId: message.from?.id ?? null,
+          }),
+        );
+      }
       // Telegram extraction is branch-heavy by protocol shape but remains one boundary normalization.
       // oxlint-disable-next-line eslint/complexity
       return yield* Effect.gen(function* attempt() {
