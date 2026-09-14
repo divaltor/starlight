@@ -50,4 +50,12 @@ if (( ${#missing_packages[@]} > 0 )); then
 fi
 time uv sync --project classification --frozen
 
+# Approve workspace-defined MCP servers (.amp/settings.json). Every fresh orb
+# treats repo-declared servers as untrusted until explicitly approved; the
+# approval is keyed to the server spec hash, so re-run on each setup.
+if command -v amp >/dev/null 2>&1; then
+  amp mcp approve grafana || true
+  amp mcp approve langfuse || true
+fi
+
 echo "Orb setup complete"
