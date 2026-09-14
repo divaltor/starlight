@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# No authentication or reconnect steps are required after an orb wakes.
+# Re-approve workspace MCP servers in case the stored spec-hash approval was
+# wiped or the server spec changed after the last setup. Idempotent.
+if [[ -x "$HOME/.amp/bin/amp" ]]; then
+  amp mcp approve grafana >/dev/null 2>&1 || true
+  amp mcp approve langfuse >/dev/null 2>&1 || true
+fi
+
+# No other authentication or reconnect steps are required after an orb wakes.

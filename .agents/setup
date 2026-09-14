@@ -53,9 +53,13 @@ time uv sync --project classification --frozen
 # Approve workspace-defined MCP servers (.amp/settings.json). Every fresh orb
 # treats repo-declared servers as untrusted until explicitly approved; the
 # approval is keyed to the server spec hash, so re-run on each setup.
-if command -v amp >/dev/null 2>&1; then
+# Amp's binary lives in ~/.amp/bin, which is not guaranteed to be on PATH here.
+if [[ -x "$HOME/.amp/bin/amp" ]]; then
+  export PATH="$PATH:$HOME/.amp/bin"
   amp mcp approve grafana || true
   amp mcp approve langfuse || true
+else
+  echo "WARNING: amp CLI not found at ~/.amp/bin; skipping MCP server approval" >&2
 fi
 
 echo "Orb setup complete"
