@@ -43,10 +43,13 @@ export namespace Prompt {
     readonly addressed: boolean;
     readonly messageId: number;
     readonly media: readonly Media.Reference[];
+    readonly repliedSenderFirstName?: string | null;
+    readonly repliedSenderId?: number | null;
     readonly repliedText: string | null;
     readonly replyToMessageId: number | null;
     readonly repliedMedia: readonly Media.Reference[];
     readonly senderFirstName: string;
+    readonly senderId: number | null;
     readonly text: string;
   }
 
@@ -95,7 +98,11 @@ export namespace Prompt {
     const reply = (() => {
       if (payload.replyToMessageId === null) return "";
       if (knownMessageIds?.has(payload.replyToMessageId)) return `REPLIES TO MESSAGE #${payload.replyToMessageId}\n`;
-      if (payload.repliedText) return `REPLIED MESSAGE #${payload.replyToMessageId}: ${payload.repliedText}\n`;
+      const sender =
+        payload.repliedSenderId === null || payload.repliedSenderId === undefined
+          ? ""
+          : ` from ${payload.repliedSenderFirstName ?? "unknown"} (Telegram user #${payload.repliedSenderId})`;
+      if (payload.repliedText) return `REPLIED MESSAGE #${payload.replyToMessageId}${sender}: ${payload.repliedText}\n`;
       return `REPLIED MESSAGE #${payload.replyToMessageId}: [target unavailable]\n`;
     })();
     const repliedMedia = payload.repliedMedia.map((reference) => reference.stableDescription).join("\n");
@@ -103,8 +110,8 @@ export namespace Prompt {
     const repliedMediaBlock = repliedMedia ? `REPLIED MEDIA:\n${repliedMedia}\n` : "";
     const mediaBlock = media ? `\nMEDIA:\n${media}` : "";
     const label = payload.addressed ? "LIVE MESSAGE" : "CONTEXT MESSAGE";
-    return `${forwardOrigin}${reply}${repliedMediaBlock}${label} #${payload.messageId} from ${
-      payload.senderFirstName
+    return `${forwardOrigin}${reply}${repliedMediaBlock}${label} #${payload.messageId} from ${payload.senderFirstName}${
+      payload.senderId === null ? "" : ` (Telegram user #${payload.senderId})`
     }: ${payload.text}${mediaBlock}`;
   }
 

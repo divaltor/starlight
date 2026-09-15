@@ -1040,7 +1040,7 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
 
 const disabledChatTools: ChatTools.Interface = {
   availableProfile: [],
-  resolve: (profile) => Effect.succeed({ profile, tools: {} }),
+  resolve: (input) => Effect.succeed({ profile: input.profile, tools: {} }),
 };
 
 const mediaLayer = Layer.succeed(Media.Service)({
