@@ -10,7 +10,7 @@ import { ChatTools } from "@/ai/chat-tools";
 import { GuestReply } from "@/ai/guest-reply";
 import { Model } from "@/ai/model";
 import { TopicMetadata } from "@/ai/topic-metadata";
-import { fileApi } from "@/bot";
+import { bot, fileApi } from "@/bot";
 import { Conversation } from "@/conversation/conversation";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { WakeOutbox } from "@/conversation/wake-outbox";
@@ -23,6 +23,7 @@ import { Memory } from "@/memory/memory";
 import { Media } from "@/media/media";
 import { Database } from "@/services/database";
 import { Exa } from "@/ai/tools/exa";
+import { TelegramModeration } from "@/ai/tools/telegram-moderation";
 import { Twitter } from "@/ai/tools/twitter";
 
 const env = createBotEnv();
@@ -89,7 +90,12 @@ const logging = Layer.mergeAll(
   ]),
   Layer.succeed(References.MinimumLogLevel)(parseLogLevel(env.LOG_LEVEL ?? (production ? "info" : "debug"))),
 );
-const chatTools = ChatTools.layer.pipe(Layer.provideMerge(Layer.mergeAll(Exa.defaultLayer, Twitter.layer)));
+const database = Database.layer(env.DATABASE_URL);
+const chatTools = ChatTools.layer.pipe(
+  Layer.provide(
+    Layer.mergeAll(Exa.defaultLayer, TelegramModeration.layer(bot.api).pipe(Layer.provide(database)), Twitter.layer),
+  ),
+);
 const replies = Layer.mergeAll(ChatReply.layer, GuestReply.layer).pipe(
   Layer.provideMerge(Model.defaultLayer(env.OPENROUTER_API_KEY)),
 );
@@ -104,7 +110,7 @@ const observability = Layer.mergeAll(logging, tracing);
 
 const infrastructure = Layer.provide(
   Layer.mergeAll(
-    Database.layer(env.DATABASE_URL),
+    database,
     chatTools,
     replies,
     topicMetadata,

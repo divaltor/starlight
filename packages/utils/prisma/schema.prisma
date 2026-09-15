@@ -137,8 +137,20 @@ model User {
   conversationInputs ConversationInput[]
   memoryNamespaces MemoryNamespace[]
   memoryObservations MemoryObservation[]
+  toolCooldowns UserToolCooldown[]
 
   @@map("users")
+}
+
+model UserToolCooldown {
+  userId      String   @map("user_id") @db.Uuid
+  cooldownKey String   @map("cooldown_key")
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, cooldownKey])
+  @@map("user_tool_cooldowns")
 }
 
 model Chat {

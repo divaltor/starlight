@@ -8,7 +8,7 @@ import { Prompt } from "@/context/prompt";
 import { ConversationContext } from "@/context/context";
 import { ConversationKey } from "@/conversation/key";
 import { Lane } from "@/conversation/lane";
-import { PreparedRequestSchema, PreparedToolProfileSchema } from "@/conversation/run-artifacts";
+import { InputPayloadSchema, PreparedRequestSchema, PreparedToolProfileSchema } from "@/conversation/run-artifacts";
 import type { InputPayload } from "@/conversation/run-artifacts";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { Memory } from "@/memory/memory";
@@ -396,7 +396,9 @@ export namespace Conversation {
             }
           }
 
-          const toolset = yield* chatTools.resolve(contextRequest.toolProfile).pipe(Effect.mapError(domainFailed));
+          const toolset = yield* chatTools
+            .resolve({ execution: toolExecutionContext(claimed), profile: contextRequest.toolProfile })
+            .pipe(Effect.mapError(domainFailed));
 
           const attempted = yield* invokeModel(claimed, prepared, contextRequest, toolset, {
             allowContextOverflowRecovery: true,
@@ -767,16 +769,18 @@ export namespace Conversation {
           ),
           Effect.flatMap((contextRequest) => {
             if (!exceedsUsableContext(contextRequest, options)) {
-              return chatTools.resolve(contextRequest.toolProfile).pipe(
-                Effect.mapError(domainFailed),
-                Effect.flatMap((toolset) =>
-                  invokeModel(claimed, prepared, contextRequest, toolset, {
-                    allowContextOverflowRecovery: false,
-                    attemptNumber: claimed.attemptCount + 2,
-                    ...telemetry,
-                  }),
-                ),
-              );
+              return chatTools
+                .resolve({ execution: toolExecutionContext(claimed), profile: contextRequest.toolProfile })
+                .pipe(
+                  Effect.mapError(domainFailed),
+                  Effect.flatMap((toolset) =>
+                    invokeModel(claimed, prepared, contextRequest, toolset, {
+                      allowContextOverflowRecovery: false,
+                      attemptNumber: claimed.attemptCount + 2,
+                      ...telemetry,
+                    }),
+                  ),
+                );
             }
             const message = "Prepared request exceeds the usable context limit after checkpoint";
             return blockRun(claimed, OVERSIZED_INPUT_ERROR_TAG, message).pipe(
@@ -1282,6 +1286,18 @@ export namespace Conversation {
     | { readonly generated: ChatReply.GenerateResult; readonly kind: "generated" }
     | { readonly kind: "contextOverflow" }
     | { readonly kind: "failed" };
+
+  function toolExecutionContext(claimed: ClaimedRun) {
+    return {
+      chatId: claimed.key.chatId,
+      liveMessageSenders: new Map(
+        claimed.inputs.map((input) => {
+          const payload = Schema.decodeUnknownSync(InputPayloadSchema)(input.payload);
+          return [payload.messageId, payload.senderId] as const;
+        }),
+      ),
+    };
+  }
 
   interface InvocationOptions {
     readonly allowContextOverflowRecovery: boolean;

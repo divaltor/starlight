@@ -50,9 +50,12 @@ test("an unaddressed batched message is rendered as context rather than a reply 
     media: [],
     messageId: 41,
     repliedMedia: [],
+    repliedSenderFirstName: null,
+    repliedSenderId: null,
     repliedText: null,
     replyToMessageId: null,
     senderFirstName: "Alice",
+    senderId: null,
     text: "background chatter",
   });
 

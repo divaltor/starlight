@@ -9,6 +9,8 @@ const ProjectedFields = {
   editDate: Schema.NullOr(Schema.Int),
   forwardOrigin: Schema.NullOr(Schema.String),
   messageId: Schema.Int,
+  repliedSenderFirstName: Schema.optional(Schema.NullOr(Schema.String)),
+  repliedSenderId: Schema.optional(Schema.NullOr(Schema.Int)),
   repliedText: Schema.NullOr(Schema.String),
   replyToMessageId: Schema.NullOr(Schema.Int),
   senderFirstName: Schema.String,

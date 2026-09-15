@@ -2203,7 +2203,7 @@ function testLayer(
 
 const disabledChatTools: ChatTools.Interface = {
   availableProfile: [],
-  resolve: (profile) => Effect.succeed({ profile, tools: {} }),
+  resolve: (input) => Effect.succeed({ profile: input.profile, tools: {} }),
 };
 
 const unavailableModel: Model.Interface = {
