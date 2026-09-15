@@ -1,4 +1,4 @@
-import type { TweetData } from "@starlight/api/types/tweets";
+import type { PostData } from "@starlight/api/types/posts";
 
 export class LayoutManager {
   pageWidth: number;
@@ -104,7 +104,7 @@ export class LayoutManager {
     return null;
   }
 
-  placeTweets(tweets: TweetData[]) {
+  placePosts(posts: PostData[]) {
     const results: {
       position: { top: number; left: number };
       index: number;
@@ -112,16 +112,16 @@ export class LayoutManager {
     const CONTAINER_WIDTH_PERCENT = 20;
 
     // Place in original order
-    for (let i = 0; i < tweets.length; i++) {
-      const tweet = tweets[i];
-      if (!tweet.photos.length) {
+    for (let i = 0; i < posts.length; i++) {
+      const post = posts[i];
+      if (!post.media.length) {
         continue;
       }
 
-      const [firstPhoto] = tweet.photos;
+      const [firstMedia] = post.media;
       let aspect = 0.8;
-      if (firstPhoto.width && firstPhoto.height && firstPhoto.width > 0) {
-        aspect = firstPhoto.height / firstPhoto.width;
+      if (firstMedia.width && firstMedia.height && firstMedia.width > 0) {
+        aspect = firstMedia.height / firstMedia.width;
       }
       const computedHeight = CONTAINER_WIDTH_PERCENT * aspect;
 

@@ -2,6 +2,7 @@ import type { ProfileResult } from "@starlight/api/routers/index";
 import AlertCircleIcon from "@hugeicons/core-free-icons/AlertCircleIcon";
 import CookieIcon from "@hugeicons/core-free-icons/CookieIcon";
 import Delete02Icon from "@hugeicons/core-free-icons/Delete02Icon";
+import Key01Icon from "@hugeicons/core-free-icons/Key01Icon";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -33,8 +34,11 @@ export const Route = createFileRoute("/settings")({
   },
 });
 
+// Settings coordinates several independent mutations in one screen.
+// oxlint-disable-next-line eslint/complexity
 function RouteComponent() {
   const [newCookies, setNewCookies] = useState("");
+  const [pixivToken, setPixivToken] = useState("");
   const [displayError, setDisplayError] = useState<string | null>(null);
 
   const { rawInitData } = useTelegramContext();
@@ -96,6 +100,38 @@ function RouteComponent() {
     }),
   );
 
+  const savePixivMutation = useMutation(
+    orpc.pixiv.save.mutationOptions({
+      onSuccess: () => {
+        queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+          ...old,
+          hasPixivCredential: true,
+        }));
+        setPixivToken("");
+      },
+    }),
+  );
+  const deletePixivMutation = useMutation(
+    orpc.pixiv.delete.mutationOptions({
+      onSuccess: () => {
+        queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+          ...old,
+          hasPixivCredential: false,
+        }));
+      },
+    }),
+  );
+  const pixivPrivateMutation = useMutation(
+    orpc.pixiv.privateBookmarks.mutationOptions({
+      onSuccess: (_data, variables) => {
+        queryClient.setQueryData(["profile"], (old: ProfileResult) => ({
+          ...old,
+          pixivIncludePrivate: variables.enabled,
+        }));
+      },
+    }),
+  );
+
   if (isLoading && !profile) {
     return <SettingsPageSkeleton />;
   }
@@ -104,13 +140,22 @@ function RouteComponent() {
     return <SettingsLoadError onRetry={() => refetchProfile()} />;
   }
 
-  const isSubmitting = saveCookiesMutation.isPending || deleteCookiesMutation.isPending || visibilityMutation.isPending;
+  const isSubmitting = [
+    saveCookiesMutation.isPending,
+    deleteCookiesMutation.isPending,
+    visibilityMutation.isPending,
+    savePixivMutation.isPending,
+    deletePixivMutation.isPending,
+    pixivPrivateMutation.isPending,
+  ].some(Boolean);
+  const pixivError = profile?.hasPixivCredential
+    ? (deletePixivMutation.error?.message ?? pixivPrivateMutation.error?.message)
+    : savePixivMutation.error?.message;
 
   return (
     <main className="container mx-auto max-w-2xl px-4 py-10">
       <Card className="card-border">
         <CardContent className="mt-4 space-y-6 pt-2 pb-2">
-          {/* Cookie Management Section */}
           <CookiesSection
             cookieError={cookieError}
             displayError={displayError}
@@ -128,6 +173,60 @@ function RouteComponent() {
             setDisplayError={setDisplayError}
             setNewCookies={setNewCookies}
           />
+
+          <section className="space-y-4">
+            <h2 className="font-semibold text-base-content text-sm uppercase tracking-wide">Pixiv</h2>
+            {pixivError && (
+              <Alert variant="destructive">
+                <HugeiconsIcon className="h-4 w-4" icon={AlertCircleIcon} />
+                <span>{pixivError}</span>
+              </Alert>
+            )}
+            {profile?.hasPixivCredential ? (
+              <>
+                <Alert className="alert-horizontal">
+                  <HugeiconsIcon className="h-4 w-4 shrink-0" icon={Key01Icon} />
+                  <span>Pixiv is connected.</span>
+                  <Button
+                    disabled={isSubmitting}
+                    onClick={() => deletePixivMutation.mutate({})}
+                    size="sm"
+                    variant="destructive"
+                  >
+                    <HugeiconsIcon className="h-4 w-4" icon={Delete02Icon} /> Remove
+                  </Button>
+                </Alert>
+                <label className="label cursor-pointer gap-2 text-wrap">
+                  <input
+                    checked={profile.pixivIncludePrivate}
+                    className="toggle toggle-sm"
+                    onChange={(event) => pixivPrivateMutation.mutate({ enabled: event.target.checked })}
+                    type="checkbox"
+                  />
+                  <span className="label-text w-full text-left">Sync private bookmarks</span>
+                </label>
+              </>
+            ) : (
+              <form
+                className="space-y-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  savePixivMutation.mutate({ refreshToken: pixivToken });
+                }}
+              >
+                <TextField
+                  id="pixiv-refresh-token"
+                  label="Pixiv refresh token"
+                  onChange={setPixivToken}
+                  placeholder="Pixiv refresh token"
+                  value={pixivToken}
+                />
+                <Button disabled={isSubmitting || pixivToken.trim().length < 20} size="sm" type="submit">
+                  Connect Pixiv
+                </Button>
+              </form>
+            )}
+          </section>
 
           {/* Profile Visibility Section */}
           <VisibilitySection
@@ -220,8 +319,6 @@ function CookiesSection({
   return (
     <section className="space-y-4">
       <h2 className="font-semibold text-base-content text-sm uppercase tracking-wide">Authentication Cookies</h2>
-
-      {/* Cookie Success/Error Messages */}
       {cookieError && (
         <Alert variant="destructive">
           <HugeiconsIcon className="size-4" icon={AlertCircleIcon} />
@@ -240,17 +337,14 @@ function CookiesSection({
         </Alert>
       ) : (
         <div className="space-y-4">
-          {!profile?.hasValidCookies && (
-            <Alert variant="default">
-              <HugeiconsIcon className="size-4" icon={AlertCircleIcon} />
-              <AlertDescription>Connect your Twitter account by adding authentication cookies</AlertDescription>
-            </Alert>
-          )}
-
+          <Alert variant="default">
+            <HugeiconsIcon className="size-4" icon={AlertCircleIcon} />
+            <AlertDescription>Connect your Twitter account by adding authentication cookies</AlertDescription>
+          </Alert>
           <form
             className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
+            onSubmit={(event) => {
+              event.preventDefault();
               onSave(newCookies);
             }}
           >
@@ -268,7 +362,6 @@ function CookiesSection({
               />
               {displayError && <p className="text-error text-sm">{displayError}</p>}
             </div>
-
             <div className="flex gap-2">
               <Button disabled={isSubmitting} size="sm" type="submit">
                 Save cookies
@@ -299,7 +392,7 @@ function VisibilitySection({
         <input
           checked={isPublic}
           className="toggle toggle-sm data-[theme=light]:toggle-neutral data-[theme=dark]:toggle-accent"
-          onChange={(e) => onToggle(e.target.checked ? "public" : "private")}
+          onChange={(event) => onToggle(event.target.checked ? "public" : "private")}
           type="checkbox"
         />
         <span className="label-text w-full text-left">Make your profile visible to other people</span>
@@ -308,17 +401,14 @@ function VisibilitySection({
   );
 }
 
-// The origin cannot change during a page's lifetime, so subscribing would be
-// a no-op; only the snapshots matter to useSyncExternalStore.
+const NOOP_SUBSCRIPTION = () => {
+  // The origin value has no external subscription.
+};
 function subscribeToOrigin() {
-  return () => {
-    // Nothing to clean up.
-  };
+  return NOOP_SUBSCRIPTION;
 }
 
 function ProfileLinkBlock({ username }: { username: string }) {
-  // window is unavailable during SSR; useSyncExternalStore renders the
-  // path-only form on the server and upgrades to the absolute URL on mount.
   const origin = useSyncExternalStore(
     subscribeToOrigin,
     () => window.location.origin,

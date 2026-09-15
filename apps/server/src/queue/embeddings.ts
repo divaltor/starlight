@@ -2,13 +2,20 @@ import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { DbNull, Prisma, prisma } from "@starlight/utils";
 import { Queue, Worker } from "bullmq";
 import { Schema } from "effect";
-import env from "@/env";
 import { logger } from "@/logger";
-import { PhotoJobData } from "@/queue/photo-job";
+import env from "@/env";
 import { runtime } from "@/services/runtime";
 import { redis } from "@/storage";
 
-export const embeddingsQueue = new Queue<PhotoJobData>("embeddings", {
+const EmbeddingsJobData = Schema.Struct({
+  photoId: Schema.String,
+  provider: Schema.optional(Schema.String),
+  requestId: Schema.optional(Schema.String),
+  userId: Schema.String,
+});
+type EmbeddingsJobData = typeof EmbeddingsJobData.Type;
+
+export const embeddingsQueue = new Queue<EmbeddingsJobData>("embeddings", {
   connection: redis,
   defaultJobOptions: {
     attempts: 5,
@@ -18,7 +25,7 @@ export const embeddingsQueue = new Queue<PhotoJobData>("embeddings", {
   },
 });
 
-export const embeddingsWorker = new Worker<PhotoJobData>(
+export const embeddingsWorker = new Worker<EmbeddingsJobData>(
   "embeddings",
   async (job) => {
     if (!env.ENABLE_EMBEDDINGS) {
@@ -26,7 +33,12 @@ export const embeddingsWorker = new Worker<PhotoJobData>(
       return;
     }
 
-    const { photoId, userId, requestId: incomingRequestId } = Schema.decodeUnknownSync(PhotoJobData)(job.data);
+    const {
+      photoId,
+      provider = "twitter",
+      userId,
+      requestId: incomingRequestId,
+    } = Schema.decodeUnknownSync(EmbeddingsJobData)(job.data);
     const requestId = incomingRequestId || Bun.randomUUIDv7();
 
     if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
@@ -36,9 +48,9 @@ export const embeddingsWorker = new Worker<PhotoJobData>(
 
     logger.info({ photoId, userId, requestId }, "Generating photo embeddings");
 
-    const photo = await prisma.photo.findUnique({
+    const photo = await prisma.media.findUnique({
       where: {
-        photoId: { id: photoId, userId },
+        mediaId: { id: photoId, provider, userId },
         classification: { not: DbNull },
       },
       select: {
@@ -75,7 +87,7 @@ export const embeddingsWorker = new Worker<PhotoJobData>(
     const imageVecStr = `[${(result.image ?? []).join(",")}]`;
 
     await prisma.$executeRaw(
-      Prisma.sql`UPDATE photos SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE id = ${photoId} AND user_id = ${userId}`,
+      Prisma.sql`UPDATE media SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE external_id = ${photoId} AND user_id = ${userId} AND provider = ${provider}`,
     );
 
     logger.info({ photoId, userId, requestId }, "Photo embeddings generated");

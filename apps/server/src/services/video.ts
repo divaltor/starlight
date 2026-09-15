@@ -1,15 +1,11 @@
 import path from "node:path";
 import { http } from "@starlight/utils/http";
-import { Schema } from "effect";
 import { create } from "youtube-dl-exec";
-import env from "@/env";
+import { Schema } from "effect";
 import { logger } from "@/logger";
+import env from "@/env";
 
 const filesGlob = new Bun.Glob("*.mp4");
-
-// Spawn timeout kills yt-dlp (SIGTERM) so a hung download rejects, runs the
-// fallback path, and reaches the temp-dir cleanup instead of pinning the
-// update context forever.
 const VIDEO_DOWNLOAD_TIMEOUT_MS = 180_000;
 
 export const VideoMetadata = Schema.Struct({
@@ -25,7 +21,6 @@ export interface VideoInformation {
 
 async function createVideoInformation(filePath: string): Promise<VideoInformation> {
   const parsedPath = path.parse(filePath);
-
   const infoJsonPath = path.join(parsedPath.dir, `${parsedPath.name}.info.json`);
 
   logger.debug({ infoJsonPath }, "Creating video information");
@@ -56,11 +51,7 @@ export async function downloadVideoFromUrl(
 
   logger.debug({ url }, "Downloading video directly from URL");
 
-  // ky's `timeout` only bounds time-to-headers; the abort signal also bounds
-  // the response body so Bun.write cannot hang on a stalled CDN stream.
-  const response = await http(url, {
-    signal: AbortSignal.timeout(VIDEO_DOWNLOAD_TIMEOUT_MS),
-  });
+  const response = await http(url, { signal: AbortSignal.timeout(VIDEO_DOWNLOAD_TIMEOUT_MS) });
 
   if (!(response.ok && response.body)) {
     throw new Error(`Failed to download video from ${url}: ${response.status}`);

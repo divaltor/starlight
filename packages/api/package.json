@@ -25,6 +25,7 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "@book000/pixivts": "^0.63.0",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@opentelemetry/api": "1.9.1",

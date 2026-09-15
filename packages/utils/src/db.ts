@@ -1,5 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import Sqids from "sqids";
+import { parse } from "uuid";
 import databaseEnv from "./database-env";
 import { PrismaClient } from "./generated/prisma/client";
 import type { Prisma as PrismaGenerated } from "./generated/prisma/client";
@@ -21,14 +22,15 @@ const onlyNotDeletedMessages = <
 >(
   args: T,
 ): T => {
-  if (args.where?.deletedAt !== undefined) {
+  const { where } = args;
+  if (where?.deletedAt !== undefined) {
     return args;
   }
 
   args.where = {
     ...args.where,
     deletedAt: null,
-  };
+  } as PrismaGenerated.MessageWhereInput;
 
   return args;
 };
@@ -44,6 +46,8 @@ const MESSAGE_READ_OPERATIONS = new Set([
   "groupBy",
 ]);
 
+const isMessageReadOperation = (operation: string) => MESSAGE_READ_OPERATIONS.has(operation);
+
 export const prisma = new PrismaClient({
   log: databaseEnv.NODE_ENV === "production" ? ["warn", "error"] : ["info", "warn", "error"],
   adapter,
@@ -51,7 +55,7 @@ export const prisma = new PrismaClient({
   query: {
     message: {
       $allOperations({ operation, args, query }) {
-        if (MESSAGE_READ_OPERATIONS.has(operation)) {
+        if (isMessageReadOperation(operation)) {
           return query(
             onlyNotDeletedMessages(
               args as {
@@ -66,13 +70,17 @@ export const prisma = new PrismaClient({
     },
   },
   result: {
-    photo: {
+    media: {
       externalId: {
         needs: {
           id: true,
+          provider: true,
           userId: true,
         },
-        compute(data: { id: string; userId: string }) {
+        compute(data: { id: string; provider: string; userId: string }) {
+          if (data.provider !== "twitter") {
+            return `${data.provider}:${data.id}`;
+          }
           // Split Twitter ID into 3 parts to handle large numbers that exceed bigint
           const { id } = data;
           const chunkSize = Math.ceil(id.length / 3);
@@ -81,7 +89,7 @@ export const prisma = new PrismaClient({
             (part) => Math.trunc(Number(part || "0")),
           );
 
-          const userId = Buffer.from(data.userId.replaceAll("-", ""), "hex");
+          const userId = parse(data.userId);
 
           return sqids.encode([...parts, ...userId]);
         },
@@ -127,21 +135,21 @@ export const prisma = new PrismaClient({
     },
   },
   model: {
-    photo: {
-      available: (): PrismaGenerated.PhotoWhereInput => ({
+    media: {
+      available: () => ({
         deletedAt: null,
         s3Path: { not: null },
       }),
-    },
-    tweet: {
-      available: (): PrismaGenerated.TweetWhereInput => ({
-        photos: {
+    } satisfies Record<string, (...args: never[]) => PrismaGenerated.MediaWhereInput>,
+    post: {
+      available: () => ({
+        media: {
           some: {
             deletedAt: null,
             s3Path: { not: null },
           },
         },
       }),
-    },
+    } satisfies Record<string, (...args: never[]) => PrismaGenerated.PostWhereInput>,
   },
 });

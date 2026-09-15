@@ -2,19 +2,22 @@ import { prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import { Queue, Worker } from "bullmq";
 import { Schema } from "effect";
-import env from "@/env";
 import { logger } from "@/logger";
+import env from "@/env";
 import { embeddingsQueue } from "@/queue/embeddings";
-import { PhotoJobData } from "@/queue/photo-job";
 import { redis } from "@/storage";
 import { Classification } from "@/types";
 
-// Bounds the classification request including the response body (ky's
-// `timeout` only covers time-to-headers), so a stalled ML service fails the
-// job for retry instead of hanging the worker.
 const CLASSIFICATION_TIMEOUT_MS = 10_000;
 
-export const classificationQueue = new Queue<PhotoJobData>("classification", {
+interface ClassificationJobData {
+  photoId: string;
+  provider?: string;
+  requestId?: string;
+  userId: string;
+}
+
+export const classificationQueue = new Queue<ClassificationJobData>("classification", {
   connection: redis,
   defaultJobOptions: {
     attempts: 5,
@@ -24,7 +27,7 @@ export const classificationQueue = new Queue<PhotoJobData>("classification", {
   },
 });
 
-export const classificationWorker = new Worker<PhotoJobData>(
+export const classificationWorker = new Worker<ClassificationJobData>(
   "classification",
   async (job) => {
     if (!env.ENABLE_CLASSIFICATION) {
@@ -32,7 +35,7 @@ export const classificationWorker = new Worker<PhotoJobData>(
       return;
     }
 
-    const { photoId, userId, requestId: incomingRequestId } = Schema.decodeUnknownSync(PhotoJobData)(job.data);
+    const { photoId, provider = "twitter", userId, requestId: incomingRequestId } = job.data;
     const requestId = incomingRequestId || Bun.randomUUIDv7();
 
     if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
@@ -43,8 +46,8 @@ export const classificationWorker = new Worker<PhotoJobData>(
     logger.info({ photoId, userId, requestId }, "Classifying photo");
 
     // Fetch photo record to get URL
-    const photo = await prisma.photo.findUnique({
-      where: { photoId: { id: photoId, userId } },
+    const photo = await prisma.media.findUnique({
+      where: { mediaId: { id: photoId, provider, userId } },
       select: {
         id: true,
         userId: true,
@@ -99,17 +102,17 @@ export const classificationWorker = new Worker<PhotoJobData>(
       throw error;
     }
 
-    await prisma.photo.update({
-      where: { photoId: { id: photoId, userId } },
+    await prisma.media.update({
+      where: { mediaId: { id: photoId, provider, userId } },
       data: { classification: data },
     });
 
     await embeddingsQueue.add(
-      `embed-${photoId}`,
-      { photoId, userId, requestId },
+      `embed-${provider}-${photoId}`,
+      { photoId, provider, userId, requestId },
       {
-        jobId: `embed-${photoId}-${userId}`,
-        deduplication: { id: `embed-${photoId}-${userId}` },
+        jobId: `embed-${provider}-${photoId}-${userId}`,
+        deduplication: { id: `embed-${provider}-${photoId}-${userId}` },
       },
     );
 

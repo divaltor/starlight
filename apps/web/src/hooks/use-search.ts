@@ -1,8 +1,8 @@
-import type { SearchPageResult, TweetData } from "@starlight/api/types/tweets";
+import type { SearchPageResult, PostData } from "@starlight/api/types/posts";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { orpc } from "@/utils/orpc";
 
-const EMPTY_RESULTS: TweetData[] = [];
+const EMPTY_RESULTS: PostData[] = [];
 
 interface UseSearchOptions {
   limit?: number;
@@ -14,8 +14,8 @@ export function useSearch(options: UseSearchOptions) {
   const { query, limit = 30, ownOnly = false } = options;
 
   const { data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage, status } = useInfiniteQuery(
-    orpc.tweets.search.infiniteOptions({
-      input: (pageParam: string | null | undefined) => ({
+    orpc.posts.search.infiniteOptions({
+      input: (pageParam: string | null) => ({
         query,
         cursor: pageParam ?? undefined,
         limit,
@@ -23,7 +23,7 @@ export function useSearch(options: UseSearchOptions) {
       }),
       queryKey: ["search", { query, ownOnly }],
       initialPageParam: null,
-      getNextPageParam: (lastPage: SearchPageResult) => lastPage.nextCursor ?? undefined,
+      getNextPageParam: (lastPage: SearchPageResult) => lastPage.nextCursor ?? null,
       retry: false,
       gcTime: 10 * 60 * 1000,
       enabled: !!query.trim(),

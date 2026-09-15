@@ -1,21 +1,19 @@
-import type { SearchResult } from "../types/tweets";
+import type { SearchResult } from "../types/posts";
 
 export const paginateSearchResults = (results: SearchResult[], limit: number) => {
   const selectedPosts = new Set<string>();
   const rows: SearchResult[] = [];
   let hasNextPage = false;
-  let lastPost: Pick<SearchResult, "final_score" | "tweet_id"> | undefined;
+  let lastPost: Pick<SearchResult, "final_score" | "post_provider" | "post_id" | "user_id"> | undefined;
 
   for (const result of results) {
-    const isDuplicate = selectedPosts.has(result.tweet_id);
-    const hasReachedLimit = selectedPosts.size >= limit;
-
-    if (isDuplicate) {
+    const key = `${result.post_provider}:${result.post_id}:${result.user_id}`;
+    if (selectedPosts.has(key)) {
       rows.push(result);
-    } else if (hasReachedLimit) {
+    } else if (selectedPosts.size >= limit) {
       hasNextPage = true;
     } else {
-      selectedPosts.add(result.tweet_id);
+      selectedPosts.add(key);
       rows.push(result);
       lastPost = result;
     }
