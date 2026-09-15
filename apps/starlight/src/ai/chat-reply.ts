@@ -10,8 +10,8 @@ export namespace ChatReply {
   export const systemPrompt = `${personaPromptText}\n\n${systemPromptText}`;
   export const outputSchemaVersion = "chat-reply-v1";
   export const maxOutputTokens = 4096;
-  const MAX_TOOL_OUTPUT_BYTES = 16 * 1024;
-  const MAX_TOOL_CALLS = 3;
+  export const maxToolOutputBytes = 16 * 1024;
+  export const maxToolCalls = 3;
 
   const reactionEmojiSchema = z.enum(TelegramDelivery.reactionEmojis);
 
@@ -68,8 +68,8 @@ export namespace ChatReply {
             cachePrefixMessageCount: input.cachePrefixMessageCount,
             instructions: input.instructions ?? systemPrompt,
             maxOutputTokens,
-            maxToolOutputBytes: MAX_TOOL_OUTPUT_BYTES,
-            maxToolCalls: Object.keys(input.toolset.tools).length > 0 ? MAX_TOOL_CALLS : 0,
+            maxToolOutputBytes,
+            maxToolCalls: Object.keys(input.toolset.tools).length > 0 ? maxToolCalls : 0,
             messages: input.messages,
             outputSchema: responseSchema,
             private: input.private,

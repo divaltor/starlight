@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { Composer } from "grammy";
 import type { Context } from "grammy";
+import { ChatTools } from "@/ai/chat-tools";
 import { GuestReply } from "@/ai/guest-reply";
 import { Media } from "@/media/media";
 import { runtime } from "@/services/runtime";
@@ -11,7 +12,9 @@ composer.on("guest_message:text", async (ctx) => {
   const text = await runtime.runPromise(
     Effect.gen(function* generateGuestReply() {
       const guestReply = yield* GuestReply.Service;
+      const chatTools = yield* ChatTools.Service;
       const media = yield* Media.Service;
+      const toolset = yield* chatTools.resolve(chatTools.availableProfile);
       const repliedMedia = yield* Effect.all(
         Media.fromTelegramMessage(ctx.guestMessage!.reply_to_message).map((source) =>
           media.ingest(source).pipe(Effect.flatMap(media.load)),
@@ -23,6 +26,7 @@ composer.on("guest_message:text", async (ctx) => {
         repliedMedia: repliedMedia.filter((item): item is Media.Loaded => item !== null),
         repliedMessage: ctx.guestMessage!.reply_to_message?.text ?? ctx.guestMessage!.reply_to_message?.caption ?? null,
         sessionId: `guest:${ctx.from!.id}:${ctx.update.update_id}`,
+        toolset,
       });
     }),
   );

@@ -1,5 +1,7 @@
 import { Context, Effect, Layer } from "effect";
 import { z } from "zod";
+import type { ChatTools } from "@/ai/chat-tools";
+import { ChatReply } from "@/ai/chat-reply";
 import guestPromptText from "@/ai/guest-prompt.txt";
 import { Model } from "@/ai/model";
 import personaPromptText from "@/ai/persona-prompt.txt";
@@ -17,6 +19,7 @@ export namespace GuestReply {
       readonly repliedMedia: readonly Media.Loaded[];
       readonly repliedMessage: string | null;
       readonly sessionId: string;
+      readonly toolset: ChatTools.Resolved;
     }) => Effect.Effect<string, Model.Error>;
   }
 
@@ -32,8 +35,8 @@ export namespace GuestReply {
           const generated = yield* model.generate({
             instructions: `${personaPromptText}\n\n${guestPromptText}`,
             maxOutputTokens: MAX_OUTPUT_TOKENS,
-            maxToolOutputBytes: 0,
-            maxToolCalls: 0,
+            maxToolOutputBytes: ChatReply.maxToolOutputBytes,
+            maxToolCalls: Object.keys(input.toolset.tools).length > 0 ? ChatReply.maxToolCalls : 0,
             messages: [
               {
                 role: "user",
@@ -44,7 +47,7 @@ export namespace GuestReply {
             outputSchema,
             sessionId: input.sessionId,
             telemetryFunctionId: "guest-reply",
-            tools: {},
+            tools: input.toolset.tools,
           });
           return generated.output.text;
         }),
