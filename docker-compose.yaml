@@ -19,6 +19,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
     volumes:
       - postgresql_data:/var/lib/postgresql/data
+      # supabase/postgres leaves $POSTGRES_DB owned by supabase_admin with
+      # postgres demoted (no CREATE on schema public); hand it back on first init.
+      - ./docker/postgresql/z-starlight-grants.sh:/docker-entrypoint-initdb.d/z-starlight-grants.sh:ro
     networks:
       - starlight
     healthcheck:
