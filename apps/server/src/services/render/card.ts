@@ -45,6 +45,18 @@ const BLOCK_GAP_BOTTOM = LAYOUT.MEDIA_GAP_BOTTOM;
 const CARD_WIDTH_INNER = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
 const CHAIN_CONTENT_WIDTH = CARD_WIDTH_INNER - LAYOUT.AVATAR_SIZE - LAYOUT.AVATAR_GAP;
 
+// X-style short timestamp: time before date, year only when it differs from the current one.
+export function formatShortDate(createdAt: Date): string {
+  return format(
+    createdAt,
+    createdAt.getFullYear() === new Date().getFullYear() ? "h:mm a · MMM d" : "h:mm a · MMM d, yyyy",
+  );
+}
+
+export function formatTweetTimestamp(createdAt: Date): string {
+  return format(createdAt, "h:mm a · MMM d, yyyy");
+}
+
 export interface BuildCardParams {
   colors: ThemeColors;
   failedUrls: Set<string>;
@@ -78,7 +90,7 @@ export function buildTweetCard(params: BuildCardParams): Node {
       children: [
         text(
           [
-            params.tweet.createdAt ? format(params.tweet.createdAt, "MMM d, yyyy") : null,
+            params.tweet.createdAt ? formatTweetTimestamp(params.tweet.createdAt) : null,
             `${formatNumber(params.tweet.replies)} replies`,
             `${formatNumber(params.tweet.retweets)} reposts`,
             `${formatNumber(params.tweet.likes)} likes`,
@@ -248,6 +260,9 @@ function nameRowNodes(colors: ThemeColors, fontSize: number, tweet: TweetData): 
   return [
     text(tweet.authorName, { color: colors.text, fontSize, fontWeight: 700 }),
     text(` @${tweet.authorUsername}`, { color: colors.secondaryText, fontSize }),
+    ...(tweet.createdAt
+      ? [text(` · ${formatShortDate(tweet.createdAt)}`, { color: colors.secondaryText, fontSize })]
+      : []),
     ...(language ? translationBadge(language, colors, fontSize) : []),
   ];
 }
