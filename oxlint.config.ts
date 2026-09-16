@@ -29,6 +29,9 @@ export default defineConfig({
     // Prisma generated client must not be linted.
     "packages/utils/src/generated/**",
   ],
+  // Re-declared on the root so dependency analyzers (Knip) see the JS
+  // plugins; oxlint loads them from the extended presets either way.
+  jsPlugins: jsPlugins.jsPlugins,
   settings: jsPluginSettings,
   rules: {
     // Full React Doctor coverage (parity with `bunx react-doctor`), so the
@@ -37,13 +40,13 @@ export default defineConfig({
     // repo-specific overrides below keep precedence.
     ...ALL_REACT_DOCTOR_RULES,
     // Disabled because they conflict with repo conventions: function
-    // declarations, non-alphabetical key order (oRPC routers), TanStack
-    // router filenames, the utils barrel re-exporting Prisma, and
-    // single-line guard clauses.
+    // declarations, the utils barrel re-exporting Prisma, and single-line
+    // guard clauses. (`sort-keys` is already off in
+    // `ultracite/oxlint/tanstack` for all files, and
+    // `github/filenames-match-regex` is already scoped to route directories
+    // in `ultracite/oxlint/js-plugins`.)
     "eslint/func-style": "off",
     "react/function-component-definition": "off",
-    "eslint/sort-keys": "off",
-    "github/filenames-match-regex": "off",
     "oxc/no-barrel-file": "off",
     "eslint/curly": "off",
     "eslint/no-use-before-define": "off",
