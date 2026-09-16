@@ -631,16 +631,43 @@ function formatNumber(num: number | null | undefined): string {
 
 const languageDisplayNames = new Intl.DisplayNames(["en"], { type: "language" });
 
-function getTranslationLanguage(tweet: Pick<TweetData, "translation">): string | null {
-  const sourceLanguage = tweet.translation?.sourceLanguage;
-  if (!sourceLanguage) {
+// BCP47-ish language tag: 2-3 letter code with optional script and region.
+const LANGUAGE_CODE_RE = /^[a-z]{2,3}(?:-[a-z]{4})?(?:-(?:[a-z]{2}|\d{3}))?$/iu;
+// Codes with no meaningful display name; never shown in the badge.
+const UNTRANSLATABLE = new Set(["und", "mul", "zxx", "auto"]);
+
+export function getTranslationLanguage(tweet: Pick<TweetData, "translation">): string | null {
+  const raw = tweet.translation?.sourceLanguage?.trim();
+  if (!raw) {
+    return null;
+  }
+
+  // Upstream leaks its missing-i18n-key fallback ("language_zh", "language-ZH").
+  const candidate = raw.replace(/^language[_-]+/iu, "").replaceAll("_", "-");
+  const language = candidate === "" ? raw : candidate;
+
+  // Already an English name ("Chinese") rather than a code: DisplayNames would
+  // lowercase it, so only normalize the capitalization.
+  if (!LANGUAGE_CODE_RE.test(language)) {
+    if (UNTRANSLATABLE.has(language.toLowerCase())) {
+      return null;
+    }
+    return language.charAt(0).toUpperCase() + language.slice(1);
+  }
+
+  if (UNTRANSLATABLE.has(language.toLowerCase())) {
     return null;
   }
 
   try {
-    return languageDisplayNames.of(sourceLanguage.replace("_", "-")) ?? sourceLanguage;
+    const display = languageDisplayNames.of(language);
+    // Unknown codes round-trip unchanged; fall back to a capitalized code.
+    if (!display || display.toLowerCase() === language.toLowerCase()) {
+      return language.charAt(0).toUpperCase() + language.slice(1);
+    }
+    return display;
   } catch {
-    return sourceLanguage;
+    return language.charAt(0).toUpperCase() + language.slice(1);
   }
 }
 

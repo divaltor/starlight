@@ -88,8 +88,10 @@ export class FxEmbedTranslation extends Schema.Class<FxEmbedTranslation>("FxEmbe
     if (!this.text) {
       return null;
     }
+    // Prefer the ISO code over the English name: upstream derives source_lang_en
+    // from an i18n key and leaks the raw key (e.g. "language_zh") when missing.
     return {
-      sourceLanguage: this.source_lang_en ?? this.source_lang.toUpperCase(),
+      sourceLanguage: this.source_lang,
     };
   }
 }
