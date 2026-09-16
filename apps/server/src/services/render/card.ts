@@ -73,12 +73,16 @@ export function buildTweetCard(params: BuildCardParams): Node {
   const tail: Node[] = [
     headerRow(params.colors, params.failedUrls, params.tweet),
     box({
-      children: buildTextParagraphs(params.tweet.text, {
-        color: params.colors.text,
-        fontSize: LAYOUT.FONT_SIZE_TEXT,
-        lineHeight: LAYOUT.LINE_HEIGHT,
-        width: CARD_WIDTH_INNER,
-      }),
+      children: buildTextParagraphs(
+        params.tweet.text,
+        {
+          color: params.colors.text,
+          fontSize: LAYOUT.FONT_SIZE_TEXT,
+          lineHeight: LAYOUT.LINE_HEIGHT,
+          width: CARD_WIDTH_INNER,
+        },
+        params.colors.accent,
+      ),
       style: { marginTop: LAYOUT.AVATAR_GAP },
     }),
     ...tweetExtrasNodes(params.colors, CARD_WIDTH_INNER, params.failedUrls, params.tweet),
@@ -177,10 +181,88 @@ export function stripUnavailableImages(node: Node, fetchedBytes: Map<string, Uin
   });
 }
 
+export type TextRunKind = "link" | "mention" | "hashtag" | "plain";
+
+export interface TextRun {
+  kind: TextRunKind;
+  value: string;
+}
+
+const TOKEN_RE =
+  /(?<token>https?:\/\/\S+|(?<![\p{L}\p{N}_.%+-])@[A-Za-z0-9_]{1,15}|(?<![\p{L}\p{N}_])#[\p{L}\p{N}_][\p{L}\p{N}_\p{M}]*)/gu;
+// Sentence punctuation hugging a URL belongs to the sentence, not the address.
+const TRAILING_URL_PUNCT_RE = /[.,;:!?"'“”‘’«»‹›「」『』（）【】。、，！？；：…]+$/u;
+
+export function splitTextRuns(line: string): TextRun[] {
+  const runs: TextRun[] = [];
+  let last = 0;
+  for (const match of line.matchAll(TOKEN_RE)) {
+    const token = match.groups?.token ?? match[0];
+    const index = match.index ?? 0;
+    if (index > last) {
+      runs.push({ kind: "plain", value: line.slice(last, index) });
+    }
+    if (token.startsWith("http")) {
+      const { url, tail } = splitUrlTail(token);
+      runs.push({ kind: "link", value: url });
+      if (tail !== "") {
+        runs.push({ kind: "plain", value: tail });
+      }
+    } else {
+      runs.push({ kind: token.startsWith("@") ? "mention" : "hashtag", value: token });
+    }
+    last = index + token.length;
+  }
+  if (last < line.length) {
+    runs.push({ kind: "plain", value: line.slice(last) });
+  }
+  // URL-tail peeling can leave adjacent plain runs ("peel" + "suffix").
+  const merged: TextRun[] = [];
+  for (const run of runs) {
+    const prev = merged.at(-1);
+    if (prev?.kind === "plain" && run.kind === "plain") {
+      prev.value += run.value;
+    } else {
+      merged.push(run);
+    }
+  }
+  return merged;
+}
+
+// Peels sentence punctuation off a URL tail, unwinding to the last balanced
+// bracket: "(https://x/y))" keeps one ")" inside the link, the outer lands
+// back in plain text.
+const CLOSING_TO_OPENING: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+
+function splitUrlTail(token: string): { url: string; tail: string } {
+  let url = token;
+  let tail = "";
+  for (;;) {
+    const punct = url.match(TRAILING_URL_PUNCT_RE)?.[0] ?? "";
+    if (punct !== "") {
+      tail = punct + tail;
+      url = url.slice(0, -punct.length);
+      continue;
+    }
+    const closer = url.match(/[)\]}]$/u)?.[0];
+    if (!closer) {
+      return { url, tail };
+    }
+    const opener = CLOSING_TO_OPENING[closer] ?? "";
+    if (url.split(closer).length <= url.split(opener).length) {
+      return { url, tail };
+    }
+    tail = closer + tail;
+    url = url.slice(0, -closer.length);
+  }
+}
+
 // Mirrors the old wrapText preprocessing: leading mentions stripped, a blank
 // line forced before a trailing hashtag block, "\n\n" starts a spaced paragraph,
-// single "\n" a plain line break.
-export function buildTextParagraphs(rawText: string, style: Style): Node[] {
+// single "\n" a plain line break. Like X, links, mentions, and hashtags render
+// in the theme accent color at regular weight: one block host per paragraph
+// carries the runs as inline text, so wrapping flows like normal text.
+export function buildTextParagraphs(rawText: string, style: Style, accent: string): Node[] {
   const cleaned = rawText
     // Strip leading "@mention " prefixes before paragraph processing.
     .replace(/^(?:@\w+\s*)+/u, "")
@@ -199,17 +281,35 @@ export function buildTextParagraphs(rawText: string, style: Style): Node[] {
     }
 
     const isLastParagraph = pIndex === paragraphs.length - 1;
+    const marginBottom = isLastParagraph ? 0 : LAYOUT.PARAGRAPH_GAP;
+    // Breaks over-long tokens (URLs) instead of overflowing the card,
+    // matching the old breakLongWord behavior.
+    const { width, ...textStyle } = style;
+    const runs = lines.flatMap((line, lIndex) => [
+      ...(lIndex === 0 ? [] : [{ kind: "plain", value: "\n" } satisfies TextRun]),
+      ...splitTextRuns(line),
+    ]);
     return [
-      // One text node per paragraph: sibling text nodes collapse in layout.
       box({
-        children: [text(lines.join("\n"), { whiteSpace: "pre-line" })],
-        style: {
-          // Breaks over-long tokens (URLs) instead of overflowing the card,
-          // matching the old breakLongWord behavior.
-          ...style,
-          marginBottom: isLastParagraph ? 0 : LAYOUT.PARAGRAPH_GAP,
-          overflowWrap: "anywhere",
-        },
+        children: [
+          container({
+            children: runs.map((run) => {
+              const runStyle: Style = {
+                display: "inline",
+                whiteSpace: "pre-line",
+                overflowWrap: "anywhere",
+                ...textStyle,
+              };
+              if (run.kind !== "plain") {
+                runStyle.color = accent;
+                runStyle.fontWeight = 400;
+              }
+              return text(run.value, runStyle);
+            }),
+            style: { display: "block", width },
+          }),
+        ],
+        style: { marginBottom, width },
       }),
     ];
   });
@@ -312,12 +412,16 @@ function replyChainItem(colors: ThemeColors, failedUrls: Set<string>, tweet: Twe
             },
           }),
           box({
-            children: buildTextParagraphs(tweet.text, {
-              color: colors.text,
-              fontSize: REPLY_FONT_SIZE_TEXT,
-              lineHeight: LAYOUT.LINE_HEIGHT,
-              width: CHAIN_CONTENT_WIDTH,
-            }),
+            children: buildTextParagraphs(
+              tweet.text,
+              {
+                color: colors.text,
+                fontSize: REPLY_FONT_SIZE_TEXT,
+                lineHeight: LAYOUT.LINE_HEIGHT,
+                width: CHAIN_CONTENT_WIDTH,
+              },
+              colors.accent,
+            ),
             style: { marginTop: LAYOUT.TEXT_GAP },
           }),
           ...tweetExtrasNodes(colors, CHAIN_CONTENT_WIDTH, failedUrls, tweet),
@@ -405,12 +509,16 @@ function quoteBox(
               },
             }),
             box({
-              children: buildTextParagraphs(quote.text, {
-                color: colors.text,
-                fontSize: QUOTE_FONT_SIZE_TEXT,
-                lineHeight: LAYOUT.LINE_HEIGHT,
-                width: textWidth,
-              }),
+              children: buildTextParagraphs(
+                quote.text,
+                {
+                  color: colors.text,
+                  fontSize: QUOTE_FONT_SIZE_TEXT,
+                  lineHeight: LAYOUT.LINE_HEIGHT,
+                  width: textWidth,
+                },
+                colors.accent,
+              ),
               style: { marginTop: LAYOUT.TEXT_GAP },
             }),
           ],
@@ -463,21 +571,29 @@ function articleBlock(colors: ThemeColors, contentWidth: number, article: Articl
     box({
       children: [
         box({
-          children: buildTextParagraphs(article.title, {
-            color: colors.text,
-            fontSize: ARTICLE_TITLE_FONT_SIZE,
-            fontWeight: 700,
-            lineHeight: LAYOUT.LINE_HEIGHT,
-            width: innerWidth,
-          }),
+          children: buildTextParagraphs(
+            article.title,
+            {
+              color: colors.text,
+              fontSize: ARTICLE_TITLE_FONT_SIZE,
+              fontWeight: 700,
+              lineHeight: LAYOUT.LINE_HEIGHT,
+              width: innerWidth,
+            },
+            colors.accent,
+          ),
         }),
         box({
-          children: buildTextParagraphs(article.previewText, {
-            color: colors.secondaryText,
-            fontSize: ARTICLE_PREVIEW_FONT_SIZE,
-            lineHeight: LAYOUT.LINE_HEIGHT,
-            width: innerWidth,
-          }),
+          children: buildTextParagraphs(
+            article.previewText,
+            {
+              color: colors.secondaryText,
+              fontSize: ARTICLE_PREVIEW_FONT_SIZE,
+              lineHeight: LAYOUT.LINE_HEIGHT,
+              width: innerWidth,
+            },
+            colors.accent,
+          ),
           style: { marginTop: LAYOUT.TEXT_GAP },
         }),
       ],
