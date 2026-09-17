@@ -6,6 +6,7 @@ import { Conversation } from "@/conversation/conversation";
 import { Prompt } from "@/context/prompt";
 import { createBotEnv } from "@/env";
 import { MessageReply } from "@/handlers/message-reply";
+import { TelegramMessageText } from "@/handlers/telegram-message-text";
 import { Media } from "@/media/media";
 import { runtime } from "@/services/runtime";
 
@@ -92,7 +93,7 @@ async function admitMessage(ctx: Context, message: Message, addressed: boolean, 
             messageId: message.message_id,
             media: references,
             mediaGroupId: message.media_group_id ?? null,
-            repliedText: message.reply_to_message?.text ?? message.reply_to_message?.caption ?? null,
+            repliedText: TelegramMessageText.withEntityLinks(message.reply_to_message),
             repliedMedia,
             replyToMessageId: message.reply_to_message?.message_id ?? null,
             senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
@@ -100,7 +101,7 @@ async function admitMessage(ctx: Context, message: Message, addressed: boolean, 
             senderIsBot: message.from?.is_bot ?? false,
             senderLastName: message.from?.last_name ?? null,
             senderUsername: message.from?.username ?? null,
-            text: message.text ?? message.caption ?? "",
+            text: TelegramMessageText.withEntityLinks(message) ?? "",
           },
           updateId: ctx.update.update_id,
         });
