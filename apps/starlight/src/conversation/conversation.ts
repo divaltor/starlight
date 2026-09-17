@@ -335,6 +335,49 @@ export namespace Conversation {
           // not pin their lane and suppress a later message that explicitly addresses the bot.
           if (!claimed.replyEligible) return yield* finalizeClaimed(claimed);
 
+          const addressedPayloads = claimed.inputs.flatMap((item) => {
+            const payload = item.payload as InputPayload;
+            return payload.addressed ? [payload] : [];
+          });
+          const precomputedReactions = addressedPayloads.flatMap((payload) =>
+            payload.precomputedReaction === undefined ? [] : [payload.precomputedReaction],
+          );
+          if (precomputedReactions.length === addressedPayloads.length) {
+            const actions = precomputedReactions.map((reaction) => ({ ...reaction, type: "reaction" as const }));
+            yield* database
+              .transaction(async (transaction) => {
+                await Lane.assertFence(transaction, claimed.dbKey, claimed);
+                await transaction.conversationRunAction.createMany({
+                  data: actions.map((action, ordinal) => ({
+                    deliveryStatus: "pending",
+                    lastError: null,
+                    ordinal,
+                    payload: action as Prisma.InputJsonObject,
+                    runId: claimed.runId,
+                    targetMessageId: action.messageId,
+                    type: action.type,
+                  })),
+                  skipDuplicates: true,
+                });
+                await transaction.conversationRun.update({
+                  where: { id: claimed.runId },
+                  data: {
+                    finishReason: "precomputed-reaction",
+                    generatedAt: new Date(),
+                    generatedOutput: { replies: actions },
+                    modelTranscript: [],
+                    status: "generated",
+                  },
+                });
+              })
+              .pipe(
+                Effect.withSpan("Conversation precomputed reaction persist"),
+                Effect.mapError(failed("Failed to persist precomputed reactions")),
+              );
+            yield* dispatchRun(claimed);
+            return yield* finalizeClaimed(claimed);
+          }
+
           const frozenProfile = Schema.decodeUnknownSync(PreparedToolProfileSchema)(claimed.preparedRequest);
           const transitioned = yield* blockOnPermanent(
             conversationContext.transitionProfile({

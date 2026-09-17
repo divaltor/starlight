@@ -2,12 +2,13 @@ import { experimental_evaluate } from "ai";
 import type { Experimental_EvaluationModel } from "ai";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
 import { ChatReply } from "@/ai/chat-reply";
+import type { TelegramDelivery } from "@/conversation/delivery";
 import type { ConversationKey } from "@/conversation/key";
 import type { InputPayload } from "@/conversation/run-artifacts";
 import { Database } from "@/services/database";
 
 export namespace DialogueContinuation {
-  const RESPONSE_THRESHOLD = 0.8;
+  const ACTION_THRESHOLD = 0.8;
 
   export interface Input {
     readonly key: ConversationKey.Value;
@@ -26,8 +27,13 @@ export namespace DialogueContinuation {
     }
   }
 
+  export type Decision =
+    | { readonly type: "silence" }
+    | { readonly type: "text" }
+    | { readonly emoji: TelegramDelivery.ReactionEmoji; readonly type: "reaction" };
+
   export interface Interface {
-    readonly shouldRespond: (input: Input) => Effect.Effect<boolean, EvaluationError>;
+    readonly evaluate: (input: Input) => Effect.Effect<Decision, EvaluationError>;
   }
 
   export class Service extends Context.Service<Service, Interface>()("starlight/DialogueContinuation") {}
@@ -40,7 +46,7 @@ export namespace DialogueContinuation {
       Service,
       Effect.gen(function* make() {
         const database = yield* Database.Service;
-        const shouldRespond = Effect.fn("DialogueContinuation.shouldRespond")(function* shouldRespond(input: Input) {
+        const evaluate = Effect.fn("DialogueContinuation.evaluate")(function* evaluate(input: Input) {
           const latestReply = yield* database
             .query((client) =>
               client.conversationRunAction.findFirst({
@@ -74,7 +80,9 @@ export namespace DialogueContinuation {
               }),
             )
             .pipe(Effect.mapError(EvaluationError.fromCause));
-          if (latestReply?.telegramMessageId === null || latestReply?.telegramMessageId === undefined) return false;
+          if (latestReply?.telegramMessageId === null || latestReply?.telegramMessageId === undefined) {
+            return { type: "silence" } as const;
+          }
           const replyMessageId = latestReply.telegramMessageId;
 
           const messagesAfterReply = yield* database
@@ -91,7 +99,7 @@ export namespace DialogueContinuation {
               }),
             )
             .pipe(Effect.mapError(EvaluationError.fromCause));
-          if (messagesAfterReply.length >= options.messageLimit) return false;
+          if (messagesAfterReply.length >= options.messageLimit) return { type: "silence" } as const;
 
           const recentExchange = [
             ...latestReply.run.inputs.map((runInput) => {
@@ -121,14 +129,37 @@ export namespace DialogueContinuation {
                 maxRetries: 2,
                 model,
                 questions: {
-                  continuation: {
-                    type: "boolean",
+                  action: {
+                    type: "choice",
                     instructions:
-                      "Should Starlight treat `currentMessage` as a continuation addressed to her and respond? Decide conversational addressee and intent, not merely topic similarity.",
+                      "What is the most natural action for Starlight toward `currentMessage`? Judge whether it is addressed to her and what social response it warrants.",
                     criteria: {
-                      true: "The current message naturally follows Starlight's recent reply and seeks her answer, reaction, clarification, or participation, even without mentioning or replying to her explicitly.",
-                      false:
-                        "The current message is directed at another participant, unrelated, self-contained chat among humans, or only an acknowledgement or closer that does not need a response.",
+                      text: "Write substantive text because the message seeks an answer, clarification, opinion, correction, or meaningful participation from Starlight.",
+                      reaction:
+                        "Add one Telegram emoji reaction as a lightweight acknowledgement because the message is addressed to Starlight but words would unnecessarily prolong the exchange.",
+                      silence:
+                        "Do nothing because the message is directed elsewhere, unrelated, or a routine closer where even a reaction would add little.",
+                    },
+                  },
+                  emoji: {
+                    type: "choice",
+                    instructions:
+                      "If Starlight reacts to `currentMessage`, which available Telegram emoji best matches its meaning and emotional intensity?",
+                    criteria: {
+                      "😁": "Warm amusement or cheerful delight",
+                      "🤮": "Strong disgust",
+                      "🤡": "Mocking something foolish",
+                      "🤔": "Thoughtful doubt or curiosity",
+                      "😭": "Overwhelming laughter, emotion, or sadness when clearly intense",
+                      "🥰": "Affection or warm appreciation",
+                      "😡": "Anger",
+                      "🔥": "Enthusiastic praise or something impressive",
+                      "👏": "Congratulations or applause",
+                      "👌": "Approval or acknowledgement",
+                      "👎": "Disapproval",
+                      "👍": "Simple agreement, thanks acknowledgement, or confirmation",
+                      "💔": "Heartbreak or sympathy",
+                      "💯": "Strong agreement or emphatic approval",
                     },
                   },
                 },
@@ -148,20 +179,29 @@ export namespace DialogueContinuation {
               }),
             catch: EvaluationError.fromCause,
           }).pipe(Effect.timeout(Duration.seconds(10)), Effect.mapError(EvaluationError.fromCause));
-          const respond = result.answers.continuation.probability >= RESPONSE_THRESHOLD;
+          const action = result.answers.action.choice;
+          const probability = result.answers.action.probabilities?.[action] ?? 0;
+          const candidate: Record<typeof action, Decision> = {
+            reaction: { emoji: result.answers.emoji.choice, type: "reaction" },
+            silence: { type: "silence" },
+            text: { type: "text" },
+          };
+          const decision = probability < ACTION_THRESHOLD ? { type: "silence" as const } : candidate[action];
           yield* Effect.logDebug("Dialogue continuation evaluated").pipe(
             Effect.annotateLogs({
+              action,
               chatId: input.key.chatId,
+              decision: decision.type,
+              emoji: decision.type === "reaction" ? decision.emoji : null,
               messageId: input.messageId,
-              probability: result.answers.continuation.probability,
-              respond,
+              probability,
               threadKey: input.key.threadKey,
             }),
           );
-          return respond;
+          return decision;
         });
 
-        return Service.of({ shouldRespond });
+        return Service.of({ evaluate });
       }),
     );
   }

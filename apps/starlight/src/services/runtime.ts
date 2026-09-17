@@ -105,7 +105,7 @@ const dialogueContinuation = env.TYPESAFE_API_KEY
   ? DialogueContinuation.layer(createTypeSafeAi({ apiKey: env.TYPESAFE_API_KEY }).evaluationModel("jev-latest"), {
       messageLimit: env.DIALOGUE_CONTINUATION_MESSAGE_LIMIT,
     })
-  : Layer.succeed(DialogueContinuation.Service)({ shouldRespond: () => Effect.succeed(false) });
+  : Layer.succeed(DialogueContinuation.Service)({ evaluate: () => Effect.succeed({ type: "silence" }) });
 const database = Database.layer(env.DATABASE_URL);
 const tracing =
   env.langfuse === undefined && env.otlp === undefined

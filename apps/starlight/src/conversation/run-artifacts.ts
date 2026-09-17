@@ -1,5 +1,6 @@
 import type { Prisma } from "@starlight/utils/generated/prisma/client";
 import { Effect, Schema } from "effect";
+import { TelegramDelivery } from "@/conversation/delivery";
 import { Media } from "@/media/media";
 
 // Fields the transcript projection reads back from stored inputs.
@@ -27,6 +28,12 @@ export const StoredPayloadSchema = Schema.Struct(ProjectedFields);
 // read the same rows, so a second independent definition would drift silently.
 export const InputPayloadSchema = Schema.Struct({
   ...ProjectedFields,
+  precomputedReaction: Schema.optional(
+    Schema.Struct({
+      emoji: Schema.Literals(TelegramDelivery.reactionEmojis),
+      messageId: Schema.Int,
+    }),
+  ),
   senderIsBot: Schema.optional(Schema.Boolean),
   senderLastName: Schema.optional(Schema.NullOr(Schema.String)),
   senderUsername: Schema.NullOr(Schema.String),

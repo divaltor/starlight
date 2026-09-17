@@ -78,7 +78,7 @@ async function admitMessage(
       const threadKey = message.is_topic_message === true ? (message.message_thread_id ?? 0) : 0;
       const continuation = evaluateContinuation
         ? yield* dialogueContinuation
-            .shouldRespond({
+            .evaluate({
               key: { assistantId: ctx.me.id, chatId: ctx.chat!.id, threadKey },
               messageId: message.message_id,
               senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
@@ -94,11 +94,11 @@ async function admitMessage(
                     messageId: message.message_id,
                     threadKey,
                   }),
-                  Effect.as(false),
+                  Effect.as({ type: "silence" } as const),
                 ),
               ),
             )
-        : false;
+        : ({ type: "silence" } as const);
       if (randomResponseTriggered) {
         yield* Effect.logInfo("Random response chance triggered").pipe(
           Effect.annotateLogs({
@@ -129,13 +129,17 @@ async function admitMessage(
             threadKey,
           },
           payload: {
-            addressed: addressed || continuation,
+            addressed: addressed || continuation.type !== "silence",
             date: message.date,
             editDate: message.edit_date ?? null,
             forwardOrigin: message.forward_origin ? Prompt.canonicalEncode(message.forward_origin) : null,
             messageId: message.message_id,
             media: references,
             mediaGroupId: message.media_group_id ?? null,
+            precomputedReaction:
+              continuation.type === "reaction"
+                ? { emoji: continuation.emoji, messageId: message.message_id }
+                : undefined,
             repliedText: TelegramMessageText.withEntityLinks(message.reply_to_message),
             repliedMedia,
             replyToMessageId: message.reply_to_message?.message_id ?? null,

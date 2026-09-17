@@ -88,6 +88,116 @@ test.skipIf(!databaseUrl)("duplicate Telegram delivery creates one immutable inp
   }
 });
 
+test.skipIf(!databaseUrl)("precomputed reactions bypass model generation and use durable delivery", async () => {
+  let modelCalls = 0;
+  const model: Model.Interface = {
+    generate: <Output>() => {
+      modelCalls += 1;
+      return Effect.succeed({
+        finishReason: "stop",
+        output: { replies: [{ type: "ignore" }] } as Output,
+        steps: [],
+        toolEvents: [],
+        transcript: [],
+        usage: {
+          billing: {
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            costUsd: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            reasoningTokens: 0,
+          },
+          contextInputTokens: 0,
+          stepCount: 0,
+        },
+      });
+    },
+  };
+  const delivered: TelegramDelivery.Action[] = [];
+  const delivery: TelegramDelivery.Interface = {
+    deliver: (input) => {
+      delivered.push(input.action);
+      return Effect.succeed({ telegramMessageId: null });
+    },
+    indicateTyping: () => Effect.void,
+  };
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+  const assistantId = 8_000_000_120;
+  const chatId = -8_000_000_120;
+  const key = { assistantId, chatId, threadKey: 0 };
+
+  try {
+    const result = await runtime.runPromise(
+      Effect.gen(function* run() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* conversation.admit({
+          chatTitle: "Precomputed reaction test",
+          chatType: "supergroup",
+          chatUsername: null,
+          key,
+          payload: {
+            addressed: true,
+            date: 1_700_000_000,
+            editDate: null,
+            forwardOrigin: null,
+            media: [],
+            mediaGroupId: null,
+            messageId: 120,
+            precomputedReaction: { emoji: "👍", messageId: 120 },
+            repliedMedia: [],
+            repliedText: null,
+            replyToMessageId: null,
+            senderFirstName: "Alice",
+            senderId: 42,
+            senderUsername: "alice",
+            text: "Thanks",
+          },
+          updateId: 220,
+        });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+        const drain = yield* conversation.drain({ key });
+        const action = yield* database.query((client) =>
+          client.conversationRunAction.findFirstOrThrow({
+            where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId), threadKey: 0 } },
+          }),
+        );
+        return { action, drain };
+      }),
+    );
+
+    expect(result.drain.kind).toBe("completed");
+    expect(modelCalls).toBe(0);
+    expect(delivered).toEqual([{ emoji: "👍", messageId: 120, type: "reaction" }]);
+    expect(result.action.deliveryStatus).toBe("delivered");
+    expect(result.action.type).toBe("reaction");
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
 test.skipIf(!databaseUrl)("model-selected reply targets are passed to Telegram delivery", async () => {
   const targetMessageId = 9_999_999;
   const delivered: TelegramDelivery.Action[] = [];
