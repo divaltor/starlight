@@ -1,4 +1,3 @@
-import { FormattedString } from "@grammyjs/parse-mode";
 import { cleanupTweetText, extractTweetId, prisma } from "@starlight/utils";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
@@ -7,6 +6,7 @@ import { bot } from "@/bot";
 import type { FxEmbedTweet } from "@/services/fxembed/types";
 import { runtime } from "@/services/runtime";
 import { generateTweetImage } from "@/services/tweet/tweet-image.service";
+import { TweetRichMessage } from "@/services/tweet/tweet-rich-message";
 import { TwitterApi } from "@/services/twitter-api";
 import { downloadVideo, downloadVideoFromUrl } from "@/services/video";
 import type { VideoInformation } from "@/services/video";
@@ -26,6 +26,7 @@ const whitelistedGroupChat = groupChat.filter((ctx) => WHITELISTED_CHAT_IDS.has(
 const whitelistedChats = chats.filter((ctx) => ctx.chat?.type === "private" || WHITELISTED_CHAT_IDS.has(ctx.chat.id));
 
 type SendMessageOptions = Parameters<Context["api"]["sendMessage"]>[2];
+type SendRichMessageOptions = Parameters<Context["api"]["sendRichMessage"]>[2];
 type SendVideoOptions = Parameters<Context["api"]["sendVideo"]>[2];
 
 function sendTextMessage(ctx: Context, text: string, options?: SendMessageOptions) {
@@ -44,21 +45,16 @@ function sendVideoMessage(ctx: Context, video: string | InputFile, options?: Sen
   return bot.api.sendVideo(ctx.chatId!, video, options);
 }
 
-function buildTweetCaption(tweet: FxEmbedTweet | null | undefined): FormattedString | undefined {
-  if (!tweet) return undefined;
-
-  const mainText = cleanupTweetText(tweet.getDisplayText());
-  const quoteText = cleanupTweetText(tweet.quote?.getDisplayText());
-
-  if (!quoteText) {
-    return mainText ? new FormattedString(mainText) : undefined;
+function sendRichMessage(
+  ctx: Context,
+  message: Parameters<Context["api"]["sendRichMessage"]>[1],
+  options?: SendRichMessageOptions,
+) {
+  if (ctx.chat?.type === "private") {
+    return ctx.replyWithRichMessage(message, options);
   }
 
-  if (!mainText) {
-    return FormattedString.blockquote(quoteText);
-  }
-
-  return new FormattedString(`${mainText}\n\n`).blockquote(quoteText);
+  return bot.api.sendRichMessage(ctx.chatId!, message, options);
 }
 
 function createVideoKeyboard(
@@ -133,15 +129,20 @@ async function sendExistingVideoIfExists(
   const descriptionAction = existingVideo.tweetText ? "add" : null;
 
   try {
-    await sendVideoMessage(ctx, existingVideo.telegramFileId, {
-      width: existingVideo.width ?? undefined,
-      height: existingVideo.height ?? undefined,
-      supports_streaming: true,
-      reply_markup: hasKeyboardContent
-        ? createVideoKeyboard(existingVideo.id, descriptionAction, ownerId, sourceUrl)
-        : undefined,
-      message_thread_id: messageThreadId,
-    });
+    await sendRichMessage(
+      ctx,
+      TweetRichMessage.build({
+        video: existingVideo.telegramFileId,
+        width: existingVideo.width ?? undefined,
+        height: existingVideo.height ?? undefined,
+      }),
+      {
+        reply_markup: hasKeyboardContent
+          ? createVideoKeyboard(existingVideo.id, descriptionAction, ownerId, sourceUrl)
+          : undefined,
+        message_thread_id: messageThreadId,
+      },
+    );
 
     ctx.logger.info({ chatId: ctx.chatId, tweetId, videoId: existingVideo.id }, "Sent existing video");
     return true;
@@ -242,19 +243,15 @@ async function sendTweetImageFallback(ctx: Context, tweetId: string, messageThre
 }
 
 async function sendDownloadedVideos(params: {
-  cleanedCaption: string | undefined;
   ctx: Context;
-  isTwitterLink: boolean;
   messageThreadId?: number;
   ownerId: number;
   sourceUrl: string | undefined;
+  tweetText: string | undefined;
   tweetId: string | null;
   videos: VideoInformation[];
 }): Promise<void> {
-  const { cleanedCaption, ctx, isTwitterLink, messageThreadId, ownerId, sourceUrl, tweetId, videos } = params;
-
-  const hasKeyboardContent = Boolean(cleanedCaption || sourceUrl);
-  const descriptionAction = cleanedCaption ? "add" : null;
+  const { ctx, messageThreadId, ownerId, sourceUrl, tweetId, tweetText, videos } = params;
 
   for (const video of videos) {
     try {
@@ -264,30 +261,16 @@ async function sendDownloadedVideos(params: {
 
       // Sequential by design: upstream rate limits (Telegram Bot API flood control)
       // oxlint-disable-next-line react-doctor/async-await-in-loop
-      const sentMessage = await sendVideoMessage(ctx, new InputFile(video.filePath), {
-        width: video.metadata?.width,
-        height: video.metadata?.height,
-        supports_streaming: true,
-        reply_markup: hasKeyboardContent
-          ? createVideoKeyboard(videoId, descriptionAction, ownerId, sourceUrl)
-          : undefined,
-        message_thread_id: messageThreadId,
+      await sendDownloadedVideo({
+        ctx,
+        messageThreadId,
+        ownerId,
+        sourceUrl,
+        tweetId,
+        tweetText,
+        video,
+        videoId,
       });
-
-      if (isTwitterLink && tweetId !== null) {
-        await prisma.video.create({
-          data: {
-            id: videoId,
-            userId: ctx.user!.id,
-            tweetId,
-            tweetText: cleanedCaption,
-            telegramFileId: sentMessage.video.file_id,
-            telegramFileUniqueId: sentMessage.video.file_unique_id,
-            width: sentMessage.video.width,
-            height: sentMessage.video.height,
-          },
-        });
-      }
 
       ctx.logger.info({ chatId: ctx.chatId, filePath: video.filePath, videoId }, "Sent video");
     } catch (error) {
@@ -306,6 +289,62 @@ async function sendDownloadedVideos(params: {
       }
     }
   }
+}
+
+async function sendDownloadedVideo(params: {
+  ctx: Context;
+  messageThreadId?: number;
+  ownerId: number;
+  sourceUrl: string | undefined;
+  tweetId: string | null;
+  tweetText: string | undefined;
+  video: VideoInformation;
+  videoId: string;
+}): Promise<void> {
+  if (params.tweetId === null) {
+    await sendVideoMessage(params.ctx, new InputFile(params.video.filePath), {
+      width: params.video.metadata?.width,
+      height: params.video.metadata?.height,
+      supports_streaming: true,
+      message_thread_id: params.messageThreadId,
+    });
+    return;
+  }
+
+  const descriptionAction = params.tweetText ? "add" : null;
+  const keyboard =
+    params.tweetText || params.sourceUrl
+      ? createVideoKeyboard(params.videoId, descriptionAction, params.ownerId, params.sourceUrl)
+      : undefined;
+  const sentMessage = await sendRichMessage(
+    params.ctx,
+    TweetRichMessage.build({
+      video: new InputFile(params.video.filePath),
+      width: params.video.metadata?.width,
+      height: params.video.metadata?.height,
+    }),
+    {
+      reply_markup: keyboard,
+      message_thread_id: params.messageThreadId,
+    },
+  );
+  const sentVideo = sentMessage.rich_message.blocks.find((block) => block.type === "video")?.video;
+  if (!sentVideo) {
+    throw new Error("Telegram response is missing the sent video block");
+  }
+
+  await prisma.video.create({
+    data: {
+      id: params.videoId,
+      userId: params.ctx.user!.id,
+      tweetId: params.tweetId,
+      tweetText: params.tweetText,
+      telegramFileId: sentVideo.file_id,
+      telegramFileUniqueId: sentVideo.file_unique_id,
+      width: sentVideo.width,
+      height: sentVideo.height,
+    },
+  });
 }
 
 async function shouldStopAfterDownloadFailure(params: {
@@ -383,40 +422,24 @@ async function handleVideoRequest(
       return;
     }
 
+    const tweetText = outcome.tweet
+      ? [cleanupTweetText(outcome.tweet.getDisplayText()), cleanupTweetText(outcome.tweet.quote?.getDisplayText())]
+          .filter((text): text is string => Boolean(text))
+          .join("\n\n") || undefined
+      : undefined;
+
     await sendDownloadedVideos({
-      cleanedCaption: isTwitterLink ? buildTweetCaption(outcome.tweet)?.caption : undefined,
       ctx,
-      isTwitterLink,
       messageThreadId,
       ownerId,
       sourceUrl,
+      tweetText,
       tweetId,
       videos: outcome.videos,
     });
   } finally {
     tempDir.removeCallback();
   }
-}
-
-async function resolveToggleCaption(
-  video: { id: string; tweetId: string; tweetText: string | null },
-  showDescription: boolean,
-): Promise<FormattedString | undefined> {
-  if (!showDescription) {
-    return undefined;
-  }
-
-  const tweet = await runtime.runPromise(TwitterApi.getFxTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE));
-  const caption = buildTweetCaption(tweet) ?? (video.tweetText ? new FormattedString(video.tweetText) : undefined);
-
-  if (caption && caption.caption !== video.tweetText) {
-    await prisma.video.update({
-      where: { id: video.id },
-      data: { tweetText: caption.caption },
-    });
-  }
-
-  return caption;
 }
 
 privateChat
@@ -474,7 +497,22 @@ whitelistedChats.callbackQuery(
     }
 
     const showDescription = action === "add_desc";
-    const caption = await resolveToggleCaption(video, showDescription);
+    const tweet = showDescription
+      ? await runtime.runPromise(TwitterApi.getFxTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE))
+      : undefined;
+
+    if (tweet) {
+      const tweetText = [cleanupTweetText(tweet.getDisplayText()), cleanupTweetText(tweet.quote?.getDisplayText())]
+        .filter((text): text is string => Boolean(text))
+        .join("\n\n");
+
+      if (tweetText && tweetText !== video.tweetText) {
+        await prisma.video.update({
+          where: { id: video.id },
+          data: { tweetText },
+        });
+      }
+    }
 
     const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
     const sourceUrl = isGroupChat ? getTweetUrl(video.tweetId) : undefined;
@@ -484,11 +522,16 @@ whitelistedChats.callbackQuery(
       ownerId,
       sourceUrl,
     );
+    const richMessage = TweetRichMessage.build({
+      tweet,
+      video: video.telegramFileId,
+      width: video.width ?? undefined,
+      height: video.height ?? undefined,
+      fallbackText: showDescription ? (video.tweetText ?? undefined) : undefined,
+    });
 
     try {
-      await ctx.editMessageCaption({
-        caption: caption?.caption,
-        caption_entities: caption?.caption_entities,
+      await ctx.editMessageText(richMessage, {
         reply_markup: keyboard,
       });
     } catch (error) {
@@ -498,12 +541,7 @@ whitelistedChats.callbackQuery(
 
       ctx.logger.warn({ error, videoId }, "Failed to edit message, resending video");
 
-      await ctx.replyWithVideo(video.telegramFileId, {
-        width: video.width ?? undefined,
-        height: video.height ?? undefined,
-        supports_streaming: true,
-        caption: caption?.caption,
-        caption_entities: caption?.caption_entities,
+      await ctx.replyWithRichMessage(richMessage, {
         reply_markup: keyboard,
         message_thread_id: ctx.msg?.message_thread_id,
       });
@@ -529,18 +567,30 @@ privateChat.on(":video", async (ctx) => {
 
 whitelistedChats
   .command("source")
-  .filter((ctx) => ctx.msg.reply_to_message === undefined || ctx.msg.reply_to_message?.video === undefined)
+  .filter(
+    (ctx) =>
+      ctx.msg.reply_to_message === undefined ||
+      (ctx.msg.reply_to_message.video === undefined &&
+        !ctx.msg.reply_to_message.rich_message?.blocks.some((block) => block.type === "video")),
+  )
   .use((ctx) => {
     ctx.reply("Please, reply to a message with a video.");
   });
 
 whitelistedChats
   .command("source")
-  .filter((ctx) => ctx.msg.reply_to_message !== undefined)
+  .filter(
+    (ctx) =>
+      ctx.msg.reply_to_message?.video !== undefined ||
+      ctx.msg.reply_to_message?.rich_message?.blocks.some((block) => block.type === "video") === true,
+  )
   .use(async (ctx) => {
+    const repliedVideo =
+      ctx.msg.reply_to_message!.video ??
+      ctx.msg.reply_to_message!.rich_message?.blocks.find((block) => block.type === "video")?.video;
     const video = await prisma.video.findFirst({
       where: {
-        telegramFileUniqueId: ctx.msg.reply_to_message?.video?.file_unique_id as string,
+        telegramFileUniqueId: repliedVideo!.file_unique_id,
       },
       orderBy: {
         createdAt: "desc",
