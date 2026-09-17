@@ -16,6 +16,8 @@ import { z } from "zod";
 
 export namespace Youtube {
   export const profileId = "youtube-transcript-v1";
+  export const urlPattern =
+    /^https?:\/\/(?:(?:www|m|music)\.)?(?:youtube\.com\/(?:watch\?[^#]*v=|shorts\/|embed\/|live\/|v\/)|youtu\.be\/)[a-zA-Z0-9_-]{11}(?:[?#&/].*)?$/iu;
   const FETCH_TIMEOUT_MS = 20_000;
   const MAX_TEXT_CHARS = 12_000;
   const FETCH_RETRIES = 2;
@@ -23,12 +25,7 @@ export namespace Youtube {
   // Transcripts are immutable; share them for a month so repeat questions
   // never cost extra YouTube requests from our rate-limited IP.
   const CACHE_TTL_MS = 30 * 24 * 3_600_000;
-  const youtubeUrl = z
-    .url()
-    .regex(
-      /^https?:\/\/(?:(?:www|m|music)\.)?(?:youtube\.com\/(?:watch\?[^#]*v=|shorts\/|embed\/|live\/|v\/)|youtu\.be\/)[a-zA-Z0-9_-]{11}(?:[?#&/].*)?$/iu,
-      "Expected a YouTube video URL",
-    );
+  const youtubeUrl = z.url().regex(urlPattern, "Expected a YouTube video URL");
   const bcp47 = z.string().regex(/^[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8})*$/u, "Expected a BCP 47 language code");
 
   export class YoutubeError extends Schema.TaggedError<YoutubeError>()("YoutubeError", {
@@ -167,7 +164,7 @@ export namespace Youtube {
       tools: {
         read_youtube: tool({
           description:
-            "Fetch the transcript (captions) of a public YouTube video with its title and author. Use this instead of web_fetch_exa for YouTube watch, shorts, embed, live, or youtu.be URLs when asked what a video contains or to summarize it. Returns timestamped transcript lines, not a summary; summarize from them yourself. Optional lang is a BCP 47 code such as 'en'; omit it for the default track. truncated:true means the tail was cut. Fails when captions are missing, disabled, or YouTube rate-limits this server.",
+            "Fetch the transcript (captions) of a public YouTube video with its title and author. This is the only tool for reading YouTube watch, shorts, embed, live, or youtu.be URLs. Never use Exa to inspect, identify, or summarize a specific YouTube video, including as a fallback when this tool fails; report that the video could not be retrieved instead. Returns timestamped transcript lines, not a summary; summarize from them yourself. Optional lang is a BCP 47 code such as 'en'; omit it for the default track. truncated:true means the tail was cut. Fails when captions are missing, disabled, or YouTube rate-limits this server.",
           inputSchema: z.object({ lang: bcp47.optional(), url: youtubeUrl }),
           execute: (input, options) =>
             Effect.runPromise(readTranscript(input.url, input.lang, options.abortSignal), {

@@ -2,25 +2,37 @@ import { createMCPClient } from "@ai-sdk/mcp";
 import type { ToolSet } from "ai";
 import { Config, Context, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { z } from "zod";
+import { Youtube } from "@/ai/tools/youtube";
 
 export namespace Exa {
   export const profileId = "exa-mcp-v3-limited";
+  export const fetchUrl = z.url().refine((url) => !Youtube.urlPattern.test(url), "Use read_youtube for YouTube URLs");
+  export const searchQuery = z
+    .string()
+    .min(3)
+    .max(300)
+    .refine(
+      (query) => !(query.match(/https?:\/\/[^\s"'<>]+/giu) ?? []).some((url) => Youtube.urlPattern.test(url)),
+      "Use read_youtube for YouTube URLs",
+    );
   const DEFAULT_MCP_URL = "https://mcp.exa.ai/mcp";
   const ENABLED_TOOLS = ["web_search_exa", "web_fetch_exa"] as const;
 
   const toolDefinitions = {
     web_fetch_exa: {
-      description: "Fetch the readable content of one web page.",
+      description:
+        "Fetch the readable content of one non-YouTube web page. Never use this for a YouTube URL or as a fallback when read_youtube fails.",
       inputSchema: z.object({
         maxCharacters: z.number().int().positive().max(6000).optional(),
-        urls: z.array(z.url()).length(1),
+        urls: z.array(fetchUrl).length(1),
       }),
     },
     web_search_exa: {
-      description: "Search the web for current, niche, ambiguous, or uncertain factual information.",
+      description:
+        "Search the web for current, niche, ambiguous, or uncertain factual information. Never use this to inspect, identify, or summarize a specific YouTube video, including as a fallback when read_youtube fails.",
       inputSchema: z.object({
         numResults: z.number().int().positive().max(5).default(3),
-        query: z.string().min(3).max(300),
+        query: searchQuery,
       }),
     },
   };
