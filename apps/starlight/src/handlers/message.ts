@@ -25,19 +25,18 @@ groupChat
   .use((ctx) => {
     const explicitlyAddressed = isAddressedToBot(ctx, ctx.message);
     const hasSticker = ctx.message.sticker !== undefined;
+    const replyTo = MessageReply.actualReply(ctx.message);
     const responded = MessageReply.shouldRespond({
       explicitlyAddressed,
       hasSticker,
-      isReply: ctx.message.reply_to_message !== undefined,
+      isReply: replyTo !== undefined,
       random: Math.random,
       randomResponseChance,
       text: ctx.message.text ?? ctx.message.caption ?? "",
     });
     const continuationCandidate = !responded && !hasSticker;
     const evaluateContinuation =
-      continuationCandidate &&
-      ctx.message.reply_to_message === undefined &&
-      (ctx.message.text ?? ctx.message.caption) !== undefined;
+      continuationCandidate && replyTo === undefined && (ctx.message.text ?? ctx.message.caption) !== undefined;
     return admitMessage(
       ctx,
       ctx.message,
@@ -112,10 +111,11 @@ async function admitMessage(
       // Telegram extraction is branch-heavy by protocol shape but remains one boundary normalization.
       // oxlint-disable-next-line eslint/complexity
       return yield* Effect.gen(function* attempt() {
+        const replyTo = MessageReply.actualReply(message);
         const references = yield* Effect.all(Media.fromTelegramMessage(message).map(media.ingest), {
           concurrency: "unbounded",
         }).pipe(Effect.mapError(mediaAdmissionError));
-        const repliedMedia = yield* Effect.all(Media.fromTelegramMessage(message.reply_to_message).map(media.ingest), {
+        const repliedMedia = yield* Effect.all(Media.fromTelegramMessage(replyTo).map(media.ingest), {
           concurrency: "unbounded",
         }).pipe(Effect.mapError(mediaAdmissionError));
         return yield* conversation.admit({
@@ -140,9 +140,9 @@ async function admitMessage(
               continuation.type === "reaction"
                 ? { emoji: continuation.emoji, messageId: message.message_id }
                 : undefined,
-            repliedText: TelegramMessageText.withEntityLinks(message.reply_to_message),
+            repliedText: TelegramMessageText.withEntityLinks(replyTo),
             repliedMedia,
-            replyToMessageId: message.reply_to_message?.message_id ?? null,
+            replyToMessageId: replyTo?.message_id ?? null,
             senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
             senderId: message.from?.id ?? null,
             senderIsBot: message.from?.is_bot ?? false,
@@ -181,7 +181,7 @@ function mediaAdmissionError(error: Media.MediaError): Conversation.AdmissionErr
 function isAddressedToBot(ctx: Context, message: Message): boolean {
   const text = message.text ?? message.caption ?? "";
   return (
-    message.reply_to_message?.from?.id === ctx.me.id ||
+    MessageReply.actualReply(message)?.from?.id === ctx.me.id ||
     Boolean(ctx.me.username && text.toLowerCase().includes(`@${ctx.me.username.toLowerCase()}`)) ||
     // \b is ASCII-only, so it never bounds Cyrillic words; use explicit letter lookarounds.
     /(?<![\p{L}\p{N}_])(?:старка|зв[её]здочка)(?![\p{L}\p{N}_])/iu.test(text)
