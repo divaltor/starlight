@@ -92,6 +92,7 @@
         "effect": "4.0.0-rc.115",
         "gpt-tokenizer": "4.0.0",
         "grammy": "catalog:",
+        "youtube-transcript-plus": "2.0.1",
         "zod": "catalog:",
       },
       "devDependencies": {
@@ -2904,6 +2905,8 @@
     "youch-core": ["youch-core@0.3.3", "", { "dependencies": { "@poppinss/exception": "^1.2.2", "error-stack-parser-es": "^1.0.5" } }, "sha512-ho7XuGjLaJ2hWHoK8yFnsUGy2Y5uDpqSTq1FkHLK4/oqKtyUU1AFbOOxY4IpC9f0fTLjwYbslUz0Po5BpD1wrA=="],
 
     "youtube-dl-exec": ["youtube-dl-exec@3.1.15", "", { "dependencies": { "binary-version-check": "~6.1.0", "dargs": "~7.0.0", "debug-logfmt": "~1.4.0", "is-unix": "~2.0.10", "tinyspawn": "~1.5.10" } }, "sha512-hUWpBIF6hQMtqEr1icf6PP1bEOIX3xvdhvDMbQqMmj5Vg8pI7DIrGzlPTHUZWtHX/sh7LzOgIzBTXZAztrrskA=="],
+
+    "youtube-transcript-plus": ["youtube-transcript-plus@2.0.1", "", {}, "sha512-rU49uSbhRJzGNGtXCfx347W2xv7hJp+WDWCuY8rdA+AVcZACi6MnRuH+2JxyUpvtZOT/dayfA/9vs2r9Zr7BjQ=="],
 
     "yuku-ast": ["yuku-ast@0.9.5", "", { "dependencies": { "@yuku-toolchain/types": "^0.9.5" } }, "sha512-Q8qW8WwQnN5Cm0ZZivdRIfv0sRLTjUq0YumXJkw8CYN1aCdICH9rk4C47/4n6kA5EqDtlj+F608twoTSV2MwdQ=="],
 
