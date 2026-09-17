@@ -198,6 +198,248 @@ test.skipIf(!databaseUrl)("precomputed reactions bypass model generation and use
   }
 });
 
+test.skipIf(!databaseUrl)("mixed batches deliver the precomputed reaction and the model reply", async () => {
+  const model: Model.Interface = {
+    generate: <Output>() =>
+      Effect.succeed({
+        finishReason: "stop",
+        output: { replies: [{ replyTo: 122, text: "On it", type: "text" }] } as Output,
+        steps: [],
+        toolEvents: [],
+        transcript: [{ text: "On it", type: "assistant-text" }],
+        usage: {
+          billing: {
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            costUsd: 0,
+            inputTokens: 10,
+            outputTokens: 2,
+            reasoningTokens: 0,
+          },
+          contextInputTokens: 10,
+          stepCount: 0,
+        },
+      }),
+  };
+  const delivered: TelegramDelivery.Action[] = [];
+  const delivery: TelegramDelivery.Interface = {
+    deliver: (input) => {
+      delivered.push(input.action);
+      return Effect.succeed({ telegramMessageId: input.action.type === "text" ? 902 : null });
+    },
+    indicateTyping: () => Effect.void,
+  };
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+  const assistantId = 8_000_000_121;
+  const chatId = -8_000_000_121;
+  const key = { assistantId, chatId, threadKey: 0 };
+
+  try {
+    const result = await runtime.runPromise(
+      Effect.gen(function* mixedBatch() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        const base = {
+          addressed: true,
+          chatTitle: "Mixed precomputed test",
+          chatType: "supergroup" as const,
+          chatUsername: null,
+          date: 1_700_000_000,
+          editDate: null,
+          forwardOrigin: null,
+          key,
+          media: [],
+          mediaGroupId: null,
+          repliedMedia: [],
+          repliedText: null,
+          replyToMessageId: null,
+          senderFirstName: "Alice",
+          senderId: 42,
+          senderUsername: "alice",
+        };
+        yield* conversation.admit({
+          ...base,
+          payload: { ...base, messageId: 121, precomputedReaction: { emoji: "👍", messageId: 121 }, text: "Thanks" },
+          updateId: 221,
+        });
+        yield* conversation.admit({
+          ...base,
+          payload: { ...base, date: 1_700_000_001, messageId: 122, text: "@starlight status?" },
+          updateId: 222,
+        });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+        const drain = yield* conversation.drain({ key });
+        const run = yield* database.query((client) =>
+          client.conversationRun.findFirstOrThrow({
+            include: { actions: { orderBy: { ordinal: "asc" } } },
+            where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId), threadKey: 0 },
+          }),
+        );
+        return { drain, run };
+      }),
+    );
+
+    expect(result.drain.kind).toBe("completed");
+    expect(delivered).toEqual([
+      { emoji: "👍", messageId: 121, type: "reaction" },
+      { replyTo: 122, text: "On it", type: "text" },
+    ]);
+    expect(result.run.actions.map((action) => action.type)).toEqual(["reaction", "text"]);
+    expect(result.run.actions.map((action) => action.targetMessageId)).toEqual([121, 122]);
+    expect(result.run.actions.map((action) => action.deliveryStatus)).toEqual(["delivered", "delivered"]);
+    expect(result.run.generatedOutput).toEqual({
+      replies: [
+        { emoji: "👍", messageId: 121, type: "reaction" },
+        { replyTo: 122, text: "On it", type: "text" },
+      ],
+    });
+    expect(result.run.finishReason).toBe("stop");
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
+test.skipIf(!databaseUrl)("a failed precomputed reaction does not suppress the model reply", async () => {
+  const model: Model.Interface = {
+    generate: <Output>() =>
+      Effect.succeed({
+        finishReason: "stop",
+        output: { replies: [{ replyTo: 132, text: "On it", type: "text" }] } as Output,
+        steps: [],
+        toolEvents: [],
+        transcript: [{ text: "On it", type: "assistant-text" }],
+        usage: {
+          billing: {
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            costUsd: 0,
+            inputTokens: 10,
+            outputTokens: 2,
+            reasoningTokens: 0,
+          },
+          contextInputTokens: 10,
+          stepCount: 0,
+        },
+      }),
+  };
+  const attempted: TelegramDelivery.Action["type"][] = [];
+  const delivery: TelegramDelivery.Interface = {
+    deliver: (input) => {
+      attempted.push(input.action.type);
+      if (input.action.type === "reaction") {
+        return Effect.fail(
+          new TelegramDelivery.DeliveryError({
+            cause: new Error("Telegram rejected delivery"),
+            message: "Telegram rejected delivery",
+            outcomeUnknown: false,
+            retryable: false,
+          }),
+        );
+      }
+      return Effect.succeed({ telegramMessageId: 903 });
+    },
+    indicateTyping: () => Effect.void,
+  };
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+  const assistantId = 8_000_000_122;
+  const chatId = -8_000_000_122;
+  const key = { assistantId, chatId, threadKey: 0 };
+
+  try {
+    const result = await runtime.runPromise(
+      Effect.gen(function* mixedBatchFailure() {
+        const conversation = yield* Conversation.Service;
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        const base = {
+          addressed: true,
+          chatTitle: "Mixed precomputed failure test",
+          chatType: "supergroup" as const,
+          chatUsername: null,
+          date: 1_700_000_000,
+          editDate: null,
+          forwardOrigin: null,
+          key,
+          media: [],
+          mediaGroupId: null,
+          repliedMedia: [],
+          repliedText: null,
+          replyToMessageId: null,
+          senderFirstName: "Alice",
+          senderId: 42,
+          senderUsername: "alice",
+        };
+        yield* conversation.admit({
+          ...base,
+          payload: { ...base, messageId: 131, precomputedReaction: { emoji: "👍", messageId: 131 }, text: "Thanks" },
+          updateId: 231,
+        });
+        yield* conversation.admit({
+          ...base,
+          payload: { ...base, date: 1_700_000_001, messageId: 132, text: "@starlight status?" },
+          updateId: 232,
+        });
+        yield* database.query((client) =>
+          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        );
+        yield* database.query((client) =>
+          client.conversationLane.update({
+            where: {
+              assistantId_chatId_threadKey: {
+                assistantId: BigInt(assistantId),
+                chatId: BigInt(chatId),
+                threadKey: 0,
+              },
+            },
+            data: { nextWakeAt: new Date(0) },
+          }),
+        );
+        const drain = yield* conversation.drain({ key });
+        const actions = yield* database.query((client) =>
+          client.conversationRunAction.findMany({
+            orderBy: { ordinal: "asc" },
+            where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
+          }),
+        );
+        return { actions, drain };
+      }),
+    );
+
+    expect(result.drain.kind).toBe("completed");
+    expect(attempted).toEqual(["reaction", "text"]);
+    expect(result.actions.map((action) => action.deliveryStatus)).toEqual(["failed", "delivered"]);
+  } finally {
+    await runtime.runPromise(
+      Effect.gen(function* cleanup() {
+        const database = yield* Database.Service;
+        yield* database.query((client) => resetLane(client, assistantId, chatId));
+      }),
+    );
+    await runtime.dispose();
+  }
+});
+
 test.skipIf(!databaseUrl)("model-selected reply targets are passed to Telegram delivery", async () => {
   const targetMessageId = 9_999_999;
   const delivered: TelegramDelivery.Action[] = [];

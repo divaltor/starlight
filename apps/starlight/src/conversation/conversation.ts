@@ -339,11 +339,13 @@ export namespace Conversation {
             const payload = item.payload as InputPayload;
             return payload.addressed ? [payload] : [];
           });
-          const precomputedReactions = addressedPayloads.flatMap((payload) =>
-            payload.precomputedReaction === undefined ? [] : [payload.precomputedReaction],
+          const precomputedActions = addressedPayloads.flatMap((payload) =>
+            payload.precomputedReaction === undefined
+              ? []
+              : [{ ...payload.precomputedReaction, type: "reaction" as const }],
           );
-          if (precomputedReactions.length === addressedPayloads.length) {
-            const actions = precomputedReactions.map((reaction) => ({ ...reaction, type: "reaction" as const }));
+          if (precomputedActions.length === addressedPayloads.length) {
+            const actions = precomputedActions;
             yield* database
               .transaction(async (transaction) => {
                 await Lane.assertFence(transaction, claimed.dbKey, claimed);
@@ -458,7 +460,7 @@ export namespace Conversation {
             });
           }
 
-          yield* persistGeneration(claimed, invocation.generated);
+          yield* persistGeneration(claimed, invocation.generated, precomputedActions);
           yield* dispatchRun(claimed);
           return yield* finalizeClaimed(claimed);
         });
@@ -829,11 +831,16 @@ export namespace Conversation {
         );
       }
 
-      function persistGeneration(claimed: ClaimedRun, generated: ChatReply.GenerateResult) {
+      function persistGeneration(
+        claimed: ClaimedRun,
+        generated: ChatReply.GenerateResult,
+        precomputedActions: readonly TelegramDelivery.ReactionAction[] = [],
+      ) {
         const transcript: Prisma.InputJsonArray = generated.transcript.map((event) => ({
           text: event.text,
           type: event.type,
         }));
+        const replies = Conversation.mergePrecomputedReactions(precomputedActions, generated.output.replies);
         const usage: Prisma.InputJsonObject = {
           // TS7 demands index signatures Json columns don't have; the chain is the
           // boundary escape.
@@ -866,7 +873,7 @@ export namespace Conversation {
               skipDuplicates: true,
             });
             await transaction.conversationRunAction.createMany({
-              data: generated.output.replies.map((action, ordinal) => {
+              data: replies.map((action, ordinal) => {
                 if (action.type === "ignore") {
                   return {
                     deliveryStatus: "delivered" as const,
@@ -896,7 +903,7 @@ export namespace Conversation {
               data: {
                 finishReason: generated.finishReason,
                 generatedAt: new Date(),
-                generatedOutput: generated.output as Prisma.InputJsonObject,
+                generatedOutput: { ...generated.output, replies } as Prisma.InputJsonObject,
                 modelTranscript: transcript,
                 status: "generated",
                 usage,
@@ -944,9 +951,27 @@ export namespace Conversation {
             )
             .pipe(Effect.mapError(failed("Failed to load conversation actions")));
 
+          // Precomputed Jev reactions are an independent acknowledgement prefix: their
+          // failure must not suppress the model suffix. Stop-after-failure still applies
+          // within each segment. The boundary derives from the frozen batch inputs, not
+          // action types, so a pure model run keeps its existing fail-stop behavior.
+          const precomputedMessageIds = new Set(
+            claimed.inputs.flatMap((item) => {
+              const payload = item.payload as InputPayload;
+              return payload.addressed && payload.precomputedReaction !== undefined
+                ? [payload.precomputedReaction.messageId]
+                : [];
+            }),
+          );
+          const boundary = Math.min(precomputedMessageIds.size, actions.length);
+          const afterPrefix = yield* Effect.reduce(
+            actions.slice(0, boundary),
+            initialPrefixState,
+            (deliveryState, stored) => dispatchStoredAction(claimed, deliveryState, stored),
+          );
           yield* Effect.reduce(
-            actions,
-            (): DeliveryState => ({ deliveryOpen: true, textDelivered: false }),
+            actions.slice(boundary),
+            () => ({ ...afterPrefix, deliveryOpen: true }),
             (deliveryState, stored) => dispatchStoredAction(claimed, deliveryState, stored),
           );
         });
@@ -1293,9 +1318,34 @@ export namespace Conversation {
 
   export const optionsLayer = Layer.succeed(OptionsService);
 
+  // Mixed batches must not silently drop Jev reactions when the model also replies.
+  // Precomputed reactions come first so delivery attempts them before model text.
+  // A model duplicate for the same message loses: Telegram reactions overwrite, so a
+  // second reaction to the same message would only waste a delivery attempt. A model
+  // ignore loses too: Jev already decided the message deserves a reaction.
+  export function mergePrecomputedReactions(
+    precomputed: readonly TelegramDelivery.ReactionAction[],
+    generated: readonly ChatReply.Response["replies"][number][],
+  ): readonly ChatReply.Response["replies"][number][] {
+    if (precomputed.length === 0) return generated;
+    const deduped = precomputed.filter(
+      (reaction, index) => precomputed.findIndex((other) => other.messageId === reaction.messageId) === index,
+    );
+    const generatedWithoutPrecomputedTargets = generated.filter((action) => {
+      if (action.type === "ignore") return false;
+      if (action.type !== "reaction") return true;
+      return !deduped.some((reaction) => reaction.messageId === action.messageId);
+    });
+    return [...deduped, ...generatedWithoutPrecomputedTargets];
+  }
+
   interface DeliveryState {
     readonly deliveryOpen: boolean;
     readonly textDelivered: boolean;
+  }
+
+  function initialPrefixState(): DeliveryState {
+    return { deliveryOpen: true, textDelivered: false };
   }
 
   interface ClaimedRun {
