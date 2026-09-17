@@ -1,12 +1,14 @@
 import { isSpanContextValid, ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
+import { createTypeSafeAi } from "@ai-sdk/typesafe-ai";
 import type { LogRecord } from "@opentelemetry/api-logs";
 import { OtelTracer, Resource } from "@effect/opentelemetry";
-import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
+import { Effect, Layer, Logger, ManagedRuntime, pipe, References } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import type { LogLevel } from "effect/LogLevel";
 import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";
+import { DialogueContinuation } from "@/ai/dialogue-continuation";
 import { GuestReply } from "@/ai/guest-reply";
 import { Model } from "@/ai/model";
 import { TopicMetadata } from "@/ai/topic-metadata";
@@ -99,6 +101,12 @@ const replies = Layer.mergeAll(ChatReply.layer, GuestReply.layer).pipe(
 const topicMetadata = TopicMetadata.layer.pipe(
   Layer.provide(Model.defaultLayer(env.OPENROUTER_API_KEY, TopicMetadata.profile)),
 );
+const dialogueContinuation = env.TYPESAFE_API_KEY
+  ? DialogueContinuation.layer(createTypeSafeAi({ apiKey: env.TYPESAFE_API_KEY }).evaluationModel("jev-latest"), {
+      messageLimit: env.DIALOGUE_CONTINUATION_MESSAGE_LIMIT,
+    })
+  : Layer.succeed(DialogueContinuation.Service)({ shouldRespond: () => Effect.succeed(false) });
+const database = Database.layer(env.DATABASE_URL);
 const tracing =
   env.langfuse === undefined && env.otlp === undefined
     ? Layer.empty
@@ -107,10 +115,10 @@ const observability = Layer.mergeAll(logging, tracing);
 
 const infrastructure = Layer.provide(
   Layer.mergeAll(
-    Database.layer(env.DATABASE_URL),
     chatTools,
     replies,
     topicMetadata,
+    dialogueContinuation,
     TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
     WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
     Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),
@@ -128,7 +136,7 @@ const infrastructure = Layer.provide(
       quietMs: env.CONVERSATION_BATCH_QUIET_MS,
       recallMaxQueryTokens: env.HINDSIGHT_RECALL_MAX_QUERY_TOKENS,
     }),
-  ),
+  ).pipe(Layer.provideMerge(database)),
   FetchHttpClient.layer,
 );
 const hindsightRetention = HindsightRetention.layer.pipe(Layer.provideMerge(infrastructure));

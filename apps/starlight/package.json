@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@ai-sdk/mcp": "2.0.50",
-    "@ai-sdk/otel": "1.0.102",
+    "@ai-sdk/otel": "1.0.105",
+    "@ai-sdk/typesafe-ai": "3.0.2",
     "@effect/opentelemetry": "4.0.0-rc.115",
     "@effect/platform-bun": "4.0.0-rc.115",
     "@firecrawl/pdf-inspector": "1.20.0",
@@ -35,7 +36,7 @@
     "@starlight/utils": "workspace:*",
     "@t3-oss/env-core": "0.13.11",
     "@vectorize-io/hindsight-client": "0.10.0",
-    "ai": "7.0.102",
+    "ai": "7.0.105",
     "bullmq": "6.3.6",
     "effect": "4.0.0-rc.115",
     "gpt-tokenizer": "4.0.0",

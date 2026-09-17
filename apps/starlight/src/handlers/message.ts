@@ -2,6 +2,7 @@ import { Composer } from "grammy";
 import type { Context } from "grammy";
 import type { Message } from "grammy/types";
 import { Duration, Effect, Schedule } from "effect";
+import { DialogueContinuation } from "@/ai/dialogue-continuation";
 import { Conversation } from "@/conversation/conversation";
 import { Prompt } from "@/context/prompt";
 import { createBotEnv } from "@/env";
@@ -32,7 +33,18 @@ groupChat
       randomResponseChance,
       text: ctx.message.text ?? ctx.message.caption ?? "",
     });
-    return admitMessage(ctx, ctx.message, responded, responded && !explicitlyAddressed && !hasSticker);
+    const continuationCandidate = !responded && !hasSticker;
+    const evaluateContinuation =
+      continuationCandidate &&
+      ctx.message.reply_to_message === undefined &&
+      (ctx.message.text ?? ctx.message.caption) !== undefined;
+    return admitMessage(
+      ctx,
+      ctx.message,
+      responded,
+      responded && !explicitlyAddressed && !hasSticker,
+      evaluateContinuation,
+    );
   });
 groupChat
   .on("edited_message")
@@ -49,13 +61,44 @@ privateChat
 
 export default composer;
 
-async function admitMessage(ctx: Context, message: Message, addressed: boolean, randomResponseTriggered = false) {
+async function admitMessage(
+  ctx: Context,
+  message: Message,
+  addressed: boolean,
+  randomResponseTriggered = false,
+  evaluateContinuation = false,
+) {
   await runtime.runPromise(
     // Telegram message variants are normalized once at admission.
     // oxlint-disable-next-line eslint/complexity
     Effect.gen(function* admit() {
       const conversation = yield* Conversation.Service;
+      const dialogueContinuation = yield* DialogueContinuation.Service;
       const media = yield* Media.Service;
+      const threadKey = message.is_topic_message === true ? (message.message_thread_id ?? 0) : 0;
+      const continuation = evaluateContinuation
+        ? yield* dialogueContinuation
+            .shouldRespond({
+              key: { assistantId: ctx.me.id, chatId: ctx.chat!.id, threadKey },
+              messageId: message.message_id,
+              senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
+              senderId: message.from?.id ?? null,
+              text: TelegramMessageText.withEntityLinks(message) ?? "",
+            })
+            .pipe(
+              Effect.catch((error) =>
+                Effect.logWarning("Dialogue continuation evaluation failed").pipe(
+                  Effect.annotateLogs({
+                    chatId: ctx.chat!.id,
+                    errorTag: error._tag,
+                    messageId: message.message_id,
+                    threadKey,
+                  }),
+                  Effect.as(false),
+                ),
+              ),
+            )
+        : false;
       if (randomResponseTriggered) {
         yield* Effect.logInfo("Random response chance triggered").pipe(
           Effect.annotateLogs({
@@ -83,10 +126,10 @@ async function admitMessage(ctx: Context, message: Message, addressed: boolean, 
             assistantId: ctx.me.id,
             chatId: ctx.chat!.id,
             // Only forum topics open a distinct lane; ordinary reply threads stay in the chat lane.
-            threadKey: message.is_topic_message === true ? (message.message_thread_id ?? 0) : 0,
+            threadKey,
           },
           payload: {
-            addressed,
+            addressed: addressed || continuation,
             date: message.date,
             editDate: message.edit_date ?? null,
             forwardOrigin: message.forward_origin ? Prompt.canonicalEncode(message.forward_origin) : null,
