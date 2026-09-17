@@ -26,7 +26,6 @@ const whitelistedGroupChat = groupChat.filter((ctx) => WHITELISTED_CHAT_IDS.has(
 const whitelistedChats = chats.filter((ctx) => ctx.chat?.type === "private" || WHITELISTED_CHAT_IDS.has(ctx.chat.id));
 
 type SendMessageOptions = Parameters<Context["api"]["sendMessage"]>[2];
-type SendRichMessageOptions = Parameters<Context["api"]["sendRichMessage"]>[2];
 type SendVideoOptions = Parameters<Context["api"]["sendVideo"]>[2];
 
 function sendTextMessage(ctx: Context, text: string, options?: SendMessageOptions) {
@@ -43,18 +42,6 @@ function sendVideoMessage(ctx: Context, video: string | InputFile, options?: Sen
   }
 
   return bot.api.sendVideo(ctx.chatId!, video, options);
-}
-
-function sendRichMessage(
-  ctx: Context,
-  message: Parameters<Context["api"]["sendRichMessage"]>[1],
-  options?: SendRichMessageOptions,
-) {
-  if (ctx.chat?.type === "private") {
-    return ctx.replyWithRichMessage(message, options);
-  }
-
-  return bot.api.sendRichMessage(ctx.chatId!, message, options);
 }
 
 function createVideoKeyboard(
@@ -125,24 +112,19 @@ async function sendExistingVideoIfExists(
 
   ctx.logger.info({ tweetId, videoId: existingVideo.id }, "Found existing video; sending via Telegram file ID");
 
-  const hasKeyboardContent = Boolean(existingVideo.tweetText || sourceUrl);
   const descriptionAction = existingVideo.tweetText ? "add" : null;
 
   try {
-    await sendRichMessage(
-      ctx,
-      TweetRichMessage.build({
-        video: existingVideo.telegramFileId,
-        width: existingVideo.width ?? undefined,
-        height: existingVideo.height ?? undefined,
-      }),
-      {
-        reply_markup: hasKeyboardContent
+    await sendVideoMessage(ctx, existingVideo.telegramFileId, {
+      width: existingVideo.width ?? undefined,
+      height: existingVideo.height ?? undefined,
+      supports_streaming: true,
+      reply_markup:
+        existingVideo.tweetText || sourceUrl
           ? createVideoKeyboard(existingVideo.id, descriptionAction, ownerId, sourceUrl)
           : undefined,
-        message_thread_id: messageThreadId,
-      },
-    );
+      message_thread_id: messageThreadId,
+    });
 
     ctx.logger.info({ chatId: ctx.chatId, tweetId, videoId: existingVideo.id }, "Sent existing video");
     return true;
@@ -312,26 +294,16 @@ async function sendDownloadedVideo(params: {
   }
 
   const descriptionAction = params.tweetText ? "add" : null;
-  const keyboard =
-    params.tweetText || params.sourceUrl
-      ? createVideoKeyboard(params.videoId, descriptionAction, params.ownerId, params.sourceUrl)
-      : undefined;
-  const sentMessage = await sendRichMessage(
-    params.ctx,
-    TweetRichMessage.build({
-      video: new InputFile(params.video.filePath),
-      width: params.video.metadata?.width,
-      height: params.video.metadata?.height,
-    }),
-    {
-      reply_markup: keyboard,
-      message_thread_id: params.messageThreadId,
-    },
-  );
-  const sentVideo = sentMessage.rich_message.blocks.find((block) => block.type === "video")?.video;
-  if (!sentVideo) {
-    throw new Error("Telegram response is missing the sent video block");
-  }
+  const sentMessage = await sendVideoMessage(params.ctx, new InputFile(params.video.filePath), {
+    width: params.video.metadata?.width,
+    height: params.video.metadata?.height,
+    supports_streaming: true,
+    reply_markup:
+      params.tweetText || params.sourceUrl
+        ? createVideoKeyboard(params.videoId, descriptionAction, params.ownerId, params.sourceUrl)
+        : undefined,
+    message_thread_id: params.messageThreadId,
+  });
 
   await prisma.video.create({
     data: {
@@ -339,10 +311,10 @@ async function sendDownloadedVideo(params: {
       userId: params.ctx.user!.id,
       tweetId: params.tweetId,
       tweetText: params.tweetText,
-      telegramFileId: sentVideo.file_id,
-      telegramFileUniqueId: sentVideo.file_unique_id,
-      width: sentVideo.width,
-      height: sentVideo.height,
+      telegramFileId: sentMessage.video.file_id,
+      telegramFileUniqueId: sentMessage.video.file_unique_id,
+      width: sentMessage.video.width,
+      height: sentMessage.video.height,
     },
   });
 }
@@ -522,29 +494,33 @@ whitelistedChats.callbackQuery(
       ownerId,
       sourceUrl,
     );
-    const richMessage = TweetRichMessage.build({
-      tweet,
-      video: video.telegramFileId,
-      width: video.width ?? undefined,
-      height: video.height ?? undefined,
-      fallbackText: showDescription ? (video.tweetText ?? undefined) : undefined,
-    });
+    await (showDescription
+      ? bot.api.sendRichMessage(
+          ctx.chatId!,
+          TweetRichMessage.build({
+            tweet: tweet!,
+            video: video.telegramFileId,
+            width: video.width ?? undefined,
+            height: video.height ?? undefined,
+          }),
+          {
+            reply_markup: keyboard,
+            message_thread_id: ctx.msg!.message_thread_id,
+          },
+        )
+      : ctx.editMessageMedia(
+          {
+            type: "video",
+            media: video.telegramFileId,
+            width: video.width ?? undefined,
+            height: video.height ?? undefined,
+            supports_streaming: true,
+          },
+          { reply_markup: keyboard },
+        ));
 
-    try {
-      await ctx.editMessageText(richMessage, {
-        reply_markup: keyboard,
-      });
-    } catch (error) {
-      if (!(error instanceof GrammyError)) {
-        throw error;
-      }
-
-      ctx.logger.warn({ error, videoId }, "Failed to edit message, resending video");
-
-      await ctx.replyWithRichMessage(richMessage, {
-        reply_markup: keyboard,
-        message_thread_id: ctx.msg?.message_thread_id,
-      });
+    if (showDescription) {
+      await ctx.deleteMessage();
     }
   },
 );

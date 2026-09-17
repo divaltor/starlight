@@ -71,18 +71,3 @@ test("test_preserves_x_reading_order_for_quoted_video_posts", () => {
     ],
   });
 });
-
-test("test_keeps_hidden_description_as_editable_rich_video", () => {
-  expect(TweetRichMessage.build({ video: "telegram-video" })).toEqual({
-    blocks: [
-      {
-        type: "video",
-        video: {
-          type: "video",
-          media: "telegram-video",
-          supports_streaming: true,
-        },
-      },
-    ],
-  });
-});
