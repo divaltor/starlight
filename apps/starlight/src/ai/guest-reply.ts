@@ -9,8 +9,21 @@ import type { Media } from "@/media/media";
 
 export namespace GuestReply {
   const MAX_OUTPUT_TOKENS = 2048;
+  const paragraphs = z
+    .array(z.string().trim().min(1).max(1200))
+    .min(1)
+    .max(3)
+    .describe("Ordered plain-text paragraphs for one Telegram guest response");
   const outputSchema = z.object({
-    text: z.string().min(1).max(4096).describe("Plain-text Telegram response to the guest message"),
+    type: z.enum(["answer", "clarification"]),
+    paragraphs,
+    followUp: z
+      .object({
+        purpose: z.literal("decision_support"),
+        text: z.string().trim().min(1).max(240),
+      })
+      .nullable()
+      .describe("Usually null; one exceptional question that materially helps with a decision"),
   });
 
   export interface Interface {
@@ -49,7 +62,16 @@ export namespace GuestReply {
             telemetryFunctionId: "guest-reply",
             tools: input.toolset.tools,
           });
-          return generated.output.text;
+          if (generated.output.type === "clarification") {
+            return generated.output.paragraphs[0]!;
+          }
+          return generated.output.paragraphs
+            .map((paragraph, index) =>
+              generated.output.followUp !== null && index === generated.output.paragraphs.length - 1
+                ? `${paragraph} ${generated.output.followUp.text}`
+                : paragraph,
+            )
+            .join("\n\n");
         }),
       });
     }),

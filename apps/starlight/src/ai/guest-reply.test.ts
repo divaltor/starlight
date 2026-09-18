@@ -41,6 +41,30 @@ test("test_guest_reply_offers_only_final_output_when_toolset_empty", async () =>
   expect(offeredTools(model)).toEqual([["final_output"]]);
 });
 
+test("test_guest_reply_separates_generated_paragraphs_with_blank_lines", async () => {
+  const model = new MockLanguageModelV3({
+    doGenerate: [finalOutputResult("first point", "second point")],
+  });
+
+  expect(await runGuest(model, { profile: [], tools: {} })).toBe("first point\n\nsecond point");
+});
+
+test("test_guest_reply_returns_only_the_clarification_question_when_context_is_missing", async () => {
+  const model = new MockLanguageModelV3({
+    doGenerate: [finalClarificationResult("what should I evaluate?")],
+  });
+
+  expect(await runGuest(model, { profile: [], tools: {} })).toBe("what should I evaluate?");
+});
+
+test("test_guest_reply_appends_an_exceptional_decision_question_to_the_last_paragraph", async () => {
+  const model = new MockLanguageModelV3({
+    doGenerate: [finalOutputResultWithFollowUp("both work", "do you value comfort or durability more?")],
+  });
+
+  expect(await runGuest(model, { profile: [], tools: {} })).toBe("both work do you value comfort or durability more?");
+});
+
 function runGuest(model: LanguageModel, toolset: ChatTools.Resolved) {
   return Effect.runPromise(
     Effect.gen(function* () {
@@ -88,11 +112,11 @@ function toolCallResult(toolCallId: string) {
   };
 }
 
-function finalOutputResult(text: string) {
+function finalOutputResult(...paragraphs: string[]) {
   return {
     content: [
       {
-        input: JSON.stringify({ text }),
+        input: JSON.stringify({ type: "answer", paragraphs, followUp: null }),
         toolCallId: "final-output-call",
         toolName: "final_output",
         type: "tool-call" as const,
@@ -102,6 +126,38 @@ function finalOutputResult(text: string) {
     response: { id: "final-output-response", modelId: "mock-model" },
     usage: modelUsage,
     warnings: [],
+  };
+}
+
+function finalOutputResultWithFollowUp(paragraph: string, question: string) {
+  return {
+    ...finalOutputResult(paragraph),
+    content: [
+      {
+        input: JSON.stringify({
+          type: "answer",
+          paragraphs: [paragraph],
+          followUp: { purpose: "decision_support", text: question },
+        }),
+        toolCallId: "final-output-call",
+        toolName: "final_output",
+        type: "tool-call" as const,
+      },
+    ],
+  };
+}
+
+function finalClarificationResult(question: string) {
+  return {
+    ...finalOutputResult("unused"),
+    content: [
+      {
+        input: JSON.stringify({ type: "clarification", paragraphs: [question], followUp: null }),
+        toolCallId: "final-output-call",
+        toolName: "final_output",
+        type: "tool-call" as const,
+      },
+    ],
   };
 }
 

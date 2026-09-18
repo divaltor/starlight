@@ -12,6 +12,7 @@
 10. Don't use `git stash` mid-session; other agents or the user can edit files at the same time.
 11. Before writing or proposing tests, read `TESTING.md` and pass its admission gate.
 12. This project is a pre-production PoC with no legacy or production data. Do not add backward compatibility, migrations, or legacy recovery unless explicitly requested.
+13. Do not add emotional-support scenarios as generic prompt tests or eval cases.
 
 ## Communication
 
