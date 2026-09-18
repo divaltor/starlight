@@ -25,15 +25,19 @@ time bun install --frozen-lockfile
 echo "Generating the Prisma client"
 time bun run db:generate
 
-# oxlint's JS-plugin arena reserves a ~4 GiB-aligned virtual memory region per
+# oxlint's JS-plugin arena reserves a ~4 GiB virtual memory region per
 # worker; the Linux overcommit heuristic denies that when RAM + swap is below
-# 4 GiB, crashing lint with an allocator panic. Ensure a swapfile exists so
-# RAM + swap covers the reservation.
-if ! swapon --show 2>/dev/null | grep -Fq .; then
-  echo "Creating a 4G swapfile for oxlint's arena reservation"
-  sudo fallocate -l 4G /swapfile
-  sudo chmod 600 /swapfile
-  sudo mkswap /swapfile
+# 4 GiB, crashing lint with an allocator panic. Ensure our swapfile is active
+# so RAM + swap covers the reservation. The guard runs through sudo because
+# swapon lives in /sbin, off the default orb PATH; checking for /swapfile
+# itself (not just any swap) keeps re-runs idempotent — fallocate fails with
+# "Text file busy" on live swap, so an already-active file must skip creation.
+if ! sudo swapon --show=NAME --noheadings 2>/dev/null | grep -Fxq /swapfile; then
+  if [[ ! -f /swapfile ]]; then
+    sudo fallocate -l 4G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+  fi
   sudo swapon /swapfile
 fi
 
