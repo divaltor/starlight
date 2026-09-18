@@ -19,7 +19,7 @@ import { Usage } from "@/ai/usage";
 import type { Media } from "@/media/media";
 
 export namespace Model {
-  const MODEL_TIMEOUT_MS = 120_000;
+  const MODEL_TIMEOUT_MS = 40_000;
   const MAX_GENERATION_STEPS = 32;
   const FINAL_OUTPUT_TOOL_NAME = "final_output";
   const FINAL_OUTPUT_INSTRUCTION =

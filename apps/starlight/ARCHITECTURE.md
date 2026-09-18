@@ -10,7 +10,7 @@ Telegram update ──▶ admit() ──▶ ConversationInput + wake outbox ─�
 
 ## Constants
 
-`quietMs` 1000, `maxWaitMs` 3000, `leaseMs` 180000 (`packages/utils/src/env.ts`), model timeout 120s (`ai/model.ts`), batch 20 messages, 5 model attempts, 5 delivery attempts (`conversation/conversation.ts`).
+`quietMs` 1000, `maxWaitMs` 3000, `leaseMs` 180000 (`packages/utils/src/env.ts`), model timeout 40s (`ai/model.ts`), batch 20 messages, 5 model attempts, 5 delivery attempts (`conversation/conversation.ts`).
 
 ## Admission (`conversation/conversation.ts`, `admit`)
 
@@ -40,7 +40,7 @@ Recovery paths in `drain`: `generated`/`dispatching` resumes at dispatch (delive
 
 **Fencing**: every stage write goes through `Lane.assertFence` (`conversation/lane.ts`) inside the same transaction. A stale worker's writes throw after a newer claim. Fences protect database state and prevent duplicate Telegram sends; they do not cancel in-flight provider calls.
 
-**Lease renewal**: the transactions that open each long stage — model invocation (`invokeModel`), checkpoint summarization (`summarizeCheckpoint`), and dispatch (`dispatchRun`) — also rewrite `leaseUntil = now + leaseMs` on the lane. Every awaitable stage is bounded by the 120s model timeout or a short delivery burst, so gaps between renewals stay below one lease period without heartbeat timers. A crashed worker stops renewing, so crash-recovery latency stays at one lease period. Before this renewal, a worst-case drain (summary + generation ≈ 240s) outlived the 180s lease and let a second worker re-invoke the model on the same run — duplicate spend with no benefit.
+**Lease renewal**: the transactions that open each long stage — model invocation (`invokeModel`), checkpoint summarization (`summarizeCheckpoint`), and dispatch (`dispatchRun`) — also rewrite `leaseUntil = now + leaseMs` on the lane. Every awaitable stage is bounded by the 40s model timeout or a short delivery burst, so gaps between renewals stay below one lease period without heartbeat timers. A crashed worker stops renewing, so crash-recovery latency stays at one lease period. Before this renewal, a worst-case drain (summary + generation ≈ 240s) outlived the 180s lease and let a second worker re-invoke the model on the same run — duplicate spend with no benefit.
 
 ## Prepared request freeze and replay (`conversation/run-artifacts.ts`, `prepareRun`)
 

@@ -366,7 +366,7 @@ test("aborts provider work and returns TimedOut at the total deadline", async ()
       const fiber = yield* Effect.forkChild(
         runModelEffect(model, { outputSchema: z.object({ answer: z.string() }) }).pipe(Effect.flip),
       );
-      yield* TestClock.adjust("120 seconds");
+      yield* TestClock.adjust("40 seconds");
       return yield* Fiber.join(fiber);
     }).pipe(Effect.provide(TestClock.layer())),
   );
@@ -399,7 +399,7 @@ test("aborts an active tool when the total deadline expires", async () => {
           },
         }).pipe(Effect.flip),
       );
-      yield* TestClock.adjust("120 seconds");
+      yield* TestClock.adjust("40 seconds");
       return yield* Fiber.join(fiber);
     }).pipe(Effect.provide(TestClock.layer())),
   );
