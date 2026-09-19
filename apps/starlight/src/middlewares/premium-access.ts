@@ -7,7 +7,7 @@ import { runtime } from "@/services/runtime";
 const premiumAccess: MiddlewareFn<Context> = async (ctx, next) => {
   if (!ctx.chat) return;
 
-  // Guest chat IDs belong to an independent chat; premium access belongs to the sender's regular DM chat.
+  // Guest updates arrive in an independent chat; attribute telemetry to the sender's DM id. Guest access is open to everyone.
   const chatId = ctx.guestMessage ? ctx.from!.id : ctx.chat.id;
 
   const chat = await runtime.runPromise(
@@ -38,7 +38,7 @@ const premiumAccess: MiddlewareFn<Context> = async (ctx, next) => {
     span.setAttributes(attributes);
   }
 
-  if (chat?.isPremium) {
+  if (ctx.guestMessage || chat?.isPremium) {
     await next();
     return;
   }
