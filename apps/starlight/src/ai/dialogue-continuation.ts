@@ -178,7 +178,7 @@ export namespace DialogueContinuation {
                 },
               }),
             catch: EvaluationError.fromCause,
-          }).pipe(Effect.timeout(Duration.seconds(10)), Effect.mapError(EvaluationError.fromCause));
+          }).pipe(Effect.timeout(Duration.seconds(5)), Effect.mapError(EvaluationError.fromCause));
           const action = result.answers.action.choice;
           const probability = result.answers.action.probabilities?.[action] ?? 0;
           const candidate: Record<typeof action, Decision> = {

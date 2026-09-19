@@ -1,9 +1,9 @@
 import { isSpanContextValid, ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
-import { createTypeSafeAi } from "@ai-sdk/typesafe-ai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LogRecord } from "@opentelemetry/api-logs";
 import { OtelTracer, Resource } from "@effect/opentelemetry";
-import { Effect, Layer, Logger, ManagedRuntime, pipe, References } from "effect";
+import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import type { LogLevel } from "effect/LogLevel";
 import { ChatReply } from "@/ai/chat-reply";
@@ -101,11 +101,16 @@ const replies = Layer.mergeAll(ChatReply.layer, GuestReply.layer).pipe(
 const topicMetadata = TopicMetadata.layer.pipe(
   Layer.provide(Model.defaultLayer(env.OPENROUTER_API_KEY, TopicMetadata.profile)),
 );
-const dialogueContinuation = env.TYPESAFE_API_KEY
-  ? DialogueContinuation.layer(createTypeSafeAi({ apiKey: env.TYPESAFE_API_KEY }).evaluationModel("jev-latest"), {
-      messageLimit: env.DIALOGUE_CONTINUATION_MESSAGE_LIMIT,
-    })
-  : Layer.succeed(DialogueContinuation.Service)({ evaluate: () => Effect.succeed({ type: "silence" }) });
+const dialogueContinuation = DialogueContinuation.layer(
+  createOpenRouter({
+    apiKey: env.OPENROUTER_API_KEY,
+    appName: "Starlight",
+    compatibility: "strict",
+  }).evaluationModel("typesafe/jev-1.13"),
+  {
+    messageLimit: env.DIALOGUE_CONTINUATION_MESSAGE_LIMIT,
+  },
+);
 const database = Database.layer(env.DATABASE_URL);
 const tracing =
   env.langfuse === undefined && env.otlp === undefined

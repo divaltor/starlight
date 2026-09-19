@@ -48,7 +48,6 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       HINDSIGHT_RECALL_MAX_QUERY_TOKENS: z.coerce.number().int().positive().default(800),
 
       OPENROUTER_API_KEY: z.string().trim().min(1),
-      TYPESAFE_API_KEY: z.string().trim().min(1).optional(),
       STARLIGHT_MODEL: z.enum(ModelProfile.modelIds).default(ModelProfile.ids.gemini37Flash),
 
       AWS_ACCESS_KEY_ID: z.string(),
