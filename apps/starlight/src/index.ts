@@ -2,6 +2,7 @@ import { run } from "@grammyjs/runner";
 import { Effect, pipe } from "effect";
 import { bot } from "@/bot";
 import { createBotEnv } from "@/env";
+import chatMemberHandler from "@/handlers/chat-member";
 import guestMessageHandler from "@/handlers/guest-message";
 import messageHandler from "@/handlers/message";
 import startHandler from "@/handlers/start";
@@ -39,6 +40,7 @@ const boundary = bot.errorBoundary((error) =>
 );
 
 boundary.use(startChat);
+boundary.use(chatMemberHandler);
 boundary.use(premiumAccess);
 boundary.use(startHandler);
 boundary.use(guestMessageHandler);
