@@ -23,7 +23,11 @@ groupChat
   .on("message")
   .filter(hasAdmittableContent)
   .use((ctx) => {
-    const explicitlyAddressed = isAddressedToBot(ctx, ctx.message);
+    const explicitlyAddressed = MessageReply.isAddressedToBot({
+      botId: ctx.me.id,
+      botUsername: ctx.me.username,
+      message: ctx.message,
+    });
     const hasSticker = ctx.message.sticker !== undefined;
     const replyTo = MessageReply.actualReply(ctx.message);
     const responded = MessageReply.shouldRespond({
@@ -176,16 +180,6 @@ function mediaAdmissionError(error: Media.MediaError): Conversation.AdmissionErr
     message: error.message,
     retryable: error.retryable,
   });
-}
-
-function isAddressedToBot(ctx: Context, message: Message): boolean {
-  const text = message.text ?? message.caption ?? "";
-  return (
-    MessageReply.actualReply(message)?.from?.id === ctx.me.id ||
-    Boolean(ctx.me.username && text.toLowerCase().includes(`@${ctx.me.username.toLowerCase()}`)) ||
-    // \b is ASCII-only, so it never bounds Cyrillic words; use explicit letter lookarounds.
-    /(?<![\p{L}\p{N}_])(?:старка|зв[её]здочка)(?![\p{L}\p{N}_])/iu.test(text)
-  );
 }
 
 function hasAdmittableContent(ctx: Context): boolean {
