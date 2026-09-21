@@ -31,7 +31,7 @@ const premiumAccess: MiddlewareFn<Context> = async (ctx, next) => {
       ...(ctx.from !== undefined && { "langfuse.user.id": ctx.from.id.toString() }),
     };
     if (chat?.isPrivate === true) {
-      attributes["starlight.private"] = "true";
+      span.setAttribute('starlight.private', true);
     } else if (chatName !== undefined) {
       attributes["langfuse.trace.name"] = chatName;
     }
