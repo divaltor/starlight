@@ -25,10 +25,12 @@ Do not test library validation, encryption mechanics, framework propagation or D
 
 ## Rules
 
+- Before implementation, choose how to verify the required behavior. Reuse sufficient existing coverage; apply the admission gate before adding tests.
 - Test observable behavior, not internal calls, ordering, intermediate values, or generated SQL.
 - Every test names the customer rule or bug class it protects. Every bug fix includes a regression test when the admission gate passes; otherwise record the focused verification used.
 - Identify plausible wrong implementations and choose inputs that distinguish them from the required behavior, including both sides of a boundary where relevant. Prove the test fails for the identified mistake; otherwise rewrite or delete it.
-- Prefer integration tests with real collaborators and only external boundaries mocked. Unit-test tricky owned logic; reserve e2e for critical journeys.
+- For behavior changes or bug fixes needing new coverage, write the smallest distinguishing test before implementation. Confirm it fails for the intended behavioral reason, not setup errors, then passes after the change.
+- Prefer integration tests with real collaborators and only external boundaries mocked. Unit-test tricky owned logic; reserve e2e for critical journeys. Make journey checks repeatable and retain reviewable artifacts when useful; artifacts do not replace behavioral assertions.
 - Cover each distinct failure mode at the cheapest useful level; avoid duplicate coverage of the same failure mode. A rule may need multiple cases.
 - Use minimal fixtures instead of private helpers. Keep tests isolated, deterministic, order-independent, and free of shared mutable state.
 - No sleeps, real clocks, or real networks. Patch real attributes, not string import paths.
