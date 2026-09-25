@@ -84,7 +84,7 @@ function runGuest(model: LanguageModel, toolset: ChatTools.Resolved) {
               Layer.provide(
                 Layer.succeed(ModelProvider.Service)({
                   model,
-                  profile: ModelProfile.profiles["google/gemini-3.7-flash"],
+                  profile: ModelProfile.profiles["google/gemini-3-flash-preview"],
                 }),
               ),
             ),

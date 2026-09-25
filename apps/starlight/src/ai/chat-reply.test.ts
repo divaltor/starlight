@@ -53,7 +53,7 @@ test("uses Gemini-compatible enum discriminators for JSON schema replies", async
 
 function modelLayer(
   model: LanguageModel,
-  profile: ModelProfile.Profile = ModelProfile.profiles["google/gemini-3.7-flash"],
+  profile: ModelProfile.Profile = ModelProfile.profiles["google/gemini-3-flash-preview"],
 ) {
   return Model.layer.pipe(Layer.provide(Layer.succeed(ModelProvider.Service)({ model, profile })));
 }
@@ -82,7 +82,7 @@ function replyModel() {
 
 function runReply(
   model: LanguageModel,
-  profile: ModelProfile.Profile = ModelProfile.profiles["google/gemini-3.7-flash"],
+  profile: ModelProfile.Profile = ModelProfile.profiles["google/gemini-3-flash-preview"],
 ) {
   return Effect.runPromise(
     Effect.gen(function* () {

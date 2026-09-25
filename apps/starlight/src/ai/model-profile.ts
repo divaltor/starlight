@@ -3,7 +3,7 @@ export namespace ModelProfile {
     gemini3FlashPreview: "google/gemini-3-flash-preview",
     gemini37Flash: "google/gemini-3.7-flash",
   } as const;
-  export const modelIds = [ids.gemini37Flash, ids.gemini3FlashPreview] as const;
+  export const modelIds = [ids.gemini3FlashPreview, ids.gemini37Flash] as const;
   export const outputProtocols = {
     finalOutputTool: "final-output-tool",
     jsonSchemaResponse: "json-schema-response",
@@ -54,11 +54,11 @@ export namespace ModelProfile {
   } as const satisfies Record<ModelId, Profile>;
 
   export function fromModelId(model: string | undefined): Profile {
-    if (model === undefined || model === ids.gemini37Flash) {
-      return profiles[ids.gemini37Flash];
-    }
-    if (model === ids.gemini3FlashPreview) {
+    if (model === undefined || model === ids.gemini3FlashPreview) {
       return profiles[ids.gemini3FlashPreview];
+    }
+    if (model === ids.gemini37Flash) {
+      return profiles[ids.gemini37Flash];
     }
     throw new Error(`Unsupported Starlight model: ${model}`);
   }

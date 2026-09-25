@@ -440,7 +440,7 @@ function runModelEffect<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTP
         Layer.provide(
           Layer.succeed(ModelProvider.Service)({
             model,
-            profile: input.profile ?? ModelProfile.profiles["google/gemini-3.7-flash"],
+            profile: input.profile ?? ModelProfile.profiles["google/gemini-3-flash-preview"],
           }),
         ),
       ),
