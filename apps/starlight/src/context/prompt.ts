@@ -40,6 +40,7 @@ export namespace Prompt {
 
   export interface LiveMessagePayload {
     readonly forwardOrigin: string | null;
+    readonly forwardedFromSelf: boolean;
     readonly addressed: boolean;
     readonly messageId: number;
     readonly media: readonly Media.Reference[];
@@ -89,7 +90,11 @@ export namespace Prompt {
   }
 
   export function renderLiveMessage(payload: LiveMessagePayload, knownMessageIds?: ReadonlySet<number>): string {
-    const forwardOrigin = payload.forwardOrigin === null ? "" : `FORWARD ORIGIN: ${payload.forwardOrigin}\n`;
+    const forwardOrigin = (() => {
+      if (payload.forwardedFromSelf) return "FORWARDED FROM YOUR OWN EARLIER MESSAGE\n";
+      if (payload.forwardOrigin === null) return "";
+      return `FORWARD ORIGIN: ${payload.forwardOrigin}\n`;
+    })();
     // Reply targets resolve against sealed transcript turns when available; live batches have
     // no sealed history yet, so their targets quote the captured replied text instead.
     const reply = (() => {

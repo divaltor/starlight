@@ -9,6 +9,7 @@ const ProjectedFields = {
   date: Schema.Int,
   editDate: Schema.NullOr(Schema.Int),
   forwardOrigin: Schema.NullOr(Schema.String),
+  forwardedFromSelf: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   messageId: Schema.Int,
   repliedText: Schema.NullOr(Schema.String),
   replyToMessageId: Schema.NullOr(Schema.Int),

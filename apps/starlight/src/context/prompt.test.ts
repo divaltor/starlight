@@ -47,6 +47,7 @@ test("an unaddressed batched message is rendered as context rather than a reply 
   const rendered = Prompt.renderLiveMessage({
     addressed: false,
     forwardOrigin: null,
+    forwardedFromSelf: false,
     media: [],
     messageId: 41,
     repliedMedia: [],

@@ -115,19 +115,33 @@ export namespace Transcript {
       return [
         ...linked,
         {
-          content: {
-            date: payload.date,
-            forwardOrigin: payload.forwardOrigin,
-            messageId,
-            replyToMessageId,
-            replyTargetUnavailable: replyToMessageId !== null && payload.repliedText === null,
-            senderFirstName: payload.senderFirstName,
-            senderId: payload.senderId,
-            text: payload.text,
-          },
+          // A forward of our own reply is our voice; as user text the model imitates it as a request.
+          ...(payload.forwardedFromSelf
+            ? {
+                content: {
+                  date: payload.date,
+                  forwardedBy: payload.senderFirstName,
+                  messageId,
+                  text: payload.text,
+                },
+                kind: "assistantMessage" as const,
+                role: "assistant" as const,
+              }
+            : {
+                content: {
+                  date: payload.date,
+                  forwardOrigin: payload.forwardOrigin,
+                  messageId,
+                  replyToMessageId,
+                  replyTargetUnavailable: replyToMessageId !== null && payload.repliedText === null,
+                  senderFirstName: payload.senderFirstName,
+                  senderId: payload.senderId,
+                  text: payload.text,
+                },
+                kind: payload.editDate === null ? ("userMessage" as const) : ("editCorrection" as const),
+                role: "user" as const,
+              }),
           key: `input:${runInput.input.id}`,
-          kind: payload.editDate === null ? ("userMessage" as const) : ("editCorrection" as const),
-          role: "user" as const,
           sourceMessageId: messageId,
           sourceReferences: {
             inputId: runInput.input.id.toString(),

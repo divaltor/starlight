@@ -137,6 +137,8 @@ async function admitMessage(
             date: message.date,
             editDate: message.edit_date ?? null,
             forwardOrigin: message.forward_origin ? Prompt.canonicalEncode(message.forward_origin) : null,
+            forwardedFromSelf:
+              message.forward_origin?.type === "user" && message.forward_origin.sender_user.id === ctx.me.id,
             messageId: message.message_id,
             media: references,
             mediaGroupId: message.media_group_id ?? null,

@@ -168,7 +168,7 @@ export namespace Memory {
     const visibility = run.chatId > 0n ? "privateUser" : scopedVisibility;
     for (const runInput of run.inputs) {
       const payload = Schema.decodeUnknownSync(InputPayloadSchema)(runInput.input.payload);
-      if (payload.senderIsBot ?? false) continue;
+      if ((payload.senderIsBot ?? false) || payload.forwardedFromSelf) continue;
       const kind = payload.editDate === null ? "fact" : "correction";
       const inputId = runInput.input.id;
       // One Prisma transaction connection must execute its queries serially.
