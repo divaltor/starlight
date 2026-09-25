@@ -29,3 +29,14 @@ test("leaves text without new entity links unchanged", () => {
     }),
   ).toBe("Visit https://example.com");
 });
+
+test("renders a poll-only message as its question with options", () => {
+  expect(
+    TelegramMessageText.withEntityLinks({
+      poll: {
+        options: [{ text: "0" }, { text: "2-3" }, { text: "4-7" }],
+        question: "Сколько было половых партнёров?",
+      },
+    }),
+  ).toBe("POLL: Сколько было половых партнёров?\nOPTIONS:\n- 0\n- 2-3\n- 4-7");
+});

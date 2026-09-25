@@ -36,11 +36,11 @@ groupChat
       isReply: replyTo !== undefined,
       random: Math.random,
       randomResponseChance,
-      text: ctx.message.text ?? ctx.message.caption ?? "",
+      text: TelegramMessageText.withEntityLinks(ctx.message) ?? "",
     });
     const continuationCandidate = !responded && !hasSticker;
     const evaluateContinuation =
-      continuationCandidate && replyTo === undefined && (ctx.message.text ?? ctx.message.caption) !== undefined;
+      continuationCandidate && replyTo === undefined && TelegramMessageText.withEntityLinks(ctx.message) !== null;
     return admitMessage(
       ctx,
       ctx.message,
@@ -184,13 +184,14 @@ function mediaAdmissionError(error: Media.MediaError): Conversation.AdmissionErr
 
 function hasAdmittableContent(ctx: Context): boolean {
   return Boolean(
-    ctx.message && ((ctx.message.text ?? ctx.message.caption) || Media.fromTelegramMessage(ctx.message).length > 0),
+    ctx.message &&
+    (TelegramMessageText.withEntityLinks(ctx.message) || Media.fromTelegramMessage(ctx.message).length > 0),
   );
 }
 
 function hasAdmittableEditedContent(ctx: Context): boolean {
   return Boolean(
     ctx.editedMessage &&
-    ((ctx.editedMessage.text ?? ctx.editedMessage.caption) || Media.fromTelegramMessage(ctx.editedMessage).length > 0),
+    (TelegramMessageText.withEntityLinks(ctx.editedMessage) || Media.fromTelegramMessage(ctx.editedMessage).length > 0),
   );
 }
