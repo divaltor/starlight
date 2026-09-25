@@ -33,7 +33,7 @@
     "@t3-oss/env-core": "0.13.11",
     "@telegram-apps/init-data-node": "2.0.10",
     "date-fns": "4.4.0",
-    "effect": "4.0.0-rc.115",
+    "effect": "4.0.0-rc.117",
     "zod": "catalog:"
   }
 }

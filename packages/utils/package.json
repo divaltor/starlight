@@ -25,7 +25,7 @@
     "@prisma/adapter-pg": "catalog:",
     "@prisma/client": "catalog:",
     "@t3-oss/env-core": "0.13.11",
-    "dotenv": "17.4.2",
+    "dotenv": "18.0.3",
     "ky": "catalog:",
     "prisma": "catalog:",
     "prisma-json-types-generator": "catalog:",
