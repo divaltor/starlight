@@ -840,7 +840,7 @@ export namespace Conversation {
           text: event.text,
           type: event.type,
         }));
-        const replies = Conversation.mergePrecomputedReactions(precomputedActions, generated.output.replies);
+        const merged = Conversation.mergePrecomputedReactions(precomputedActions, generated.output.replies);
         const usage: Prisma.InputJsonObject = {
           // TS7 demands index signatures Json columns don't have; the chain is the
           // boundary escape.
@@ -856,6 +856,22 @@ export namespace Conversation {
               where: { id: claimed.runId },
               select: { contextId: true },
             });
+            // Read under the lane lock so the previous run's delivered replies are settled.
+            // One Prisma transaction connection must execute its queries serially.
+            // oxlint-disable-next-line react-doctor/server-sequential-independent-await
+            const recent = await transaction.conversationRunAction.findMany({
+              where: { deliveryStatus: "delivered", run: claimed.dbKey, type: "text" },
+              orderBy: [{ createdAt: "desc" }, { ordinal: "desc" }],
+              select: { payload: true },
+              take: Conversation.emojiSignOffWindow,
+            });
+            const replies = Conversation.limitEmojiSignOffs(
+              recent.toReversed().flatMap((action) => {
+                const payload = ChatReply.actionSchema.parse(action.payload);
+                return payload.type === "text" ? [payload.text] : [];
+              }),
+              merged,
+            );
             await transaction.conversationToolCall.createMany({
               data: generated.toolEvents.map((event) => ({
                 durationMs: event.durationMs,
@@ -1337,6 +1353,30 @@ export namespace Conversation {
       return !deduped.some((reaction) => reaction.messageId === action.messageId);
     });
     return [...deduped, ...generatedWithoutPrecomputedTargets];
+  }
+
+  export const emojiSignOffWindow = 8;
+  const trailingEmoji = /\s*(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|\u200D|\uFE0F)+$/u;
+
+  // Delivered replies re-enter context verbatim, so one trailing emoji becomes an
+  // in-context sign-off habit the model copies into every later reply. Allow a trailing
+  // emoji only when none of the recent replies (oldest first) already ended with one.
+  export function limitEmojiSignOffs(
+    recentTexts: readonly string[],
+    replies: readonly ChatReply.Response["replies"][number][],
+  ): readonly ChatReply.Response["replies"][number][] {
+    const window = [...recentTexts];
+    return replies.map((action) => {
+      if (action.type !== "text") return action;
+      const stripped = action.text.replace(trailingEmoji, "");
+      const repeated =
+        stripped.length > 0 &&
+        stripped !== action.text &&
+        window.slice(-emojiSignOffWindow).some((text) => trailingEmoji.test(text));
+      const text = repeated ? stripped : action.text;
+      window.push(text);
+      return repeated ? { ...action, text } : action;
+    });
   }
 
   interface DeliveryState {
