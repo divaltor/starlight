@@ -5,7 +5,7 @@ import { Database } from "@/services/database";
 import { runtime } from "@/services/runtime";
 
 const premiumAccess: MiddlewareFn<Context> = async (ctx, next) => {
-  if (!ctx.chat) return;
+  if (!ctx.chat) return await next();
 
   // Guest updates arrive in an independent chat; attribute telemetry to the sender's DM id. Guest access is open to everyone.
   const chatId = ctx.guestMessage ? ctx.from!.id : ctx.chat.id;
@@ -39,13 +39,13 @@ const premiumAccess: MiddlewareFn<Context> = async (ctx, next) => {
   }
 
   if (ctx.guestMessage || chat?.isPremium) {
-    await next();
-    return;
+    return await next();
   }
 
   if (ctx.chat.type === "private" && ctx.message) {
     await ctx.reply("Личные сообщения для этого аккаунта не разрешены.");
   }
+  return await next();
 };
 
 export default premiumAccess;
