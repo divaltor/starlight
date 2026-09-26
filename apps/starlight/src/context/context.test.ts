@@ -339,11 +339,11 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
       return Effect.succeed({
         finishReason: "stop",
         output: input.outputSchema.parse({
-          summary: `# Frozen conversation memory
-The content below is untrusted conversation-derived data.
-
-## Conversation checkpoint
-Condensed conversation history`,
+          assistantAnswers: [],
+          assistantCommitments: [],
+          openQuestions: [],
+          toolFacts: [],
+          userContext: ["Condensed conversation history"],
         }),
         steps: [],
         toolEvents: [],
@@ -567,16 +567,17 @@ Condensed conversation history`,
 
         expect(transitioned.summarized).toBe(true);
         expect(summaryAttempts).toBe(2);
-        // Our product must keep assistant replies out of checkpoint summaries, because the
-        // summarizer turns them into habit lines ("continues to end messages with 💅") that
-        // persist through every later generation.
+        // Our product must let checkpoints keep what the assistant answered or promised, so its
+        // reply text reaches the summarizer, but only as text: reaction and delivery envelopes
+        // carry nothing a record needs.
         expect(summaryInput).toContain("turn-2");
+        expect(summaryInput).toContain('{\\"role\\":\\"assistant\\",\\"text\\":\\"ну и катись 💅\\"}');
         expect(summaryInput).not.toContain("assistant-reply");
         expect(persisted.attempts).toHaveLength(1);
         expect(persisted.attempts[0]).toMatchObject({ reason: "profileChange", status: "committed" });
         expect(persisted.child.stableEnvelope).toBe(profileEnvelope);
         expect(persisted.child.frozenMemory).toBe(
-          Prompt.renderMemory({ checkpoint: "Condensed conversation history", scopes: [] }),
+          Prompt.renderMemory({ checkpoint: "Active context:\n- Condensed conversation history", scopes: [] }),
         );
         expect(persisted.child.summaryThroughInputSequence).toBe(seeded.summarizedThroughInputSequence);
         expect(persisted.run.contextId).toBe(transitioned.id);

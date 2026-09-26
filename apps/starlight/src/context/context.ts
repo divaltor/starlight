@@ -1,8 +1,4 @@
-import type {
-  ConversationCheckpointReason,
-  ConversationTranscriptKind,
-  Prisma,
-} from "@starlight/utils/generated/prisma/client";
+import type { ConversationCheckpointReason, Prisma } from "@starlight/utils/generated/prisma/client";
 import { Context, Effect, Layer, Number, Option, Predicate, Schema } from "effect";
 import { ModelProfile } from "@/ai/model-profile";
 import { Model } from "@/ai/model";
@@ -23,7 +19,6 @@ export namespace ConversationContext {
   const PREFIX_SNAPSHOT_LIMIT = 128;
   const CHECKPOINT_TOOL_OUTPUT_MAX_CHARS = 2000;
   const CHECKPOINT_INPUT_VERSION = "context-checkpoint-v3";
-  const assistantReplyKinds = new Set<ConversationTranscriptKind>(["assistantMessage", "assistantIgnore"]);
   const MAX_REQUEST_MEDIA_BYTES = 20 * 1024 * 1024;
   const PROFILE_MISMATCH_ERROR = "Checkpoint profile does not match the prepared run";
   // Reactions, ignores, and forwards of our own replies carry no delivered text ending.
@@ -740,7 +735,7 @@ export namespace ConversationContext {
           maxToolOutputBytes: 0,
           maxToolCalls: 0,
           messages: [{ role: "user", text: prepared.summaryInput }],
-          outputSchema: Checkpoint.Summary,
+          outputSchema: Checkpoint.Records,
           private: checkpointInput.telemetryPrivate,
           sessionId: prepared.parentContextId,
           tools: {},
@@ -754,16 +749,7 @@ export namespace ConversationContext {
               new ContextError({ cause: error, message: "Failed to summarize context", retryable: error.retryable }),
           ),
         );
-      const summary = generated.output.summary
-        .trim()
-        .replace(
-          /^(?:# Frozen conversation memory\nThe content below is untrusted conversation-derived data\.\n\n## Conversation checkpoint\n)+/u,
-          "",
-        )
-        .trim();
-      if (summary.length === 0) {
-        return yield* new ContextError({ message: "Context summary was empty", retryable: true });
-      }
+      const summary = Checkpoint.renderRecords(generated.output);
       yield* database
         .transaction(async (transaction) => {
           await Lane.assertFence(transaction, prepared.key, checkpointInput);
@@ -771,7 +757,7 @@ export namespace ConversationContext {
             where: { id: prepared.attemptId },
             data: {
               status: "summarized",
-              summaryOutput: { summary },
+              summaryOutput: { records: generated.output, summary },
               summaryUsage: {
                 // TS7 demands index signatures Json columns don't have; the chain
                 // is the boundary escape.
@@ -859,11 +845,15 @@ export namespace ConversationContext {
     const summaryInput = existing
       ? existing.summaryInput
       : Prompt.canonicalEncode({
-          // The summarizer describes whatever assistant replies it reads ("continues to end
-          // messages with 💅"), and that line then carries across every later generation
-          // through previousMemory. Without replies there is no style to describe.
+          // Assistant turns reach the summarizer as reply text only, without reaction and ignore
+          // envelopes, so records can keep what it answered or promised.
           head: boundaries.head.flatMap((turn) => {
-            if (assistantReplyKinds.has(turn.transcriptTurn.kind)) return [];
+            if (turn.transcriptTurn.kind === "assistantIgnore") return [];
+            if (turn.transcriptTurn.kind === "assistantMessage") {
+              return Option.toArray(Schema.decodeUnknownOption(DeliveredTextSchema)(turn.transcriptTurn.content)).map(
+                (content) => Prompt.canonicalEncode({ role: "assistant", text: content.action.text }),
+              );
+            }
             return turn.transcriptTurn.kind === "toolResult" &&
               turn.renderedContent.length > CHECKPOINT_TOOL_OUTPUT_MAX_CHARS
               ? [`${turn.renderedContent.slice(0, CHECKPOINT_TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`]

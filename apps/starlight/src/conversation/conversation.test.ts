@@ -1573,7 +1573,13 @@ test.skipIf(!databaseUrl)(
       generate: <Output>(input: Model.GenerateInput<Output>) => {
         requests.push(input);
         const output = input.instructions.startsWith("Summarize")
-          ? { summary: "Alice asked twice and the assistant answered both messages." }
+          ? {
+              assistantAnswers: [],
+              assistantCommitments: [],
+              openQuestions: [],
+              toolFacts: [],
+              userContext: ["Alice asked twice and the assistant answered both messages."],
+            }
           : { replies: [{ replyTo: null, text: "Hi", type: "text" }] };
         return Effect.succeed({
           finishReason: "stop",
@@ -1742,7 +1748,13 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
         return Effect.fail(new Model.ContextOverflow({ message: "Model context limit exceeded", retryable: false }));
       }
       const output = input.instructions.startsWith("Summarize")
-        ? { summary: "The recent discussion must remain available." }
+        ? {
+            assistantAnswers: [],
+            assistantCommitments: [],
+            openQuestions: [],
+            toolFacts: [],
+            userContext: ["The recent discussion must remain available."],
+          }
         : { replies: [{ replyTo: null, text: "Continued", type: "text" }] };
       return Effect.succeed({
         finishReason: "stop",
