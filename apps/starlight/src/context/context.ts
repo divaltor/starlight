@@ -1,5 +1,5 @@
 import type { ConversationCheckpointReason, Prisma } from "@starlight/utils/generated/prisma/client";
-import { Context, Effect, Layer, Number, Predicate, Schema } from "effect";
+import { Context, Effect, Layer, Number, Option, Predicate, Schema } from "effect";
 import { ModelProfile } from "@/ai/model-profile";
 import { Model } from "@/ai/model";
 import { ActiveContext } from "@/context/active-context";
@@ -20,6 +20,8 @@ export namespace ConversationContext {
   const CHECKPOINT_TOOL_OUTPUT_MAX_CHARS = 2000;
   const MAX_REQUEST_MEDIA_BYTES = 20 * 1024 * 1024;
   const PROFILE_MISMATCH_ERROR = "Checkpoint profile does not match the prepared run";
+  // Reactions, ignores, and forwards of our own replies carry no delivered text ending.
+  const DeliveredTextSchema = Schema.Struct({ action: Schema.Struct({ text: Schema.String }) });
   export interface PreparedContextRequest {
     readonly cacheBase: string;
     readonly cachePrefixMessageCount: number;
@@ -332,6 +334,21 @@ export namespace ConversationContext {
             const knownMessageIds = new Set(
               transcriptTurns.flatMap((turn) => (turn.sourceMessageId === null ? [] : [turn.sourceMessageId])),
             );
+            // The lane transcript is append-only, so retries derive the same guidance.
+            // oxlint-disable-next-line react-doctor/server-sequential-independent-await
+            const recentReplies = await transaction.conversationTranscriptTurn.findMany({
+              where: { ...key, kind: "assistantMessage" },
+              orderBy: { ordinal: "desc" },
+              select: { content: true },
+              take: Prompt.signOffWindow,
+            });
+            const signOffGuidance = Prompt.renderSignOffGuidance(
+              recentReplies.flatMap((turn) =>
+                Option.toArray(Schema.decodeUnknownOption(DeliveredTextSchema)(turn.content)).map(
+                  (content) => content.action.text,
+                ),
+              ),
+            );
             const frozen = Schema.decodeUnknownSync(PreparedRequestSchema)(run.preparedRequest);
             const current: Model.Message[] = [
               {
@@ -347,6 +364,7 @@ export namespace ConversationContext {
                   text: Prompt.renderLiveMessage(payload, knownMessageIds),
                 };
               }),
+              ...(signOffGuidance === null ? [] : [{ role: "user" as const, text: signOffGuidance }]),
             ];
             const finalized: Model.Message[] = turns.map((turn) => ({
               role: turn.role === "assistant" ? ("assistant" as const) : ("user" as const),
