@@ -328,9 +328,11 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
 
 test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the newest eight", async () => {
   let summaryAttempts = 0;
+  let summaryInput = "";
   const retryingSummaryModel: Model.Interface = {
     generate: (input) => {
       summaryAttempts += 1;
+      summaryInput = input.messages.map((message) => message.text).join("\n");
       if (summaryAttempts === 1) {
         return Effect.fail(new Model.Unavailable({ message: "Interrupted profile summary", retryable: true }));
       }
@@ -446,7 +448,7 @@ Condensed conversation history`,
                 content: { text: `Message ${index}` },
                 idempotencyKey: `${run.id}:user`,
                 kind: "userMessage",
-                ordinal: index,
+                ordinal: index * 2,
                 runId: run.id,
                 sourceMessageId: 100 + index,
                 sourceReferences: {},
@@ -458,7 +460,7 @@ Condensed conversation history`,
               data: {
                 contextId: parent.id,
                 estimatedTokens: 100,
-                ordinal: index,
+                ordinal: index * 2,
                 renderedContent: `turn-${index}`,
                 renderVersion: "profile-checkpoint-test-v1",
                 role: "user",
@@ -467,7 +469,37 @@ Condensed conversation history`,
                 transcriptTurnId: transcriptTurn.id,
               },
             });
-            if (index === 2) summarizedThroughInputSequence = input.id;
+            if (index === 2) {
+              summarizedThroughInputSequence = input.id;
+              const replyTurn = await client.conversationTranscriptTurn.create({
+                data: {
+                  assistantId,
+                  chatId,
+                  content: { action: { text: "ну и катись 💅", type: "text" } },
+                  idempotencyKey: `${run.id}:action:0`,
+                  kind: "assistantMessage",
+                  ordinal: index * 2 + 1,
+                  runId: run.id,
+                  sourceMessageId: null,
+                  sourceReferences: {},
+                  threadKey: 0,
+                  visibility: "delivered",
+                },
+              });
+              await client.conversationContextTurn.create({
+                data: {
+                  contextId: parent.id,
+                  estimatedTokens: 100,
+                  ordinal: index * 2 + 1,
+                  renderedContent: "assistant-reply-ну и катись 💅",
+                  renderVersion: "profile-checkpoint-test-v1",
+                  role: "assistant",
+                  rollingPrefixHash: `obsolete-rolling-reply-${index}`,
+                  segmentHash: `obsolete-segment-reply-${index}`,
+                  transcriptTurnId: replyTurn.id,
+                },
+              });
+            }
           }
           const currentRun = await client.conversationRun.create({
             data: {
@@ -535,6 +567,11 @@ Condensed conversation history`,
 
         expect(transitioned.summarized).toBe(true);
         expect(summaryAttempts).toBe(2);
+        // Our product must keep assistant replies out of checkpoint summaries, because the
+        // summarizer turns them into habit lines ("continues to end messages with 💅") that
+        // persist through every later generation.
+        expect(summaryInput).toContain("turn-2");
+        expect(summaryInput).not.toContain("assistant-reply");
         expect(persisted.attempts).toHaveLength(1);
         expect(persisted.attempts[0]).toMatchObject({ reason: "profileChange", status: "committed" });
         expect(persisted.child.stableEnvelope).toBe(profileEnvelope);
@@ -543,7 +580,7 @@ Condensed conversation history`,
         );
         expect(persisted.child.summaryThroughInputSequence).toBe(seeded.summarizedThroughInputSequence);
         expect(persisted.run.contextId).toBe(transitioned.id);
-        expect(persisted.turns.map((turn) => turn.transcriptTurn.ordinal)).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+        expect(persisted.turns.map((turn) => turn.transcriptTurn.ordinal)).toEqual([6, 8, 10, 12, 14, 16, 18, 20]);
 
         const repeated = yield* context.transitionProfile({
           key: { assistantId: Number(assistantId), chatId: Number(chatId), threadKey: 0 },

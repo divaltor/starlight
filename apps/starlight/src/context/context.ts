@@ -1,4 +1,8 @@
-import type { ConversationCheckpointReason, Prisma } from "@starlight/utils/generated/prisma/client";
+import type {
+  ConversationCheckpointReason,
+  ConversationTranscriptKind,
+  Prisma,
+} from "@starlight/utils/generated/prisma/client";
 import { Context, Effect, Layer, Number, Option, Predicate, Schema } from "effect";
 import { ModelProfile } from "@/ai/model-profile";
 import { Model } from "@/ai/model";
@@ -18,6 +22,8 @@ import { Database } from "@/services/database";
 export namespace ConversationContext {
   const PREFIX_SNAPSHOT_LIMIT = 128;
   const CHECKPOINT_TOOL_OUTPUT_MAX_CHARS = 2000;
+  const CHECKPOINT_INPUT_VERSION = "context-checkpoint-v3";
+  const assistantReplyKinds = new Set<ConversationTranscriptKind>(["assistantMessage", "assistantIgnore"]);
   const MAX_REQUEST_MEDIA_BYTES = 20 * 1024 * 1024;
   const PROFILE_MISMATCH_ERROR = "Checkpoint profile does not match the prepared run";
   // Reactions, ignores, and forwards of our own replies carry no delivered text ending.
@@ -853,19 +859,26 @@ export namespace ConversationContext {
     const summaryInput = existing
       ? existing.summaryInput
       : Prompt.canonicalEncode({
-          head: boundaries.head.map((turn) =>
-            turn.transcriptTurn.kind === "toolResult" && turn.renderedContent.length > CHECKPOINT_TOOL_OUTPUT_MAX_CHARS
-              ? `${turn.renderedContent.slice(0, CHECKPOINT_TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
-              : turn.renderedContent,
-          ),
+          // The summarizer describes whatever assistant replies it reads ("continues to end
+          // messages with 💅"), and that line then carries across every later generation
+          // through previousMemory. Without replies there is no style to describe.
+          head: boundaries.head.flatMap((turn) => {
+            if (assistantReplyKinds.has(turn.transcriptTurn.kind)) return [];
+            return turn.transcriptTurn.kind === "toolResult" &&
+              turn.renderedContent.length > CHECKPOINT_TOOL_OUTPUT_MAX_CHARS
+              ? [`${turn.renderedContent.slice(0, CHECKPOINT_TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`]
+              : [turn.renderedContent];
+          }),
           previousMemory: parent.frozenMemory,
-          version: "context-checkpoint-v2",
+          version: CHECKPOINT_INPUT_VERSION,
         });
     if (existing && new Bun.CryptoHasher("sha256").update(summaryInput).digest("hex") !== existing.summaryInputHash) {
       throw new Error("Stored checkpoint input hash is invalid");
     }
     const summaryProfileFingerprint = new Bun.CryptoHasher("sha256")
-      .update(`${parent.modelProfileFingerprint}:${run.modelProfileFingerprint}:${input.reason}:context-checkpoint-v2`)
+      .update(
+        `${parent.modelProfileFingerprint}:${run.modelProfileFingerprint}:${input.reason}:${CHECKPOINT_INPUT_VERSION}`,
+      )
       .digest("hex");
     const attempt = existing
       ? await transaction.conversationCheckpointAttempt.update({
