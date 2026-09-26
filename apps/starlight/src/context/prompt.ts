@@ -116,26 +116,32 @@ export namespace Prompt {
   export const signOffWindow = 8;
   const SIGN_OFF_REPEATS = 3;
   const EMOJI_ENDING = "emoji";
+  const sentenceBreak = /(?<=[.!?…])\s+|\n+/u;
   const trailingPunctuation = /[\s.,!?…]+$/u;
   const trailingEmoji = /(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|\u200D|\uFE0F)+$/u;
   const trailingWord = /[\p{L}\p{N}]+$/u;
   const wordCharacter = /[\p{L}\p{N}]/u;
 
-  // Delivered replies re-enter context verbatim, so one repeated ending becomes an in-context
-  // habit the model copies into every later reply. Naming it on the live tail breaks the loop
-  // without touching the cached prefix or rewriting what was actually delivered.
+  // Delivered replies re-enter context verbatim, so one repeated sentence ending becomes an
+  // in-context habit the model copies into every later reply, mid-reply too ("…обрабатывать ага.
+  // а т-5…"). Naming it on the live tail breaks the loop without touching the cached prefix or
+  // rewriting what was actually delivered. Each reply counts an ending once.
   export function renderSignOffGuidance(recentReplies: readonly string[]): string | null {
-    const endings = recentReplies.flatMap((reply) => {
-      const text = reply.trim().replace(trailingPunctuation, "");
-      const match = trailingEmoji.exec(text) ?? trailingWord.exec(text);
-      if (match === null || !wordCharacter.test(text.slice(0, match.index))) return [];
-      return [trailingEmoji.test(match[0]) ? EMOJI_ENDING : match[0].toLowerCase()];
-    });
+    const endings = recentReplies.flatMap((reply) => [
+      ...new Set(
+        reply.split(sentenceBreak).flatMap((sentence) => {
+          const text = sentence.trim().replace(trailingPunctuation, "");
+          const match = trailingEmoji.exec(text) ?? trailingWord.exec(text);
+          if (match === null || !wordCharacter.test(text.slice(0, match.index))) return [];
+          return [trailingEmoji.test(match[0]) ? EMOJI_ENDING : match[0].toLowerCase()];
+        }),
+      ),
+    ]);
     const repeated = [...Map.groupBy(endings, (ending) => ending)].find(
       (entry) => entry[1].length >= SIGN_OFF_REPEATS,
     )?.[0];
     if (repeated === undefined) return null;
-    return `TRUSTED REQUEST METADATA\nYour recent replies keep ending with ${
+    return `TRUSTED REQUEST METADATA\nYour recent replies keep ending sentences with ${
       repeated === EMOJI_ENDING ? "an emoji" : `«${repeated}»`
     }. Do not tack it onto this reply; finish when the substantive content is complete.`;
   }

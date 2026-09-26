@@ -77,13 +77,23 @@ test.each([
   },
   { expected: null, name: "the shared word is not at the end", recent: ["ага, да", "ага, нет", "ага, может"] },
   {
+    expected: "«ага»",
+    name: "the repeated word ends a sentence inside a reply",
+    recent: ["в т-50 крутилка для тех кому лень ага. а т-5 взрослый варик", "терпи ага", "гордись ага! и все"],
+  },
+  {
+    expected: null,
+    name: "the repeated word ends several sentences of only two replies",
+    recent: ["раз ага. два ага. три ага", "четыре ага", "пять"],
+  },
+  {
     expected: "an emoji",
     name: "recent replies alternate trailing emoji",
     recent: ["ну и катись 💄", "дорогая 💅", "это база 💄"],
   },
 ])("test_sign_off_guidance_names_the_ending_when_$name", (input) => {
   expect(
-    Prompt.renderSignOffGuidance(input.recent)?.match(/ending with (?<ending>«[^»]+»|an emoji)/u)?.groups?.ending ??
-      null,
+    Prompt.renderSignOffGuidance(input.recent)?.match(/ending sentences with (?<ending>«[^»]+»|an emoji)/u)?.groups
+      ?.ending ?? null,
   ).toBe(input.expected);
 });
