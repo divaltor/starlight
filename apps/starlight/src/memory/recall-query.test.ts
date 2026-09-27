@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { countTokens } from "gpt-tokenizer/encoding/cl100k_base";
+import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
 import { RecallQuery } from "@/memory/recall-query";
 
 test("keeps the complete FIFO recall query when it fits", () => {

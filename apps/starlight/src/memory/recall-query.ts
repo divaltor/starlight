@@ -1,4 +1,4 @@
-import { isWithinTokenLimit } from "gpt-tokenizer/encoding/cl100k_base";
+import { isWithinTokenLimit } from "gpt-tokenizer/encoding/o200k_base";
 import type { InputPayload } from "@/conversation/run-artifacts";
 
 export namespace RecallQuery {
@@ -15,7 +15,7 @@ export namespace RecallQuery {
   }
 
   export function build(options: { readonly inputs: readonly Input[]; readonly maxTokens: number }) {
-    // Hindsight 0.9.2 counts cl100k_base tokens and rejects REST queries above its
+    // Hindsight 0.10 counts o200k_base tokens and rejects REST queries above its
     // configured cap. Keep normal batches byte-for-byte unchanged; only overflow
     // invokes the relevance policy below.
     const segments = options.inputs.flatMap((input, inputOrdinal): Segment[] => [

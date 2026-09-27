@@ -112,7 +112,7 @@ services:
     restart: unless-stopped
 
   hindsight:
-    image: ghcr.io/vectorize-io/hindsight:0.9.2
+    image: ghcr.io/vectorize-io/hindsight:0.10.1
     environment:
       HINDSIGHT_API_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       HINDSIGHT_API_DATABASE_SCHEMA: hindsight
@@ -145,7 +145,11 @@ services:
       classification:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8888/health"]
+      test:
+        [
+          "CMD-SHELL",
+          'python3 -c "import urllib.request; urllib.request.urlopen(''http://localhost:8888/health/live'', timeout=5)"',
+        ]
       interval: 10s
       timeout: 10s
       retries: 6
