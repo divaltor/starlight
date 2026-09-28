@@ -9,12 +9,12 @@ export namespace TopicMetadata {
       defaultOutputTokens: 1024,
       maximumOutputTokens: 1024,
     },
-    model: "openai/gpt-5.6-luna",
+    model: "openai/gpt-6-luna",
     output: { protocol: ModelProfile.outputProtocols.jsonSchemaResponse },
     reasoning: { effort: "low" },
     route: {
       allowFallbacks: false,
-      only: ["openai"],
+      only: [],
       requireParameters: true,
     },
   } as const satisfies ModelProfile.Profile;

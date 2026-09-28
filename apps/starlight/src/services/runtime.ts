@@ -99,7 +99,12 @@ const replies = Layer.mergeAll(ChatReply.layer, GuestReply.layer).pipe(
   Layer.provideMerge(Model.defaultLayer(env.OPENROUTER_API_KEY)),
 );
 const topicMetadata = TopicMetadata.layer.pipe(
-  Layer.provide(Model.defaultLayer(env.OPENROUTER_API_KEY, TopicMetadata.profile)),
+  Layer.provide(
+    Model.defaultLayer(env.OPENROUTER_API_KEY, {
+      ...TopicMetadata.profile,
+      model: env.TOPIC_METADATA_MODEL ?? TopicMetadata.profile.model,
+    }),
+  ),
 );
 const dialogueContinuation = DialogueContinuation.layer(
   createOpenRouter({

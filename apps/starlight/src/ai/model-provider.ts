@@ -25,8 +25,8 @@ export namespace ModelProvider {
           provider: {
             allow_fallbacks: profile.route.allowFallbacks,
             data_collection: "deny",
-            only: [...profile.route.only],
-            order: [...profile.route.only],
+            only: profile.route.only.length === 0 ? undefined : [...profile.route.only],
+            order: profile.route.only.length === 0 ? undefined : [...profile.route.only],
             require_parameters: profile.route.requireParameters,
           },
           reasoning: profile.reasoning,

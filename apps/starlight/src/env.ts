@@ -49,6 +49,7 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
 
       OPENROUTER_API_KEY: z.string().trim().min(1),
       STARLIGHT_MODEL: z.enum(ModelProfile.modelIds).default(ModelProfile.ids.gemini3FlashPreview),
+      TOPIC_METADATA_MODEL: z.string().trim().min(1).optional(),
 
       AWS_ACCESS_KEY_ID: z.string(),
       AWS_SECRET_ACCESS_KEY: z.string(),
