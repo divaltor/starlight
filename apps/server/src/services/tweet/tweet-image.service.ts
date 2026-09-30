@@ -8,6 +8,7 @@ import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";
 
+export const TWEET_IMAGE_CACHE_PREFIX = "tweets/v2";
 const TWEET_IMAGE_TRANSLATION_LANGUAGE = "en";
 const MOSAIC_METADATA_TIMEOUT_MS = 5000;
 
@@ -81,24 +82,25 @@ const mapMediaData = Effect.fn("mapMediaData")(
     }),
 );
 
-function buildTweetData(tweet: FxEmbedTweet, textOverride?: string): Effect.Effect<TweetData, never, never> {
+function buildTweetData(tweet: FxEmbedTweet, replyingTo?: string): Effect.Effect<TweetData, never, never> {
   return Effect.gen(function* () {
     const media = yield* mapMediaData(tweet.media);
-
-    const quote = tweet.quote ? yield* buildTweetData(tweet.quote, tweet.quote.getDisplayText()) : null;
+    const translation = tweet.translation?.source_lang === "ru" ? null : tweet.translation;
+    const text = translation?.text ?? tweet.text;
+    const quote = tweet.quote ? yield* buildTweetData(tweet.quote) : null;
 
     return {
       authorName: tweet.author.name,
       authorUsername: tweet.author.screen_name,
       authorAvatarUrl: tweet.author.avatar_url,
-      text: textOverride ?? tweet.getDisplayText(),
+      text: replyingTo ? text.replace(new RegExp(`^@${replyingTo}\\s*`, "iu"), "").trim() : text,
       createdAt: new Date(tweet.created_timestamp * 1000),
       media,
       article: tweet.article?.toArticleData() ?? null,
       likes: tweet.likes,
       retweets: tweet.retweets,
       replies: tweet.replies,
-      translation: tweet.translation?.toTranslationData() ?? null,
+      translation: translation?.toTranslationData() ?? null,
       quote,
     } satisfies TweetData;
   });
@@ -128,9 +130,7 @@ function fetchReplyChain(
       return { chain: [], hasMore: false };
     }
 
-    const tweetText = childReplyingTo ? tweet.stripLeadingMention(childReplyingTo) : tweet.getDisplayText();
-
-    const tweetData = yield* buildTweetData(tweet, tweetText);
+    const tweetData = yield* buildTweetData(tweet, childReplyingTo);
 
     if (tweet.replying_to_status) {
       const parentResult = yield* fetchReplyChain(tweet.replying_to_status, depth + 1, tweet.replying_to ?? undefined);
@@ -164,12 +164,7 @@ export const prepareTweetData = Effect.fn("prepareTweetData")(
         hasMoreInChain = chainResult.hasMore;
       }
 
-      const tweetText =
-        tweet.replying_to && replyChain.length > 0
-          ? tweet.stripLeadingMention(tweet.replying_to)
-          : tweet.getDisplayText();
-
-      const base = yield* buildTweetData(tweet, tweetText);
+      const base = yield* buildTweetData(tweet, replyChain.length > 0 ? (tweet.replying_to ?? undefined) : undefined);
 
       return {
         ...base,
@@ -187,7 +182,7 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
     theme: Theme = "light",
   ): Effect.Effect<RenderResult, TwitterApi.TwitterApiError | Error, TwitterApi.Service> =>
     Effect.gen(function* () {
-      const s3Path = `tweets/${tweetId}/${theme}.jpg`;
+      const s3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/${theme}.jpg`;
       const s3File = s3.file(s3Path);
 
       const cachedResult = yield* Effect.tryPromise({

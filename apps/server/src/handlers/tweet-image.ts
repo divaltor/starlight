@@ -2,7 +2,7 @@ import { extractTweetId, isTwitterUrl } from "@starlight/utils";
 import { Composer, GrammyError, InlineKeyboard, InlineQueryResultBuilder, InputFile } from "grammy";
 import env from "@/env";
 import { renderTweetImage } from "@/services/render";
-import { generateTweetImage, prepareTweetData } from "@/services/tweet/tweet-image.service";
+import { generateTweetImage, prepareTweetData, TWEET_IMAGE_CACHE_PREFIX } from "@/services/tweet/tweet-image.service";
 import type { Theme } from "@/services/tweet/tweet-image.service";
 import { runtime } from "@/services/runtime";
 import { s3 } from "@/storage";
@@ -104,8 +104,8 @@ composer
         renderTweetImage(tweetData, "dark"),
       ]);
 
-      const lightS3Path = `tweets/${tweetId}/light.jpg`;
-      const darkS3Path = `tweets/${tweetId}/dark.jpg`;
+      const lightS3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/light.jpg`;
+      const darkS3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/dark.jpg`;
 
       await Promise.all([
         s3.write(lightS3Path, lightResult.buffer, { type: IMAGE_JPEG_TYPE }),
@@ -159,8 +159,8 @@ composer
           renderTweetImage(tweetDataWithoutChain, "dark"),
         ]);
 
-        const lightNoChainS3Path = `tweets/${tweetId}/light-no-chain.jpg`;
-        const darkNoChainS3Path = `tweets/${tweetId}/dark-no-chain.jpg`;
+        const lightNoChainS3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/light-no-chain.jpg`;
+        const darkNoChainS3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/dark-no-chain.jpg`;
 
         await Promise.all([
           s3.write(lightNoChainS3Path, lightNoChainResult.buffer, { type: IMAGE_JPEG_TYPE }),

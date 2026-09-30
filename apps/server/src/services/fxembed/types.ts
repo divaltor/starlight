@@ -124,11 +124,6 @@ export class FxEmbedTweet extends Schema.Class<FxEmbedTweet>("FxEmbedTweet")({
   getDisplayText(): string {
     return this.translation?.text ?? this.text;
   }
-
-  stripLeadingMention(username: string): string {
-    const mentionPattern = new RegExp(`^@${username}\\s*`, "iu");
-    return this.getDisplayText().replace(mentionPattern, "").trim();
-  }
 }
 
 export type FxEmbedTweetData = ConstructorParameters<typeof FxEmbedTweet>[0];
