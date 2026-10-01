@@ -1,5 +1,4 @@
 import type { Prisma } from "@starlight/utils/generated/prisma/client";
-import type { ChatTools } from "@/ai/chat-tools";
 import { Prompt } from "@/context/prompt";
 import { ConversationKey } from "@/conversation/key";
 import type { Lane } from "@/conversation/lane";
@@ -8,9 +7,8 @@ export namespace ActiveContext {
   export async function ensure(
     transaction: Prisma.TransactionClient,
     key: Lane.LaneKey,
-    toolProfile: ChatTools.Profile,
     frozenMemory: string,
-    stableEnvelope = Prompt.renderEnvelope({ toolProfile }),
+    stableEnvelope: string,
   ) {
     const existing = await transaction.conversationContext.findFirst({
       where: { ...key, status: "active" },

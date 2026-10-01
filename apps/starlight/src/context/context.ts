@@ -7,7 +7,7 @@ import { CacheDiagnostics } from "@/context/cache-diagnostics";
 import { Checkpoint } from "@/context/checkpoint";
 import { Prompt } from "@/context/prompt";
 import { Transcript } from "@/context/transcript";
-import { ChatTools } from "@/ai/chat-tools";
+import type { ChatTools } from "@/ai/chat-tools";
 import { ConversationKey } from "@/conversation/key";
 import { Lane } from "@/conversation/lane";
 import { PreparedRequestSchema, PreparedToolProfileSchema, StoredPayloadSchema } from "@/conversation/run-artifacts";
@@ -100,7 +100,6 @@ export namespace ConversationContext {
     Service,
     Effect.gen(function* layer() {
       const database = yield* Database.Service;
-      const chatTools = yield* ChatTools.Service;
       const media = yield* Media.Service;
       const model = yield* Model.Service;
       const prefixSnapshots = new Map<string, CacheDiagnostics.PrefixSnapshot>();
@@ -153,7 +152,12 @@ export namespace ConversationContext {
             // oxlint-disable-next-line react-doctor/server-sequential-independent-await
             const context = run.contextId
               ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ActiveContext.ensure(transaction, key, chatTools.availableProfile, initialMemory);
+              : await ActiveContext.ensure(
+                  transaction,
+                  key,
+                  initialMemory,
+                  Schema.decodeUnknownSync(PreparedToolProfileSchema)(run.preparedRequest).profileEnvelope,
+                );
             if (run.contextId === null) {
               await transaction.conversationRun.update({
                 where: { id: run.id },
@@ -313,7 +317,12 @@ export namespace ConversationContext {
             await Lane.assertFence(transaction, key, input);
             const context = run.contextId
               ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ActiveContext.ensure(transaction, key, chatTools.availableProfile, initialMemory);
+              : await ActiveContext.ensure(
+                  transaction,
+                  key,
+                  initialMemory,
+                  Schema.decodeUnknownSync(PreparedToolProfileSchema)(run.preparedRequest).profileEnvelope,
+                );
             if (context.status !== "active") throw new Error("Pinned context is not active");
             if (context.modelProfileFingerprint !== run.modelProfileFingerprint) {
               throw new Error("Active context profile does not match the prepared run");
@@ -556,7 +565,6 @@ export namespace ConversationContext {
               : await ActiveContext.ensure(
                   transaction,
                   key,
-                  input.toolProfile,
                   Prompt.renderMemory({ checkpoint: "", scopes: [] }),
                   input.profileEnvelope,
                 );

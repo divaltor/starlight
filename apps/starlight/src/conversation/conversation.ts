@@ -521,7 +521,6 @@ export namespace Conversation {
 
       function claimRun(key: ConversationKey.Value) {
         const toolProfile = chatTools.availableProfile;
-        const profileEnvelope = Prompt.renderEnvelope({ toolProfile });
         return database
           .transaction(async (transaction): Promise<ClaimedRun | DrainResult> => {
             const where = ConversationKey.toDb(key);
@@ -586,6 +585,11 @@ export namespace Conversation {
               };
             }
 
+            const chat = await transaction.chat.findUniqueOrThrow({
+              where: { id: where.chatId },
+              select: { title: true },
+            });
+            const profileEnvelope = Prompt.renderEnvelope({ chatTitle: chat.title, toolProfile });
             const pendingInputs = await transaction.conversationInput.findMany({
               where: {
                 ...where,

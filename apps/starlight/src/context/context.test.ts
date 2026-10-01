@@ -113,6 +113,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable attribute
               modelProfileFingerprint: new Bun.CryptoHasher("sha256")
                 .update(Prompt.renderEnvelope({ toolProfile: [] }))
                 .digest("hex"),
+              preparedRequest: { profileEnvelope: Prompt.renderEnvelope({ toolProfile: [] }), toolProfile: [] },
               replyEligible: true,
               status: "finalized",
               threadKey: 0,
@@ -810,6 +811,7 @@ test.skipIf(!databaseUrl)(
                 inputStartRevision: 1,
                 inputs: { create: { inputId: inputA.id, ordinal: 0 } },
                 modelProfileFingerprint: Prompt.profileFingerprint([]),
+                preparedRequest: { profileEnvelope: Prompt.renderEnvelope({ toolProfile: [] }), toolProfile: [] },
                 replyEligible: true,
                 status: "finalized",
                 threadKey: 0,
@@ -835,6 +837,7 @@ test.skipIf(!databaseUrl)(
                 inputStartRevision: 2,
                 inputs: { create: { inputId: inputB.id, ordinal: 0 } },
                 modelProfileFingerprint: Prompt.profileFingerprint([]),
+                preparedRequest: { profileEnvelope: Prompt.renderEnvelope({ toolProfile: [] }), toolProfile: [] },
                 replyEligible: true,
                 status: "finalized",
                 threadKey: 0,
