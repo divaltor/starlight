@@ -16,7 +16,7 @@ test("uses provider-reported cost", () => {
     createProviderMetadata(0.0031),
   );
 
-  expect(usage.reportedCostUsd).toBe(0.0031);
+  expect(usage).toMatchObject({ reportedCostUsd: 0.0031 });
 });
 
 test("sums billing input but keeps final context input separate", () => {

@@ -117,9 +117,10 @@ export namespace Prompt {
   const SIGN_OFF_REPEATS = 3;
   const EMOJI_ENDING = "emoji";
   const sentenceBreak = /(?<=[.!?…])\s+|\n+/u;
-  const trailingPunctuation = /[\s.,!?…]+$/u;
-  const trailingEmoji = /(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|\u200D|\uFE0F)+$/u;
-  const trailingWord = /[\p{L}\p{N}]+$/u;
+  const trailingPunctuation = /(?<![\s.,!?…])[\s.,!?…]+$/u;
+  const trailingEmoji =
+    /(?<!(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|\u200D|\uFE0F))(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|\u200D|\uFE0F)+$/u;
+  const trailingWord = /(?<![\p{L}\p{N}])[\p{L}\p{N}]+$/u;
   const wordCharacter = /[\p{L}\p{N}]/u;
 
   // Delivered replies re-enter context verbatim, so one repeated sentence ending becomes an

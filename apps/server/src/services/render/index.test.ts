@@ -103,7 +103,7 @@ test("renders light card bottom corners without dark pixels", async () => {
   }
 });
 
-test("renders light card bottom corners without dark pixels", async () => {
+test("renders both bottom corner pixels as white on a light card", async () => {
   const { renderTweetImage } = await import(".");
   const server = Bun.serve({
     port: 0,

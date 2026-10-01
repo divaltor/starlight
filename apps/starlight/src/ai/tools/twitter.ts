@@ -93,7 +93,7 @@ export namespace Twitter {
             inputSchema: z.object({ url: postUrl }),
             execute: (input, options) =>
               Effect.runPromise(
-                readChain(new URL(input.url).pathname.replace(/^\/.*?\/status\/(?<id>\d+).*$/iu, "$<id>"), MAX_POSTS),
+                readChain(new URL(input.url).pathname.match(/\/status\/(?<id>\d+)/iu)!.groups!.id!, MAX_POSTS),
                 { signal: options.abortSignal },
               ),
           }),

@@ -116,7 +116,7 @@ export function initTelemetry(backends: TelemetryConfig): void {
 // OTLP/HTTP exporters want the signal path appended; mirrors what SDKs do for
 // the OTEL_EXPORTER_OTLP_ENDPOINT variable.
 function signalEndpoint(endpoint: string, signal: "traces" | "metrics" | "logs"): string {
-  return `${endpoint.replace(/\/+$/u, "")}/v1/${signal}`;
+  return `${endpoint.replace(/(?<!\/)\/+$/u, "")}/v1/${signal}`;
 }
 
 export function createUpdateTracer(): MiddlewareFn<Context> {

@@ -346,19 +346,20 @@ export namespace Conversation {
           );
           if (precomputedActions.length === addressedPayloads.length) {
             const actions = precomputedActions;
+            const actionData = actions.map((action, ordinal) => ({
+              deliveryStatus: "pending" as const,
+              lastError: null,
+              ordinal,
+              payload: action as Prisma.InputJsonObject,
+              runId: claimed.runId,
+              targetMessageId: action.messageId,
+              type: action.type,
+            }));
             yield* database
               .transaction(async (transaction) => {
                 await Lane.assertFence(transaction, claimed.dbKey, claimed);
                 await transaction.conversationRunAction.createMany({
-                  data: actions.map((action, ordinal) => ({
-                    deliveryStatus: "pending",
-                    lastError: null,
-                    ordinal,
-                    payload: action as Prisma.InputJsonObject,
-                    runId: claimed.runId,
-                    targetMessageId: action.messageId,
-                    type: action.type,
-                  })),
+                  data: actionData,
                   skipDuplicates: true,
                 });
                 await transaction.conversationRun.update({

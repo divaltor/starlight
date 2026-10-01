@@ -191,7 +191,8 @@ export interface TextRun {
 const TOKEN_RE =
   /(?<token>https?:\/\/\S+|(?<![\p{L}\p{N}_.%+-])@[A-Za-z0-9_]{1,15}|(?<![\p{L}\p{N}_])#[\p{L}\p{N}_][\p{L}\p{N}_\p{M}]*)/gu;
 // Sentence punctuation hugging a URL belongs to the sentence, not the address.
-const TRAILING_URL_PUNCT_RE = /[.,;:!?"'“”‘’«»‹›「」『』（）【】。、，！？；：…]+$/u;
+const TRAILING_URL_PUNCT_RE =
+  /(?<![.,;:!?"'“”‘’«»‹›「」『』（）【】。、，！？；：…])[.,;:!?"'“”‘’«»‹›「」『』（）【】。、，！？；：…]+$/u;
 
 export function splitTextRuns(line: string): TextRun[] {
   const runs: TextRun[] = [];

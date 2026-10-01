@@ -344,11 +344,10 @@ export namespace ConversationContext {
               take: Prompt.signOffWindow,
             });
             const signOffGuidance = Prompt.renderSignOffGuidance(
-              recentReplies.flatMap((turn) =>
-                Option.toArray(Schema.decodeUnknownOption(DeliveredTextSchema)(turn.content)).map(
-                  (content) => content.action.text,
-                ),
-              ),
+              recentReplies.flatMap((turn) => {
+                const content = Schema.decodeUnknownOption(DeliveredTextSchema)(turn.content);
+                return Option.isSome(content) ? [content.value.action.text] : [];
+              }),
             );
             const frozen = Schema.decodeUnknownSync(PreparedRequestSchema)(run.preparedRequest);
             const current: Model.Message[] = [

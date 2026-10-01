@@ -122,6 +122,14 @@ export namespace DialogueContinuation {
             speakerId: input.senderId?.toString() ?? "unknown",
             text: input.text,
           };
+          const messagesAfterAssistant = [
+            ...messagesAfterReply.map((message) => ({
+              speaker: message.fromFirstName ?? "unknown",
+              speakerId: message.fromId?.toString() ?? "unknown",
+              text: message.text ?? message.caption ?? "[non-text message]",
+            })),
+            currentMessage,
+          ];
           const result = yield* Effect.tryPromise({
             try: (signal) =>
               experimental_evaluate({
@@ -166,14 +174,7 @@ export namespace DialogueContinuation {
                 state: {
                   currentMessage,
                   explicitAddressing: false,
-                  messagesAfterAssistant: [
-                    ...messagesAfterReply.map((message) => ({
-                      speaker: message.fromFirstName ?? "unknown",
-                      speakerId: message.fromId?.toString() ?? "unknown",
-                      text: message.text ?? message.caption ?? "[non-text message]",
-                    })),
-                    currentMessage,
-                  ],
+                  messagesAfterAssistant,
                   recentExchange,
                 },
               }),
