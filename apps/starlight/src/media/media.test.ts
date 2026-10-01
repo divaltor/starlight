@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { FileApiFlavor } from "@grammyjs/files";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 import { Bot } from "grammy";
 import type { Context, Api } from "grammy";
 import { Media } from "@/media/media";

@@ -4,7 +4,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LogRecord } from "@opentelemetry/api-logs";
 import { OtelTracer, Resource } from "@effect/opentelemetry";
 import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 import type { LogLevel } from "effect/LogLevel";
 import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";

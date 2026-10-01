@@ -1,6 +1,6 @@
 import { classifyPdfAsync } from "@firecrawl/pdf-inspector";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest } from "effect/http";
 import type { Api } from "grammy";
 import type { Message } from "grammy/types";
 

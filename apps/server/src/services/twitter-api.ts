@@ -1,7 +1,7 @@
 import { Scraper } from "@the-convocation/twitter-scraper";
 import type { Tweet } from "@the-convocation/twitter-scraper";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import type { Cookies } from "@/storage";
 import { FxEmbedResponseSchema } from "@/services/fxembed/types";
 import type { FxEmbedTweet } from "@/services/fxembed/types";

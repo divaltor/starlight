@@ -1,7 +1,7 @@
 import { tool } from "ai";
 import type { Tool } from "ai";
 import { Context, Effect, Layer, Schema } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { z } from "zod";
 
 export namespace Twitter {

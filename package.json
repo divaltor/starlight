@@ -46,25 +46,25 @@
     "@types/bun": "1.4.2",
     "@typescript/native": "npm:typescript@7.0.2",
     "eslint-plugin-github": "6.1.2",
-    "eslint-plugin-sonarjs": "4.2.1",
-    "lefthook": "2.1.14",
-    "oxfmt": "0.70.0",
-    "oxlint": "1.85.0",
+    "eslint-plugin-sonarjs": "4.2.2",
+    "lefthook": "2.1.15",
+    "oxfmt": "0.71.0",
+    "oxlint": "1.86.0",
     "oxlint-plugin-react-doctor": "0.9.14",
     "oxlint-tsgolint": "7.0.2003",
     "tsdown": "0.23.0",
-    "turbo": "2.11.4",
+    "turbo": "2.11.6",
     "typescript": "7.0.2",
-    "ultracite": "7.12.0"
+    "ultracite": "7.12.2"
   },
   "packageManager": "bun@1.4.2",
   "overrides": {
-    "@effect/platform-node-shared": "4.0.0-rc.117",
+    "@effect/platform-node-shared": "4.0.0",
     "@opentelemetry/core": "2.11.0",
-    "fast-uri": "3.1.5",
-    "find-my-way": "9.7.0",
-    "lodash": "4.18.0",
-    "valibot": "1.4.2"
+    "fast-uri": "4.2.1",
+    "find-my-way": "9.9.0",
+    "lodash": "4.18.1",
+    "valibot": "1.5.0"
   },
   "engines": {
     "bun": ">=1.3.0"
