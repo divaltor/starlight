@@ -136,46 +136,33 @@ async function sendExistingVideoIfExists(
 
 interface FreshDownloadParams {
   ctx: Context;
-  isTwitterLink: boolean;
   link: string;
   messageThreadId?: number;
   tempDirName: string;
-  tweetId: string | null;
+  tweet: FxEmbedTweet | null;
 }
 
 interface FreshDownloadSuccess {
   status: "ok";
-  tweet: FxEmbedTweet | null;
   videoDownloadFailed: boolean;
   videos: VideoInformation[];
 }
 
 async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDownloadSuccess | { status: "failed" }> {
-  const { ctx, isTwitterLink, link, messageThreadId, tempDirName, tweetId } = params;
+  const { ctx, link, messageThreadId, tempDirName, tweet } = params;
 
   try {
-    if (!isTwitterLink || tweetId === null) {
+    try {
       const videos = await downloadVideo(link, tempDirName);
-      return { status: "ok", videos, tweet: null, videoDownloadFailed: false };
+      return { status: "ok", videos, videoDownloadFailed: false };
+    } catch (error) {
+      ctx.logger.warn({ error }, "yt-dlp download failed, trying fxtwitter API fallback");
     }
-
-    const [downloadResult, tweetResult] = await Promise.allSettled([
-      downloadVideo(link, tempDirName),
-      runtime.runPromise(TwitterApi.getFxTweet(tweetId, TWEET_TRANSLATION_LANGUAGE)),
-    ]);
-
-    const tweet = tweetResult.status === "fulfilled" ? tweetResult.value : null;
-
-    if (downloadResult.status === "fulfilled") {
-      return { status: "ok", videos: downloadResult.value, tweet, videoDownloadFailed: false };
-    }
-
-    ctx.logger.warn({ error: downloadResult.reason }, "yt-dlp download failed, trying fxtwitter API fallback");
 
     const apiVideos = tweet?.media?.videos;
 
     if (!(apiVideos && apiVideos.length > 0)) {
-      return { status: "ok", videos: [], tweet, videoDownloadFailed: true };
+      return { status: "ok", videos: [], videoDownloadFailed: true };
     }
 
     const videos: VideoInformation[] = [];
@@ -192,10 +179,10 @@ async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDo
       }
     } catch (fallbackError) {
       ctx.logger.error({ error: fallbackError }, "Fallback video download also failed");
-      return { status: "ok", videos, tweet, videoDownloadFailed: true };
+      return { status: "ok", videos, videoDownloadFailed: true };
     }
 
-    return { status: "ok", videos, tweet, videoDownloadFailed: false };
+    return { status: "ok", videos, videoDownloadFailed: false };
   } catch (error) {
     ctx.logger.error({ error, link }, "Failed to download video");
 
@@ -206,11 +193,12 @@ async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDo
   }
 }
 
-async function sendTweetImageFallback(ctx: Context, tweetId: string, messageThreadId?: number): Promise<void> {
+async function sendTweetImageFallback(ctx: Context, tweet: FxEmbedTweet, messageThreadId?: number): Promise<void> {
+  const tweetId = tweet.id;
   ctx.logger.info({ tweetId }, "No video in tweet, generating image instead");
 
   try {
-    const result = await runtime.runPromise(generateTweetImage(tweetId, "light"));
+    const result = await runtime.runPromise(generateTweetImage(tweetId, "light", tweet));
     const photo = new InputFile(result.buffer, `tweet-${tweetId}.jpg`);
     const options = { caption: getTweetUrl(tweetId), message_thread_id: messageThreadId };
     await (ctx.chat?.type === "private"
@@ -319,50 +307,32 @@ async function sendDownloadedVideo(params: {
   });
 }
 
-async function shouldStopAfterDownloadFailure(params: {
-  ctx: Context;
-  isTwitterLink: boolean;
-  messageThreadId?: number;
-  outcome: FreshDownloadSuccess;
-  tweetId: string | null;
-}): Promise<boolean> {
-  const { ctx, isTwitterLink, messageThreadId, outcome, tweetId } = params;
-
-  if (!(isTwitterLink && outcome.videoDownloadFailed && outcome.videos.length === 0)) {
-    return false;
-  }
-
-  const hasVideo = Boolean(outcome.tweet?.media?.videos && outcome.tweet.media.videos.length > 0);
-
-  if (!hasVideo && outcome.tweet && tweetId !== null) {
-    await sendTweetImageFallback(ctx, tweetId, messageThreadId);
-    return true;
-  }
-
-  await sendTextMessage(ctx, CANT_DOWNLOAD_MESSAGE, {
-    message_thread_id: messageThreadId,
-  });
-  return true;
-}
-
 async function handleVideoRequest(
   ctx: Context,
   link: string,
   ownerId: number,
   messageThreadId?: number,
 ): Promise<void> {
-  await ctx.replyWithChatAction("upload_video");
-
   const tweetId = extractTweetId(link);
-  const isTwitterLink = tweetId !== null;
   const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
   const sourceUrl = isGroupChat && tweetId ? getTweetUrl(tweetId) : undefined;
+  const tweet =
+    tweetId === null
+      ? null
+      : await runtime.runPromise(TwitterApi.getFxTweet(tweetId, TWEET_TRANSLATION_LANGUAGE)).catch((error) => {
+          ctx.logger.warn({ error, tweetId }, "Could not fetch FxTwitter metadata, falling back to yt-dlp");
+          return null;
+        });
 
-  if (
-    isTwitterLink &&
-    tweetId !== null &&
-    (await sendExistingVideoIfExists(ctx, tweetId, ownerId, sourceUrl, messageThreadId))
-  ) {
+  if (tweet && !tweet.media?.videos?.length) {
+    await ctx.replyWithChatAction("upload_photo", { message_thread_id: messageThreadId });
+    await sendTweetImageFallback(ctx, tweet, messageThreadId);
+    return;
+  }
+
+  await ctx.replyWithChatAction("upload_video", { message_thread_id: messageThreadId });
+
+  if (tweetId !== null && (await sendExistingVideoIfExists(ctx, tweetId, ownerId, sourceUrl, messageThreadId))) {
     return;
   }
 
@@ -371,31 +341,23 @@ async function handleVideoRequest(
   try {
     const outcome = await downloadFreshVideos({
       ctx,
-      isTwitterLink,
       link,
       messageThreadId,
       tempDirName: tempDir.name,
-      tweetId,
+      tweet,
     });
 
     if (outcome.status === "failed") {
       return;
     }
 
-    const handledByFallback = await shouldStopAfterDownloadFailure({
-      ctx,
-      isTwitterLink,
-      messageThreadId,
-      outcome,
-      tweetId,
-    });
-
-    if (handledByFallback) {
+    if (outcome.videoDownloadFailed && outcome.videos.length === 0) {
+      await sendTextMessage(ctx, CANT_DOWNLOAD_MESSAGE, { message_thread_id: messageThreadId });
       return;
     }
 
-    const tweetText = outcome.tweet
-      ? [cleanupTweetText(outcome.tweet.getDisplayText()), cleanupTweetText(outcome.tweet.quote?.getDisplayText())]
+    const tweetText = tweet
+      ? [cleanupTweetText(tweet.getDisplayText()), cleanupTweetText(tweet.quote?.getDisplayText())]
           .filter((text): text is string => Boolean(text))
           .join("\n\n") || undefined
       : undefined;

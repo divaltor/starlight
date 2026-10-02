@@ -56,3 +56,34 @@ test("test_preserves_russian_text_in_main_quotes_and_replies_while_translating_o
   expect(result.replyChain?.[0]?.quote?.text).toBe("Spanish text");
   expect(result.replyChain?.[0]?.quote?.translation).toEqual({ sourceLanguage: "es" });
 });
+
+test("test_renders_the_classified_tweet_without_refetching_it", async () => {
+  const tweet = new FxEmbedTweet({
+    author: { avatar_url: "", id: "1", name: "Author", screen_name: "author" },
+    created_at: "2026-09-30",
+    created_timestamp: 1_790_726_400,
+    id: "1",
+    likes: 0,
+    replies: 0,
+    retweets: 0,
+    text: "Already fetched tweet",
+    url: "https://x.com/author/status/1",
+    replying_to: "parent",
+    replying_to_status: "2",
+  });
+
+  const result = await Effect.runPromise(
+    prepareTweetData("1", tweet).pipe(
+      Effect.provideService(TwitterApi.Service, {
+        getTweet: () => Effect.succeed(null),
+        getFxTweet: (id) =>
+          id === "2"
+            ? Effect.succeed(new FxEmbedTweet({ ...tweet, id: "2", text: "Parent tweet", replying_to_status: null }))
+            : Effect.fail(new TwitterApi.TwitterApiError({ message: "Main tweet must not be refetched" })),
+      }),
+    ),
+  );
+
+  expect(result.text).toBe("Already fetched tweet");
+  expect(result.replyChain?.map((reply) => reply.text)).toEqual(["Parent tweet"]);
+});

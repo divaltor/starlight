@@ -145,10 +145,13 @@ function fetchReplyChain(
 }
 
 export const prepareTweetData = Effect.fn("prepareTweetData")(
-  (tweetId: string): Effect.Effect<TweetData, TwitterApi.TwitterApiError | Error, TwitterApi.Service> =>
+  (
+    tweetId: string,
+    fetchedTweet?: FxEmbedTweet,
+  ): Effect.Effect<TweetData, TwitterApi.TwitterApiError | Error, TwitterApi.Service> =>
     Effect.gen(function* () {
       const twitterApi = yield* TwitterApi.Service;
-      const tweet = yield* twitterApi.getFxTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE);
+      const tweet = fetchedTweet ?? (yield* twitterApi.getFxTweet(tweetId, TWEET_IMAGE_TRANSLATION_LANGUAGE));
 
       if (!tweet) {
         yield* Effect.logWarning("Could not fetch tweet", { tweetId });
@@ -180,6 +183,7 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
   (
     tweetId: string,
     theme: Theme = "light",
+    fetchedTweet?: FxEmbedTweet,
   ): Effect.Effect<RenderResult, TwitterApi.TwitterApiError | Error, TwitterApi.Service> =>
     Effect.gen(function* () {
       const s3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/${theme}.jpg`;
@@ -216,7 +220,7 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
         return cachedResult;
       }
 
-      const tweetData = yield* prepareTweetData(tweetId);
+      const tweetData = yield* prepareTweetData(tweetId, fetchedTweet);
 
       yield* Effect.logDebug("Rendering tweet image", { tweetId, theme });
 
