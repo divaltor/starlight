@@ -200,7 +200,14 @@ async function sendTweetImageFallback(ctx: Context, tweet: FxEmbedTweet, message
   try {
     const result = await runtime.runPromise(generateTweetImage(tweetId, "light", tweet));
     const photo = new InputFile(result.buffer, `tweet-${tweetId}.jpg`);
-    const options = { caption: getTweetUrl(tweetId), message_thread_id: messageThreadId };
+    const options = {
+      caption: getTweetUrl(tweetId),
+      message_thread_id: messageThreadId,
+      reply_markup:
+        ctx.chat?.type === "private"
+          ? new InlineKeyboard().text("🌙 Change theme", `tweet_img:toggle:${tweetId}:dark:${ctx.from!.id}`)
+          : undefined,
+    };
     await (ctx.chat?.type === "private"
       ? ctx.replyWithPhoto(photo, options)
       : bot.api.sendPhoto(ctx.chatId!, photo, options));

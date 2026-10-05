@@ -17,7 +17,7 @@ const IMAGE_JPEG_TYPE = "image/jpeg";
 
 function createThemeKeyboard(tweetId: string, currentTheme: Theme, userId: number): InlineKeyboard {
   const nextTheme = currentTheme === "dark" ? "light" : "dark";
-  const buttonText = currentTheme === "dark" ? "☀️ Light" : "🌙 Dark";
+  const buttonText = currentTheme === "dark" ? "☀️ Change theme" : "🌙 Change theme";
 
   return new InlineKeyboard().text(buttonText, `tweet_img:toggle:${tweetId}:${nextTheme}:${userId}`);
 }
