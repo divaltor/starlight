@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SECONDS=0
+TIMEFORMAT='Elapsed: %3R seconds'
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
@@ -8,7 +11,7 @@ export PATH="$HOME/.bun/bin:$PATH"
 
 echo "Installing Bun 1.4.2"
 if [[ "$(bun --version 2>/dev/null || true)" != "1.4.2" ]]; then
-  curl -fsSL https://bun.sh/install | bash -s -- bun-v1.4.2
+  time curl -fsSL --connect-timeout 10 --max-time 60 https://bun.sh/install | bash -s -- bun-v1.4.2
 fi
 if ! grep -Fqx "# Starlight Bun" "$HOME/.bash_profile" 2>/dev/null; then
   cat >> "$HOME/.bash_profile" <<'EOF'
@@ -25,6 +28,7 @@ time bun install --frozen-lockfile
 echo "Generating the Prisma client"
 time bun run db:generate
 
+echo "Ensuring lint swap space"
 # oxlint's JS-plugin arena reserves a ~4 GiB virtual memory region per
 # worker; the Linux overcommit heuristic denies that when RAM + swap is below
 # 4 GiB, crashing lint with an allocator panic. Ensure our swapfile is active
@@ -34,11 +38,11 @@ time bun run db:generate
 # "Text file busy" on live swap, so an already-active file must skip creation.
 if ! sudo swapon --show=NAME --noheadings 2>/dev/null | grep -Fxq /swapfile; then
   if [[ ! -f /swapfile ]]; then
-    sudo fallocate -l 4G /swapfile
+    time sudo fallocate -l 4G /swapfile
     sudo chmod 600 /swapfile
-    sudo mkswap /swapfile
+    time sudo mkswap /swapfile
   fi
-  sudo swapon /swapfile
+  time sudo swapon /swapfile
 fi
 
 echo "Installing classification dependencies"
@@ -49,21 +53,9 @@ for package in libatomic1 libgomp1 libnuma1; do
   fi
 done
 if (( ${#missing_packages[@]} > 0 )); then
-  sudo apt-get update
-  sudo apt-get install -y --no-install-recommends "${missing_packages[@]}"
+  time sudo apt-get update
+  time sudo apt-get install -y --no-install-recommends "${missing_packages[@]}"
 fi
 time uv sync --project classification --frozen
 
-# Approve workspace-defined MCP servers (.amp/settings.json). Every fresh orb
-# treats repo-declared servers as untrusted until explicitly approved; the
-# approval is keyed to the server spec hash, so re-run on each setup.
-# Amp's binary lives in ~/.amp/bin, which is not guaranteed to be on PATH here.
-if [[ -x "$HOME/.amp/bin/amp" ]]; then
-  export PATH="$PATH:$HOME/.amp/bin"
-  amp mcp approve grafana || true
-  amp mcp approve langfuse || true
-else
-  echo "WARNING: amp CLI not found at ~/.amp/bin; skipping MCP server approval" >&2
-fi
-
-echo "Orb setup complete"
+echo "Orb setup complete in ${SECONDS}s"

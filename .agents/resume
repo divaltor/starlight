@@ -1,11 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Re-approve workspace MCP servers in case the stored spec-hash approval was
-# wiped or the server spec changed after the last setup. Idempotent.
-if [[ -x "$HOME/.amp/bin/amp" ]]; then
-  amp mcp approve grafana >/dev/null 2>&1 || true
-  amp mcp approve langfuse >/dev/null 2>&1 || true
+if [[ -z "${AMP_API_KEY:-}" ]]; then
+  echo "WARNING: Skipping MCP approval: AMP_API_KEY is absent; interactive login is not allowed during resume" >&2
+  exit 0
 fi
 
-# No other authentication or reconnect steps are required after an orb wakes.
+if [[ ! -x "$HOME/.amp/bin/amp" ]]; then
+  echo "WARNING: Skipping MCP approval: amp CLI not found at ~/.amp/bin/amp" >&2
+  exit 0
+fi
+
+# Both approvals share a deadline below Amp's ten-second resume wait.
+status=0
+timeout --signal=KILL 8s bash -c '
+  status=0
+  for server in grafana langfuse; do
+    "$HOME/.amp/bin/amp" mcp approve "$server" || status=$?
+  done
+  exit "$status"
+' </dev/null || status=$?
+
+if (( status != 0 )); then
+  echo "WARNING: MCP approval failed or timed out (exit status ${status}); check resume.log for diagnostics" >&2
+fi
