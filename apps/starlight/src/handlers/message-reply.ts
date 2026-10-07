@@ -1,4 +1,5 @@
 import type { Message } from "grammy/types";
+import type { DialogueContinuation } from "@/ai/dialogue-continuation";
 
 const QUOTLY_COMMAND = /^\/q(?:@[a-z\d_]+)?(?:\s|$)/iu;
 // \b is ASCII-only, so it never bounds Cyrillic words; use explicit letter lookarounds.
@@ -41,10 +42,11 @@ export namespace MessageReply {
     readonly text: string;
   }
 
-  export function shouldRespond(options: Options): boolean {
-    if (options.isReply && QUOTLY_COMMAND.test(options.text)) return false;
-    if (options.explicitlyAddressed) return true;
-    if (options.hasSticker) return false;
-    return options.random() < options.randomResponseChance;
+  export function trigger(options: Options): DialogueContinuation.Input["trigger"] | null {
+    if (options.isReply && QUOTLY_COMMAND.test(options.text)) return null;
+    if (options.explicitlyAddressed) return "addressed";
+    if (options.hasSticker) return null;
+    if (options.random() < options.randomResponseChance) return "random";
+    return !options.isReply && options.text.length > 0 ? "continuation" : null;
   }
 }

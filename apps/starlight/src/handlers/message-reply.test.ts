@@ -52,3 +52,26 @@ test("test_forwarded_reply_to_bot_does_not_trigger", () => {
   } as Message;
   expect(MessageReply.isAddressedToBot({ botId: 42, botUsername: "starka_bot", message })).toBe(false);
 });
+
+test.each([
+  { addressed: true, isReply: true, sticker: false, text: "Хватит отвечать", roll: 0.99, expected: "addressed" },
+  { addressed: false, isReply: true, sticker: false, text: "Влад, ты идёшь?", roll: 0, expected: "random" },
+  { addressed: false, isReply: false, sticker: false, text: "А почему?", roll: 0.5, expected: "continuation" },
+  { addressed: false, isReply: true, sticker: false, text: "Влад, ты идёшь?", roll: 0.5, expected: null },
+  { addressed: false, isReply: false, sticker: true, text: "", roll: 0, expected: null },
+  { addressed: true, isReply: false, sticker: true, text: "", roll: 0.5, expected: "addressed" },
+  { addressed: true, isReply: true, sticker: false, text: "/q@quote_bot", roll: 0, expected: null },
+  { addressed: false, isReply: false, sticker: false, text: "", roll: 0.5, expected: null },
+  { addressed: false, isReply: false, sticker: false, text: "Мнение?", roll: 0.01, expected: "continuation" },
+])("test_selects_response_opportunity_without_bypassing_jev_when_$expected", (row) => {
+  expect(
+    MessageReply.trigger({
+      explicitlyAddressed: row.addressed,
+      hasSticker: row.sticker,
+      isReply: row.isReply,
+      random: () => row.roll,
+      randomResponseChance: 0.01,
+      text: row.text,
+    }),
+  ).toBe(row.expected);
+});
