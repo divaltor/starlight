@@ -122,7 +122,7 @@ export class FxEmbedTweet extends Schema.Class<FxEmbedTweet>("FxEmbedTweet")({
   views: Schema.optional(Schema.Number),
 }) {
   getDisplayText(): string {
-    return this.translation?.text ?? this.text;
+    return this.translation?.source_lang === "ru" ? this.text : (this.translation?.text ?? this.text);
   }
 }
 
