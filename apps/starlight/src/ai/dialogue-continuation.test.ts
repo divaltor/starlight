@@ -7,39 +7,16 @@ import { DialogueContinuation } from "@/ai/dialogue-continuation";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { Database } from "@/services/database";
 
-test.each(["addressed", "random"] as const)(
-  "test_evaluates_$0_opportunity_when_bot_has_never_spoken",
-  async (trigger) => {
-    const result = await runDecision({ trigger });
-    expect(result.decision).toEqual({ type: "text" });
-    expect(result.state).toMatchObject({ trigger, explicitAddressing: trigger === "addressed" });
-  },
-);
-
-test("test_stays_silent_when_continuation_has_no_prior_bot_reply", async () => {
-  const result = await runDecision({ trigger: "continuation" });
-  expect(result.decision).toEqual({ type: "silence" });
+test("test_evaluates_random_opportunity_when_bot_has_never_spoken", async () => {
+  const result = await runDecision({});
+  expect(result.decision).toEqual({ type: "text" });
+  expect(result.state).toMatchObject({ trigger: "random", explicitAddressing: false });
 });
 
-test.each([
-  { count: 4, expected: "text" },
-  { count: 5, expected: "silence" },
-])("test_limits_continuation_when_$count_messages_follow_the_bot", async (row) => {
-  const result = await runDecision({
-    messageIds: Array.from({ length: row.count }, (_, index) => 51 + index),
-    replyMessageId: 50,
-    trigger: "continuation",
-  });
-  expect(result.decision).toEqual({ type: row.expected });
+test("test_evaluates_random_opportunity_when_many_messages_follow_the_bot", async () => {
+  const result = await runDecision({ messageIds: [55, 54, 53, 52, 51], replyMessageId: 50 });
+  expect(result.decision).toEqual({ type: "text" });
 });
-
-test.each(["addressed", "random"] as const)(
-  "test_keeps_$0_opportunity_when_continuation_window_has_expired",
-  async (trigger) => {
-    const result = await runDecision({ messageIds: [55, 54, 53, 52, 51], replyMessageId: 50, trigger });
-    expect(result.decision).toEqual({ type: "text" });
-  },
-);
 
 test.each([
   { probability: 0.79, expected: "silence" },
@@ -49,13 +26,10 @@ test.each([
   expect(result.decision).toEqual({ type: row.expected });
 });
 
-test.each(["addressed", "random"] as const)(
-  "test_stays_silent_for_$0_opportunity_when_jev_selects_silence",
-  async (trigger) => {
-    const result = await runDecision({ action: "silence", trigger });
-    expect(result.decision).toEqual({ type: "silence" });
-  },
-);
+test("test_stays_silent_for_random_opportunity_when_jev_selects_silence", async () => {
+  const result = await runDecision({ action: "silence" });
+  expect(result.decision).toEqual({ type: "silence" });
+});
 
 test("test_preserves_reaction_without_generating_text_when_jev_selects_acknowledgement", async () => {
   const result = await runDecision({ action: "reaction" });
@@ -93,7 +67,6 @@ async function runDecision(options: {
   readonly messageIds?: readonly number[];
   readonly probability?: number;
   readonly replyMessageId?: number;
-  readonly trigger?: DialogueContinuation.Input["trigger"];
 }) {
   const client = new PrismaClient({
     adapter: new PrismaPg({ connectionString: "postgresql://test:test@127.0.0.1:1/test" }),
@@ -173,11 +146,11 @@ async function runDecision(options: {
         senderFirstName: "Vlad",
         senderId: 7,
         text: "А почему?",
-        trigger: options.trigger ?? "addressed",
+        trigger: "random",
       });
     }).pipe(
       Effect.provide(
-        DialogueContinuation.layer(model, { messageLimit: 5 }).pipe(
+        DialogueContinuation.layer(model).pipe(
           Layer.provide(
             Layer.succeed(Database.Service)({
               query: (operation) => Effect.promise(() => operation(client)),

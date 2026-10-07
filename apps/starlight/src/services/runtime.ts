@@ -112,9 +112,6 @@ const dialogueContinuation = DialogueContinuation.layer(
     appName: "Starlight",
     compatibility: "strict",
   }).evaluationModel("typesafe/jev-1.13"),
-  {
-    messageLimit: env.DIALOGUE_CONTINUATION_MESSAGE_LIMIT,
-  },
 );
 const database = Database.layer(env.DATABASE_URL);
 const tracing =

@@ -55,7 +55,7 @@ export default composer;
 async function admitMessage(
   ctx: Context,
   message: Message,
-  options: { readonly addressed?: boolean; readonly trigger?: DialogueContinuation.Input["trigger"] | null },
+  options: { readonly addressed?: boolean; readonly trigger?: ReturnType<typeof MessageReply.trigger> },
 ) {
   await runtime.runPromise(
     // Telegram message variants are normalized once at admission.
@@ -72,7 +72,7 @@ async function admitMessage(
           ? { type: "text" }
           : { type: "silence" };
       const decision =
-        options.trigger && text !== null && message.sticker === undefined
+        options.trigger === "random" && text !== null && message.sticker === undefined
           ? yield* dialogueContinuation
               .evaluate({
                 key: { assistantId: ctx.me.id, chatId: ctx.chat!.id, threadKey },
@@ -100,9 +100,7 @@ async function admitMessage(
                       threadKey,
                       trigger: options.trigger,
                     }),
-                    Effect.as<DialogueContinuation.Decision>(
-                      options.trigger === "addressed" ? baseline : { type: "silence" },
-                    ),
+                    Effect.as<DialogueContinuation.Decision>({ type: "silence" }),
                   ),
                 ),
               )

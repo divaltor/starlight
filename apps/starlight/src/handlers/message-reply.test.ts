@@ -56,14 +56,15 @@ test("test_forwarded_reply_to_bot_does_not_trigger", () => {
 test.each([
   { addressed: true, isReply: true, sticker: false, text: "Хватит отвечать", roll: 0.99, expected: "addressed" },
   { addressed: false, isReply: true, sticker: false, text: "Влад, ты идёшь?", roll: 0, expected: "random" },
-  { addressed: false, isReply: false, sticker: false, text: "А почему?", roll: 0.5, expected: "continuation" },
+  { addressed: false, isReply: false, sticker: false, text: "А почему?", roll: 0.5, expected: null },
   { addressed: false, isReply: true, sticker: false, text: "Влад, ты идёшь?", roll: 0.5, expected: null },
   { addressed: false, isReply: false, sticker: true, text: "", roll: 0, expected: null },
   { addressed: true, isReply: false, sticker: true, text: "", roll: 0.5, expected: "addressed" },
   { addressed: true, isReply: true, sticker: false, text: "/q@quote_bot", roll: 0, expected: null },
   { addressed: false, isReply: false, sticker: false, text: "", roll: 0.5, expected: null },
-  { addressed: false, isReply: false, sticker: false, text: "Мнение?", roll: 0.01, expected: "continuation" },
-])("test_selects_response_opportunity_without_bypassing_jev_when_$expected", (row) => {
+  { addressed: false, isReply: false, sticker: false, text: "Мнение?", roll: 0.01, expected: null },
+  { addressed: true, isReply: false, sticker: false, text: "Старка", roll: 0, expected: "addressed" },
+])("test_selects_only_direct_or_random_response_triggers_when_$expected", (row) => {
   expect(
     MessageReply.trigger({
       explicitlyAddressed: row.addressed,
@@ -74,4 +75,12 @@ test.each([
       text: row.text,
     }),
   ).toBe(row.expected);
+});
+
+test("test_bypasses_jev_unless_group_message_has_random_trigger", async () => {
+  const handler = await Bun.file(new URL("message.ts", import.meta.url)).text();
+  const lines = handler.split("\n");
+  expect(lines[lines.findIndex((line) => line.trim().startsWith(".evaluate(")) - 2]).toContain(
+    '.trigger === "random" &&',
+  );
 });

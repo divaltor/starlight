@@ -31,7 +31,6 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       CONVERSATION_BATCH_QUIET_MS: z.coerce.number().int().positive().default(1000),
       CONVERSATION_BATCH_MAX_WAIT_MS: z.coerce.number().int().positive().default(3000),
       CONVERSATION_LANE_LEASE_MS: z.coerce.number().int().min(3000).default(45_000),
-      DIALOGUE_CONTINUATION_MESSAGE_LIMIT: z.coerce.number().int().positive().default(5),
       RANDOM_RESPONSE_CHANCE: z.coerce.number().min(0).max(1).default(0.01),
       MEMORY_RETENTION_IDLE_MS: z.coerce.number().int().positive().default(900_000),
       MEMORY_RETENTION_MAX_PENDING_CHARS: z.coerce.number().int().positive().default(8000),
