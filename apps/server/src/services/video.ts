@@ -86,8 +86,9 @@ export async function downloadVideo(url: string, folder: string): Promise<VideoI
       noOverwrites: true,
       format: "mp4",
       writeInfoJson: true,
+      noWritePlaylistMetafiles: true,
       noCheckCertificates: true,
-      output: `${uuid}.%(ext)s`,
+      output: `${uuid}.%(id)s.%(ext)s`,
     },
     { timeout: VIDEO_DOWNLOAD_TIMEOUT_MS },
   );
