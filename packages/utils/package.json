@@ -13,8 +13,8 @@
   },
   "scripts": {
     "build": "bun run db:generate && bun run -b tsdown",
-    "lint": "tsc -b",
-    "typecheck": "tsc -b",
+    "lint": "bun check -b",
+    "typecheck": "bun check -b",
     "test": "bun test src",
     "format": "oxfmt",
     "db:deploy": "prisma --config prisma.config.ts migrate deploy",

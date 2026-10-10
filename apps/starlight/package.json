@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
-    "lint": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
+    "lint": "bun check",
+    "typecheck": "bun check",
     "test": "bun test src"
   },
   "dependencies": {

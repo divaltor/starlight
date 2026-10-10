@@ -13,8 +13,8 @@
   },
   "scripts": {
     "build": "bun run -b tsdown",
-    "lint": "tsc -b",
-    "typecheck": "tsc -b",
+    "lint": "bun check -b",
+    "typecheck": "bun check -b",
     "format": "oxfmt"
   },
   "devDependencies": {
