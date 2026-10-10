@@ -28,7 +28,7 @@
     "@the-convocation/twitter-scraper": "0.22.3",
     "bullmq": "6.3.11",
     "date-fns": "4.4.0",
-    "effect": "4.0.1",
+    "effect": "4.0.2",
     "grammy": "catalog:",
     "pino": "10.4.0",
     "pino-pretty": "13.2.0",

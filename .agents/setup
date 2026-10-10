@@ -9,9 +9,9 @@ cd "$repo_root"
 
 export PATH="$HOME/.bun/bin:$PATH"
 
-echo "Installing Bun 1.4.2"
-if [[ "$(bun --version 2>/dev/null || true)" != "1.4.2" ]]; then
-  time curl -fsSL --connect-timeout 10 --max-time 60 https://bun.sh/install | bash -s -- bun-v1.4.2
+echo "Installing Bun 1.4.3"
+if [[ "$(bun --version 2>/dev/null || true)" != "1.4.3" ]]; then
+  time curl -fsSL --connect-timeout 10 --max-time 60 https://bun.sh/install | bash -s -- bun-v1.4.3
 fi
 if ! grep -Fqx "# Starlight Bun" "$HOME/.bash_profile" 2>/dev/null; then
   cat >> "$HOME/.bash_profile" <<'EOF'
