@@ -8,10 +8,12 @@ import systemPromptText from "@/ai/system-prompt.txt";
 
 export namespace ChatReply {
   export const systemPrompt = `${personaPromptText}\n\n${systemPromptText}`;
-  export const outputSchemaVersion = "chat-reply-v1";
+  export const outputSchemaVersion = "chat-reply-v2";
   export const maxOutputTokens = 4096;
   export const maxToolOutputBytes = 16 * 1024;
   export const maxToolCalls = 3;
+  const groupReplyLimit = 3;
+  const privateReplyLimit = 5;
 
   const reactionEmojiSchema = z.enum(TelegramDelivery.reactionEmojis);
 
@@ -30,7 +32,7 @@ export namespace ChatReply {
   ]);
 
   export const responseSchema = z.object({
-    replies: z.array(actionSchema).min(1).max(3),
+    replies: z.array(actionSchema).min(1).max(groupReplyLimit),
   });
 
   export type Response = z.infer<typeof responseSchema>;
@@ -64,15 +66,17 @@ export namespace ChatReply {
 
       return Service.of({
         generate: Effect.fn("ChatReply.generate")(function* generate(input) {
+          const replyLimit = input.private === true ? privateReplyLimit : groupReplyLimit;
+
           return yield* model.generate({
             cacheBase: input.cacheBase,
             cachePrefixMessageCount: input.cachePrefixMessageCount,
-            instructions: input.instructions ?? systemPrompt,
+            instructions: `${input.instructions ?? systemPrompt}\n\nReply-item limit for this chat: ${replyLimit}.`,
             maxOutputTokens,
             maxToolOutputBytes,
             maxToolCalls: Object.keys(input.toolset.tools).length > 0 ? maxToolCalls : 0,
             messages: input.messages,
-            outputSchema: responseSchema,
+            outputSchema: responseSchema.extend({ replies: z.array(actionSchema).min(1).max(replyLimit) }),
             private: input.private,
             promptCacheKey: input.promptCacheKey,
             sessionId: input.sessionId,
