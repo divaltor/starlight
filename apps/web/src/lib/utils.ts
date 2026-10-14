@@ -42,6 +42,7 @@ type QuickManagerRead = { cookies: Cookie[]; state: "matched" } | { state: "json
  */
 function readQuickManagerExport(text: string, targetNames: ReadonlySet<string>): QuickManagerRead {
   let parsed: unknown;
+
   try {
     parsed = JSON.parse(text);
   } catch {
@@ -49,13 +50,16 @@ function readQuickManagerExport(text: string, targetNames: ReadonlySet<string>):
   }
 
   const result = CookieQuickManagerSchema.safeParse(parsed);
+
   if (!result.success) {
     return { state: "json-other" };
   }
 
   const cookies: Cookie[] = [];
+
   for (const item of result.data) {
     const name = item["Name raw"];
+
     if (!targetNames.has(name)) {
       continue;
     }
@@ -66,6 +70,7 @@ function readQuickManagerExport(text: string, targetNames: ReadonlySet<string>):
       domain: item["Host raw"],
     });
   }
+
   return { cookies, state: "matched" };
 }
 
@@ -75,19 +80,15 @@ function resolveCookieAttempt(
   attempt: QuickManagerRead,
   targetNames: ReadonlySet<string>,
 ): Cookie[] | null {
-  switch (attempt.state) {
-    case "matched": {
-      return attempt.cookies.length > 0 ? attempt.cookies : null;
-    }
-    case "not-json": {
-      // Not JSON, might be RFC 6265 format
-      return parseRfc6265Cookies(text, targetNames);
-    }
-    default: {
-      // Valid JSON of an unexpected shape
-      return null;
-    }
+  if (attempt.state === "matched") {
+    return attempt.cookies.length > 0 ? attempt.cookies : null;
   }
+
+  if (attempt.state === "not-json") {
+    return parseRfc6265Cookies(text, targetNames);
+  }
+
+  return null;
 }
 
 /** Parse a single "name=value" segment, or undefined when it is not a target cookie. */
@@ -108,10 +109,12 @@ function parseRfc6265Cookies(cookieString: string, targetNames: ReadonlySet<stri
 
   for (const part of cookieString.split(";")) {
     const cookie = parseCookieSegment(part, targetNames);
+
     if (cookie) {
       cookies.push(cookie);
     }
   }
+
   return cookies;
 }
 
@@ -123,7 +126,7 @@ function parseRfc6265Cookies(cookieString: string, targetNames: ReadonlySet<stri
  * @returns Array of Cookie objects or null if invalid
  */
 export function decodeCookies(value: string | null, cookieNames?: string[]): Cookie[] | null {
-  if (!value?.trim()) {
+  if (value === null || value.trim().length === 0) {
     return null;
   }
 

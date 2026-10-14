@@ -2,7 +2,8 @@ const TWITTER_URL_REGEX =
   /(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com|fxtwitter\.com|fixupx\.com)\/\w+\/status\/(?<tweetId>\d+)(?:.+)?/iu;
 
 export function extractTweetId(url: string): string | null {
-  const match = url.match(TWITTER_URL_REGEX);
+  const match = TWITTER_URL_REGEX.exec(url);
+
   return match?.groups?.tweetId ?? null;
 }
 
@@ -11,8 +12,8 @@ export function isTwitterUrl(text: string): boolean {
 }
 
 export function cleanupTweetText(text: string | undefined): string | undefined {
-  if (!text) {
-    return;
+  if (text === undefined || text === "") {
+    return undefined;
   }
 
   return (

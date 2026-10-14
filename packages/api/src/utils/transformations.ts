@@ -17,7 +17,7 @@ function transformTweetsBase<T extends Pick<Tweet, "id" | "createdAt" | "usernam
 
       return {
         id: photo.id,
-        url: photo.s3Url || photo.originalUrl,
+        url: photo.s3Url !== undefined && photo.s3Url !== "" ? photo.s3Url : photo.originalUrl,
         is_nsfw: photo.is_nsfw,
         height: photo.height ?? undefined,
         width: photo.width ?? undefined,
@@ -27,7 +27,7 @@ function transformTweetsBase<T extends Pick<Tweet, "id" | "createdAt" | "usernam
 
     return {
       id: tweet.id,
-      artist: tweet.username ? `@${tweet.username}` : "@good_artist",
+      artist: tweet.username !== null && tweet.username !== "" ? `@${tweet.username}` : "@good_artist",
       date: format(tweet.createdAt, "MMM d, yyyy"),
       photos,
       hasMultipleImages: photos.length > 1,

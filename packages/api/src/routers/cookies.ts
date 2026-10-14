@@ -11,7 +11,7 @@ const cookiesSchema = z.object({
 });
 
 export const saveCookies = protectedProcedure.input(cookiesSchema).handler(async ({ input, context }) => {
-  if (!(context.user && context.databaseUserId)) {
+  if (context.databaseUserId === "") {
     throw new ORPCError("UNAUTHORIZED", {
       message: "Unauthorized",
       status: 401,
@@ -44,7 +44,7 @@ export const saveCookies = protectedProcedure.input(cookiesSchema).handler(async
 
 export const verifyCookies = async ({ context }: { context: AuthContext & Context }) => {
   try {
-    if (!(context.user && context.databaseUserId)) {
+    if (context.user === undefined || context.databaseUserId === undefined || context.databaseUserId === "") {
       return { hasValidCookies: false };
     }
 
@@ -59,7 +59,7 @@ export const verifyCookies = async ({ context }: { context: AuthContext & Contex
 
     const storedCookies = user?.cookies;
 
-    if (!storedCookies) {
+    if (storedCookies === undefined || storedCookies === null || storedCookies === "") {
       return { hasValidCookies: false };
     }
 
@@ -77,6 +77,7 @@ export const verifyCookies = async ({ context }: { context: AuthContext & Contex
           cookies: null,
         },
       });
+
       return { hasValidCookies: false };
     }
 

@@ -27,9 +27,13 @@ const boundary = bot.errorBoundary((error) => {
 });
 
 boundary.use(videoHandler);
+
 boundary.use(tweetImageHandler);
+
 boundary.use(imageHandler);
+
 boundary.use(startHandler);
+
 boundary.use(chatMemberHandler);
 
 const workers = [imagesWorker, classificationWorker, embeddingsWorker, scrapperWorker];
@@ -44,8 +48,8 @@ function handleUpdateTimeout(update: Update, task: Promise<void>) {
 
   logger.error({ updateId: update.update_id, updateType }, "Update handler timed out; evicted from runner queue");
 
-  task.catch((error) => {
-    logger.error({ err: error, updateId: update.update_id, updateType }, "Timed-out update handler failed");
+  task.catch((cause: unknown) => {
+    logger.error({ err: cause, updateId: update.update_id, updateType }, "Timed-out update handler failed");
   });
 }
 
@@ -59,20 +63,41 @@ const runner = run(bot, {
 });
 
 for (const worker of workers) {
-  worker.run().catch((error) => logger.error({ err: error }, "Queue worker stopped"));
+  worker.run().catch((cause: unknown) => {
+    logger.error({ err: cause }, "Queue worker stopped");
+  });
 }
 
 logger.info("Bot is running...");
 
 async function shutdown() {
   logger.info("Stopping bot...");
+
   if (runner.isRunning()) {
     await runner.stop();
   }
-  await Promise.all(workers.map((worker) => worker.close()));
-  await Promise.all(queues.map((queue) => queue.close()));
+
+  await Promise.all(
+    workers.map(async (worker) => {
+      await worker.close();
+    }),
+  );
+  await Promise.all(
+    queues.map(async (queue) => {
+      await queue.close();
+    }),
+  );
   await redis.quit();
 }
 
-process.once("SIGINT", shutdown);
-process.once("SIGTERM", shutdown);
+process.once("SIGINT", () => {
+  void shutdown().catch((cause: unknown) => {
+    logger.error({ err: cause }, "Shutdown failed");
+  });
+});
+
+process.once("SIGTERM", () => {
+  void shutdown().catch((cause: unknown) => {
+    logger.error({ err: cause }, "Shutdown failed");
+  });
+});

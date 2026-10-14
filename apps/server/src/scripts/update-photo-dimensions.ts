@@ -9,7 +9,7 @@ import { s3 } from "@/storage";
 //   BATCH_SIZE=100        (batch size for processing, default: 50)
 
 const DRY_RUN = process.env.DRY_RUN === "1";
-const BATCH_SIZE = Math.trunc(Number(process.env.BATCH_SIZE || "25"));
+const BATCH_SIZE = Math.trunc(Number((process.env.BATCH_SIZE ?? "") === "" ? "25" : process.env.BATCH_SIZE));
 
 type DimensionUpdateResult = "updated" | "failed" | "skipped";
 
@@ -19,8 +19,9 @@ async function updatePhotoDimension(photo: {
   s3Path: string | null;
 }): Promise<DimensionUpdateResult> {
   try {
-    if (!photo.s3Path) {
+    if (photo.s3Path === null || photo.s3Path === "") {
       logger.warn({ photoId: photo.id, userId: photo.userId }, "Photo has no s3Path");
+
       return "skipped";
     }
 
@@ -29,8 +30,12 @@ async function updatePhotoDimension(photo: {
 
     const metadata = await new Bun.Image(imageBuffer).metadata().catch(() => ({ height: null, width: null }));
 
-    if (!(metadata.height && metadata.width)) {
+    const hasHeight = metadata.height !== null && metadata.height !== 0 && !Number.isNaN(metadata.height);
+    const hasWidth = metadata.width !== null && metadata.width !== 0 && !Number.isNaN(metadata.width);
+
+    if (!hasHeight || !hasWidth) {
       logger.warn({ photoId: photo.id, userId: photo.userId, metadata }, "Failed to extract dimensions");
+
       return "failed";
     }
 
@@ -59,6 +64,7 @@ async function updatePhotoDimension(photo: {
     return "updated";
   } catch (error) {
     logger.error({ error, photoId: photo.id, userId: photo.userId }, "Failed to update photo dimensions");
+
     return "failed";
   }
 }
@@ -93,6 +99,7 @@ async function main() {
 
   if (photos.length === 0) {
     logger.info("No photos need dimension updates");
+
     return;
   }
 
@@ -111,7 +118,7 @@ async function main() {
       "Processing batch",
     );
 
-    const results = await Promise.all(batch.map((photo) => updatePhotoDimension(photo)));
+    const results = await Promise.all(batch.map(async (photo) => await updatePhotoDimension(photo)));
 
     for (const result of results) {
       if (result === "updated") {
@@ -134,13 +141,13 @@ async function main() {
   );
 }
 
-main()
-  .catch((error) => {
-    logger.error({ error }, "Photo dimensions update script failed");
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect().catch((error) => {
-      logger.error({ error }, "Failed to disconnect from database");
-    });
+try {
+  await main();
+} catch (error) {
+  logger.error({ error }, "Photo dimensions update script failed");
+  process.exitCode = 1;
+} finally {
+  await prisma.$disconnect().catch((cause: unknown) => {
+    logger.error({ error: cause }, "Failed to disconnect from database");
   });
+}

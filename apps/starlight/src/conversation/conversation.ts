@@ -8,7 +8,7 @@ import { Prompt } from "@/context/prompt";
 import { ConversationContext } from "@/context/context";
 import { ConversationKey } from "@/conversation/key";
 import { Lane } from "@/conversation/lane";
-import { PreparedRequestSchema, PreparedToolProfileSchema } from "@/conversation/run-artifacts";
+import { InputPayloadSchema, PreparedRequestSchema, PreparedToolProfileSchema } from "@/conversation/run-artifacts";
 import type { InputPayload } from "@/conversation/run-artifacts";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { Memory } from "@/memory/memory";
@@ -20,10 +20,12 @@ export namespace Conversation {
   const MAX_BATCH_MESSAGES = 20;
   const MAX_ALBUM_MESSAGES = 10;
   const MAX_DELIVERY_RETRIES = 3;
+
   const DELIVERY_RETRY_SCHEDULE = Schedule.exponential("1 second", 2.5).pipe(
     Schedule.modifyDelay((metadata) => Effect.succeed(Duration.min(metadata.duration, Duration.seconds(5)))),
     Schedule.upTo({ times: MAX_DELIVERY_RETRIES }),
   );
+
   const MAX_MODEL_ATTEMPTS = 5;
   const MAX_RESPONSE_MESSAGE_DELAY_MS = 2500;
   const MIN_RESPONSE_MESSAGE_DELAY_MS = 1500;
@@ -100,24 +102,30 @@ export namespace Conversation {
       const admit = Effect.fn("Conversation.admit")(function* admit(input: AdmissionInput) {
         const traceCarrier: Record<string, string> = {};
         propagation.inject(context.active(), traceCarrier);
+
         const traceContext = {
           traceparent: traceCarrier.traceparent ?? null,
           tracestate: traceCarrier.tracestate ?? null,
         };
+
         const batchQuietMs = input.payload.mediaGroupId === null ? options.quietMs : ALBUM_SETTLE_MS;
         const batchMaxWaitMs = input.payload.mediaGroupId === null ? options.maxWaitMs : ALBUM_SETTLE_MS;
+
         const mediaReferences =
           input.payload.media.length > 0 || input.payload.repliedMedia.length > 0
             ? { current: input.payload.media, replied: input.payload.repliedMedia }
             : undefined;
+
         const admitted = yield* database
           .transaction(async (transaction) => {
             const key = ConversationKey.toDb(input.key);
+
             const sourceRevision = `${
               input.payload.editDate === null ? "original" : "edit"
             }:${input.payload.editDate ?? input.payload.date}:${new Bun.CryptoHasher("sha256")
               .update(Prompt.canonicalEncode(input.payload))
               .digest("hex")}`;
+
             await transaction.chat.upsert({
               where: { id: BigInt(input.key.chatId) },
               create: {
@@ -129,6 +137,7 @@ export namespace Conversation {
               },
               update: { title: input.chatTitle, username: input.chatUsername },
             });
+
             const sender =
               input.payload.senderId === null
                 ? null
@@ -148,6 +157,7 @@ export namespace Conversation {
                       username: input.payload.senderUsername,
                     },
                   });
+
             const rawMessage = {
               caption: input.payload.media.length > 0 ? input.payload.text : null,
               chatId: BigInt(input.key.chatId),
@@ -163,6 +173,7 @@ export namespace Conversation {
               replyToMessageId: input.payload.replyToMessageId,
               text: input.payload.media.length > 0 ? null : input.payload.text,
             };
+
             await transaction.message.upsert({
               where: {
                 messageId_chatId: {
@@ -181,6 +192,7 @@ export namespace Conversation {
             // Admission upserts before locking so duplicate detection and revision bookkeeping
             // run under the same lane lock the drain side uses.
             await Lane.lockLane(transaction, key);
+
             const existing = await transaction.conversationInput.findFirst({
               where: {
                 OR: [
@@ -194,10 +206,12 @@ export namespace Conversation {
                 ],
               },
             });
+
             if (existing) {
               const outbox = await transaction.conversationWakeOutbox.findUnique({
                 where: { assistantId_chatId_threadKey: key },
               });
+
               return {
                 duplicate: true,
                 inputId: existing.id,
@@ -209,10 +223,12 @@ export namespace Conversation {
             const lane = await transaction.conversationLane.findUniqueOrThrow({
               where: { assistantId_chatId_threadKey: key },
             });
+
             const now = new Date();
             const firstPendingAt = lane.firstPendingAt ?? now;
             const pendingRevision = lane.pendingRevision + 1;
             const wakeAt = new Date(Math.min(now.getTime() + batchQuietMs, firstPendingAt.getTime() + batchMaxWaitMs));
+
             const created = await transaction.conversationInput.create({
               data: {
                 ...key,
@@ -228,6 +244,7 @@ export namespace Conversation {
                 sourceUpdateId: input.updateId,
               },
             });
+
             await transaction.conversationLane.update({
               where: { assistantId_chatId_threadKey: key },
               data: { firstPendingAt, nextWakeAt: wakeAt, pendingRevision },
@@ -272,32 +289,40 @@ export namespace Conversation {
             pendingRevision: admitted.pendingRevision,
           }),
         );
+
         return admitted;
       });
 
       const drain = Effect.fn("Conversation.drain")(function* drain(input: LaneWakeInput) {
         const claimed = yield* claimRun(input.key);
+
         if (claimed.kind !== "claimed") return { kind: claimed.kind };
 
         const claimedDrain = Effect.gen(function* drainClaimed() {
           const chat = yield* database
-            .query((client) =>
-              client.chat.findUnique({
-                where: { id: BigInt(claimed.key.chatId) },
-                select: { isPremium: true, isPrivate: true, title: true },
-              }),
+            .query(
+              async (client) =>
+                await client.chat.findUnique({
+                  where: { id: BigInt(claimed.key.chatId) },
+                  select: { isPremium: true, isPrivate: true, title: true },
+                }),
             )
             .pipe(Effect.mapError(failed("Failed to verify chat access")));
-          if (!chat?.isPremium) {
+
+          if (chat?.isPremium !== true) {
             yield* blockRun(claimed, "chat-access-revoked", "Chat access is not allowed");
+
             return { kind: "completed" as const, runId: claimed.runId };
           }
+
           const telemetryPrivate = chat.isPrivate;
+
           const telemetry = {
             telemetryPrivate,
             telemetryTraceName: chat.title ?? undefined,
             telemetryUserId: claimed.inputs.at(-1)?.senderTelegramId?.toString(),
           };
+
           // A permanent checkpoint failure (e.g. summarization that can never succeed) would
           // otherwise be redriven forever: failed hardSafety attempts are deliberately
           // resumable with no attempt bound.
@@ -312,14 +337,19 @@ export namespace Conversation {
             claimed,
             "checkpoint-failed",
           );
+
           if (resumedCheckpoint !== null) {
             yield* memory.flush(claimed.dbKey).pipe(Effect.mapError(domainFailed));
           }
+
           if (claimed.status === "generated" || claimed.status === "dispatching") {
             yield* dispatchRun(claimed);
+
             return yield* finalizeClaimed(claimed);
           }
+
           if (claimed.status === "failed") return yield* finalizeClaimed(claimed);
+
           if (claimed.status === "blocked") {
             // Crash recovery: blockRun releases the lane in the same transaction, so a live claim
             // on a blocked run means it was blocked before that existed. Release the lane instead
@@ -328,6 +358,7 @@ export namespace Conversation {
             yield* Effect.logWarning("Released a lane pinned by a blocked run").pipe(
               Effect.annotateLogs({ runId: claimed.runId }),
             );
+
             return { kind: "completed" as const, runId: claimed.runId };
           }
 
@@ -336,16 +367,20 @@ export namespace Conversation {
           if (!claimed.replyEligible) return yield* finalizeClaimed(claimed);
 
           const addressedPayloads = claimed.inputs.flatMap((item) => {
-            const payload = item.payload as InputPayload;
+            const payload = Schema.decodeUnknownSync(InputPayloadSchema)(item.payload);
+
             return payload.addressed ? [payload] : [];
           });
+
           const precomputedActions = addressedPayloads.flatMap((payload) =>
             payload.precomputedReaction === undefined
               ? []
               : [{ ...payload.precomputedReaction, type: "reaction" as const }],
           );
+
           if (precomputedActions.length === addressedPayloads.length) {
             const actions = precomputedActions;
+
             const actionData = actions.map((action, ordinal) => ({
               deliveryStatus: "pending" as const,
               lastError: null,
@@ -355,6 +390,7 @@ export namespace Conversation {
               targetMessageId: action.messageId,
               type: action.type,
             }));
+
             yield* database
               .transaction(async (transaction) => {
                 await Lane.assertFence(transaction, claimed.dbKey, claimed);
@@ -378,10 +414,12 @@ export namespace Conversation {
                 Effect.mapError(failed("Failed to persist precomputed reactions")),
               );
             yield* dispatchRun(claimed);
+
             return yield* finalizeClaimed(claimed);
           }
 
           const frozenProfile = Schema.decodeUnknownSync(PreparedToolProfileSchema)(claimed.preparedRequest);
+
           const transitioned = yield* blockOnPermanent(
             conversationContext.transitionProfile({
               key: claimed.key,
@@ -396,9 +434,11 @@ export namespace Conversation {
             claimed,
             "profile-transition-required",
           );
+
           if (transitioned.summarized) {
             yield* memory.flush(claimed.dbKey).pipe(Effect.mapError(domainFailed));
           }
+
           const prepared = yield* prepareRun(claimed, frozenProfile).pipe(
             Effect.catch((error) =>
               error.retryable
@@ -412,6 +452,7 @@ export namespace Conversation {
             claimed,
             "context-prepare-failed",
           );
+
           if (exceedsUsableContext(contextRequest, options)) {
             yield* blockOnPermanent(
               conversationContext.checkpoint({
@@ -429,12 +470,14 @@ export namespace Conversation {
             contextRequest = yield* conversationContext
               .prepare({ fencingToken: claimed.fencingToken, runId: claimed.runId })
               .pipe(Effect.mapError(domainFailed));
+
             if (exceedsUsableContext(contextRequest, options)) {
               yield* blockRun(
                 claimed,
                 OVERSIZED_INPUT_ERROR_TAG,
                 "Prepared request exceeds the hard context limit after checkpoint",
               );
+
               return yield* new ConversationError({
                 message: "Prepared request exceeds the hard context limit after checkpoint",
                 retryable: false,
@@ -449,11 +492,14 @@ export namespace Conversation {
             attemptNumber: claimed.attemptCount + 1,
             ...telemetry,
           });
+
           const invocation =
             attempted.kind === "contextOverflow"
               ? yield* recoverContextOverflow(claimed, prepared, telemetry)
               : attempted;
+
           if (invocation.kind === "failed") return yield* finalizeClaimed(claimed);
+
           if (invocation.kind === "contextOverflow") {
             return yield* new ConversationError({
               message: "Model context limit exceeded after checkpoint",
@@ -463,8 +509,10 @@ export namespace Conversation {
 
           yield* persistGeneration(claimed, invocation.generated, precomputedActions);
           yield* dispatchRun(claimed);
+
           return yield* finalizeClaimed(claimed);
         });
+
         return yield* Effect.raceFirst(claimedDrain, maintainLease(claimed)).pipe(
           Effect.tapError(() => expireLease(claimed)),
         );
@@ -472,15 +520,16 @@ export namespace Conversation {
 
       const maintainLease = Effect.fn("Conversation.maintainLease")(function* maintainLease(claimed: ClaimedRun) {
         const renew = database
-          .query((client) =>
-            client.conversationLane.updateMany({
-              where: {
-                ...claimed.dbKey,
-                activeRunId: claimed.runId,
-                fencingToken: claimed.fencingToken,
-              },
-              data: { leaseUntil: new Date(Date.now() + options.leaseMs) },
-            }),
+          .query(
+            async (client) =>
+              await client.conversationLane.updateMany({
+                where: {
+                  ...claimed.dbKey,
+                  activeRunId: claimed.runId,
+                  fencingToken: claimed.fencingToken,
+                },
+                data: { leaseUntil: new Date(Date.now() + options.leaseMs) },
+              }),
           )
           .pipe(
             Effect.mapError(failed("Failed to renew conversation lease")),
@@ -493,6 +542,7 @@ export namespace Conversation {
             ),
             Effect.delay(Duration.millis(Math.floor(options.leaseMs / 3))),
           );
+
         return yield* Effect.forever(renew);
       });
 
@@ -501,6 +551,7 @@ export namespace Conversation {
           .appendFinalized({ fencingToken: claimed.fencingToken, runId: claimed.runId })
           .pipe(Effect.mapError(domainFailed));
         yield* finalizeRun(claimed);
+
         return { kind: "completed" as const, runId: claimed.runId };
       });
 
@@ -521,15 +572,19 @@ export namespace Conversation {
 
       function claimRun(key: ConversationKey.Value) {
         const toolProfile = chatTools.availableProfile;
+
         return database
           .transaction(async (transaction): Promise<ClaimedRun | DrainResult> => {
             const where = ConversationKey.toDb(key);
             await Lane.lockLane(transaction, where);
+
             const lane = await transaction.conversationLane.findUnique({
               where: { assistantId_chatId_threadKey: where },
             });
+
             if (!lane || lane.pendingRevision <= lane.processedRevision) return { kind: "up-to-date" };
             const now = new Date();
+
             if (lane.nextWakeAt && lane.nextWakeAt > now) {
               await transaction.conversationWakeOutbox.updateMany({
                 where,
@@ -539,9 +594,11 @@ export namespace Conversation {
                   publishedAt: null,
                 },
               });
+
               return { kind: "not-due" };
             }
-            if (lane.activeRunId && lane.leaseUntil && lane.leaseUntil > now) {
+
+            if (lane.activeRunId !== null && lane.activeRunId !== "" && lane.leaseUntil && lane.leaseUntil > now) {
               await transaction.conversationWakeOutbox.updateMany({
                 where,
                 data: {
@@ -550,18 +607,21 @@ export namespace Conversation {
                   publishedAt: null,
                 },
               });
+
               return { kind: "busy" };
             }
 
             const fencingToken = lane.fencingToken + 1n;
             const leaseUntil = new Date(now.getTime() + options.leaseMs);
-            if (lane.activeRunId) {
+
+            if (lane.activeRunId !== null && lane.activeRunId !== "") {
               const active = await transaction.conversationRun.findUniqueOrThrow({
                 where: { id: lane.activeRunId },
                 include: {
                   inputs: { include: { input: true }, orderBy: { ordinal: "asc" } },
                 },
               });
+
               await transaction.conversationRun.update({
                 where: { id: active.id },
                 data: { fencingToken },
@@ -570,6 +630,7 @@ export namespace Conversation {
                 where: { assistantId_chatId_threadKey: where },
                 data: { fencingToken, leaseOwner: crypto.randomUUID(), leaseUntil },
               });
+
               return {
                 fencingToken,
                 inputEndRevision: active.inputEndRevision,
@@ -589,7 +650,9 @@ export namespace Conversation {
               where: { id: where.chatId },
               select: { title: true },
             });
+
             const profileEnvelope = Prompt.renderEnvelope({ chatTitle: chat.title, toolProfile });
+
             const pendingInputs = await transaction.conversationInput.findMany({
               where: {
                 ...where,
@@ -601,19 +664,33 @@ export namespace Conversation {
               orderBy: { admittedRevision: "asc" },
               take: MAX_BATCH_MESSAGES + MAX_ALBUM_MESSAGES,
             });
+
             const initialInputs = pendingInputs.slice(0, MAX_BATCH_MESSAGES);
-            const finalMediaGroupId = (initialInputs.at(-1)?.payload as InputPayload | undefined)?.mediaGroupId ?? null;
+            const finalInput = initialInputs.at(-1);
+
+            const finalMediaGroupId =
+              finalInput === undefined
+                ? null
+                : Schema.decodeUnknownSync(InputPayloadSchema)(finalInput.payload).mediaGroupId;
+
             const mediaGroupTail = pendingInputs.slice(initialInputs.length);
+
             const mediaGroupEnd = mediaGroupTail.findIndex(
-              (item) => (item.payload as InputPayload).mediaGroupId !== finalMediaGroupId,
+              (item) => Schema.decodeUnknownSync(InputPayloadSchema)(item.payload).mediaGroupId !== finalMediaGroupId,
             );
+
             const mediaGroupBatchEnd =
               mediaGroupEnd === -1 ? pendingInputs.length : initialInputs.length + mediaGroupEnd;
+
             const inputs = finalMediaGroupId === null ? initialInputs : pendingInputs.slice(0, mediaGroupBatchEnd);
             const lastInput = inputs.at(-1)!;
+
             // The eligibility decision is persisted once at freeze time; retries must not
             // recompute (and a future probabilistic policy must not re-roll) it.
-            const replyEligible = inputs.some((item) => (item.payload as InputPayload).addressed);
+            const replyEligible = inputs.some(
+              (item) => Schema.decodeUnknownSync(InputPayloadSchema)(item.payload).addressed,
+            );
+
             const run = await transaction.conversationRun.create({
               data: {
                 ...where,
@@ -629,6 +706,7 @@ export namespace Conversation {
                 },
               },
             });
+
             await transaction.conversationInput.updateMany({
               where: { id: { in: inputs.map((item) => item.id) } },
               data: { claimedRunId: run.id },
@@ -662,8 +740,9 @@ export namespace Conversation {
 
       function prepareRun(claimed: ClaimedRun, frozenProfile: typeof PreparedToolProfileSchema.Type) {
         return Effect.gen(function* prepare() {
-          const payloads = claimed.inputs.map((input) => input.payload as InputPayload);
+          const payloads = claimed.inputs.map((input) => Schema.decodeUnknownSync(InputPayloadSchema)(input.payload));
           const stored = Option.getOrNull(Schema.decodeUnknownOption(PreparedRequestSchema)(claimed.preparedRequest));
+
           // Only what time erodes is frozen; rendering rebuilds deterministically from the
           // immutable batch in ConversationContext.prepare.
           const recalled =
@@ -675,6 +754,7 @@ export namespace Conversation {
                   })
                   .pipe(Effect.mapError(domainFailed))
               : null;
+
           const frozen =
             stored ??
             ({
@@ -687,6 +767,7 @@ export namespace Conversation {
                 .slice(0, 32),
               toolProfile: frozenProfile.toolProfile,
             } satisfies typeof PreparedRequestSchema.Type);
+
           if (stored === null) {
             yield* database
               .transaction(async (transaction) => {
@@ -703,6 +784,7 @@ export namespace Conversation {
               })
               .pipe(Effect.mapError(failed("Failed to prepare conversation run")));
           }
+
           return {
             sessionId: frozen.sessionId,
           } satisfies PreparedRun;
@@ -772,7 +854,9 @@ export namespace Conversation {
                 ) {
                   return Effect.succeed<InvocationResult>({ kind: "contextOverflow" });
                 }
+
                 const exhausted = !error.retryable || invocation.attemptNumber >= MAX_MODEL_ATTEMPTS;
+
                 if (!exhausted) {
                   return recordModelFailure(claimed, error, false).pipe(
                     Effect.andThen(
@@ -786,6 +870,7 @@ export namespace Conversation {
                     ),
                   );
                 }
+
                 return recordModelFailure(claimed, error, true).pipe(Effect.as<InvocationResult>({ kind: "failed" }));
               }),
             );
@@ -828,7 +913,9 @@ export namespace Conversation {
                 ),
               );
             }
+
             const message = "Prepared request exceeds the usable context limit after checkpoint";
+
             return blockRun(claimed, OVERSIZED_INPUT_ERROR_TAG, message).pipe(
               Effect.andThen(Effect.fail(new ConversationError({ message, retryable: false }))),
             );
@@ -845,22 +932,23 @@ export namespace Conversation {
           text: event.text,
           type: event.type,
         }));
-        const replies = Conversation.mergePrecomputedReactions(precomputedActions, generated.output.replies);
+
+        const replies = mergePrecomputedReactions(precomputedActions, generated.output.replies);
+
         const usage: Prisma.InputJsonObject = {
-          // TS7 demands index signatures Json columns don't have; the chain is the
-          // boundary escape.
-          // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- deliberate
-          generation: structuredClone(generated.usage) as unknown as Prisma.InputJsonObject,
-          // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- deliberate
-          steps: structuredClone(generated.steps) as unknown as Prisma.InputJsonArray,
+          generation: structuredClone(generated.usage),
+          steps: structuredClone(generated.steps.map((step) => ({ ...step }))),
         };
+
         return database
           .transaction(async (transaction) => {
             await Lane.assertFence(transaction, claimed.dbKey, claimed);
+
             const run = await transaction.conversationRun.findUniqueOrThrow({
               where: { id: claimed.runId },
               select: { contextId: true },
             });
+
             await transaction.conversationToolCall.createMany({
               data: generated.toolEvents.map((event) => ({
                 durationMs: event.durationMs,
@@ -884,18 +972,20 @@ export namespace Conversation {
                     deliveryStatus: "delivered" as const,
                     lastError: null,
                     ordinal,
-                    payload: action as Prisma.InputJsonObject,
+                    payload: action,
                     runId: claimed.runId,
                     targetMessageId: null,
                     type: action.type,
                   };
                 }
+
                 const target = action.type === "reaction" ? action.messageId : action.replyTo;
+
                 return {
                   deliveryStatus: "pending" as const,
                   lastError: null,
                   ordinal,
-                  payload: action as Prisma.InputJsonObject,
+                  payload: action,
                   runId: claimed.runId,
                   targetMessageId: target ?? null,
                   type: action.type,
@@ -908,12 +998,13 @@ export namespace Conversation {
               data: {
                 finishReason: generated.finishReason,
                 generatedAt: new Date(),
-                generatedOutput: { ...generated.output, replies } as Prisma.InputJsonObject,
+                generatedOutput: { ...generated.output, replies },
                 modelTranscript: transcript,
                 status: "generated",
                 usage,
               },
             });
+
             if (run.contextId !== null) {
               await transaction.conversationContext.update({
                 where: { id: run.contextId },
@@ -947,12 +1038,14 @@ export namespace Conversation {
               });
             })
             .pipe(Effect.mapError(failed("Failed to start action dispatch")));
+
           const actions = yield* database
-            .query((client) =>
-              client.conversationRunAction.findMany({
-                where: { runId: claimed.runId },
-                orderBy: { ordinal: "asc" },
-              }),
+            .query(
+              async (client) =>
+                await client.conversationRunAction.findMany({
+                  where: { runId: claimed.runId },
+                  orderBy: { ordinal: "asc" },
+                }),
             )
             .pipe(Effect.mapError(failed("Failed to load conversation actions")));
 
@@ -962,18 +1055,22 @@ export namespace Conversation {
           // action types, so a pure model run keeps its existing fail-stop behavior.
           const precomputedMessageIds = new Set(
             claimed.inputs.flatMap((item) => {
-              const payload = item.payload as InputPayload;
+              const payload = Schema.decodeUnknownSync(InputPayloadSchema)(item.payload);
+
               return payload.addressed && payload.precomputedReaction !== undefined
                 ? [payload.precomputedReaction.messageId]
                 : [];
             }),
           );
+
           const boundary = Math.min(precomputedMessageIds.size, actions.length);
+
           const afterPrefix = yield* Effect.reduce(
             actions.slice(0, boundary),
             initialPrefixState,
             (deliveryState, stored) => dispatchStoredAction(claimed, deliveryState, stored),
           );
+
           yield* Effect.reduce(
             actions.slice(boundary),
             () => ({ ...afterPrefix, deliveryOpen: true }),
@@ -991,24 +1088,30 @@ export namespace Conversation {
           if (stored.deliveryStatus === "delivered" || stored.deliveryStatus === "failed") {
             return Effect.succeed(deliveryState);
           }
+
           return skipStoredAction(claimed, stored.ordinal).pipe(Effect.as(deliveryState));
         }
+
         if (stored.deliveryStatus === "delivered") {
           return Effect.succeed({
             ...deliveryState,
             textDelivered: deliveryState.textDelivered || stored.type === "text",
           });
         }
+
         if (stored.deliveryStatus === "failed") {
           return Effect.succeed({ ...deliveryState, deliveryOpen: false });
         }
+
         if (stored.deliveryStatus === "unknown" && stored.unknownRetryCount > 0) {
           return failUnknownDelivery(claimed, stored.ordinal).pipe(
             Effect.as({ ...deliveryState, deliveryOpen: false }),
           );
         }
+
         const action = ChatReply.actionSchema.parse(stored.payload);
         const { deliveryStatus } = stored;
+
         const delay =
           deliveryState.textDelivered && action.type === "text"
             ? Random.nextIntBetween(MIN_RESPONSE_MESSAGE_DELAY_MS, MAX_RESPONSE_MESSAGE_DELAY_MS).pipe(
@@ -1016,6 +1119,7 @@ export namespace Conversation {
                 Effect.flatMap(Effect.sleep),
               )
             : Effect.void;
+
         return Schedule.toStepWithSleep(DELIVERY_RETRY_SCHEDULE).pipe(
           Effect.flatMap((retry) =>
             delay.pipe(
@@ -1131,6 +1235,7 @@ export namespace Conversation {
                 const retriesExhausted = stored.attemptCount >= MAX_DELIVERY_RETRIES;
                 const cautiousRetryFailed = stored.unknownRetryCount > 0;
                 yield* recordDeliveryFailure(claimed, stored, error, retriesExhausted || cautiousRetryFailed);
+
                 if (
                   error.outcomeUnknown &&
                   stored.deliveryStatus === "pending" &&
@@ -1148,8 +1253,10 @@ export namespace Conversation {
                     retry,
                   );
                 }
+
                 if (!error.retryable || error.outcomeUnknown || retriesExhausted || cautiousRetryFailed) return false;
                 yield* retry(error).pipe(Effect.orDie);
+
                 return yield* deliverStoredAction(
                   claimed,
                   {
@@ -1183,9 +1290,13 @@ export namespace Conversation {
               data: {
                 deliveryStatus: (() => {
                   if (exhausted) return "failed";
+
                   if (error.outcomeUnknown && stored.unknownRetryCount === 0) return "unknown";
+
                   if (error.outcomeUnknown) return "failed";
+
                   if (error.retryable) return "pending";
+
                   return "failed";
                 })(),
                 lastError: error.message,
@@ -1214,10 +1325,12 @@ export namespace Conversation {
         return database
           .transaction(async (transaction) => {
             await Lane.assertFence(transaction, claimed.dbKey, claimed);
+
             const run = await transaction.conversationRun.findUniqueOrThrow({
               where: { id: claimed.runId },
               select: { status: true },
             });
+
             await transaction.conversationRun.update({
               where: { id: claimed.runId },
               // The override exists for crash recovery of runs already blocked in an earlier deploy;
@@ -1236,14 +1349,18 @@ export namespace Conversation {
       // past this run's batch, and schedules the successor wake when newer inputs are waiting.
       async function releaseLane(transaction: Prisma.TransactionClient, claimed: ClaimedRun) {
         const where = claimed.dbKey;
+
         const lane = await transaction.conversationLane.findUniqueOrThrow({
           where: { assistantId_chatId_threadKey: where },
         });
+
         const hasSuccessor = lane.pendingRevision > claimed.inputEndRevision;
         const now = new Date();
+
         const successorWakeAt = hasSuccessor
           ? new Date(now.getTime() + Math.min(options.quietMs, options.maxWaitMs))
           : null;
+
         await transaction.conversationLane.update({
           where: { assistantId_chatId_threadKey: where },
           data: {
@@ -1255,10 +1372,13 @@ export namespace Conversation {
             processedRevision: claimed.inputEndRevision,
           },
         });
+
         if (!successorWakeAt) {
           await transaction.conversationWakeOutbox.deleteMany({ where });
+
           return;
         }
+
         await transaction.conversationWakeOutbox.upsert({
           where: { assistantId_chatId_threadKey: where },
           create: { ...where, desiredWakeAt: successorWakeAt, pendingRevision: lane.pendingRevision },
@@ -1284,6 +1404,7 @@ export namespace Conversation {
                 status: terminal ? "failed" : "prepared",
               },
             });
+
             if (!terminal) {
               await transaction.conversationLane.update({
                 where: { assistantId_chatId_threadKey: claimed.dbKey },
@@ -1296,15 +1417,16 @@ export namespace Conversation {
 
       function expireLease(claimed: ClaimedRun) {
         return database
-          .query((client) =>
-            client.conversationLane.updateMany({
-              where: {
-                ...claimed.dbKey,
-                activeRunId: claimed.runId,
-                fencingToken: claimed.fencingToken,
-              },
-              data: { leaseUntil: new Date() },
-            }),
+          .query(
+            async (client) =>
+              await client.conversationLane.updateMany({
+                where: {
+                  ...claimed.dbKey,
+                  activeRunId: claimed.runId,
+                  fencingToken: claimed.fencingToken,
+                },
+                data: { leaseUntil: new Date() },
+              }),
           )
           .pipe(
             Effect.catch((error) =>
@@ -1333,14 +1455,19 @@ export namespace Conversation {
     generated: readonly ChatReply.Response["replies"][number][],
   ): readonly ChatReply.Response["replies"][number][] {
     if (precomputed.length === 0) return generated;
+
     const deduped = precomputed.filter(
       (reaction, index) => precomputed.findIndex((other) => other.messageId === reaction.messageId) === index,
     );
+
     const generatedWithoutPrecomputedTargets = generated.filter((action) => {
       if (action.type === "ignore") return false;
+
       if (action.type !== "reaction") return true;
+
       return !deduped.some((reaction) => reaction.messageId === action.messageId);
     });
+
     return [...deduped, ...generatedWithoutPrecomputedTargets];
   }
 

@@ -13,10 +13,10 @@ import { TelegramDelivery } from "@/conversation/delivery";
 import { Database } from "@/services/database";
 import { Media } from "@/media/media";
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL ?? "";
 
 test.skipIf(!databaseUrl)("duplicate Telegram delivery creates one immutable input and one lane revision", async () => {
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!));
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl));
   const assistantId = 8_000_000_091;
   const chatId = -8_000_000_091;
 
@@ -25,7 +25,10 @@ test.skipIf(!databaseUrl)("duplicate Telegram delivery creates one immutable inp
       Effect.gen(function* verifyAdmission() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
+
         const input: Conversation.AdmissionInput = {
           chatTitle: "Phase 2 test",
           chatType: "supergroup",
@@ -53,12 +56,14 @@ test.skipIf(!databaseUrl)("duplicate Telegram delivery creates one immutable inp
 
         const first = yield* conversation.admit(input);
         const duplicate = yield* conversation.admit(input);
+
         const persisted = yield* database.query(async (client) => {
           const key = {
             assistantId: BigInt(assistantId),
             chatId: BigInt(chatId),
             threadKey: 17,
           };
+
           return {
             count: await client.conversationInput.count({ where: key }),
             lane: await client.conversationLane.findUniqueOrThrow({
@@ -82,7 +87,9 @@ test.skipIf(!databaseUrl)("duplicate Telegram delivery creates one immutable inp
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -91,12 +98,14 @@ test.skipIf(!databaseUrl)("duplicate Telegram delivery creates one immutable inp
 
 test.skipIf(!databaseUrl)("precomputed reactions bypass model generation and use durable delivery", async () => {
   let modelCalls = 0;
+
   const model: Model.Interface = {
-    generate: <Output>() => {
+    generate: (input) => {
       modelCalls += 1;
+
       return Effect.succeed({
         finishReason: "stop",
-        output: { replies: [{ type: "ignore" }] } as Output,
+        output: input.outputSchema.parse({ replies: [{ type: "ignore" }] }),
         steps: [],
         toolEvents: [],
         transcript: [],
@@ -115,15 +124,19 @@ test.skipIf(!databaseUrl)("precomputed reactions bypass model generation and use
       });
     },
   };
+
   const delivered: TelegramDelivery.Action[] = [];
+
   const delivery: TelegramDelivery.Interface = {
     deliver: (input) => {
       delivered.push(input.action);
+
       return Effect.succeed({ telegramMessageId: null });
     },
     indicateTyping: () => Effect.void,
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, delivery));
   const assistantId = 8_000_000_120;
   const chatId = -8_000_000_120;
   const key = { assistantId, chatId, threadKey: 0 };
@@ -133,7 +146,9 @@ test.skipIf(!databaseUrl)("precomputed reactions bypass model generation and use
       Effect.gen(function* run() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
         yield* conversation.admit({
           chatTitle: "Precomputed reaction test",
           chatType: "supergroup",
@@ -159,27 +174,31 @@ test.skipIf(!databaseUrl)("precomputed reactions bypass model generation and use
           },
           updateId: 220,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
         const drain = yield* conversation.drain({ key });
-        const action = yield* database.query((client) =>
-          client.conversationRunAction.findFirstOrThrow({
-            where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId), threadKey: 0 } },
-          }),
+
+        const action = yield* database.query(
+          async (client) =>
+            await client.conversationRunAction.findFirstOrThrow({
+              where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId), threadKey: 0 } },
+            }),
         );
+
         return { action, drain };
       }),
     );
@@ -193,7 +212,9 @@ test.skipIf(!databaseUrl)("precomputed reactions bypass model generation and use
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -202,10 +223,10 @@ test.skipIf(!databaseUrl)("precomputed reactions bypass model generation and use
 
 test.skipIf(!databaseUrl)("mixed batches deliver the precomputed reaction and the model reply", async () => {
   const model: Model.Interface = {
-    generate: <Output>() =>
+    generate: (input) =>
       Effect.succeed({
         finishReason: "stop",
-        output: { replies: [{ replyTo: 122, text: "On it", type: "text" }] } as Output,
+        output: input.outputSchema.parse({ replies: [{ replyTo: 122, text: "On it", type: "text" }] }),
         steps: [],
         toolEvents: [],
         transcript: [{ text: "On it", type: "assistant-text" }],
@@ -223,15 +244,19 @@ test.skipIf(!databaseUrl)("mixed batches deliver the precomputed reaction and th
         },
       }),
   };
+
   const delivered: TelegramDelivery.Action[] = [];
+
   const delivery: TelegramDelivery.Interface = {
     deliver: (input) => {
       delivered.push(input.action);
+
       return Effect.succeed({ telegramMessageId: input.action.type === "text" ? 902 : null });
     },
     indicateTyping: () => Effect.void,
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, delivery));
   const assistantId = 8_000_000_121;
   const chatId = -8_000_000_121;
   const key = { assistantId, chatId, threadKey: 0 };
@@ -241,7 +266,10 @@ test.skipIf(!databaseUrl)("mixed batches deliver the precomputed reaction and th
       Effect.gen(function* mixedBatch() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
+
         const base = {
           addressed: true,
           chatTitle: "Mixed precomputed test",
@@ -261,6 +289,7 @@ test.skipIf(!databaseUrl)("mixed batches deliver the precomputed reaction and th
           senderId: 42,
           senderUsername: "alice",
         };
+
         yield* conversation.admit({
           ...base,
           payload: { ...base, messageId: 121, precomputedReaction: { emoji: "👍", messageId: 121 }, text: "Thanks" },
@@ -271,28 +300,32 @@ test.skipIf(!databaseUrl)("mixed batches deliver the precomputed reaction and th
           payload: { ...base, date: 1_700_000_001, messageId: 122, text: "@starlight status?" },
           updateId: 222,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
         const drain = yield* conversation.drain({ key });
-        const run = yield* database.query((client) =>
-          client.conversationRun.findFirstOrThrow({
-            include: { actions: { orderBy: { ordinal: "asc" } } },
-            where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId), threadKey: 0 },
-          }),
+
+        const run = yield* database.query(
+          async (client) =>
+            await client.conversationRun.findFirstOrThrow({
+              include: { actions: { orderBy: { ordinal: "asc" } } },
+              where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId), threadKey: 0 },
+            }),
         );
+
         return { drain, run };
       }),
     );
@@ -316,7 +349,9 @@ test.skipIf(!databaseUrl)("mixed batches deliver the precomputed reaction and th
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -325,10 +360,10 @@ test.skipIf(!databaseUrl)("mixed batches deliver the precomputed reaction and th
 
 test.skipIf(!databaseUrl)("a failed precomputed reaction does not suppress the model reply", async () => {
   const model: Model.Interface = {
-    generate: <Output>() =>
+    generate: (input) =>
       Effect.succeed({
         finishReason: "stop",
-        output: { replies: [{ replyTo: 132, text: "On it", type: "text" }] } as Output,
+        output: input.outputSchema.parse({ replies: [{ replyTo: 132, text: "On it", type: "text" }] }),
         steps: [],
         toolEvents: [],
         transcript: [{ text: "On it", type: "assistant-text" }],
@@ -346,10 +381,13 @@ test.skipIf(!databaseUrl)("a failed precomputed reaction does not suppress the m
         },
       }),
   };
+
   const attempted: TelegramDelivery.Action["type"][] = [];
+
   const delivery: TelegramDelivery.Interface = {
     deliver: (input) => {
       attempted.push(input.action.type);
+
       if (input.action.type === "reaction") {
         return Effect.fail(
           new TelegramDelivery.DeliveryError({
@@ -360,11 +398,13 @@ test.skipIf(!databaseUrl)("a failed precomputed reaction does not suppress the m
           }),
         );
       }
+
       return Effect.succeed({ telegramMessageId: 903 });
     },
     indicateTyping: () => Effect.void,
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, delivery));
   const assistantId = 8_000_000_122;
   const chatId = -8_000_000_122;
   const key = { assistantId, chatId, threadKey: 0 };
@@ -374,7 +414,10 @@ test.skipIf(!databaseUrl)("a failed precomputed reaction does not suppress the m
       Effect.gen(function* mixedBatchFailure() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
+
         const base = {
           addressed: true,
           chatTitle: "Mixed precomputed failure test",
@@ -394,6 +437,7 @@ test.skipIf(!databaseUrl)("a failed precomputed reaction does not suppress the m
           senderId: 42,
           senderUsername: "alice",
         };
+
         yield* conversation.admit({
           ...base,
           payload: { ...base, messageId: 131, precomputedReaction: { emoji: "👍", messageId: 131 }, text: "Thanks" },
@@ -404,28 +448,32 @@ test.skipIf(!databaseUrl)("a failed precomputed reaction does not suppress the m
           payload: { ...base, date: 1_700_000_001, messageId: 132, text: "@starlight status?" },
           updateId: 232,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
         const drain = yield* conversation.drain({ key });
-        const actions = yield* database.query((client) =>
-          client.conversationRunAction.findMany({
-            orderBy: { ordinal: "asc" },
-            where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
-          }),
+
+        const actions = yield* database.query(
+          async (client) =>
+            await client.conversationRunAction.findMany({
+              orderBy: { ordinal: "asc" },
+              where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
+            }),
         );
+
         return { actions, drain };
       }),
     );
@@ -437,7 +485,9 @@ test.skipIf(!databaseUrl)("a failed precomputed reaction does not suppress the m
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -447,11 +497,12 @@ test.skipIf(!databaseUrl)("a failed precomputed reaction does not suppress the m
 test.skipIf(!databaseUrl)("model-selected reply targets are passed to Telegram delivery", async () => {
   const targetMessageId = 9_999_999;
   const delivered: TelegramDelivery.Action[] = [];
+
   const model: Model.Interface = {
-    generate: <Output>() =>
+    generate: (input) =>
       Effect.succeed({
         finishReason: "stop",
-        output: { replies: [{ replyTo: targetMessageId, text: "Hi", type: "text" }] } as Output,
+        output: input.outputSchema.parse({ replies: [{ replyTo: targetMessageId, text: "Hi", type: "text" }] }),
         steps: [],
         toolEvents: [],
         transcript: [{ text: "Hi", type: "assistant-text" }],
@@ -469,14 +520,17 @@ test.skipIf(!databaseUrl)("model-selected reply targets are passed to Telegram d
         },
       }),
   };
+
   const delivery: TelegramDelivery.Interface = {
     deliver: (input) => {
       delivered.push(input.action);
+
       return Effect.succeed({ telegramMessageId: 901 });
     },
     indicateTyping: () => Effect.void,
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, delivery));
   const assistantId = 8_000_000_104;
   const chatId = -8_000_000_104;
   const key = { assistantId, chatId, threadKey: 0 };
@@ -486,7 +540,9 @@ test.skipIf(!databaseUrl)("model-selected reply targets are passed to Telegram d
       Effect.gen(function* run() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
         yield* conversation.admit({
           chatTitle: "Reply target test",
           chatType: "supergroup",
@@ -511,21 +567,23 @@ test.skipIf(!databaseUrl)("model-selected reply targets are passed to Telegram d
           },
           updateId: 204,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
+
         return yield* conversation.drain({ key });
       }),
     );
@@ -536,7 +594,9 @@ test.skipIf(!databaseUrl)("model-selected reply targets are passed to Telegram d
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -545,16 +605,16 @@ test.skipIf(!databaseUrl)("model-selected reply targets are passed to Telegram d
 
 test.skipIf(!databaseUrl)("consecutive text replies wait 1.5 to 2.5 seconds after the first message", async () => {
   const model: Model.Interface = {
-    generate: <Output>() =>
+    generate: (input) =>
       Effect.succeed({
         finishReason: "stop",
-        output: {
+        output: input.outputSchema.parse({
           replies: [
             { replyTo: 111, text: "First", type: "text" },
             { replyTo: null, text: "Second", type: "text" },
             { replyTo: null, text: "Third", type: "text" },
           ],
-        } as Output,
+        }),
         steps: [],
         toolEvents: [],
         transcript: [],
@@ -572,25 +632,30 @@ test.skipIf(!databaseUrl)("consecutive text replies wait 1.5 to 2.5 seconds afte
         },
       }),
   };
+
   const delivered: TelegramDelivery.Action[] = [];
   const sleeps: number[] = [];
   let telegramMessageId = 911;
+
   const delivery: TelegramDelivery.Interface = {
     deliver: (input) => {
       delivered.push(input.action);
       const receipt = { telegramMessageId };
       telegramMessageId += 1;
+
       return Effect.succeed(receipt);
     },
     indicateTyping: () => Effect.void,
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, delivery));
   const assistantId = 8_000_000_111;
   const chatId = -8_000_000_111;
   const key = { assistantId, chatId, threadKey: 0 };
 
   try {
     const liveClock = await runtime.runPromise(Clock.Clock);
+
     const clock: Clock.Clock = {
       currentTimeMillis: liveClock.currentTimeMillis,
       currentTimeMillisUnsafe: () => liveClock.currentTimeMillisUnsafe(),
@@ -600,17 +665,22 @@ test.skipIf(!databaseUrl)("consecutive text replies wait 1.5 to 2.5 seconds afte
       monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
       sleep: (duration) => {
         const milliseconds = Duration.toMillis(duration);
+
         if (milliseconds < 1500 || milliseconds > 2500) return liveClock.sleep(duration);
+
         return Effect.sync(() => {
           sleeps.push(milliseconds);
         });
       },
     };
+
     const result = await runtime.runPromise(
       Effect.gen(function* run() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
         yield* conversation.admit({
           chatTitle: "Response pacing test",
           chatType: "supergroup",
@@ -635,21 +705,23 @@ test.skipIf(!databaseUrl)("consecutive text replies wait 1.5 to 2.5 seconds afte
           },
           updateId: 211,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
+
         return yield* conversation.drain({ key });
       }).pipe(Effect.provideService(Clock.Clock, clock), Random.withSeed("response-pacing")),
     );
@@ -662,7 +734,9 @@ test.skipIf(!databaseUrl)("consecutive text replies wait 1.5 to 2.5 seconds afte
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -675,23 +749,28 @@ test.skipIf(!databaseUrl)(
     const requests: Model.GenerateInput<unknown>[] = [];
     let recallCount = 0;
     const recallQueries: string[] = [];
+
     const memory: Memory.Interface = {
       flush: () => Effect.void,
       recall: (input) => {
         recallCount += 1;
         recallQueries.push(input.query);
+
         return Effect.succeed({ contextMemory: `recalled version ${recallCount}` });
       },
     };
+
     const model: Model.Interface = {
       generate: <Output>(input: Model.GenerateInput<Output>) => {
         requests.push(input);
+
         if (requests.length === 1) {
           return Effect.fail(new Model.TimedOut({ message: "Retry model generation", retryable: true }));
         }
+
         return Effect.succeed({
           finishReason: "stop",
-          output: { replies: [{ replyTo: null, text: "Recovered", type: "text" }] } as Output,
+          output: input.outputSchema.parse({ replies: [{ replyTo: null, text: "Recovered", type: "text" }] }),
           steps: [],
           toolEvents: [],
           transcript: [],
@@ -710,11 +789,13 @@ test.skipIf(!databaseUrl)(
         });
       },
     };
+
     const delivery: TelegramDelivery.Interface = {
       deliver: () => Effect.succeed({ telegramMessageId: 900 }),
       indicateTyping: () => Effect.void,
     };
-    const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery, {}, memory));
+
+    const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, delivery, {}, memory));
     const assistantId = 8_000_000_103;
     const chatId = -8_000_000_103;
     const key = { assistantId, chatId, threadKey: 0 };
@@ -724,7 +805,9 @@ test.skipIf(!databaseUrl)(
         Effect.gen(function* admit() {
           const conversation = yield* Conversation.Service;
           const database = yield* Database.Service;
-          yield* database.query((client) => resetLane(client, assistantId, chatId));
+          yield* database.query(async (client) => {
+            await resetLane(client, assistantId, chatId);
+          });
           yield* conversation.admit({
             chatTitle: "Recall retry test",
             chatType: "supergroup",
@@ -749,28 +832,31 @@ test.skipIf(!databaseUrl)(
             },
             updateId: 201,
           });
-          yield* database.query((client) =>
-            client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+          yield* database.query(
+            async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
           );
-          yield* database.query((client) =>
-            client.conversationLane.update({
-              where: {
-                assistantId_chatId_threadKey: {
-                  assistantId: BigInt(assistantId),
-                  chatId: BigInt(chatId),
-                  threadKey: 0,
+          yield* database.query(
+            async (client) =>
+              await client.conversationLane.update({
+                where: {
+                  assistantId_chatId_threadKey: {
+                    assistantId: BigInt(assistantId),
+                    chatId: BigInt(chatId),
+                    threadKey: 0,
+                  },
                 },
-              },
-              data: { nextWakeAt: new Date(0) },
-            }),
+                data: { nextWakeAt: new Date(0) },
+              }),
           );
         }),
       );
 
+      // oxlint-disable-next-line typescript/await-thenable, typescript/no-confusing-void-expression -- Bun rejects assertions are async at runtime but declared void
       await expect(
         runtime.runPromise(
           Effect.gen(function* failFirstAttempt() {
             const conversation = yield* Conversation.Service;
+
             return yield* conversation.drain({ key });
           }),
         ),
@@ -778,14 +864,17 @@ test.skipIf(!databaseUrl)(
       await runtime.runPromise(
         Effect.gen(function* renameChat() {
           const database = yield* Database.Service;
-          yield* database.query((client) =>
-            client.chat.update({ where: { id: BigInt(chatId) }, data: { title: "Renamed during retry" } }),
+          yield* database.query(
+            async (client) =>
+              await client.chat.update({ where: { id: BigInt(chatId) }, data: { title: "Renamed during retry" } }),
           );
         }),
       );
+
       const resumed = await runtime.runPromise(
         Effect.gen(function* resume() {
           const conversation = yield* Conversation.Service;
+
           return yield* conversation.drain({ key });
         }),
       );
@@ -803,7 +892,9 @@ test.skipIf(!databaseUrl)(
       await runtime.runPromise(
         Effect.gen(function* cleanup() {
           const database = yield* Database.Service;
-          yield* database.query((client) => resetLane(client, assistantId, chatId));
+          yield* database.query(async (client) => {
+            await resetLane(client, assistantId, chatId);
+          });
         }),
       );
       await runtime.dispose();
@@ -813,14 +904,17 @@ test.skipIf(!databaseUrl)(
 
 test.skipIf(!databaseUrl)("silent batches finalize without invoking mandatory memory recall", async () => {
   let recallCount = 0;
+
   const memory: Memory.Interface = {
     flush: () => Effect.void,
     recall: () => {
       recallCount += 1;
+
       return Effect.fail(new Memory.MemoryError({ message: "Recall unavailable", retryable: true }));
     },
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, unavailableModel, unavailableDelivery, {}, memory));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, unavailableModel, unavailableDelivery, {}, memory));
   const assistantId = 8_000_000_105;
   const chatId = -8_000_000_105;
   const key = { assistantId, chatId, threadKey: 0 };
@@ -830,7 +924,9 @@ test.skipIf(!databaseUrl)("silent batches finalize without invoking mandatory me
       Effect.gen(function* run() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
         yield* conversation.admit({
           chatTitle: "Silent batch test",
           chatType: "supergroup",
@@ -855,37 +951,42 @@ test.skipIf(!databaseUrl)("silent batches finalize without invoking mandatory me
           },
           updateId: 205,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
+
         return yield* conversation.drain({ key });
       }),
     );
+
     const lane = await runtime.runPromise(
       Effect.gen(function* inspect() {
         const database = yield* Database.Service;
-        return yield* database.query((client) =>
-          client.conversationLane.findUniqueOrThrow({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+
+        return yield* database.query(
+          async (client) =>
+            await client.conversationLane.findUniqueOrThrow({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-          }),
+            }),
         );
       }),
     );
@@ -898,7 +999,9 @@ test.skipIf(!databaseUrl)("silent batches finalize without invoking mandatory me
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -907,20 +1010,23 @@ test.skipIf(!databaseUrl)("silent batches finalize without invoking mandatory me
 
 test.skipIf(!databaseUrl)("permanent recall rejection blocks only its run and releases the successor", async () => {
   let recallCount = 0;
+
   const memory: Memory.Interface = {
     flush: () => Effect.void,
     recall: () => {
       recallCount += 1;
+
       return recallCount === 1
         ? Effect.fail(new Memory.MemoryError({ message: "Recall rejected", retryable: false }))
         : Effect.succeed({ contextMemory: null });
     },
   };
+
   const model: Model.Interface = {
-    generate: <Output>() =>
+    generate: (input) =>
       Effect.succeed({
         finishReason: "stop",
-        output: { replies: [{ replyTo: null, text: "Recovered", type: "text" }] } as Output,
+        output: input.outputSchema.parse({ replies: [{ replyTo: null, text: "Recovered", type: "text" }] }),
         steps: [],
         toolEvents: [],
         transcript: [],
@@ -938,15 +1044,19 @@ test.skipIf(!databaseUrl)("permanent recall rejection blocks only its run and re
         },
       }),
   };
+
   const delivered: TelegramDelivery.Action[] = [];
+
   const delivery: TelegramDelivery.Interface = {
     deliver: (input) => {
       delivered.push(input.action);
+
       return Effect.succeed({ telegramMessageId: 906 });
     },
     indicateTyping: () => Effect.void,
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery, {}, memory));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, delivery, {}, memory));
   const assistantId = 8_000_000_106;
   const chatId = -8_000_000_106;
   const key = { assistantId, chatId, threadKey: 0 };
@@ -956,7 +1066,9 @@ test.skipIf(!databaseUrl)("permanent recall rejection blocks only its run and re
       Effect.gen(function* admitFirst() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
         yield* conversation.admit({
           chatTitle: "Permanent recall test",
           chatType: "supergroup",
@@ -981,28 +1093,31 @@ test.skipIf(!databaseUrl)("permanent recall rejection blocks only its run and re
           },
           updateId: 206,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
       }),
     );
 
+    // oxlint-disable-next-line typescript/await-thenable, typescript/no-confusing-void-expression -- Bun rejects assertions are async at runtime but declared void
     await expect(
       runtime.runPromise(
         Effect.gen(function* rejectFirst() {
           const conversation = yield* Conversation.Service;
+
           return yield* conversation.drain({ key });
         }),
       ),
@@ -1036,24 +1151,28 @@ test.skipIf(!databaseUrl)("permanent recall rejection blocks only its run and re
           },
           updateId: 207,
         });
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
+
         return yield* conversation.drain({ key });
       }),
     );
+
     const state = await runtime.runPromise(
       Effect.gen(function* inspect() {
         const database = yield* Database.Service;
+
         return yield* database.query(async (client) => ({
           lane: await client.conversationLane.findUniqueOrThrow({
             where: {
@@ -1080,7 +1199,9 @@ test.skipIf(!databaseUrl)("permanent recall rejection blocks only its run and re
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -1090,6 +1211,7 @@ test.skipIf(!databaseUrl)("permanent recall rejection blocks only its run and re
 test.skipIf(!databaseUrl)("lease ownership loss interrupts active model work", async () => {
   const modelStarted = Deferred.makeUnsafe<true>();
   const modelInterrupted = Deferred.makeUnsafe<true>();
+
   const model: Model.Interface = {
     generate: () =>
       Deferred.succeed(modelStarted, true).pipe(
@@ -1097,7 +1219,8 @@ test.skipIf(!databaseUrl)("lease ownership loss interrupts active model work", a
         Effect.onInterrupt(() => Deferred.succeed(modelInterrupted, true).pipe(Effect.asVoid)),
       ),
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, unavailableDelivery, { leaseMs: 3000 }));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, unavailableDelivery, { leaseMs: 3000 }));
   const assistantId = 8_000_000_107;
   const chatId = -8_000_000_107;
   const key = { assistantId, chatId, threadKey: 0 };
@@ -1107,7 +1230,9 @@ test.skipIf(!databaseUrl)("lease ownership loss interrupts active model work", a
       Effect.gen(function* loseLeaseOwnership() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
         yield* conversation.admit({
           chatTitle: "Lease ownership test",
           chatType: "supergroup",
@@ -1132,37 +1257,40 @@ test.skipIf(!databaseUrl)("lease ownership loss interrupts active model work", a
           },
           updateId: 208,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
 
         const drain = yield* Effect.forkChild(conversation.drain({ key }).pipe(Effect.flip));
         yield* Deferred.await(modelStarted);
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { fencingToken: { increment: 1 } },
-          }),
+              data: { fencingToken: { increment: 1 } },
+            }),
         );
         yield* TestClock.adjust("1 second");
+
         return {
           error: yield* Fiber.join(drain),
           modelInterrupted: yield* Deferred.isDone(modelInterrupted),
@@ -1179,7 +1307,9 @@ test.skipIf(!databaseUrl)("lease ownership loss interrupts active model work", a
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -1188,10 +1318,10 @@ test.skipIf(!databaseUrl)("lease ownership loss interrupts active model work", a
 
 test.skipIf(!databaseUrl)("unknown delivery gets only one cautious retry without regenerating output", async () => {
   const model: Model.Interface = {
-    generate: <Output>() =>
+    generate: (input) =>
       Effect.succeed({
         finishReason: "stop",
-        output: { replies: [{ replyTo: 61, text: "Hi", type: "text" }] } as Output,
+        output: input.outputSchema.parse({ replies: [{ replyTo: 61, text: "Hi", type: "text" }] }),
         steps: [],
         toolEvents: [],
         transcript: [{ text: "Hi", type: "assistant-text" }],
@@ -1209,6 +1339,7 @@ test.skipIf(!databaseUrl)("unknown delivery gets only one cautious retry without
         },
       }),
   };
+
   const deliveryResults = [
     Effect.fail(
       new TelegramDelivery.DeliveryError({
@@ -1227,11 +1358,13 @@ test.skipIf(!databaseUrl)("unknown delivery gets only one cautious retry without
       }),
     ),
   ];
+
   const delivery: TelegramDelivery.Interface = {
     deliver: () => deliveryResults.shift()!,
     indicateTyping: () => Effect.void,
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, delivery));
   const assistantId = 8_000_000_094;
   const chatId = -8_000_000_094;
 
@@ -1240,7 +1373,9 @@ test.skipIf(!databaseUrl)("unknown delivery gets only one cautious retry without
       Effect.gen(function* admit() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
         yield* conversation.admit({
           chatTitle: "Phase 2 retry test",
           chatType: "supergroup",
@@ -1265,20 +1400,21 @@ test.skipIf(!databaseUrl)("unknown delivery gets only one cautious retry without
           },
           updateId: 111,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
       }),
     );
@@ -1286,19 +1422,23 @@ test.skipIf(!databaseUrl)("unknown delivery gets only one cautious retry without
     const completed = await runtime.runPromise(
       Effect.gen(function* drain() {
         const conversation = yield* Conversation.Service;
+
         return yield* conversation.drain({
           key: { assistantId, chatId, threadKey: 0 },
         });
       }),
     );
+
     const persisted = await runtime.runPromise(
       Effect.gen(function* inspect() {
         const database = yield* Database.Service;
-        return yield* database.query((client) =>
-          client.conversationRun.findFirstOrThrow({
-            where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) },
-            include: { actions: true },
-          }),
+
+        return yield* database.query(
+          async (client) =>
+            await client.conversationRun.findFirstOrThrow({
+              where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) },
+              include: { actions: true },
+            }),
         );
       }),
     );
@@ -1313,7 +1453,9 @@ test.skipIf(!databaseUrl)("unknown delivery gets only one cautious retry without
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -1322,10 +1464,10 @@ test.skipIf(!databaseUrl)("unknown delivery gets only one cautious retry without
 
 test.skipIf(!databaseUrl)("known transient delivery failures retry after 1, 2.5, and 5 seconds", async () => {
   const model: Model.Interface = {
-    generate: <Output>() =>
+    generate: (input) =>
       Effect.succeed({
         finishReason: "stop",
-        output: { replies: [{ replyTo: 112, text: "Retried", type: "text" }] } as Output,
+        output: input.outputSchema.parse({ replies: [{ replyTo: 112, text: "Retried", type: "text" }] }),
         steps: [],
         toolEvents: [],
         transcript: [],
@@ -1343,12 +1485,16 @@ test.skipIf(!databaseUrl)("known transient delivery failures retry after 1, 2.5,
         },
       }),
   };
+
   let deliveryAttempts = 0;
   const sleeps: number[] = [];
+
   const delivery: TelegramDelivery.Interface = {
     deliver: () => {
       deliveryAttempts += 1;
+
       if (deliveryAttempts > 3) return Effect.succeed({ telegramMessageId: 912 });
+
       return Effect.fail(
         new TelegramDelivery.DeliveryError({
           cause: new Error("Telegram unavailable"),
@@ -1360,13 +1506,15 @@ test.skipIf(!databaseUrl)("known transient delivery failures retry after 1, 2.5,
     },
     indicateTyping: () => Effect.void,
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, delivery));
   const assistantId = 8_000_000_112;
   const chatId = -8_000_000_112;
   const key = { assistantId, chatId, threadKey: 0 };
 
   try {
     const liveClock = await runtime.runPromise(Clock.Clock);
+
     const clock: Clock.Clock = {
       currentTimeMillis: liveClock.currentTimeMillis,
       currentTimeMillisUnsafe: () => liveClock.currentTimeMillisUnsafe(),
@@ -1376,17 +1524,22 @@ test.skipIf(!databaseUrl)("known transient delivery failures retry after 1, 2.5,
       monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
       sleep: (duration) => {
         const milliseconds = Duration.toMillis(duration);
+
         if (![1000, 2500, 5000].includes(milliseconds)) return liveClock.sleep(duration);
+
         return Effect.sync(() => {
           sleeps.push(milliseconds);
         });
       },
     };
+
     const result = await runtime.runPromise(
       Effect.gen(function* run() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
         yield* conversation.admit({
           chatTitle: "Delivery retry test",
           chatType: "supergroup",
@@ -1411,27 +1564,31 @@ test.skipIf(!databaseUrl)("known transient delivery failures retry after 1, 2.5,
           },
           updateId: 212,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
         const drain = yield* conversation.drain({ key });
-        const action = yield* database.query((client) =>
-          client.conversationRunAction.findFirstOrThrow({
-            where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
-          }),
+
+        const action = yield* database.query(
+          async (client) =>
+            await client.conversationRunAction.findFirstOrThrow({
+              where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
+            }),
         );
+
         return { action, drain };
       }).pipe(Effect.provideService(Clock.Clock, clock)),
     );
@@ -1445,7 +1602,9 @@ test.skipIf(!databaseUrl)("known transient delivery failures retry after 1, 2.5,
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -1454,16 +1613,16 @@ test.skipIf(!databaseUrl)("known transient delivery failures retry after 1, 2.5,
 
 test.skipIf(!databaseUrl)("later response actions are skipped after a permanent delivery failure", async () => {
   const model: Model.Interface = {
-    generate: <Output>() =>
+    generate: (input) =>
       Effect.succeed({
         finishReason: "stop",
-        output: {
+        output: input.outputSchema.parse({
           replies: [
             { replyTo: 110, text: "First", type: "text" },
             { emoji: "👍", messageId: 110, type: "reaction" },
             { replyTo: null, text: "Third", type: "text" },
           ],
-        } as Output,
+        }),
         steps: [],
         toolEvents: [],
         transcript: [],
@@ -1481,11 +1640,14 @@ test.skipIf(!databaseUrl)("later response actions are skipped after a permanent 
         },
       }),
   };
+
   const attempted: TelegramDelivery.Action["type"][] = [];
   let telegramMessageId = 910;
+
   const delivery: TelegramDelivery.Interface = {
     deliver: (input) => {
       attempted.push(input.action.type);
+
       if (input.action.type === "reaction") {
         return Effect.fail(
           new TelegramDelivery.DeliveryError({
@@ -1496,13 +1658,16 @@ test.skipIf(!databaseUrl)("later response actions are skipped after a permanent 
           }),
         );
       }
+
       const receipt = { telegramMessageId };
       telegramMessageId += 1;
+
       return Effect.succeed(receipt);
     },
     indicateTyping: () => Effect.void,
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, delivery));
   const assistantId = 8_000_000_110;
   const chatId = -8_000_000_110;
   const key = { assistantId, chatId, threadKey: 0 };
@@ -1512,7 +1677,9 @@ test.skipIf(!databaseUrl)("later response actions are skipped after a permanent 
       Effect.gen(function* run() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
         yield* conversation.admit({
           chatTitle: "Ordered response delivery test",
           chatType: "supergroup",
@@ -1537,28 +1704,32 @@ test.skipIf(!databaseUrl)("later response actions are skipped after a permanent 
           },
           updateId: 210,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
         const drain = yield* conversation.drain({ key });
-        const actions = yield* database.query((client) =>
-          client.conversationRunAction.findMany({
-            where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
-            orderBy: { ordinal: "asc" },
-          }),
+
+        const actions = yield* database.query(
+          async (client) =>
+            await client.conversationRunAction.findMany({
+              where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
+              orderBy: { ordinal: "asc" },
+            }),
         );
+
         return { actions, drain };
       }),
     );
@@ -1571,7 +1742,9 @@ test.skipIf(!databaseUrl)("later response actions are skipped after a permanent 
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -1582,9 +1755,11 @@ test.skipIf(!databaseUrl)(
   "finalized responses remain active until the next request requires preflight context compaction",
   async () => {
     const requests: Model.GenerateInput<unknown>[] = [];
+
     const model: Model.Interface = {
       generate: <Output>(input: Model.GenerateInput<Output>) => {
         requests.push(input);
+
         const output = input.instructions.startsWith("Summarize")
           ? {
               assistantAnswers: [],
@@ -1594,9 +1769,10 @@ test.skipIf(!databaseUrl)(
               userContext: ["Alice asked twice and the assistant answered both messages."],
             }
           : { replies: [{ replyTo: null, text: "Hi", type: "text" }] };
+
         return Effect.succeed({
           finishReason: "stop",
-          output: output as Output,
+          output: input.outputSchema.parse(output),
           steps: [],
           toolEvents: [],
           transcript: [],
@@ -1615,16 +1791,20 @@ test.skipIf(!databaseUrl)(
         });
       },
     };
+
     let telegramMessageId = 900;
+
     const delivery: TelegramDelivery.Interface = {
       deliver: () => {
         const receipt = { telegramMessageId };
         telegramMessageId += 1;
+
         return Effect.succeed(receipt);
       },
       indicateTyping: () => Effect.void,
     };
-    const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model, delivery));
+
+    const runtime = ManagedRuntime.make(testLayer(databaseUrl, model, delivery));
     const assistantId = 8_000_000_096;
     const chatId = -8_000_000_096;
     const key = { assistantId, chatId, threadKey: 0 };
@@ -1634,7 +1814,9 @@ test.skipIf(!databaseUrl)(
         Effect.gen(function* runConversation() {
           const conversation = yield* Conversation.Service;
           const database = yield* Database.Service;
-          yield* database.query((client) => resetLane(client, assistantId, chatId));
+          yield* database.query(async (client) => {
+            await resetLane(client, assistantId, chatId);
+          });
           yield* conversation.admit({
             chatTitle: "Checkpoint test",
             chatType: "supergroup",
@@ -1659,20 +1841,21 @@ test.skipIf(!databaseUrl)(
             },
             updateId: 131,
           });
-          yield* database.query((client) =>
-            client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+          yield* database.query(
+            async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
           );
-          yield* database.query((client) =>
-            client.conversationLane.update({
-              where: {
-                assistantId_chatId_threadKey: {
-                  assistantId: BigInt(assistantId),
-                  chatId: BigInt(chatId),
-                  threadKey: 0,
+          yield* database.query(
+            async (client) =>
+              await client.conversationLane.update({
+                where: {
+                  assistantId_chatId_threadKey: {
+                    assistantId: BigInt(assistantId),
+                    chatId: BigInt(chatId),
+                    threadKey: 0,
+                  },
                 },
-              },
-              data: { nextWakeAt: new Date(0) },
-            }),
+                data: { nextWakeAt: new Date(0) },
+              }),
           );
           yield* conversation.drain({ key });
           yield* conversation.admit({
@@ -1699,17 +1882,18 @@ test.skipIf(!databaseUrl)(
             },
             updateId: 132,
           });
-          yield* database.query((client) =>
-            client.conversationLane.update({
-              where: {
-                assistantId_chatId_threadKey: {
-                  assistantId: BigInt(assistantId),
-                  chatId: BigInt(chatId),
-                  threadKey: 0,
+          yield* database.query(
+            async (client) =>
+              await client.conversationLane.update({
+                where: {
+                  assistantId_chatId_threadKey: {
+                    assistantId: BigInt(assistantId),
+                    chatId: BigInt(chatId),
+                    threadKey: 0,
+                  },
                 },
-              },
-              data: { nextWakeAt: new Date(0) },
-            }),
+                data: { nextWakeAt: new Date(0) },
+              }),
           );
           yield* conversation.drain({ key });
         }),
@@ -1718,6 +1902,7 @@ test.skipIf(!databaseUrl)(
       const state = await runtime.runPromise(
         Effect.gen(function* inspectCheckpoint() {
           const database = yield* Database.Service;
+
           return yield* database.query(async (client) => ({
             attempts: await client.conversationCheckpointAttempt.findMany({
               where: { parentContext: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
@@ -1740,7 +1925,9 @@ test.skipIf(!databaseUrl)(
       await runtime.runPromise(
         Effect.gen(function* cleanup() {
           const database = yield* Database.Service;
-          yield* database.query((client) => resetLane(client, assistantId, chatId));
+          yield* database.query(async (client) => {
+            await resetLane(client, assistantId, chatId);
+          });
         }),
       );
       await runtime.dispose();
@@ -1752,14 +1939,18 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
   const requests: Model.GenerateInput<unknown>[] = [];
   let chatAttempts = 0;
   let flushAttempts = 0;
+
   const model: Model.Interface = {
     generate: <Output>(input: Model.GenerateInput<Output>) => {
       requests.push(input);
       const chatRequest = !input.instructions.startsWith("Summarize");
+
       if (chatRequest) chatAttempts += 1;
+
       if (chatRequest && chatAttempts === 1) {
         return Effect.fail(new Model.ContextOverflow({ message: "Model context limit exceeded", retryable: false }));
       }
+
       const output = input.instructions.startsWith("Summarize")
         ? {
             assistantAnswers: [],
@@ -1769,9 +1960,10 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
             userContext: ["The recent discussion must remain available."],
           }
         : { replies: [{ replyTo: null, text: "Continued", type: "text" }] };
+
       return Effect.succeed({
         finishReason: "stop",
-        output: output as Output,
+        output: input.outputSchema.parse(output),
         steps: [],
         toolEvents: [],
         transcript: [],
@@ -1790,22 +1982,26 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
       });
     },
   };
+
   const delivery: TelegramDelivery.Interface = {
     deliver: () => Effect.succeed({ telegramMessageId: 901 }),
     indicateTyping: () => Effect.void,
   };
+
   const memory: Memory.Interface = {
     flush: () => {
       flushAttempts += 1;
+
       return flushAttempts === 1
         ? Effect.fail(new Memory.MemoryError({ message: "Retry checkpoint retention", retryable: true }))
         : Effect.void;
     },
     recall: () => Effect.succeed({ contextMemory: null }),
   };
+
   const runtime = ManagedRuntime.make(
     testLayer(
-      databaseUrl!,
+      databaseUrl,
       model,
       delivery,
       {
@@ -1814,6 +2010,7 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
       memory,
     ),
   );
+
   const assistantId = 8_000_000_097;
   const chatId = -8_000_000_097;
   const key = { assistantId, chatId, threadKey: 0 };
@@ -1825,6 +2022,7 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
         const context = yield* ConversationContext.Service;
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
+
         const runIds = yield* database.query(async (client) => {
           await resetLane(client, assistantId, chatId);
           await client.chat.create({ data: { id: BigInt(chatId), isPremium: true } });
@@ -1837,6 +2035,7 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
               threadKey: 0,
             },
           });
+
           const firstInput = await client.conversationInput.create({
             data: {
               admittedRevision: 1,
@@ -1863,6 +2062,7 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
               threadKey: 0,
             },
           });
+
           const firstRun = await client.conversationRun.create({
             data: {
               actions: {
@@ -1888,6 +2088,7 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
               threadKey: 0,
             },
           });
+
           const secondInput = await client.conversationInput.create({
             data: {
               admittedRevision: 2,
@@ -1914,6 +2115,7 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
               threadKey: 0,
             },
           });
+
           const secondRun = await client.conversationRun.create({
             data: {
               actions: {
@@ -1939,45 +2141,50 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
               threadKey: 0,
             },
           });
+
           return { first: firstRun.id, second: secondRun.id };
         });
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { activeRunId: runIds.first, fencingToken: 1n },
-          }),
+              data: { activeRunId: runIds.first, fencingToken: 1n },
+            }),
         );
         yield* context.appendFinalized({ fencingToken: 1n, runId: runIds.first });
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { activeRunId: runIds.second, fencingToken: 2n },
-          }),
+              data: { activeRunId: runIds.second, fencingToken: 2n },
+            }),
         );
         yield* context.appendFinalized({ fencingToken: 2n, runId: runIds.second });
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { activeRunId: null, fencingToken: 2n },
-          }),
+              data: { activeRunId: null, fencingToken: 2n },
+            }),
         );
         yield* conversation.admit({
           chatTitle: "Hard checkpoint test",
@@ -2003,27 +2210,30 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
           },
           updateId: 143,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
       }),
     );
+    // oxlint-disable-next-line typescript/await-thenable, typescript/no-confusing-void-expression -- Bun rejects assertions are async at runtime but declared void
     await expect(
       runtime.runPromise(
         Effect.gen(function* failCheckpointFlush() {
           const conversation = yield* Conversation.Service;
+
           return yield* conversation.drain({ key });
         }),
       ),
@@ -2038,6 +2248,7 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
     const state = await runtime.runPromise(
       Effect.gen(function* inspectHardCheckpoint() {
         const database = yield* Database.Service;
+
         return yield* database.query(async (client) => ({
           attempt: await client.conversationCheckpointAttempt.findFirstOrThrow({
             where: { parentContext: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
@@ -2065,7 +2276,9 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -2074,12 +2287,14 @@ test.skipIf(!databaseUrl)("a committed checkpoint retries its failed memory flus
 
 test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without model invocation", async () => {
   let modelInvocations = 0;
+
   const model: Model.Interface = {
-    generate: <Output>() => {
+    generate: (input) => {
       modelInvocations += 1;
+
       return Effect.succeed({
         finishReason: "stop",
-        output: { replies: [{ replyTo: null, text: "Hi", type: "text" }] } as Output,
+        output: input.outputSchema.parse({ replies: [{ replyTo: null, text: "Hi", type: "text" }] }),
         steps: [],
         toolEvents: [],
         transcript: [{ text: "Hi", type: "assistant-text" }],
@@ -2098,15 +2313,18 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
       });
     },
   };
+
   const delivery: TelegramDelivery.Interface = {
     deliver: () => Effect.succeed({ telegramMessageId: 950 }),
     indicateTyping: () => Effect.void,
   };
+
   const runtime = ManagedRuntime.make(
-    testLayer(databaseUrl!, model, delivery, {
+    testLayer(databaseUrl, model, delivery, {
       contextCompactionTriggerTokens: 2000,
     }),
   );
+
   const assistantId = 8_000_000_098;
   const chatId = -8_000_000_098;
   const key = { assistantId, chatId, threadKey: 0 };
@@ -2116,7 +2334,9 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
       Effect.gen(function* admitOversized() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
         yield* conversation.admit({
           chatTitle: "Oversized test",
           chatType: "supergroup",
@@ -2141,40 +2361,46 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
           },
           updateId: 144,
         });
-        yield* database.query((client) =>
-          client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
+        yield* database.query(
+          async (client) => await client.chat.update({ where: { id: BigInt(chatId) }, data: { isPremium: true } }),
         );
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
+              where: {
+                assistantId_chatId_threadKey: {
+                  assistantId: BigInt(assistantId),
+                  chatId: BigInt(chatId),
+                  threadKey: 0,
+                },
               },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
+              data: { nextWakeAt: new Date(0) },
+            }),
         );
       }),
     );
 
+    // oxlint-disable-next-line typescript/await-thenable, typescript/no-confusing-void-expression -- Bun rejects assertions are async at runtime but declared void
     await expect(
       runtime.runPromise(
         Effect.gen(function* firstDrain() {
           const conversation = yield* Conversation.Service;
+
           return yield* conversation.drain({ key });
         }),
       ),
     ).rejects.toMatchObject({ retryable: false });
+
     // Regression: blocking must release the lane. Before that, the blocked run stayed
     // activeRunId forever, so every later message re-claimed it and the thread wedged shut.
     const released = await runtime.runPromise(
       Effect.gen(function* drainAfterBlock() {
         const conversation = yield* Conversation.Service;
+
         return yield* conversation.drain({ key });
       }),
     );
+
     expect(released.kind).toBe("up-to-date");
 
     await runtime.runPromise(
@@ -2205,34 +2431,9 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
           },
           updateId: 145,
         });
-        yield* database.query((client) =>
-          client.conversationLane.update({
-            where: {
-              assistantId_chatId_threadKey: {
-                assistantId: BigInt(assistantId),
-                chatId: BigInt(chatId),
-                threadKey: 0,
-              },
-            },
-            data: { nextWakeAt: new Date(0) },
-          }),
-        );
-        return yield* conversation.drain({ key });
-      }),
-    );
-
-    const runs = await runtime.runPromise(
-      Effect.gen(function* inspectBlockedRuns() {
-        const database = yield* Database.Service;
-        return yield* database.query((client) =>
-          Promise.all([
-            client.conversationRun.findFirstOrThrow({
-              where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId), inputStartRevision: 1 },
-            }),
-            client.conversationRun.findFirstOrThrow({
-              where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId), inputStartRevision: 2 },
-            }),
-            client.conversationLane.findUniqueOrThrow({
+        yield* database.query(
+          async (client) =>
+            await client.conversationLane.update({
               where: {
                 assistantId_chatId_threadKey: {
                   assistantId: BigInt(assistantId),
@@ -2240,26 +2441,58 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
                   threadKey: 0,
                 },
               },
+              data: { nextWakeAt: new Date(0) },
             }),
-          ]),
+        );
+
+        return yield* conversation.drain({ key });
+      }),
+    );
+
+    const runs = await runtime.runPromise(
+      Effect.gen(function* inspectBlockedRuns() {
+        const database = yield* Database.Service;
+
+        return yield* database.query(
+          async (client) =>
+            await Promise.all([
+              client.conversationRun.findFirstOrThrow({
+                where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId), inputStartRevision: 1 },
+              }),
+              client.conversationRun.findFirstOrThrow({
+                where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId), inputStartRevision: 2 },
+              }),
+              client.conversationLane.findUniqueOrThrow({
+                where: {
+                  assistantId_chatId_threadKey: {
+                    assistantId: BigInt(assistantId),
+                    chatId: BigInt(chatId),
+                    threadKey: 0,
+                  },
+                },
+              }),
+            ]),
         );
       }),
     );
+
     const [blockedRun, successorRun, lane] = runs;
 
     // Exactly one model call: the oversized run must be stopped before invocation,
     // while its normal successor flows through the whole pipeline.
     expect(modelInvocations).toBe(1);
-    expect(blockedRun!.status).toBe("blocked");
-    expect(blockedRun!.errorTag).toBe("oversized-input");
-    expect(successorRun!.status).toBe("finalized");
-    expect(lane!.activeRunId).toBeNull();
-    expect(lane!.processedRevision).toBe(2);
+    expect(blockedRun.status).toBe("blocked");
+    expect(blockedRun.errorTag).toBe("oversized-input");
+    expect(successorRun.status).toBe("finalized");
+    expect(lane.activeRunId).toBeNull();
+    expect(lane.processedRevision).toBe(2);
   } finally {
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -2267,7 +2500,7 @@ test.skipIf(!databaseUrl)("an intrinsically oversized request is blocked without
 });
 
 test.skipIf(!databaseUrl)("an edit in the original message second creates a correction revision", async () => {
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!));
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl));
   const assistantId = 8_000_000_095;
   const chatId = -8_000_000_095;
 
@@ -2276,7 +2509,10 @@ test.skipIf(!databaseUrl)("an edit in the original message second creates a corr
       Effect.gen(function* verifyEditRevision() {
         const conversation = yield* Conversation.Service;
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
+
         const original: Conversation.AdmissionInput = {
           chatTitle: "Phase 2 edit test",
           chatType: "supergroup",
@@ -2301,6 +2537,7 @@ test.skipIf(!databaseUrl)("an edit in the original message second creates a corr
           },
           updateId: 121,
         };
+
         const edit: Conversation.AdmissionInput = {
           ...original,
           payload: {
@@ -2316,12 +2553,14 @@ test.skipIf(!databaseUrl)("an edit in the original message second creates a corr
 
         const admittedOriginal = yield* conversation.admit(original);
         const admittedEdit = yield* conversation.admit(edit);
-        const revisions = yield* database.query((client) =>
-          client.conversationInput.findMany({
-            where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) },
-            orderBy: { admittedRevision: "asc" },
-            select: { sourceRevision: true },
-          }),
+
+        const revisions = yield* database.query(
+          async (client) =>
+            await client.conversationInput.findMany({
+              where: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) },
+              orderBy: { admittedRevision: "asc" },
+              select: { sourceRevision: true },
+            }),
         );
 
         expect(admittedOriginal.pendingRevision).toBe(1);
@@ -2335,7 +2574,9 @@ test.skipIf(!databaseUrl)("an edit in the original message second creates a corr
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -2344,13 +2585,16 @@ test.skipIf(!databaseUrl)("an edit in the original message second creates a corr
 
 test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and releases its lane", async () => {
   let summarizeAttempts = 0;
+
   const model: Model.Interface = {
     generate: () => {
       summarizeAttempts += 1;
+
       return Effect.fail(new Model.Unavailable({ message: "provider rejects summaries forever", retryable: false }));
     },
   };
-  const runtime = ManagedRuntime.make(testLayer(databaseUrl!, model));
+
+  const runtime = ManagedRuntime.make(testLayer(databaseUrl, model));
   const assistantId = 8_000_000_099;
   const chatId = -8_000_000_099;
   const key = { assistantId, chatId, threadKey: 0 };
@@ -2371,6 +2615,7 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
               threadKey: 0,
             },
           });
+
           const input = await client.conversationInput.create({
             data: {
               admittedRevision: 1,
@@ -2397,6 +2642,7 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
               threadKey: 0,
             },
           });
+
           const run = await client.conversationRun.create({
             data: {
               assistantId: BigInt(assistantId),
@@ -2411,11 +2657,13 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
               threadKey: 0,
             },
           });
+
           const summaryInput = Prompt.canonicalEncode({
             head: ["turn"],
             previousMemory: "",
             version: "context-checkpoint-v1",
           });
+
           const parent = await client.conversationContext.create({
             data: {
               activeKey: `v1/${assistantId}/${chatId}/0`,
@@ -2432,6 +2680,7 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
               threadKey: 0,
             },
           });
+
           const transcriptTurn = await client.conversationTranscriptTurn.create({
             data: {
               assistantId: BigInt(assistantId),
@@ -2446,6 +2695,7 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
               visibility: "conversation",
             },
           });
+
           await client.conversationContextTurn.create({
             data: {
               contextId: parent.id,
@@ -2488,10 +2738,12 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
       }),
     );
 
+    // oxlint-disable-next-line typescript/await-thenable, typescript/no-confusing-void-expression -- Bun rejects assertions are async at runtime but declared void
     await expect(
       runtime.runPromise(
         Effect.gen(function* drainFailedCheckpoint() {
           const conversation = yield* Conversation.Service;
+
           return yield* conversation.drain({ key });
         }),
       ),
@@ -2500,6 +2752,7 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
     const state = await runtime.runPromise(
       Effect.gen(function* inspectPermanentFailure() {
         const database = yield* Database.Service;
+
         return yield* database.query(async (client) => ({
           attempt: await client.conversationCheckpointAttempt.findFirstOrThrow({
             where: { run: { assistantId: BigInt(assistantId), chatId: BigInt(chatId) } },
@@ -2537,7 +2790,9 @@ test.skipIf(!databaseUrl)("a permanently failing checkpoint blocks the run and r
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => resetLane(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await resetLane(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -2568,6 +2823,7 @@ function testLayer(
   memory: Memory.Interface = unavailableMemory,
 ) {
   const chatReply = ChatReply.layer.pipe(Layer.provideMerge(Layer.succeed(Model.Service)(model)));
+
   const infrastructure = Layer.mergeAll(
     Database.layer(connectionString),
     chatReply,
@@ -2597,7 +2853,9 @@ function testLayer(
       ...optionOverrides,
     }),
   );
+
   const context = ConversationContext.layer.pipe(Layer.provideMerge(infrastructure));
+
   return Conversation.layer.pipe(Layer.provideMerge(context));
 }
 

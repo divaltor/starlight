@@ -73,30 +73,36 @@ export namespace TelegramDelivery {
   export function layer(token: string): Layer.Layer<Service> {
     return Layer.sync(Service, () => {
       const api = new Api(token);
-      const indicateTyping = Effect.fn("TelegramDelivery.indicateTyping")(function* indicateTyping(input) {
+
+      const indicateTyping = Effect.fn("TelegramDelivery.indicateTyping")(function* indicateTyping(input: TypingInput) {
         yield* Effect.tryPromise({
-          try: () =>
-            api.sendChatAction(input.chatId, "typing", {
+          try: async () =>
+            await api.sendChatAction(input.chatId, "typing", {
               message_thread_id: input.threadKey === 0 ? undefined : input.threadKey,
             }),
           catch: mapDeliveryError,
         });
       });
+
       const deliver = Effect.fn("TelegramDelivery.deliver")(function* deliver(input: DeliveryInput) {
         const { action } = input;
+
         if (action.type === "ignore") return { telegramMessageId: null };
 
         return yield* Effect.tryPromise({
           try: async () => {
             if (action.type === "reaction") {
               await api.setMessageReaction(input.chatId, action.messageId, [{ emoji: action.emoji, type: "emoji" }]);
+
               return { telegramMessageId: null };
             }
 
             const sent = await api.sendMessage(input.chatId, action.text, {
               message_thread_id: input.threadKey === 0 ? undefined : input.threadKey,
-              reply_parameters: action.replyTo ? { message_id: action.replyTo } : undefined,
+              reply_parameters:
+                action.replyTo != null && action.replyTo !== 0 ? { message_id: action.replyTo } : undefined,
             });
+
             return { telegramMessageId: sent.message_id };
           },
           catch: mapDeliveryError,

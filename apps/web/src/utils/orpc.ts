@@ -9,10 +9,16 @@ import { defaultShouldDehydrateQuery, QueryClient } from "@tanstack/react-query"
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { retrieveRawInitData } from "@telegram-apps/sdk-react";
+import { z } from "zod";
 import { createApiContext } from "@/api.server";
 
 const serializer = new StandardRPCJsonSerializer({
   customJsonSerializers: [],
+});
+
+const serializedDataSchema = z.object({
+  json: z.unknown(),
+  meta: z.array(z.tuple([z.number()], z.union([z.string(), z.number()]))),
 });
 
 export function createQueryClient() {
@@ -21,6 +27,7 @@ export function createQueryClient() {
       queries: {
         queryKeyHashFn: (queryKey) => {
           const [json, meta] = serializer.serialize(queryKey);
+
           return JSON.stringify({ json, meta });
         },
         staleTime: 60 * 1000,
@@ -29,11 +36,16 @@ export function createQueryClient() {
         shouldDehydrateQuery: (query) => defaultShouldDehydrateQuery(query) || query.state.status === "pending",
         serializeData: (data) => {
           const [json, meta] = serializer.serialize(data);
+
           return { json, meta };
         },
       },
       hydrate: {
-        deserializeData: (data) => serializer.deserialize(data.json, data.meta),
+        deserializeData: (data: z.input<typeof serializedDataSchema>) => {
+          const serialized = serializedDataSchema.parse(data);
+
+          return serializer.deserialize(serialized.json, serialized.meta);
+        },
       },
     },
   });
@@ -46,6 +58,7 @@ const getORPCClient = createIsomorphicFn()
     createRouterClient(appRouter, {
       context: () => {
         const request = getRequest();
+
         return createApiContext(request);
       },
     }),
@@ -67,7 +80,8 @@ const getORPCClient = createIsomorphicFn()
         },
         fetch: async (request, init) => {
           const telemetry = await import("@/telemetry.client");
-          return telemetry.traceRpcRequest(request, init);
+
+          return await telemetry.traceRpcRequest(request, init);
         },
       }),
     );

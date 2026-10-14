@@ -1,11 +1,15 @@
 import { trace } from "@opentelemetry/api";
 import { Effect } from "effect";
-import type { Context, MiddlewareFn } from "grammy";
+import type { MiddlewareFn } from "grammy";
 import { Database } from "@/services/database";
 import { runtime } from "@/services/runtime";
 
-const premiumAccess: MiddlewareFn<Context> = async (ctx, next) => {
-  if (!ctx.chat) return await next();
+const premiumAccess: MiddlewareFn = async (ctx, next) => {
+  if (!ctx.chat) {
+    await next();
+
+    return;
+  }
 
   // Guest updates arrive in an independent chat; attribute telemetry to the sender's DM id. Guest access is open to everyone.
   const chatId = ctx.guestMessage ? ctx.from!.id : ctx.chat.id;
@@ -13,8 +17,10 @@ const premiumAccess: MiddlewareFn<Context> = async (ctx, next) => {
   const chat = await runtime.runPromise(
     Effect.gen(function* verifyChatAccess() {
       const database = yield* Database.Service;
-      return yield* database.query((client) =>
-        client.chat.findUnique({ where: { id: BigInt(chatId) }, select: { isPremium: true, isPrivate: true } }),
+
+      return yield* database.query(
+        async (client) =>
+          await client.chat.findUnique({ where: { id: BigInt(chatId) }, select: { isPremium: true, isPrivate: true } }),
       );
     }),
   );
@@ -24,28 +30,36 @@ const premiumAccess: MiddlewareFn<Context> = async (ctx, next) => {
   // ids — pseudonymous, no PII — so costs stay attributable per chat/session even for
   // private chats. Only the display name is withheld there.
   const span = trace.getActiveSpan();
+
   if (span !== undefined) {
     const chatName = ctx.chat.title ?? ctx.chat.first_name;
+
     const attributes: Record<string, string> = {
       "langfuse.session.id": `${chatId}/${ctx.msg?.message_thread_id ?? 0}`,
       ...(ctx.from !== undefined && { "langfuse.user.id": ctx.from.id.toString() }),
     };
+
     if (chat?.isPrivate === true) {
-      span.setAttribute('starlight.private', true);
+      // oxlint-disable-next-line github/get-attribute -- OpenTelemetry attribute, not a DOM attribute
+      span.setAttribute("starlight.private", true);
     } else if (chatName !== undefined) {
       attributes["langfuse.trace.name"] = chatName;
     }
+
     span.setAttributes(attributes);
   }
 
-  if (ctx.guestMessage || chat?.isPremium) {
-    return await next();
+  if (ctx.guestMessage || chat?.isPremium === true) {
+    await next();
+
+    return;
   }
 
   if (ctx.chat.type === "private" && ctx.message) {
     await ctx.reply("Личные сообщения для этого аккаунта не разрешены.");
   }
-  return await next();
+
+  await next();
 };
 
 export default premiumAccess;

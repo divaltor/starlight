@@ -8,12 +8,14 @@ export namespace Twitter {
   export const profileId = "twitter-fx-v1";
   const MAX_POSTS = 4;
   const FETCH_TIMEOUT_MS = 5000;
+
   const postUrl = z
     .url()
     .regex(
-      /^https?:\/\/(?:(?:www|mobile)\.)?(?:x\.com|twitter\.com|fxtwitter\.com|vxtwitter\.com)\/(?:[\w]+|i\/web)\/status\/\d+(?:[/?#].*)?$/iu,
+      /^https?:\/\/(?:(?:www|mobile)\.)?(?:x\.com|twitter\.com|fxtwitter\.com|vxtwitter\.com)\/(?:\w+|i\/web)\/status\/\d+(?:[/?#].*)?$/iu,
       "Expected an X/Twitter post URL",
     );
+
   const postSchema = Schema.Struct({
     id: Schema.String,
     url: Schema.String,
@@ -31,10 +33,12 @@ export namespace Twitter {
     ),
     article: Schema.optional(Schema.NullOr(Schema.Struct({ title: Schema.String, preview_text: Schema.String }))),
   });
+
   const tweetSchema = Schema.Struct({
     ...postSchema.fields,
     quote: Schema.optional(Schema.NullOr(postSchema)),
   });
+
   const responseSchema = Schema.Struct({
     code: Schema.Number,
     message: Schema.String,
@@ -60,6 +64,7 @@ export namespace Twitter {
     Service,
     Effect.gen(function* layer() {
       const client = yield* HttpClient.HttpClient;
+
       const fetchPost = Effect.fn("Twitter.fetchPost")(function* fetchPost(id: string) {
         const data = yield* client.get(`https://api.fxtwitter.com/status/${encodeURIComponent(id)}`).pipe(
           Effect.flatMap(HttpClientResponse.filterStatusOk),
@@ -68,20 +73,26 @@ export namespace Twitter {
           Effect.timeout(FETCH_TIMEOUT_MS),
           Effect.mapError((cause) => TwitterError.fromCause({ message: "Failed to read post from FxTwitter", cause })),
         );
+
         if (data.code !== 200 || !data.tweet) {
           return yield* new TwitterError({ message: `FxTwitter post unavailable: ${data.message}` });
         }
+
         return data.tweet;
       });
+
       const readChain = Effect.fn("Twitter.readChain")(function* readChain(
         id: string,
         remaining: number,
       ): Effect.fn.Return<{ posts: (typeof tweetSchema.Type)[]; hasMore: boolean }, TwitterError> {
         const post = yield* fetchPost(id);
-        if (!post.replying_to_status || remaining === 1) {
+
+        if (post.replying_to_status == null || post.replying_to_status === "" || remaining === 1) {
           return { posts: [post], hasMore: Boolean(post.replying_to_status) };
         }
+
         const parent = yield* readChain(post.replying_to_status, remaining - 1);
+
         return { posts: [...parent.posts, post], hasMore: parent.hasMore };
       });
 
@@ -91,9 +102,9 @@ export namespace Twitter {
             description:
               "Read an X/Twitter post via FxTwitter, including up to three parent posts (four total), oldest first. Includes quoted-post text, media URLs, and article previews when available; media URLs are not visual analysis and article previews are not full articles. Use this instead of web_fetch_exa for Twitter/X post URLs. hasMore means earlier ancestors were omitted. This does not fetch replies below the post.",
             inputSchema: z.object({ url: postUrl }),
-            execute: (input, options) =>
-              Effect.runPromise(
-                readChain(new URL(input.url).pathname.match(/\/status\/(?<id>\d+)/iu)!.groups!.id!, MAX_POSTS),
+            execute: async (input, options) =>
+              await Effect.runPromise(
+                readChain(/\/status\/(?<id>\d+)/iu.exec(new URL(input.url).pathname)!.groups!.id!, MAX_POSTS),
                 { signal: options.abortSignal },
               ),
           }),

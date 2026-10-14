@@ -25,23 +25,32 @@ bot.use(async (ctx, next) => {
 });
 
 bot.use(autoQuote());
+
 bot.api.config.use(
   autoRetry({
     maxRetryAttempts: 3,
     maxDelaySeconds: 5,
   }),
 );
+
 bot.api.config.use(hydrateFiles(bot.token));
+
 bot.use(async (ctx, next) => {
   if (ctx.from && env.SUPERVISOR_IDS.includes(ctx.from.id)) {
     ctx.isSupervisor = true;
   }
+
   await next();
 });
+
 bot.use(attachUser);
+
 bot.use(attachChat);
+
 bot.use(attachChatMember);
+
 bot.use(logUpdates);
 
 export { bot };
+
 export type { Context } from "@/types";

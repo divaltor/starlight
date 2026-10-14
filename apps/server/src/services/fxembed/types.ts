@@ -7,6 +7,7 @@ export const FxEmbedAuthorSchema = Schema.Struct({
   name: Schema.String,
   screen_name: Schema.String,
 });
+
 export type FxEmbedAuthor = typeof FxEmbedAuthorSchema.Type;
 
 export const FxEmbedPhotoSchema = Schema.Struct({
@@ -15,6 +16,7 @@ export const FxEmbedPhotoSchema = Schema.Struct({
   url: Schema.String,
   width: Schema.Number,
 });
+
 export type FxEmbedPhoto = typeof FxEmbedPhotoSchema.Type;
 
 export const FxEmbedMosaicPhotoSchema = Schema.Struct({
@@ -27,6 +29,7 @@ export const FxEmbedMosaicPhotoSchema = Schema.Struct({
   url: Schema.optional(Schema.String),
   width: Schema.optional(Schema.Number),
 });
+
 export type FxEmbedMosaicPhoto = typeof FxEmbedMosaicPhotoSchema.Type;
 
 export const FxEmbedVideoSchema = Schema.Struct({
@@ -36,6 +39,7 @@ export const FxEmbedVideoSchema = Schema.Struct({
   url: Schema.String,
   width: Schema.Number,
 });
+
 export type FxEmbedVideo = typeof FxEmbedVideoSchema.Type;
 
 export const FxEmbedMediaSchema = Schema.Struct({
@@ -43,6 +47,7 @@ export const FxEmbedMediaSchema = Schema.Struct({
   photos: Schema.optional(Schema.Array(FxEmbedPhotoSchema)),
   videos: Schema.optional(Schema.Array(FxEmbedVideoSchema)),
 });
+
 export type FxEmbedMedia = typeof FxEmbedMediaSchema.Type;
 
 export const FxEmbedArticleCoverMediaSchema = Schema.Struct({
@@ -55,6 +60,7 @@ export const FxEmbedArticleCoverMediaSchema = Schema.Struct({
   }),
   media_key: Schema.String,
 });
+
 export type FxEmbedArticleCoverMedia = typeof FxEmbedArticleCoverMediaSchema.Type;
 
 export class FxEmbedArticle extends Schema.Class<FxEmbedArticle>("FxEmbedArticle")({
@@ -88,6 +94,7 @@ export class FxEmbedTranslation extends Schema.Class<FxEmbedTranslation>("FxEmbe
     if (!this.text) {
       return null;
     }
+
     // Prefer the ISO code over the English name: upstream derives source_lang_en
     // from an i18n key and leaks the raw key (e.g. "language_zh") when missing.
     return {
@@ -96,11 +103,8 @@ export class FxEmbedTranslation extends Schema.Class<FxEmbedTranslation>("FxEmbe
   }
 }
 
-function FxEmbedTweetSelf(): Schema.Schema<FxEmbedTweet> {
-  // Recursive self-reference: the schema type is only complete after the class declaration below,
-  // so a double cast is required to satisfy the Schema.suspend() lazy reference.
-  // oxlint-disable-next-line anti-slop/no-chained-type-assertions
-  return FxEmbedTweet as unknown as Schema.Schema<FxEmbedTweet>;
+function FxEmbedTweetSelf(): Schema.Codec<FxEmbedTweet, unknown> {
+  return FxEmbedTweet;
 }
 
 export class FxEmbedTweet extends Schema.Class<FxEmbedTweet>("FxEmbedTweet")({
@@ -133,16 +137,20 @@ export const FxEmbedResponseSchema = Schema.Struct({
   message: Schema.String,
   tweet: Schema.optional(Schema.NullOr(FxEmbedTweet)),
 });
+
 export type FxEmbedResponse = typeof FxEmbedResponseSchema.Type;
 
 export const FxEmbedErrorCodeSchema = Schema.Literals([401, 404, 500]);
+
 export type FxEmbedErrorCode = typeof FxEmbedErrorCodeSchema.Type;
 
 export const FxEmbedErrorMessageSchema = Schema.Literals(["PRIVATE_TWEET", "NOT_FOUND", "API_FAIL"]);
+
 export type FxEmbedErrorMessage = typeof FxEmbedErrorMessageSchema.Type;
 
 export const FxEmbedErrorSchema = Schema.Struct({
   code: FxEmbedErrorCodeSchema,
   message: FxEmbedErrorMessageSchema,
 });
+
 export type FxEmbedError = typeof FxEmbedErrorSchema.Type;

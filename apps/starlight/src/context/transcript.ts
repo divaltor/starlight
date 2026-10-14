@@ -63,6 +63,7 @@ export namespace Transcript {
 
   export function projectRun(run: ProjectionRun, knownMessageIds: ReadonlySet<number>): Projection[] {
     const seenMessageIds = new Set(knownMessageIds);
+
     const userTurns = run.inputs.flatMap((runInput, index) => {
       const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
       // Dot notation is the project convention; destructuring is intentionally disabled.
@@ -70,8 +71,11 @@ export namespace Transcript {
       const messageId = payload.messageId;
       // oxlint-disable-next-line prefer-destructuring
       const replyToMessageId = payload.replyToMessageId;
+
+      const hasRepliedText = payload.repliedText !== null && payload.repliedText !== "";
+
       const linked =
-        replyToMessageId !== null && !seenMessageIds.has(replyToMessageId) && payload.repliedText
+        replyToMessageId !== null && !seenMessageIds.has(replyToMessageId) && hasRepliedText
           ? [
               {
                 content: {
@@ -87,8 +91,10 @@ export namespace Transcript {
               },
             ]
           : [];
+
       if (linked.length > 0 && replyToMessageId !== null) seenMessageIds.add(replyToMessageId);
       seenMessageIds.add(messageId);
+
       const projectedMedia = [...payload.repliedMedia, ...payload.media].map((reference) => ({
         availability: reference.availability,
         description: reference.stableDescription,
@@ -96,6 +102,7 @@ export namespace Transcript {
         sha256: reference.availability === "stored" ? reference.sha256 : null,
         type: reference.type,
       }));
+
       const media =
         projectedMedia.length > 0
           ? [
@@ -112,6 +119,7 @@ export namespace Transcript {
               },
             ]
           : [];
+
       return [
         ...linked,
         {
@@ -155,9 +163,10 @@ export namespace Transcript {
         key: `${index}:${projectionIndex}:${projection.key}`,
       }));
     });
+
     const toolTurns = run.toolCalls.flatMap((tool, index) => [
       {
-        content: { input: tool.input, name: tool.toolName } as Prisma.InputJsonObject,
+        content: { input: Schema.decodeUnknownSync(Schema.Json)(tool.input), name: tool.toolName },
         key: `tool:${index}:call:${tool.providerCallId}`,
         kind: "toolCall" as const,
         role: "assistant" as const,
@@ -166,9 +175,10 @@ export namespace Transcript {
         visibility: "conversation",
       },
       {
-        content: (tool.status === "completed"
-          ? { name: tool.toolName, result: tool.result }
-          : { error: tool.errorMessage, name: tool.toolName }) as Prisma.InputJsonObject,
+        content:
+          tool.status === "completed"
+            ? { name: tool.toolName, result: Schema.decodeUnknownSync(Schema.Json)(tool.result) }
+            : { error: tool.errorMessage, name: tool.toolName },
         key: `tool:${index}:result:${tool.providerCallId}`,
         kind: tool.status === "completed" ? ("toolResult" as const) : ("toolError" as const),
         role: "tool" as const,
@@ -177,13 +187,15 @@ export namespace Transcript {
         visibility: "conversation",
       },
     ]);
+
     const assistantTurns = run.actions.flatMap((action) => {
       if (action.deliveryStatus !== "delivered") return [];
       const content = ChatReply.actionSchema.parse(action.payload);
+
       return [
         {
           content: {
-            action: content as Prisma.InputJsonObject,
+            action: content,
             telegramMessageId: action.telegramMessageId,
           },
           key: `action:${action.ordinal}`,
@@ -195,6 +207,7 @@ export namespace Transcript {
         },
       ];
     });
+
     const failureTurns: Projection[] =
       run.status === "failed"
         ? [

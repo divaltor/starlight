@@ -7,7 +7,8 @@ const databaseEnv = createEnv({
       .string()
       .transform((value) => {
         if (value) return value;
-        if (!process.env.BASE_FRONTEND_URL) return "";
+
+        if (process.env.BASE_FRONTEND_URL === undefined || process.env.BASE_FRONTEND_URL === "") return "";
 
         try {
           const url = new URL(
@@ -15,7 +16,9 @@ const databaseEnv = createEnv({
               ? process.env.BASE_FRONTEND_URL
               : `https://${process.env.BASE_FRONTEND_URL}`,
           );
+
           url.hostname = `cdn.${url.hostname}`;
+
           return url.toString();
         } catch {
           return process.env.BASE_FRONTEND_URL;

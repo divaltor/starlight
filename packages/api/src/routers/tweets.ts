@@ -22,7 +22,7 @@ export const listUserTweets = maybeAuthProcedure.input(TweetsQuery).handler(asyn
   // Determine target user
   let targetUser: Pick<User, "id" | "telegramId" | "username" | "isPublic"> | null = null;
 
-  if (input.username) {
+  if (input.username !== undefined && input.username !== "") {
     targetUser = await prisma.user.findUnique({
       where: { username: input.username },
       select: { id: true, telegramId: true, username: true, isPublic: true },
@@ -51,7 +51,7 @@ export const listUserTweets = maybeAuthProcedure.input(TweetsQuery).handler(asyn
   const isSelf = !!user && targetUser?.telegramId === BigInt(user.id);
 
   // Access control: only self or public profiles
-  if (!(isSelf || targetUser?.isPublic)) {
+  if (!(isSelf || targetUser?.isPublic === true)) {
     throw new ORPCError("UNAUTHORIZED", {
       message: "Unauthorized",
       status: 401,
@@ -77,7 +77,8 @@ export const retrieveUserTweets = no
 
     try {
       let cursorData: CursorPayload | null = null;
-      if (cursor) {
+
+      if (cursor !== undefined && cursor !== "") {
         cursorData = Cursor.parse(cursor, CursorPayloadSchema);
 
         if (!cursorData) {
@@ -127,6 +128,7 @@ export const retrieveUserTweets = no
       const transformedTweets = transformTweets(tweets);
 
       let nextCursor: string | null = null;
+
       if (tweets.length === limit) {
         // biome-ignore lint/style/noNonNullAssertion: We know there's at least one tweet
         const lastTweet = tweets.at(-1)!;

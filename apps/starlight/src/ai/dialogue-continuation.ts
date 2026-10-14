@@ -1,10 +1,10 @@
-import { experimental_evaluate } from "ai";
-import type { Experimental_EvaluationModel } from "ai";
+import { experimental_decide } from "ai";
+import type { Experimental_DecisionModel } from "ai";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
 import { ChatReply } from "@/ai/chat-reply";
 import type { TelegramDelivery } from "@/conversation/delivery";
 import { ConversationKey } from "@/conversation/key";
-import type { InputPayload } from "@/conversation/run-artifacts";
+import { StoredPayloadSchema } from "@/conversation/run-artifacts";
 import { Database } from "@/services/database";
 
 export namespace DialogueContinuation {
@@ -41,48 +41,54 @@ export namespace DialogueContinuation {
 
   export class Service extends Context.Service<Service, Interface>()("starlight/DialogueContinuation") {}
 
-  export function layer(model: Experimental_EvaluationModel): Layer.Layer<Service, never, Database.Service> {
+  export function layer(model: Experimental_DecisionModel): Layer.Layer<Service, never, Database.Service> {
     return Layer.effect(
       Service,
       Effect.gen(function* make() {
         const database = yield* Database.Service;
+
         const evaluate = Effect.fn("DialogueContinuation.evaluate")(function* evaluate(input: Input) {
           const key = ConversationKey.toDb(input.key);
+
           const deliveredReplies = yield* database
-            .query((client) =>
-              client.conversationRunAction.findMany({
-                where: {
-                  deliveryStatus: "delivered",
-                  telegramMessageId: { lt: input.messageId },
-                  type: "text",
-                  run: key,
-                },
-                orderBy: { telegramMessageId: "desc" },
-                select: { payload: true, telegramMessageId: true },
-                take: RECENT_MESSAGE_LIMIT,
-              }),
+            .query(
+              async (client) =>
+                await client.conversationRunAction.findMany({
+                  where: {
+                    deliveryStatus: "delivered",
+                    telegramMessageId: { lt: input.messageId },
+                    type: "text",
+                    run: key,
+                  },
+                  orderBy: { telegramMessageId: "desc" },
+                  select: { payload: true, telegramMessageId: true },
+                  take: RECENT_MESSAGE_LIMIT,
+                }),
             )
-            .pipe(Effect.mapError(EvaluationError.fromCause));
+            .pipe(Effect.mapError((cause) => EvaluationError.fromCause(cause)));
 
           const recentInputs = yield* database
-            .query((client) =>
-              client.conversationInput.findMany({
-                where: {
-                  ...key,
-                  sourceMessageId: { lt: input.messageId },
-                },
-                orderBy: [{ sourceMessageId: "desc" }, { admittedRevision: "desc" }],
-                distinct: ["sourceMessageId"],
-                select: { payload: true, sourceMessageId: true },
-                take: RECENT_MESSAGE_LIMIT,
-              }),
+            .query(
+              async (client) =>
+                await client.conversationInput.findMany({
+                  where: {
+                    ...key,
+                    sourceMessageId: { lt: input.messageId },
+                  },
+                  orderBy: [{ sourceMessageId: "desc" }, { admittedRevision: "desc" }],
+                  distinct: ["sourceMessageId"],
+                  select: { payload: true, sourceMessageId: true },
+                  take: RECENT_MESSAGE_LIMIT,
+                }),
             )
-            .pipe(Effect.mapError(EvaluationError.fromCause));
+            .pipe(Effect.mapError((cause) => EvaluationError.fromCause(cause)));
+
           const chat = yield* database
-            .query((client) =>
-              client.chat.findUniqueOrThrow({ where: { id: key.chatId }, select: { isPrivate: true } }),
+            .query(
+              async (client) =>
+                await client.chat.findUniqueOrThrow({ where: { id: key.chatId }, select: { isPrivate: true } }),
             )
-            .pipe(Effect.mapError(EvaluationError.fromCause));
+            .pipe(Effect.mapError((cause) => EvaluationError.fromCause(cause)));
 
           yield* Effect.annotateCurrentSpan({
             "gen_ai.operation.name": "evaluate",
@@ -91,9 +97,11 @@ export namespace DialogueContinuation {
             ...(input.senderId !== null && { "langfuse.user.id": input.senderId.toString() }),
             ...(chat.isPrivate && { "starlight.private": true }),
           });
+
           const recentExchange = [
             ...recentInputs.map((item) => {
-              const payload = item.payload as InputPayload;
+              const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(item.payload);
+
               return {
                 messageId: item.sourceMessageId,
                 replyToMessageId: payload.replyToMessageId,
@@ -105,6 +113,7 @@ export namespace DialogueContinuation {
             }),
             ...deliveredReplies.flatMap((action) => {
               const parsed = ChatReply.actionSchema.parse(action.payload);
+
               return parsed.type === "text"
                 ? [
                     {
@@ -121,6 +130,7 @@ export namespace DialogueContinuation {
           ]
             .toSorted((left, right) => left.messageId - right.messageId)
             .slice(-RECENT_MESSAGE_LIMIT);
+
           const state = {
             assistant: { name: "Starlight", speakerId: input.key.assistantId.toString() },
             currentMessage: {
@@ -134,6 +144,7 @@ export namespace DialogueContinuation {
             recentExchange,
             trigger: input.trigger,
           };
+
           const questions = {
             action: {
               type: "choice",
@@ -169,12 +180,14 @@ export namespace DialogueContinuation {
               },
             },
           } as const;
+
           if (!chat.isPrivate) {
             yield* Effect.annotateCurrentSpan("langfuse.observation.input", JSON.stringify({ questions, state }));
           }
+
           const result = yield* Effect.tryPromise({
-            try: (signal) =>
-              experimental_evaluate({
+            try: async (signal) =>
+              await experimental_decide({
                 abortSignal: signal,
                 maxRetries: 2,
                 model,
@@ -192,16 +205,23 @@ export namespace DialogueContinuation {
                   recordOutputs: !chat.isPrivate,
                 },
               }),
-            catch: EvaluationError.fromCause,
-          }).pipe(Effect.timeout(Duration.seconds(5)), Effect.mapError(EvaluationError.fromCause));
+            catch: (cause) => EvaluationError.fromCause(cause),
+          }).pipe(
+            Effect.timeout(Duration.seconds(5)),
+            Effect.mapError((cause) => EvaluationError.fromCause(cause)),
+          );
+
           const action = result.answers.action.choice;
           const probability = result.answers.action.probabilities?.[action] ?? 0;
+
           const candidate: Record<typeof action, Decision> = {
             reaction: { emoji: result.answers.emoji.choice, type: "reaction" },
             silence: { type: "silence" },
             text: { type: "text" },
           };
+
           const decision = probability < ACTION_THRESHOLD ? { type: "silence" as const } : candidate[action];
+
           if (!chat.isPrivate) {
             yield* Effect.annotateCurrentSpan(
               "langfuse.observation.output",
@@ -211,6 +231,7 @@ export namespace DialogueContinuation {
               }),
             );
           }
+
           yield* Effect.logInfo("Group response decision evaluated").pipe(
             Effect.annotateLogs({
               action,
@@ -224,6 +245,7 @@ export namespace DialogueContinuation {
               trigger: input.trigger,
             }),
           );
+
           return decision;
         });
 

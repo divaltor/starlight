@@ -48,6 +48,7 @@ export namespace Hindsight {
         cause instanceof Error && "statusCode" in cause && typeof cause.statusCode === "number"
           ? cause.statusCode
           : undefined;
+
       return new HindsightError({
         cause,
         message,
@@ -74,10 +75,15 @@ export namespace Hindsight {
     const initializedBanks = new Set<string>();
     const initializations = new Map<string, Promise<void>>();
 
-    const ensureBank = (bankId: string, signal: AbortSignal) => {
-      if (initializedBanks.has(bankId)) return Promise.resolve();
+    const ensureBank = async (bankId: string, signal: AbortSignal) => {
+      if (initializedBanks.has(bankId)) return;
       const pending = initializations.get(bankId);
-      if (pending !== undefined) return pending;
+
+      if (pending !== undefined) {
+        await pending;
+
+        return;
+      }
 
       const initialization = (async () => {
         if (!bankId.startsWith("conversation:")) throw new Error(`Unsupported Hindsight bank: ${bankId}`);
@@ -87,6 +93,7 @@ export namespace Hindsight {
           retainMission: RETAIN_MISSION,
           signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
         });
+
         const configured = await sdk.updateBankConfig({
           body: {
             updates: {
@@ -101,39 +108,51 @@ export namespace Hindsight {
           path: { bank_id: bankId },
           signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
         });
+
         if (configured.error !== undefined) {
           throw new Error(`Hindsight bank configuration failed: ${JSON.stringify(configured.error)}`);
         }
+
         const models = await client.listMentalModels(bankId, {
           detail: "metadata",
           signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
         });
+
         if (models.items.some((model) => model.id === LEGACY_PROFILE_ID)) {
           const deleted = await sdk.deleteMentalModel({
             client: generatedClient,
             path: { bank_id: bankId, mental_model_id: LEGACY_PROFILE_ID },
             signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
           });
+
           if (deleted.error !== undefined && deleted.response?.status !== 404) {
             throw new Error(`Hindsight legacy profile deletion failed: ${JSON.stringify(deleted.error)}`);
           }
         }
+
         initializedBanks.add(bankId);
       })().finally(() => {
         initializations.delete(bankId);
       });
+
       initializations.set(bankId, initialization);
-      return initialization;
+
+      await initialization;
     };
 
-    const retain = Effect.fn("Hindsight.retain")(function* retain(input: RetainInput) {
+    const retain = Effect.fn("Hindsight.retain")(function* retain(
+      input: RetainInput,
+    ): Effect.fn.Return<void, HindsightError> {
       yield* Effect.tryPromise({
-        try: (signal) => ensureBank(input.bankId, signal),
+        try: async (signal) => {
+          await ensureBank(input.bankId, signal);
+        },
         catch: (cause) => HindsightError.fromCause("Failed to initialize Hindsight bank", cause),
       });
+
       const submission = yield* Effect.tryPromise({
-        try: (signal) =>
-          client.retainBatch(input.bankId, [...input.items], {
+        try: async (signal) =>
+          await client.retainBatch(input.bankId, [...input.items], {
             async: true,
             operationId: input.operationId,
             signal,
@@ -143,14 +162,15 @@ export namespace Hindsight {
         Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
         Effect.mapError(foldTimeout("Failed to retain Hindsight memories")),
       );
+
       const operationIds =
         submission.operation_ids ??
         (submission.operation_id === null || submission.operation_id === undefined ? [] : [submission.operation_id]);
+
       if (operationIds.length === 0) {
-        return yield* Effect.fail(
-          HindsightError.fromCause("Hindsight async retain returned no operation ID", submission),
-        );
+        yield* Effect.fail(HindsightError.fromCause("Hindsight async retain returned no operation ID", submission));
       }
+
       // oxlint-disable-next-line github/array-foreach -- Effect.forEach, not Array.prototype.forEach
       yield* Effect.forEach(operationIds, (operationId) => waitForOperation(input.bankId, operationId), {
         concurrency: "unbounded",
@@ -164,12 +184,15 @@ export namespace Hindsight {
 
     const recall = Effect.fn("Hindsight.recall")(function* recall(input: RecallInput) {
       yield* Effect.tryPromise({
-        try: (signal) => ensureBank(input.bankId, signal),
+        try: async (signal) => {
+          await ensureBank(input.bankId, signal);
+        },
         catch: (cause) => HindsightError.fromCause("Failed to initialize Hindsight bank", cause),
       });
+
       const response = yield* Effect.tryPromise({
-        try: (signal) =>
-          client.recall(input.bankId, input.query, {
+        try: async (signal) =>
+          await client.recall(input.bankId, input.query, {
             budget: "low",
             includeEntities: false,
             maxTokens: input.maxTokens,
@@ -183,18 +206,20 @@ export namespace Hindsight {
         Effect.mapError(foldTimeout("Failed to recall Hindsight memory")),
         Effect.withSpan("Hindsight recall"),
       );
+
       return response.results;
     });
 
     const waitForOperation = Effect.fn("Hindsight.waitForOperation")(function* waitForOperation(
       bankId: string,
       operationId: string,
-    ) {
+    ): Effect.fn.Return<void, HindsightError> {
       let retried = false;
+
       for (;;) {
         const response = yield* Effect.tryPromise({
-          try: (signal) =>
-            sdk.getOperationStatus({
+          try: async (signal) =>
+            await sdk.getOperationStatus({
               client: generatedClient,
               path: { bank_id: bankId, operation_id: operationId },
               signal,
@@ -204,18 +229,24 @@ export namespace Hindsight {
           Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
           Effect.mapError(foldTimeout(`Hindsight operation ${operationId} lookup failed`)),
         );
+
         if (response.data === undefined) {
-          return yield* Effect.fail(
+          yield* Effect.fail(
             HindsightError.fromCause(`Hindsight operation ${operationId} lookup failed`, response.error),
           );
+
+          return;
         }
+
         // oxlint-disable-next-line prefer-destructuring -- project style keeps property access explicit
         const status = response.data.status;
+
         if (status === "completed") return;
+
         if (status === "failed" && !retried) {
           const retry = yield* Effect.tryPromise({
-            try: (signal) =>
-              sdk.retryOperation({
+            try: async (signal) =>
+              await sdk.retryOperation({
                 client: generatedClient,
                 path: { bank_id: bankId, operation_id: operationId },
                 signal,
@@ -225,22 +256,26 @@ export namespace Hindsight {
             Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
             Effect.mapError(foldTimeout(`Hindsight operation ${operationId} retry failed`)),
           );
+
           if (retry.data === undefined) {
-            return yield* Effect.fail(
+            yield* Effect.fail(
               HindsightError.fromCause(`Hindsight operation ${operationId} retry failed`, retry.error),
             );
           }
+
           retried = true;
           continue;
         }
+
         if (["cancelled", "failed", "not_found"].includes(status)) {
-          return yield* Effect.fail(
+          yield* Effect.fail(
             HindsightError.fromCause(
               `Hindsight operation ${operationId} ${status}: ${response.data.error_message}`,
               response.data.error_message,
             ),
           );
         }
+
         yield* Effect.sleep(Duration.millis(OPERATION_POLL_INTERVAL_MS));
       }
     });

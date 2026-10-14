@@ -26,12 +26,14 @@ export namespace TweetRichMessage {
     ];
 
     const mainText = cleanupTweetText(params.tweet.getDisplayText());
-    if (mainText) {
+
+    if (mainText !== undefined && mainText !== "") {
       blocks.push({ type: "paragraph", text: mainText });
     }
 
     const quoteText = cleanupTweetText(params.tweet.quote?.getDisplayText());
-    if (params.tweet.quote && quoteText) {
+
+    if (params.tweet.quote && quoteText !== undefined && quoteText !== "") {
       blocks.push({
         type: "blockquote",
         blocks: [
@@ -57,9 +59,11 @@ export namespace TweetRichMessage {
       media: params.video,
       supports_streaming: true,
     };
+
     if (params.width !== undefined) {
       video.width = params.width;
     }
+
     if (params.height !== undefined) {
       video.height = params.height;
     }

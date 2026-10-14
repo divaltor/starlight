@@ -15,23 +15,25 @@ composer.on("guest_message:text", async (ctx) => {
       const chatTools = yield* ChatTools.Service;
       const media = yield* Media.Service;
       const toolset = yield* chatTools.resolve(chatTools.availableProfile);
+
       const repliedMedia = yield* Effect.all(
-        Media.fromTelegramMessage(ctx.guestMessage!.reply_to_message).map((source) =>
+        Media.fromTelegramMessage(ctx.guestMessage.reply_to_message).map((source) =>
           media.ingest(source).pipe(Effect.flatMap(media.load)),
         ),
         { concurrency: "unbounded" },
       );
+
       return yield* guestReply.generate({
-        message: ctx.guestMessage!.text,
+        message: ctx.guestMessage.text,
         repliedMedia: repliedMedia.filter((item): item is Media.Loaded => item !== null),
-        repliedMessage: ctx.guestMessage!.reply_to_message?.text ?? ctx.guestMessage!.reply_to_message?.caption ?? null,
-        sessionId: `guest:${ctx.from!.id}:${ctx.update.update_id}`,
+        repliedMessage: ctx.guestMessage.reply_to_message?.text ?? ctx.guestMessage.reply_to_message?.caption ?? null,
+        sessionId: `guest:${ctx.from.id}:${ctx.update.update_id}`,
         toolset,
       });
     }),
   );
 
-  await ctx.api.answerGuestQuery(ctx.guestMessage!.guest_query_id!, {
+  await ctx.api.answerGuestQuery(ctx.guestMessage.guest_query_id!, {
     type: "article",
     id: crypto.randomUUID(),
     title: "Ответ Старки",

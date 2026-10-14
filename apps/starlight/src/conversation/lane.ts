@@ -17,6 +17,7 @@ export namespace Lane {
 				AND thread_key = ${key.threadKey}
 			FOR UPDATE
 		`;
+
     return { activeRunId: rows[0]!.active_run_id };
   }
 
@@ -28,10 +29,12 @@ export namespace Lane {
     claim: { readonly fencingToken: bigint; readonly runId: string },
   ) {
     await lockLane(transaction, key);
+
     const lane = await transaction.conversationLane.findUniqueOrThrow({
       where: { assistantId_chatId_threadKey: key },
       select: { activeRunId: true, fencingToken: true },
     });
+
     if (lane.activeRunId !== claim.runId || lane.fencingToken !== claim.fencingToken) {
       throw new Error("Conversation lane fence is stale");
     }

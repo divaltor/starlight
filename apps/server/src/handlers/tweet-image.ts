@@ -1,4 +1,5 @@
 import { extractTweetId, isTwitterUrl } from "@starlight/utils";
+import { Schema } from "effect";
 import { Composer, GrammyError, InlineKeyboard, InlineQueryResultBuilder, InputFile } from "grammy";
 import env from "@/env";
 import { renderTweetImage } from "@/services/render";
@@ -34,7 +35,7 @@ chats
   .command("quote")
   .filter((ctx) => extractTweetId(ctx.match.trim()) !== null)
   .use(async (ctx) => {
-    const tweetId = extractTweetId(ctx.match.trim()) as string;
+    const tweetId = extractTweetId(ctx.match.trim())!;
 
     ctx.logger.info({ userId: ctx.from.id, tweetId }, "Processing /q command");
 
@@ -70,6 +71,7 @@ chats
             "• Deleted\n" +
             "• Invalid URL",
         );
+
         return;
       }
 
@@ -90,9 +92,10 @@ composer
 
     ctx.logger.info({ userId: ctx.from.id, query, tweetId }, "Processing inline query for tweet");
 
-    if (!tweetId) {
+    if (tweetId === null || tweetId === "") {
       ctx.logger.debug({ query }, "Failed to extract tweet ID from inline query");
       await ctx.answerInlineQuery([]);
+
       return;
     }
 
@@ -147,7 +150,7 @@ composer
         },
       ];
 
-      if (tweetData.replyChain?.length) {
+      if ((tweetData.replyChain?.length ?? 0) !== 0) {
         const tweetDataWithoutChain = {
           ...tweetData,
           replyChain: [],
@@ -220,6 +223,7 @@ composer
             "Could not fetch this tweet. It may be private or deleted.",
           ),
         ]);
+
         return;
       }
 
@@ -229,11 +233,15 @@ composer
 
 chats.callbackQuery(/^tweet_img:toggle:(?<tweetId>\d+):(?<theme>light|dark):(?<userId>\d+)$/u, async (ctx) => {
   // The regex callback query route guarantees all named match groups are present
-  const { theme, tweetId, userId } = (ctx.match as RegExpMatchArray).groups as Record<
-    "theme" | "tweetId" | "userId",
-    string
-  >;
-  const newTheme = theme as Theme;
+  const { theme, tweetId, userId } = Schema.decodeUnknownSync(
+    Schema.Struct({
+      theme: Schema.Literals(["light", "dark"]),
+      tweetId: Schema.String,
+      userId: Schema.String,
+    }),
+  )(typeof ctx.match === "string" ? undefined : ctx.match.groups);
+
+  const newTheme = theme;
   const ownerId = userId;
 
   if (ctx.from.id !== Number(ownerId)) {
@@ -241,6 +249,7 @@ chats.callbackQuery(/^tweet_img:toggle:(?<tweetId>\d+):(?<theme>light|dark):(?<u
       text: "Only the person who requested this image can change the theme",
       show_alert: true,
     });
+
     return;
   }
 

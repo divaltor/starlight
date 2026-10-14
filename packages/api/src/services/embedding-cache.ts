@@ -14,7 +14,7 @@ export async function resolveQueryEmbedding(
 
   const cached = await redis.get(cacheKey);
 
-  if (cached) {
+  if (cached !== null && cached !== "") {
     return Schema.decodeSync(QueryEmbeddingFromJson)(cached);
   }
 

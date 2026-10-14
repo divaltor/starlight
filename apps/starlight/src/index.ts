@@ -15,6 +15,7 @@ import { runtime } from "@/services/runtime";
 const env = createBotEnv();
 
 initTelemetry({ langfuse: env.langfuse, otlp: env.otlp });
+
 await runtime.runPromise(
   pipe(
     Effect.logInfo("Telemetry established"),
@@ -27,8 +28,8 @@ await runtime.runPromise(
 
 bot.use(createUpdateTracer());
 
-const boundary = bot.errorBoundary((error) =>
-  runtime.runPromise(
+const boundary = bot.errorBoundary(async (error) => {
+  await runtime.runPromise(
     pipe(
       Effect.logError("Unhandled bot update error"),
       Effect.annotateLogs({
@@ -36,26 +37,43 @@ const boundary = bot.errorBoundary((error) =>
         error: error.error instanceof Error ? (error.error.stack ?? error.error.message) : String(error.error),
       }),
     ),
-  ),
-);
+  );
+});
 
 boundary.use(startChat);
+
 boundary.use(chatMemberHandler);
+
 boundary.use(premiumAccess);
+
 boundary.use(startHandler);
+
 boundary.use(guestMessageHandler);
+
 boundary.use(topicCreatedHandler);
+
 boundary.use(messageHandler);
 
 const runner = run(bot);
+
 await runtime.runPromise(Effect.logInfo("Starlight bot is running"));
 
 const shutdown = async () => {
   await runtime.runPromise(Effect.logInfo("Stopping Starlight bot"));
+
   if (runner.isRunning()) await runner.stop();
   await runtime.dispose();
   await shutdownTelemetry();
 };
 
-process.once("SIGINT", shutdown);
-process.once("SIGTERM", shutdown);
+process.once("SIGINT", () => {
+  shutdown().catch((cause: unknown) => {
+    console.error(cause);
+  });
+});
+
+process.once("SIGTERM", () => {
+  shutdown().catch((cause: unknown) => {
+    console.error(cause);
+  });
+});

@@ -17,7 +17,9 @@ import { cn } from "@/lib/utils";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { client, orpc } from "@/utils/orpc";
 
-const TweetImageGrid = lazy(() => import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })));
+const TweetImageGrid = lazy(
+  async () => await import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
+);
 
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
@@ -33,7 +35,7 @@ function TwitterArtViewer() {
   const { data: profile } = useQuery<ProfileResult>(
     orpc.profiles.get.queryOptions({
       queryKey: ["profile"],
-      enabled: !!rawInitData,
+      enabled: (rawInitData?.length ?? 0) > 0,
       staleTime: 5 * 60 * 1000,
       gcTime: 30 * 60 * 1000,
       retry: 1,
@@ -78,9 +80,9 @@ function TwitterArtViewer() {
   const { tweets, isLoading, isFetchingNextPage, hasNextPage, error, fetchNextPage } = useTweets();
 
   const { mutate: deletePhoto } = useMutation({
-    mutationFn: (photoId: string) => client.tweets.delete({ photoId }),
+    mutationFn: async (photoId: string) => await client.tweets.delete({ photoId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tweets"] });
+      void queryClient.invalidateQueries({ queryKey: ["tweets"] });
     },
   });
 
@@ -88,10 +90,10 @@ function TwitterArtViewer() {
     deletePhoto(photoId);
   };
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmedQuery = inputValue.trim();
-    setUrlQuery(trimmedQuery || null, { history: "push" });
+    void setUrlQuery(trimmedQuery || null, { history: "push" });
   };
 
   // Infinite loader for regular tweets
@@ -102,7 +104,7 @@ function TwitterArtViewer() {
       }
     },
     {
-      isItemLoaded: (index, items) => !!items[index],
+      isItemLoaded: (index, items) => items[index] !== undefined,
       minimumBatchSize: 30,
       threshold: 5,
     },
@@ -116,7 +118,7 @@ function TwitterArtViewer() {
       }
     },
     {
-      isItemLoaded: (index, items) => !!items[index],
+      isItemLoaded: (index, items) => items[index] !== undefined,
       minimumBatchSize: 30,
       threshold: 5,
     },
@@ -179,7 +181,9 @@ function TwitterArtViewer() {
                 itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
                 itemKey={(tweet) => tweet.id}
                 items={displayItems}
-                onRender={currentInfiniteLoader}
+                onRender={(...args) => {
+                  currentInfiniteLoader(...args);
+                }}
                 overscanBy={MASONRY_OVERSCAN_BY}
                 render={renderMasonryItem}
               />
@@ -195,7 +199,9 @@ function TwitterArtViewer() {
             <div className="join w-full">
               <Input
                 className="input input-bordered join-item flex-1"
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={(e) => {
+                  setInputValue(e.target.value);
+                }}
                 placeholder="Search for images…"
                 type="text"
                 value={inputValue}
@@ -236,8 +242,8 @@ export const Route = createFileRoute("/app")({
     });
 
     await Promise.all([
-      queryClient.fetchQuery(profileOptions),
-      queryClient.fetchInfiniteQuery(
+      queryClient.query(profileOptions),
+      queryClient.infiniteQuery(
         orpc.tweets.list.infiniteOptions({
           input: (pageParam: string | null | undefined) => ({
             cursor: pageParam ?? undefined,

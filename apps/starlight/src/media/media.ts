@@ -38,6 +38,7 @@ export namespace Media {
     telegramFileUniqueId: Schema.String,
     type: Type,
   });
+
   const UnavailableReferenceSchema = Schema.Struct({
     availability: Schema.Literal("unavailable"),
     mimeType: Schema.String,
@@ -47,6 +48,7 @@ export namespace Media {
     telegramFileUniqueId: Schema.String,
     type: Type,
   });
+
   export const ReferenceSchema = Schema.Union([StoredReferenceSchema, UnavailableReferenceSchema]);
   export type Reference = typeof ReferenceSchema.Type;
 
@@ -92,15 +94,20 @@ export namespace Media {
 
   export function fromTelegramMessage(message: Message | undefined): Source[] {
     if (!message) return [];
-    if (message.photo?.length) {
+
+    if (message.photo !== undefined && message.photo.length > 0) {
       const photo = message.photo.at(-1)!;
+
       return [createSource("photo", photo.file_id, photo.file_unique_id, "image/jpeg", photo.file_size)];
     }
+
     if (message.sticker) {
       const file =
         message.sticker.is_animated || message.sticker.is_video ? message.sticker.thumbnail : message.sticker;
+
       return file ? [createSource("sticker", file.file_id, file.file_unique_id, "image/webp", file.file_size)] : [];
     }
+
     if (message.animation) {
       return [
         createSource(
@@ -112,6 +119,7 @@ export namespace Media {
         ),
       ];
     }
+
     if (message.video) {
       return [
         createSource(
@@ -123,6 +131,7 @@ export namespace Media {
         ),
       ];
     }
+
     if (message.video_note) {
       return [
         createSource(
@@ -134,6 +143,7 @@ export namespace Media {
         ),
       ];
     }
+
     if (message.voice) {
       return [
         createSource(
@@ -145,6 +155,7 @@ export namespace Media {
         ),
       ];
     }
+
     if (message.audio) {
       return [
         createSource(
@@ -156,6 +167,7 @@ export namespace Media {
         ),
       ];
     }
+
     if (message.document) {
       return [
         createSource(
@@ -167,6 +179,7 @@ export namespace Media {
         ),
       ];
     }
+
     return [];
   }
 
@@ -175,6 +188,7 @@ export namespace Media {
       Service,
       Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;
+
         return Service.of(make(options, client));
       }),
     );
@@ -189,43 +203,52 @@ export namespace Media {
 
     const download = Effect.fn("Media.download")(function* download(source: Source | Reference) {
       yield* Effect.annotateCurrentSpan({ "media.mime_type": source.mimeType, "media.type": source.type });
+
       const file = yield* Effect.tryPromise({
-        try: (signal) =>
-          options.telegramApi.getFile(
+        try: async (signal) =>
+          await options.telegramApi.getFile(
             source.telegramFileId,
             // grammY declares the legacy abort-controller type, while Bun accepts the native signal at runtime.
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- bridge declaration mismatch without dropping cancellation
             AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]) as Parameters<Api["getFile"]>[1],
           ),
         catch: (cause) => new MediaError({ cause, message: DOWNLOAD_FAILED, retryable: true }),
       });
+
       const response = yield* client.execute(HttpClientRequest.get(file.getUrl())).pipe(
         Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
         Effect.mapError((cause) => new MediaError({ cause, message: DOWNLOAD_FAILED, retryable: true })),
       );
+
       if (response.status < 200 || response.status >= 300) {
         return yield* new MediaError({
           message: `Telegram file download returned ${response.status}`,
           retryable: true,
         });
       }
+
       const contentLength = Number(response.headers["content-length"]);
+
       if (Number.isFinite(contentLength) && contentLength > MAX_SOURCE_BYTES) {
         return yield* new MediaError({
           message: SOURCE_TOO_LARGE,
           retryable: true,
         });
       }
+
       const bytes = new Uint8Array(
         yield* response.arrayBuffer.pipe(
           Effect.mapError((cause) => new MediaError({ cause, message: DOWNLOAD_FAILED, retryable: true })),
         ),
       );
+
       if (bytes.byteLength > MAX_SOURCE_BYTES) {
         return yield* new MediaError({
           message: SOURCE_TOO_LARGE,
           retryable: true,
         });
       }
+
       return bytes;
     });
 
@@ -233,18 +256,22 @@ export namespace Media {
       if (source.declaredSize !== null && source.declaredSize > MAX_SOURCE_BYTES) {
         return unavailable(source, "media exceeds the 20 MiB boundary");
       }
+
       if (!isSupported(source)) return unavailable(source, "media type is not supported by the model pipeline");
 
       const downloaded = yield* download(source);
+
       if (source.mimeType === "application/pdf") {
         const classification = yield* Effect.tryPromise({
-          try: () => classifyPdfAsync(Buffer.from(downloaded)),
+          try: async () => await classifyPdfAsync(Buffer.from(downloaded)),
           catch: (cause) => new MediaError({ cause, message: "Failed to inspect PDF", retryable: false }),
         });
+
         if (classification.pageCount > MAX_PDF_PAGES) {
           return unavailable(source, `PDF exceeds the ${MAX_PDF_PAGES}-page boundary`);
         }
       }
+
       const bytes = isNormalizableImage(source) ? yield* normalizeImage(downloaded) : downloaded;
       const sha256 = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
       const s3Key = `telegram-media/${sha256}`;
@@ -262,6 +289,7 @@ export namespace Media {
           },
         }),
       );
+
       return {
         availability: "stored" as const,
         mimeType: normalizedMimeType(source),
@@ -277,6 +305,7 @@ export namespace Media {
 
     const load = Effect.fn("Media.load")(function* load(reference: Reference) {
       if (reference.availability === "unavailable") return null;
+
       const stored = yield* Effect.tryPromise({
         try: async () =>
           (await s3.exists(reference.s3Key)) ? new Uint8Array(await s3.file(reference.s3Key).arrayBuffer()) : null,
@@ -290,21 +319,26 @@ export namespace Media {
           },
         }),
       );
+
       const downloaded = stored ?? (yield* download(reference));
+
       const bytes =
         stored === null && reference.mimeType.startsWith("image/") && reference.mimeType !== "image/gif"
           ? yield* normalizeImage(downloaded)
           : downloaded;
+
       const sha256 = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+
       if (sha256 !== reference.sha256) {
         return yield* new MediaError({
           message: "Loaded media digest does not match its frozen reference",
           retryable: false,
         });
       }
+
       if (stored === null) {
         yield* Effect.tryPromise({
-          try: () => s3.write(reference.s3Key, bytes, { type: reference.mimeType }),
+          try: async () => await s3.write(reference.s3Key, bytes, { type: reference.mimeType }),
           catch: (cause) => new MediaError({ cause, message: "Failed to repair media in S3", retryable: true }),
         }).pipe(
           Effect.withSpan("Media repair stored", {
@@ -316,6 +350,7 @@ export namespace Media {
           }),
         );
       }
+
       return { bytes, mimeType: reference.mimeType, sha256, type: reference.type };
     });
 
@@ -330,8 +365,10 @@ export namespace Media {
             .resize(2000, 2000, { fit: "inside", withoutEnlargement: true })
             .jpeg({ quality })
             .bytes();
+
           if (normalized.byteLength <= MAX_IMAGE_BYTES) return normalized;
         }
+
         throw new Error("Normalized image exceeds the 5 MiB model boundary");
       },
       catch: (cause) => new MediaError({ cause, message: "Failed to normalize image", retryable: false }),

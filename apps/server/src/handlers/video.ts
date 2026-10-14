@@ -1,4 +1,5 @@
 import { cleanupTweetText, extractTweetId, prisma } from "@starlight/utils";
+import { Schema } from "effect";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
 import env from "@/env";
@@ -26,22 +27,23 @@ const whitelistedGroupChat = groupChat.filter((ctx) => WHITELISTED_CHAT_IDS.has(
 const whitelistedChats = chats.filter((ctx) => ctx.chat?.type === "private" || WHITELISTED_CHAT_IDS.has(ctx.chat.id));
 
 type SendMessageOptions = Parameters<Context["api"]["sendMessage"]>[2];
+
 type SendVideoOptions = Parameters<Context["api"]["sendVideo"]>[2];
 
-function sendTextMessage(ctx: Context, text: string, options?: SendMessageOptions) {
+async function sendTextMessage(ctx: Context, text: string, options?: SendMessageOptions) {
   if (ctx.chat?.type === "private") {
-    return ctx.reply(text, options);
+    return await ctx.reply(text, options);
   }
 
-  return bot.api.sendMessage(ctx.chatId!, text, options);
+  return await bot.api.sendMessage(ctx.chatId!, text, options);
 }
 
-function sendVideoMessage(ctx: Context, video: string | InputFile, options?: SendVideoOptions) {
+async function sendVideoMessage(ctx: Context, video: string | InputFile, options?: SendVideoOptions) {
   if (ctx.chat?.type === "private") {
-    return ctx.replyWithVideo(video, options);
+    return await ctx.replyWithVideo(video, options);
   }
 
-  return bot.api.sendVideo(ctx.chatId!, video, options);
+  return await bot.api.sendVideo(ctx.chatId!, video, options);
 }
 
 function createVideoKeyboard(
@@ -59,7 +61,7 @@ function createVideoKeyboard(
     keyboard.text("Remove description", `video:remove_desc:${videoId}:${ownerId}`);
   }
 
-  if (sourceUrl) {
+  if (sourceUrl !== undefined && sourceUrl !== "") {
     if (hasDescriptionAction) {
       keyboard.row();
     }
@@ -75,7 +77,7 @@ function getTweetUrl(tweetId: string): string {
 }
 
 function getDescriptionAction(tweetText: string | null, showDescription: boolean): "add" | "remove" | null {
-  if (!tweetText) {
+  if (tweetText === null || tweetText === "") {
     return null;
   }
 
@@ -112,7 +114,7 @@ async function sendExistingVideoIfExists(
 
   ctx.logger.info({ tweetId, videoId: existingVideo.id }, "Found existing video; sending via Telegram file ID");
 
-  const descriptionAction = existingVideo.tweetText ? "add" : null;
+  const descriptionAction = existingVideo.tweetText !== null && existingVideo.tweetText !== "" ? "add" : null;
 
   try {
     await sendVideoMessage(ctx, existingVideo.telegramFileId, {
@@ -120,16 +122,18 @@ async function sendExistingVideoIfExists(
       height: existingVideo.height ?? undefined,
       supports_streaming: true,
       reply_markup:
-        existingVideo.tweetText || sourceUrl
+        descriptionAction !== null || (sourceUrl !== undefined && sourceUrl !== "")
           ? createVideoKeyboard(existingVideo.id, descriptionAction, ownerId, sourceUrl)
           : undefined,
       message_thread_id: messageThreadId,
     });
 
     ctx.logger.info({ chatId: ctx.chatId, tweetId, videoId: existingVideo.id }, "Sent existing video");
+
     return true;
   } catch (error) {
     ctx.logger.error({ error, videoId: existingVideo.id }, "Error sending existing video, will download fresh copy");
+
     return false;
   }
 }
@@ -154,6 +158,7 @@ async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDo
   try {
     try {
       const videos = await downloadVideo(link, tempDirName);
+
       return { status: "ok", videos, videoDownloadFailed: false };
     } catch (error) {
       ctx.logger.warn({ error }, "yt-dlp download failed, trying fxtwitter API fallback");
@@ -175,10 +180,12 @@ async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDo
           width: apiVideo.width,
           height: apiVideo.height,
         });
+
         videos.push(info);
       }
     } catch (fallbackError) {
       ctx.logger.error({ error: fallbackError }, "Fallback video download also failed");
+
       return { status: "ok", videos, videoDownloadFailed: true };
     }
 
@@ -189,6 +196,7 @@ async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDo
     await sendTextMessage(ctx, CANT_DOWNLOAD_MESSAGE, {
       message_thread_id: messageThreadId,
     });
+
     return { status: "failed" };
   }
 }
@@ -200,6 +208,7 @@ async function sendTweetImageFallback(ctx: Context, tweet: FxEmbedTweet, message
   try {
     const result = await runtime.runPromise(generateTweetImage(tweetId, "light", tweet));
     const photo = new InputFile(result.buffer, `tweet-${tweetId}.jpg`);
+
     const options = {
       caption: getTweetUrl(tweetId),
       message_thread_id: messageThreadId,
@@ -208,6 +217,7 @@ async function sendTweetImageFallback(ctx: Context, tweet: FxEmbedTweet, message
           ? new InlineKeyboard().text("🌙 Change theme", `tweet_img:toggle:${tweetId}:dark:${ctx.from!.id}`)
           : undefined,
     };
+
     await (ctx.chat?.type === "private"
       ? ctx.replyWithPhoto(photo, options)
       : bot.api.sendPhoto(ctx.chatId!, photo, options));
@@ -253,6 +263,7 @@ async function sendDownloadedVideos(params: {
     } catch (error) {
       if (error instanceof GrammyError) {
         ctx.logger.error({ error, filePath: video.filePath }, "Failed to send video");
+
         if (error.error_code === 413) {
           await sendTextMessage(ctx, "Video is too large, can't be sent.", {
             message_thread_id: messageThreadId,
@@ -285,16 +296,18 @@ async function sendDownloadedVideo(params: {
       supports_streaming: true,
       message_thread_id: params.messageThreadId,
     });
+
     return;
   }
 
-  const descriptionAction = params.tweetText ? "add" : null;
+  const descriptionAction = params.tweetText !== undefined && params.tweetText !== "" ? "add" : null;
+
   const sentMessage = await sendVideoMessage(params.ctx, new InputFile(params.video.filePath), {
     width: params.video.metadata?.width,
     height: params.video.metadata?.height,
     supports_streaming: true,
     reply_markup:
-      params.tweetText || params.sourceUrl
+      descriptionAction !== null || (params.sourceUrl !== undefined && params.sourceUrl !== "")
         ? createVideoKeyboard(params.videoId, descriptionAction, params.ownerId, params.sourceUrl)
         : undefined,
     message_thread_id: params.messageThreadId,
@@ -322,18 +335,21 @@ async function handleVideoRequest(
 ): Promise<void> {
   const tweetId = extractTweetId(link);
   const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
-  const sourceUrl = isGroupChat && tweetId ? getTweetUrl(tweetId) : undefined;
+  const sourceUrl = isGroupChat && tweetId !== null ? getTweetUrl(tweetId) : undefined;
+
   const tweet =
     tweetId === null
       ? null
-      : await runtime.runPromise(TwitterApi.getFxTweet(tweetId, TWEET_TRANSLATION_LANGUAGE)).catch((error) => {
-          ctx.logger.warn({ error, tweetId }, "Could not fetch FxTwitter metadata, falling back to yt-dlp");
+      : await runtime.runPromise(TwitterApi.getFxTweet(tweetId, TWEET_TRANSLATION_LANGUAGE)).catch((cause: unknown) => {
+          ctx.logger.warn({ error: cause, tweetId }, "Could not fetch FxTwitter metadata, falling back to yt-dlp");
+
           return null;
         });
 
-  if (tweet && !tweet.media?.videos?.length) {
+  if (tweet && (tweet.media?.videos?.length ?? 0) === 0) {
     await ctx.replyWithChatAction("upload_photo", { message_thread_id: messageThreadId });
     await sendTweetImageFallback(ctx, tweet, messageThreadId);
+
     return;
   }
 
@@ -360,6 +376,7 @@ async function handleVideoRequest(
 
     if (outcome.videoDownloadFailed && outcome.videos.length === 0) {
       await sendTextMessage(ctx, CANT_DOWNLOAD_MESSAGE, { message_thread_id: messageThreadId });
+
       return;
     }
 
@@ -395,7 +412,7 @@ whitelistedGroupChat
   .filter((ctx) => !ctx.match.trim().startsWith("https://"))
   .use(async (ctx) => {
     await tryDeleteMessage(ctx);
-    await bot.api.sendMessage(ctx.chatId!, "Не позорься и скинь нормальную ссылку", {
+    await bot.api.sendMessage(ctx.chatId, "Не позорься и скинь нормальную ссылку", {
       message_thread_id: ctx.msg.message_thread_id,
     });
   });
@@ -416,7 +433,14 @@ whitelistedChats.callbackQuery(
       action,
       ownerId: ownerIdRaw,
       videoId,
-    } = (ctx.match as RegExpMatchArray).groups as Record<"action" | "ownerId" | "videoId", string>;
+    } = Schema.decodeUnknownSync(
+      Schema.Struct({
+        action: Schema.Literals(["add_desc", "remove_desc"]),
+        ownerId: Schema.String,
+        videoId: Schema.String,
+      }),
+    )(typeof ctx.match === "string" ? undefined : ctx.match.groups);
+
     const ownerId = Number(ownerIdRaw);
 
     if (ctx.from.id !== ownerId) {
@@ -424,6 +448,7 @@ whitelistedChats.callbackQuery(
         text: "Может по голове себе постучишь?",
         show_alert: true,
       });
+
       return;
     }
 
@@ -438,6 +463,7 @@ whitelistedChats.callbackQuery(
     }
 
     const showDescription = action === "add_desc";
+
     const tweet = showDescription
       ? await runtime.runPromise(TwitterApi.getFxTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE))
       : undefined;
@@ -457,15 +483,17 @@ whitelistedChats.callbackQuery(
 
     const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
     const sourceUrl = isGroupChat ? getTweetUrl(video.tweetId) : undefined;
+
     const keyboard = createVideoKeyboard(
       videoId,
       getDescriptionAction(video.tweetText, showDescription),
       ownerId,
       sourceUrl,
     );
+
     await (showDescription
       ? bot.api.sendRichMessage(
-          ctx.chatId!,
+          ctx.chatId,
           TweetRichMessage.build({
             tweet: tweet!,
             video: video.telegramFileId,
@@ -504,6 +532,7 @@ privateChat.on(":video", async (ctx) => {
 
   if (!video) {
     await ctx.reply("Can't find a source, sorry.");
+
     return;
   }
 
@@ -516,10 +545,10 @@ whitelistedChats
     (ctx) =>
       ctx.msg.reply_to_message === undefined ||
       (ctx.msg.reply_to_message.video === undefined &&
-        !ctx.msg.reply_to_message.rich_message?.blocks.some((block) => block.type === "video")),
+        ctx.msg.reply_to_message.rich_message?.blocks.some((block) => block.type === "video") !== true),
   )
-  .use((ctx) => {
-    ctx.reply("Please, reply to a message with a video.");
+  .use(async (ctx) => {
+    await ctx.reply("Please, reply to a message with a video.");
   });
 
 whitelistedChats
@@ -533,6 +562,7 @@ whitelistedChats
     const repliedVideo =
       ctx.msg.reply_to_message!.video ??
       ctx.msg.reply_to_message!.rich_message?.blocks.find((block) => block.type === "video")?.video;
+
     const video = await prisma.video.findFirst({
       where: {
         telegramFileUniqueId: repliedVideo!.file_unique_id,
@@ -544,6 +574,7 @@ whitelistedChats
 
     if (!video) {
       await ctx.reply("No source found, sorry.");
+
       return;
     }
 

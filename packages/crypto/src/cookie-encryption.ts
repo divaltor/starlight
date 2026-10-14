@@ -23,6 +23,7 @@ export class CookieEncryption {
    */
   private deriveKey(userId: string): Uint8Array {
     const info = utf8ToBytes(`cookie-encryption-${userId}`);
+
     return hkdf(sha256, this.masterKey, this.salt, info, 32);
   }
 
@@ -49,6 +50,7 @@ export class CookieEncryption {
     const cipher = managedNonce(xchacha20poly1305)(key);
     const plaintext = utf8ToBytes(data);
     const ciphertext = cipher.encrypt(plaintext);
+
     return bytesToHex(ciphertext);
   }
 
@@ -60,6 +62,7 @@ export class CookieEncryption {
     const cipher = managedNonce(xchacha20poly1305)(key);
     const ciphertext = hexToBytes(encryptedHex);
     const plaintext = cipher.decrypt(ciphertext);
+
     return bytesToUtf8(plaintext);
   }
 

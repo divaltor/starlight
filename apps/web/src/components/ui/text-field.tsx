@@ -8,7 +8,7 @@ import { TextArea } from "react-aria-components/TextArea";
 import { TextField as AriaTextField } from "react-aria-components/TextField";
 
 import { cn } from "@/lib/utils";
-import { Input } from "./input";
+import { Input } from "@/components/ui/input";
 
 const textFieldVariants = cva("form-control", {
   variants: {
@@ -30,11 +30,15 @@ interface TextFieldProps
   extends Omit<React.ComponentProps<typeof AriaTextField>, "className">, VariantProps<typeof textFieldVariants> {
   className?: string;
   description?: string;
-  inputRef?: React.Ref<HTMLInputElement | HTMLTextAreaElement>;
   label?: string;
-  multiline?: boolean;
   placeholder?: string;
 }
+
+type TextFieldInputProps = TextFieldProps &
+  (
+    | { multiline: true; inputRef?: React.Ref<HTMLTextAreaElement> }
+    | { multiline?: false; inputRef?: React.Ref<HTMLInputElement> }
+  );
 
 function TextField({
   label,
@@ -45,7 +49,7 @@ function TextField({
   inputRef,
   multiline,
   ...props
-}: TextFieldProps) {
+}: TextFieldInputProps) {
   const classes = cn(
     textFieldVariants({
       size,
@@ -55,12 +59,12 @@ function TextField({
 
   return (
     <AriaTextField {...props} className={classes}>
-      {label && (
+      {label !== undefined && label.length > 0 && (
         <Label className="label">
           <span className="label-text">{label}</span>
         </Label>
       )}
-      {multiline ? (
+      {multiline === true ? (
         <TextArea
           className={cn(
             "textarea w-full transition-shadow duration-200 ease-in-out focus:ring-2 focus:ring-blue-500/20",
@@ -68,16 +72,12 @@ function TextField({
             className,
           )}
           placeholder={placeholder}
-          ref={inputRef as React.Ref<HTMLTextAreaElement>}
+          ref={inputRef}
         />
       ) : (
-        <Input
-          placeholder={placeholder}
-          ref={inputRef as React.Ref<HTMLInputElement>}
-          size={size === "default" || !size ? "md" : size}
-        />
+        <Input placeholder={placeholder} ref={inputRef} size={size === "default" || !size ? "md" : size} />
       )}
-      {description && (
+      {description !== undefined && description.length > 0 && (
         <Text className="label" slot="description">
           <span className="label-text-alt">{description}</span>
         </Text>

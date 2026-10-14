@@ -16,7 +16,8 @@ groupChat
       Effect.gen(function* registerGroupChat() {
         const database = yield* Database.Service;
         const media = yield* Media.Service;
-        const chatInfo = yield* Effect.tryPromise(() => ctx.api.getChat(ctx.chat.id)).pipe(
+
+        const chatInfo = yield* Effect.tryPromise(async () => await ctx.api.getChat(ctx.chat.id)).pipe(
           Effect.catch((error) =>
             Effect.logWarning("Failed to load group chat details").pipe(
               Effect.annotateLogs({ chatId: ctx.chat.id, error: String(error) }),
@@ -24,6 +25,7 @@ groupChat
             ),
           ),
         );
+
         const photos = chatInfo?.photo
           ? yield* Effect.all(
               {
@@ -52,27 +54,29 @@ groupChat
               ),
             )
           : null;
+
         const photoBig = photos?.big.availability === "stored" ? photos.big.s3Key : undefined;
         const photoThumbnail = photos?.thumbnail.availability === "stored" ? photos.thumbnail.s3Key : undefined;
-        yield* database.query((client) =>
-          client.chat.upsert({
-            where: { id: BigInt(ctx.chat.id) },
-            create: {
-              id: BigInt(ctx.chat.id),
-              isPrivate: false,
-              ...(photoBig !== undefined && { photoBig }),
-              ...(photoThumbnail !== undefined && { photoThumbnail }),
-              title: ctx.chat.title,
-              username: ctx.chat.username,
-            },
-            update: {
-              isPrivate: false,
-              ...(photoBig !== undefined && { photoBig }),
-              ...(photoThumbnail !== undefined && { photoThumbnail }),
-              title: ctx.chat.title,
-              username: ctx.chat.username,
-            },
-          }),
+        yield* database.query(
+          async (client) =>
+            await client.chat.upsert({
+              where: { id: BigInt(ctx.chat.id) },
+              create: {
+                id: BigInt(ctx.chat.id),
+                isPrivate: false,
+                ...(photoBig !== undefined && { photoBig }),
+                ...(photoThumbnail !== undefined && { photoThumbnail }),
+                title: ctx.chat.title,
+                username: ctx.chat.username,
+              },
+              update: {
+                isPrivate: false,
+                ...(photoBig !== undefined && { photoBig }),
+                ...(photoThumbnail !== undefined && { photoThumbnail }),
+                title: ctx.chat.title,
+                username: ctx.chat.username,
+              },
+            }),
         );
       }),
     );

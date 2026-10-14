@@ -1,7 +1,8 @@
-export interface CursorData {
-  createdAt: string;
-  lastTweetId: string;
-}
+import { z } from "zod";
+
+const cursorSchema = z.object({ createdAt: z.string(), lastTweetId: z.string() });
+
+export type CursorData = z.infer<typeof cursorSchema>;
 
 export const CursorPagination = {
   createCursor(data: CursorData): string {
@@ -10,6 +11,7 @@ export const CursorPagination = {
 
   parseCursor(cursor: string): CursorData | null {
     let decoded: string;
+
     try {
       decoded = Buffer.from(cursor, "base64url").toString();
     } catch {
@@ -17,7 +19,7 @@ export const CursorPagination = {
     }
 
     try {
-      return JSON.parse(decoded);
+      return cursorSchema.safeParse(JSON.parse(decoded)).data ?? null;
     } catch {
       return null;
     }

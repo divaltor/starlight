@@ -22,7 +22,7 @@ const privateChat = composer.chatType("private");
 groupChat
   .on("message")
   .filter(hasAdmittableContent)
-  .use((ctx) => {
+  .use(async (ctx) => {
     const trigger = MessageReply.trigger({
       explicitlyAddressed: MessageReply.isAddressedToBot({
         botId: ctx.me.id,
@@ -35,20 +35,30 @@ groupChat
       randomResponseChance: env.RANDOM_RESPONSE_CHANCE,
       text: TelegramMessageText.withEntityLinks(ctx.message) ?? "",
     });
-    return admitMessage(ctx, ctx.message, { trigger });
+
+    await admitMessage(ctx, ctx.message, { trigger });
   });
+
 groupChat
   .on("edited_message")
   .filter(hasAdmittableEditedContent)
-  .use((ctx) => admitMessage(ctx, ctx.editedMessage, {}));
+  .use(async (ctx) => {
+    await admitMessage(ctx, ctx.editedMessage, {});
+  });
+
 privateChat
   .on("message")
   .filter(hasAdmittableContent)
-  .use((ctx) => admitMessage(ctx, ctx.message, { addressed: true }));
+  .use(async (ctx) => {
+    await admitMessage(ctx, ctx.message, { addressed: true });
+  });
+
 privateChat
   .on("edited_message")
   .filter(hasAdmittableEditedContent)
-  .use((ctx) => admitMessage(ctx, ctx.editedMessage, {}));
+  .use(async (ctx) => {
+    await admitMessage(ctx, ctx.editedMessage, {});
+  });
 
 export default composer;
 
@@ -67,10 +77,12 @@ async function admitMessage(
       const threadKey = message.is_topic_message === true ? (message.message_thread_id ?? 0) : 0;
       const replyTo = MessageReply.actualReply(message);
       const text = TelegramMessageText.withEntityLinks(message);
+
       const baseline: DialogueContinuation.Decision =
         options.addressed === true || options.trigger === "addressed" || options.trigger === "random"
           ? { type: "text" }
           : { type: "silence" };
+
       const decision =
         options.trigger === "random" && text !== null && message.sticker === undefined
           ? yield* dialogueContinuation
@@ -105,6 +117,7 @@ async function admitMessage(
                 ),
               )
           : baseline;
+
       if (options.trigger) {
         yield* Effect.logInfo("Group response decision applied").pipe(
           Effect.annotateLogs({
@@ -117,15 +130,18 @@ async function admitMessage(
           }),
         );
       }
+
       // Telegram extraction is branch-heavy by protocol shape but remains one boundary normalization.
       // oxlint-disable-next-line eslint/complexity
       return yield* Effect.gen(function* attempt() {
         const references = yield* Effect.all(Media.fromTelegramMessage(message).map(media.ingest), {
           concurrency: "unbounded",
         }).pipe(Effect.mapError(mediaAdmissionError));
+
         const repliedMedia = yield* Effect.all(Media.fromTelegramMessage(replyTo).map(media.ingest), {
           concurrency: "unbounded",
         }).pipe(Effect.mapError(mediaAdmissionError));
+
         return yield* conversation.admit({
           chatTitle: ctx.chat!.title ?? null,
           chatType: ctx.chat!.type,
@@ -189,13 +205,15 @@ function mediaAdmissionError(error: Media.MediaError): Conversation.AdmissionErr
 function hasAdmittableContent(ctx: Context): boolean {
   return Boolean(
     ctx.message &&
-    (TelegramMessageText.withEntityLinks(ctx.message) || Media.fromTelegramMessage(ctx.message).length > 0),
+    ((TelegramMessageText.withEntityLinks(ctx.message) ?? "") !== "" ||
+      Media.fromTelegramMessage(ctx.message).length > 0),
   );
 }
 
 function hasAdmittableEditedContent(ctx: Context): boolean {
   return Boolean(
     ctx.editedMessage &&
-    (TelegramMessageText.withEntityLinks(ctx.editedMessage) || Media.fromTelegramMessage(ctx.editedMessage).length > 0),
+    ((TelegramMessageText.withEntityLinks(ctx.editedMessage) ?? "") !== "" ||
+      Media.fromTelegramMessage(ctx.editedMessage).length > 0),
   );
 }

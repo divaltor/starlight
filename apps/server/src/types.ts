@@ -35,6 +35,7 @@ export const Classification = Schema.Struct({
   }),
   tags: Schema.Array(Schema.String),
 });
+
 export type Classification = typeof Classification.Type;
 
 export type Context = FileFlavor<BaseContext & ExtendedContext>;
@@ -43,9 +44,13 @@ declare global {
   // biome-ignore lint/style/noNamespace: Prisma
   namespace PrismaJson {
     type TweetType = Tweet;
+
     type ClassificationType = typeof Classification.Type;
+
     type MessageEntitiesType = MessageEntity[];
+
     type ForwardOriginType = MessageOrigin;
+
     type TelegramMessageType = Message;
   }
 }

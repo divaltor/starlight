@@ -1,9 +1,9 @@
 import { format } from "date-fns";
 import type { Node } from "takumi-js";
 import { container, image, text } from "takumi-js/helpers";
-import { LAYOUT } from "./layout";
-import type { ThemeColors } from "./themes";
-import type { ArticleData, TweetData } from ".";
+import { LAYOUT } from "@/services/render/layout";
+import type { ThemeColors } from "@/services/render/themes";
+import type { ArticleData, TweetData } from "@/services/render";
 
 // Takumi derives its style types from react's CSSProperties, which this
 // package deliberately does not depend on; a permissive local shape covers
@@ -68,7 +68,7 @@ export interface BuildCardParams {
 export function buildTweetCard(params: BuildCardParams): Node {
   const chain = params.tweet.replyChain ?? [];
   const chainNodes = chain.map((chainTweet) => replyChainItem(params.colors, params.failedUrls, chainTweet));
-  const dots = chain.length > 0 && params.tweet.hasMoreInChain ? [dotsIndicator(params.colors)] : [];
+  const dots = chain.length > 0 && params.tweet.hasMoreInChain === true ? [dotsIndicator(params.colors)] : [];
 
   const tail: Node[] = [
     headerRow(params.colors, params.failedUrls, params.tweet),
@@ -131,6 +131,7 @@ export function collectTweetImageUrls(tweet: TweetData): Set<string> {
   const urls = new Set<string>([tweet.authorAvatarUrl]);
 
   const media = getFirstMedia(tweet.media);
+
   if (media) {
     urls.add(getMediaImageUrl(media));
   }
@@ -164,6 +165,7 @@ export function collectRemoteImageSrcs(node: Node, into = new Set<string>()): Se
       collectRemoteImageSrcs(child, into);
     }
   }
+
   return into;
 }
 
@@ -172,11 +174,14 @@ export function stripUnavailableImages(node: Node, fetchedBytes: Map<string, Uin
   if (node.type !== "container") {
     return;
   }
+
   node.children = (node.children ?? []).filter((child) => {
     if (child.type === "image" && typeof child.src === "string" && child.src.startsWith("http")) {
       return fetchedBytes.has(child.src);
     }
+
     stripUnavailableImages(child, fetchedBytes);
+
     return true;
   });
 }
@@ -189,7 +194,8 @@ export interface TextRun {
 }
 
 const TOKEN_RE =
-  /(?<token>https?:\/\/\S+|(?<![\p{L}\p{N}_.%+-])@[A-Za-z0-9_]{1,15}|(?<![\p{L}\p{N}_])#[\p{L}\p{N}_][\p{L}\p{N}_\p{M}]*)/gu;
+  /(?<token>https?:\/\/\S+|(?<![\p{L}\p{N}_.%+-])@\w{1,15}|(?<![\p{L}\p{N}_])#[\p{L}\p{N}_][\p{L}\p{N}_\p{M}]*)/gu;
+
 // Sentence punctuation hugging a URL belongs to the sentence, not the address.
 const TRAILING_URL_PUNCT_RE =
   /(?<![.,;:!?"'“”‘’«»‹›「」『』（）【】。、，！？；：…])[.,;:!?"'“”‘’«»‹›「」『』（）【】。、，！？；：…]+$/u;
@@ -197,36 +203,46 @@ const TRAILING_URL_PUNCT_RE =
 export function splitTextRuns(line: string): TextRun[] {
   const runs: TextRun[] = [];
   let last = 0;
+
   for (const match of line.matchAll(TOKEN_RE)) {
     const token = match.groups?.token ?? match[0];
     const index = match.index ?? 0;
+
     if (index > last) {
       runs.push({ kind: "plain", value: line.slice(last, index) });
     }
+
     if (token.startsWith("http")) {
       const { url, tail } = splitUrlTail(token);
       runs.push({ kind: "link", value: url });
+
       if (tail !== "") {
         runs.push({ kind: "plain", value: tail });
       }
     } else {
       runs.push({ kind: token.startsWith("@") ? "mention" : "hashtag", value: token });
     }
+
     last = index + token.length;
   }
+
   if (last < line.length) {
     runs.push({ kind: "plain", value: line.slice(last) });
   }
+
   // URL-tail peeling can leave adjacent plain runs ("peel" + "suffix").
   const merged: TextRun[] = [];
+
   for (const run of runs) {
     const prev = merged.at(-1);
+
     if (prev?.kind === "plain" && run.kind === "plain") {
       prev.value += run.value;
     } else {
       merged.push(run);
     }
   }
+
   return merged;
 }
 
@@ -238,21 +254,28 @@ const CLOSING_TO_OPENING: Record<string, string> = { ")": "(", "]": "[", "}": "{
 function splitUrlTail(token: string): { url: string; tail: string } {
   let url = token;
   let tail = "";
+
   for (;;) {
-    const punct = url.match(TRAILING_URL_PUNCT_RE)?.[0] ?? "";
+    const punct = TRAILING_URL_PUNCT_RE.exec(url)?.[0] ?? "";
+
     if (punct !== "") {
       tail = punct + tail;
       url = url.slice(0, -punct.length);
       continue;
     }
-    const closer = url.match(/[)\]}]$/u)?.[0];
-    if (!closer) {
+
+    const closer = /[)\]}]$/u.exec(url)?.[0];
+
+    if (closer === undefined || closer === "") {
       return { url, tail };
     }
+
     const opener = CLOSING_TO_OPENING[closer] ?? "";
+
     if (url.split(closer).length <= url.split(opener).length) {
       return { url, tail };
     }
+
     tail = closer + tail;
     url = url.slice(0, -closer.length);
   }
@@ -269,6 +292,7 @@ export function buildTextParagraphs(rawText: string, style: Style, accent: strin
     .replace(/^(?:@\w+\s*)+/u, "")
     .trimStart()
     .replace(HASHTAG_BLOCK_RE, "\n\n$<hashtagBlock>");
+
   const paragraphs = cleaned.split(/\n\n+/u);
 
   return paragraphs.flatMap((paragraph, pIndex) => {
@@ -286,10 +310,12 @@ export function buildTextParagraphs(rawText: string, style: Style, accent: strin
     // Breaks over-long tokens (URLs) instead of overflowing the card,
     // matching the old breakLongWord behavior.
     const { width, ...textStyle } = style;
+
     const runs = lines.flatMap((line, lIndex) => [
       ...(lIndex === 0 ? [] : [{ kind: "plain", value: "\n" } satisfies TextRun]),
       ...splitTextRuns(line),
     ]);
+
     return [
       box({
         children: [
@@ -301,10 +327,12 @@ export function buildTextParagraphs(rawText: string, style: Style, accent: strin
                 overflowWrap: "anywhere",
                 ...textStyle,
               };
+
               if (run.kind !== "plain") {
                 runStyle.color = accent;
                 runStyle.fontWeight = 400;
               }
+
               return text(run.value, runStyle);
             }),
             style: { display: "block", width },
@@ -318,6 +346,7 @@ export function buildTextParagraphs(rawText: string, style: Style, accent: strin
 
 function headerRow(colors: ThemeColors, failedUrls: Set<string>, tweet: TweetData): Node {
   const language = getTranslationLanguage(tweet);
+
   return box({
     children: [
       avatarOrFallback(tweet.authorAvatarUrl, LAYOUT.AVATAR_SIZE, colors, failedUrls),
@@ -339,7 +368,9 @@ function headerRow(colors: ThemeColors, failedUrls: Set<string>, tweet: TweetDat
                 color: colors.secondaryText,
                 fontSize: LAYOUT.FONT_SIZE_USERNAME,
               }),
-              ...(language ? translationBadge(language, colors, LAYOUT.FONT_SIZE_USERNAME) : []),
+              ...(language !== null && language !== ""
+                ? translationBadge(language, colors, LAYOUT.FONT_SIZE_USERNAME)
+                : []),
             ],
             style: {
               display: "flex",
@@ -358,13 +389,14 @@ function headerRow(colors: ThemeColors, failedUrls: Set<string>, tweet: TweetDat
 
 function nameRowNodes(colors: ThemeColors, fontSize: number, tweet: TweetData): Node[] {
   const language = getTranslationLanguage(tweet);
+
   return [
     text(tweet.authorName, { color: colors.text, fontSize, fontWeight: 700 }),
     text(` @${tweet.authorUsername}`, { color: colors.secondaryText, fontSize }),
     ...(tweet.createdAt
       ? [text(` · ${formatShortDate(tweet.createdAt)}`, { color: colors.secondaryText, fontSize })]
       : []),
-    ...(language ? translationBadge(language, colors, fontSize) : []),
+    ...(language !== null && language !== "" ? translationBadge(language, colors, fontSize) : []),
   ];
 }
 
@@ -377,10 +409,12 @@ function translationBadge(language: string, colors: ThemeColors, fontSize: numbe
 
 function replyChainItem(colors: ThemeColors, failedUrls: Set<string>, tweet: TweetData): Node {
   const avatar = avatarOrFallback(tweet.authorAvatarUrl, LAYOUT.AVATAR_SIZE, colors, failedUrls);
+
   // Reply avatars must not take space in the flex column and push the chain down.
   if (avatar.type !== "text") {
     avatar.style = { ...avatar.style, left: 0, top: 0, position: "absolute" };
   }
+
   return box({
     style: {
       marginBottom: LAYOUT.AVATAR_GAP,
@@ -472,6 +506,7 @@ function tweetExtrasNodes(
   tweet: TweetData,
 ): Node[] {
   const media = getFirstMedia(tweet.media);
+
   return [
     ...(media ? [mediaBlock(colors, contentWidth, media, failedUrls)] : []),
     ...(tweet.article ? [articleBlock(colors, contentWidth, tweet.article)] : []),
@@ -493,6 +528,7 @@ function quoteBox(
 ): Node {
   const innerWidth = outerWidth - QUOTE_PADDING * 2;
   const textWidth = innerWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
+
   const children: Node[] = [
     box({
       children: [
@@ -534,6 +570,7 @@ function quoteBox(
       },
     }),
   ];
+
   children.push(...tweetExtrasNodes(colors, innerWidth, failedUrls, quote));
 
   return box({
@@ -675,7 +712,7 @@ function playButtonOverlay(boxWidth: number, boxHeight: number): Node {
 
 function avatarOrFallback(url: string, size: number, colors: ThemeColors, failedUrls?: Set<string>): Node {
   // Missing/blocked avatar URLs render as a plain circular placeholder.
-  if (failedUrls?.has(url)) {
+  if (failedUrls?.has(url) === true) {
     return box({
       style: {
         backgroundColor: colors.secondaryText,
@@ -685,6 +722,7 @@ function avatarOrFallback(url: string, size: number, colors: ThemeColors, failed
       },
     });
   }
+
   return image({
     src: url,
     style: { borderRadius: size / 2, height: size, width: size },
@@ -721,11 +759,13 @@ function getFirstMedia(media: TweetData["media"]): MediaItem | null {
   }
 
   const firstPhoto = media.photos?.at(0);
+
   if (firstPhoto) {
     return { type: "photo", ...firstPhoto };
   }
 
   const firstVideo = media.videos?.at(0);
+
   if (firstVideo) {
     return firstVideo;
   }
@@ -752,12 +792,15 @@ function formatNumber(num: number | null | undefined): string {
   if (num == null) {
     return "0";
   }
+
   if (num >= ONE_MILLION) {
     return `${(num / ONE_MILLION).toFixed(1)}M`;
   }
+
   if (num >= ONE_THOUSAND) {
     return `${(num / ONE_THOUSAND).toFixed(1)}K`;
   }
+
   return num.toString();
 }
 
@@ -765,12 +808,14 @@ const languageDisplayNames = new Intl.DisplayNames(["en"], { type: "language" })
 
 // BCP47-ish language tag: 2-3 letter code with optional script and region.
 const LANGUAGE_CODE_RE = /^[a-z]{2,3}(?:-[a-z]{4})?(?:-(?:[a-z]{2}|\d{3}))?$/iu;
+
 // Codes with no meaningful display name; never shown in the badge.
 const UNTRANSLATABLE = new Set(["und", "mul", "zxx", "auto"]);
 
 export function getTranslationLanguage(tweet: Pick<TweetData, "translation">): string | null {
   const raw = tweet.translation?.sourceLanguage?.trim();
-  if (!raw) {
+
+  if (raw === undefined || raw === "") {
     return null;
   }
 
@@ -784,6 +829,7 @@ export function getTranslationLanguage(tweet: Pick<TweetData, "translation">): s
     if (UNTRANSLATABLE.has(language.toLowerCase())) {
       return null;
     }
+
     return language.charAt(0).toUpperCase() + language.slice(1);
   }
 
@@ -793,10 +839,12 @@ export function getTranslationLanguage(tweet: Pick<TweetData, "translation">): s
 
   try {
     const display = languageDisplayNames.of(language);
+
     // Unknown codes round-trip unchanged; fall back to a capitalized code.
-    if (!display || display.toLowerCase() === language.toLowerCase()) {
+    if (display === undefined || display === "" || display.toLowerCase() === language.toLowerCase()) {
       return language.charAt(0).toUpperCase() + language.slice(1);
     }
+
     return display;
   } catch {
     return language.charAt(0).toUpperCase() + language.slice(1);

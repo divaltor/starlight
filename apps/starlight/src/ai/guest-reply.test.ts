@@ -16,12 +16,13 @@ test("test_guest_reply_offers_resolved_tool_alongside_final_output", async () =>
   const model = new MockLanguageModelV3({
     doGenerate: [toolCallResult("call-1"), finalOutputResult("researched")],
   });
+
   const text = await runGuest(model, {
     profile: [],
     tools: {
       web_lookup: {
         description: "Return a fixture",
-        execute: () => Promise.resolve({ value: "fresh fact" }),
+        execute: () => ({ value: "fresh fact" }),
         inputSchema: z.object({ query: z.string() }),
       },
     },
@@ -35,6 +36,7 @@ test("test_guest_reply_offers_only_final_output_when_toolset_empty", async () =>
   const model = new MockLanguageModelV3({
     doGenerate: [finalOutputResult("direct")],
   });
+
   const text = await runGuest(model, { profile: [], tools: {} });
 
   expect(text).toBe("direct");
@@ -65,10 +67,11 @@ test("test_guest_reply_appends_an_exceptional_decision_question_to_the_last_para
   expect(await runGuest(model, { profile: [], tools: {} })).toBe("both work do you value comfort or durability more?");
 });
 
-function runGuest(model: LanguageModel, toolset: ChatTools.Resolved) {
-  return Effect.runPromise(
+async function runGuest(model: LanguageModel, toolset: ChatTools.Resolved) {
+  return await Effect.runPromise(
     Effect.gen(function* () {
       const guestReply = yield* GuestReply.Service;
+
       return yield* guestReply.generate({
         message: "what is this link?",
         repliedMedia: [],

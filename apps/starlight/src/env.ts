@@ -69,11 +69,12 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
     emptyStringAsUndefined: true,
     skipValidation: false,
   });
+
   return {
     ...raw,
     // Tracing enables only when both Langfuse keys are present.
     langfuse:
-      raw.LANGFUSE_PUBLIC_KEY && raw.LANGFUSE_SECRET_KEY
+      raw.LANGFUSE_PUBLIC_KEY !== undefined && raw.LANGFUSE_SECRET_KEY !== undefined
         ? {
             publicKey: raw.LANGFUSE_PUBLIC_KEY,
             secretKey: raw.LANGFUSE_SECRET_KEY,
@@ -81,12 +82,13 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
             environment: raw.LANGFUSE_TRACING_ENVIRONMENT ?? raw.NODE_ENV,
           }
         : undefined,
-    otlp: raw.OTEL_EXPORTER_OTLP_ENDPOINT
-      ? {
-          endpoint: raw.OTEL_EXPORTER_OTLP_ENDPOINT,
-          headers: parseOtlpHeaders(raw.OTEL_EXPORTER_OTLP_HEADERS),
-        }
-      : undefined,
+    otlp:
+      raw.OTEL_EXPORTER_OTLP_ENDPOINT === undefined
+        ? undefined
+        : {
+            endpoint: raw.OTEL_EXPORTER_OTLP_ENDPOINT,
+            headers: parseOtlpHeaders(raw.OTEL_EXPORTER_OTLP_HEADERS),
+          },
   };
 }
 
@@ -96,9 +98,11 @@ function parseOtlpHeaders(rawHeaders: string): Record<string, string> {
   return Object.fromEntries(
     rawHeaders.split(",").flatMap((pair) => {
       const separator = pair.indexOf("=");
+
       if (separator < 1) return [];
       const key = pair.slice(0, separator).trim();
       const value = pair.slice(separator + 1).trim();
+
       return key.length > 0 && value.length > 0 ? [[key, value] as const] : [];
     }),
   );

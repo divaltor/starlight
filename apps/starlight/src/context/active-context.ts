@@ -13,6 +13,7 @@ export namespace ActiveContext {
     const existing = await transaction.conversationContext.findFirst({
       where: { ...key, status: "active" },
     });
+
     if (existing) return existing;
 
     // One Prisma transaction connection must execute its queries serially.
@@ -21,6 +22,7 @@ export namespace ActiveContext {
       where: key,
       _max: { generation: true },
     });
+
     const created = await transaction.conversationContext.create({
       data: {
         ...key,
@@ -30,10 +32,12 @@ export namespace ActiveContext {
         ...Prompt.stableSeed(stableEnvelope, frozenMemory),
       },
     });
+
     await transaction.conversationLane.update({
       where: { assistantId_chatId_threadKey: key },
       data: { activeContextId: created.id },
     });
+
     return created;
   }
 }

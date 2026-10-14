@@ -108,67 +108,84 @@ export namespace ConversationContext {
         input: RunReference,
       ) {
         const runContext = yield* database
-          .query((client) =>
-            client.conversationRun.findUniqueOrThrow({
-              where: { id: input.runId },
-              select: { assistantId: true, chatId: true, contextId: true, threadKey: true },
-            }),
+          .query(
+            async (client) =>
+              await client.conversationRun.findUniqueOrThrow({
+                where: { id: input.runId },
+                select: { assistantId: true, chatId: true, contextId: true, threadKey: true },
+              }),
           )
           .pipe(Effect.mapError(failed("Failed to find finalized run context")));
+
         const initialMemory = runContext.contextId === null ? Prompt.renderMemory({ checkpoint: "", scopes: [] }) : "";
+
         // oxlint-disable sonarjs/no-nested-functions -- Prisma owns the transaction callback boundary.
-        const appended = yield* database
+        // oxlint-enable sonarjs/no-nested-functions
+        return yield* database
           .transaction(async (transaction) => {
             const storedRun = await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.runId } });
+
             // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- one transaction connection must execute queries serially
             const actions = await transaction.conversationRunAction.findMany({
               where: { runId: input.runId },
               orderBy: { ordinal: "asc" },
             });
+
             const inputs = await transaction.conversationRunInput.findMany({
               where: { runId: input.runId },
               include: { input: true },
               orderBy: { ordinal: "asc" },
             });
+
             // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- one transaction connection must execute queries serially
             const toolCalls = await transaction.conversationToolCall.findMany({
               where: { runId: input.runId },
               orderBy: { createdAt: "asc" },
             });
+
             const run = { ...storedRun, actions, inputs, toolCalls };
+
             const key = {
               assistantId: run.assistantId,
               chatId: run.chatId,
               threadKey: run.threadKey,
             };
+
             await Lane.assertFence(transaction, key, input);
+
             if (run.actions.some((action) => !["delivered", "failed"].includes(action.deliveryStatus))) {
               throw new Error("Run delivery is not terminal");
             }
+
             const existingRunTurns = await transaction.conversationTranscriptTurn.count({
               where: { runId: input.runId },
             });
+
             // One Prisma transaction connection must execute its queries serially.
             // oxlint-disable-next-line react-doctor/server-sequential-independent-await
-            const context = run.contextId
-              ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ActiveContext.ensure(
-                  transaction,
-                  key,
-                  initialMemory,
-                  Schema.decodeUnknownSync(PreparedToolProfileSchema)(run.preparedRequest).profileEnvelope,
-                );
+            const context =
+              run.contextId !== null && run.contextId !== ""
+                ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
+                : await ActiveContext.ensure(
+                    transaction,
+                    key,
+                    initialMemory,
+                    Schema.decodeUnknownSync(PreparedToolProfileSchema)(run.preparedRequest).profileEnvelope,
+                  );
+
             if (run.contextId === null) {
               await transaction.conversationRun.update({
                 where: { id: run.id },
                 data: { contextId: context.id },
               });
             }
+
             if (existingRunTurns > 0) {
               const terminal = await transaction.conversationContextTurn.findFirst({
                 where: { contextId: context.id },
                 orderBy: { ordinal: "desc" },
               });
+
               return {
                 appendedTurns: 0,
                 contextId: context.id,
@@ -182,20 +199,25 @@ export namespace ConversationContext {
               orderBy: { ordinal: "asc" },
               select: { ordinal: true, sourceMessageId: true },
             });
+
             const knownMessageIds = new Set(
               existingTurns.flatMap((turn) => (turn.sourceMessageId === null ? [] : [turn.sourceMessageId])),
             );
+
             const projections = Transcript.projectRun(run, knownMessageIds);
             const firstOrdinal = (existingTurns.at(-1)?.ordinal ?? 0) + 1;
+
             const contextTurns = await transaction.conversationContextTurn.findMany({
               where: { contextId: context.id },
               orderBy: { ordinal: "asc" },
             });
+
             let rollingHash = contextTurns.at(-1)?.rollingPrefixHash ?? context.basePrefixHash;
             let estimatedTokens = context.estimatedStableTokens;
 
             for (const [index, projection] of projections.entries()) {
               const ordinal = firstOrdinal + index;
+
               const transcript = await transaction.conversationTranscriptTurn.create({
                 data: {
                   ...key,
@@ -209,10 +231,12 @@ export namespace ConversationContext {
                   visibility: projection.visibility,
                 },
               });
+
               const rendered = Prompt.renderTurn({
                 content: Prompt.canonicalEncode(projection.content),
                 role: projection.role,
               });
+
               const segment = Prompt.extendPrefix(rollingHash, rendered);
               rollingHash = segment.rollingPrefixHash;
               estimatedTokens += segment.estimatedTokens;
@@ -230,6 +254,7 @@ export namespace ConversationContext {
                 },
               });
             }
+
             await transaction.conversationContext.update({
               where: { id: context.id },
               data: { estimatedStableTokens: estimatedTokens },
@@ -247,46 +272,52 @@ export namespace ConversationContext {
             Effect.withSpan("Context append finalized"),
             Effect.mapError(failed("Failed to append finalized context")),
           );
-        // oxlint-enable sonarjs/no-nested-functions
-        return appended;
       });
 
       const prepare = Effect.fn("ConversationContext.prepare")(function* prepare(input: RunReference) {
         const runContext = yield* database
-          .query((client) =>
-            client.conversationRun.findUniqueOrThrow({
-              where: { id: input.runId },
-              select: { assistantId: true, chatId: true, contextId: true, threadKey: true },
-            }),
+          .query(
+            async (client) =>
+              await client.conversationRun.findUniqueOrThrow({
+                where: { id: input.runId },
+                select: { assistantId: true, chatId: true, contextId: true, threadKey: true },
+              }),
           )
           .pipe(Effect.mapError(failed("Failed to find prepared run context")));
+
         const mediaInputs = yield* database
-          .query((client) =>
-            client.conversationRunInput.findMany({
-              where: { runId: input.runId },
-              include: { input: { select: { id: true, payload: true } } },
-              orderBy: { ordinal: "asc" },
-            }),
+          .query(
+            async (client) =>
+              await client.conversationRunInput.findMany({
+                where: { runId: input.runId },
+                include: { input: { select: { id: true, payload: true } } },
+                orderBy: { ordinal: "asc" },
+              }),
           )
           .pipe(Effect.mapError(failed("Failed to find prepared run media")));
+
         const mediaBytes = Number.sumAll(
           mediaInputs.flatMap((runInput) => {
             const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
+
             return [...payload.repliedMedia, ...payload.media].map((reference) =>
               reference.availability === "stored" ? reference.size : 0,
             );
           }),
         );
+
         if (mediaBytes > MAX_REQUEST_MEDIA_BYTES) {
           return yield* new ContextError({
             message: "Prepared request media exceeds the 20 MiB aggregate boundary",
             retryable: false,
           });
         }
+
         const loadedMedia = new Map(
           yield* Effect.all(
             mediaInputs.map((runInput) => {
               const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
+
               return Effect.all([...payload.repliedMedia, ...payload.media].map(media.load), {
                 concurrency: "unbounded",
               }).pipe(
@@ -299,7 +330,9 @@ export namespace ConversationContext {
             { concurrency: "unbounded" },
           ),
         );
+
         const initialMemory = runContext.contextId === null ? Prompt.renderMemory({ checkpoint: "", scopes: [] }) : "";
+
         const outcome = yield* database
           .transaction(async (transaction) => {
             const run = await transaction.conversationRun.findUniqueOrThrow({
@@ -314,23 +347,30 @@ export namespace ConversationContext {
               chatId: run.chatId,
               threadKey: run.threadKey,
             };
+
             await Lane.assertFence(transaction, key, input);
-            const context = run.contextId
-              ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ActiveContext.ensure(
-                  transaction,
-                  key,
-                  initialMemory,
-                  Schema.decodeUnknownSync(PreparedToolProfileSchema)(run.preparedRequest).profileEnvelope,
-                );
+
+            const context =
+              run.contextId !== null && run.contextId !== ""
+                ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
+                : await ActiveContext.ensure(
+                    transaction,
+                    key,
+                    initialMemory,
+                    Schema.decodeUnknownSync(PreparedToolProfileSchema)(run.preparedRequest).profileEnvelope,
+                  );
+
             if (context.status !== "active") throw new Error("Pinned context is not active");
+
             if (context.modelProfileFingerprint !== run.modelProfileFingerprint) {
               throw new Error("Active context profile does not match the prepared run");
             }
+
             const turns = await transaction.conversationContextTurn.findMany({
               where: { contextId: context.id },
               orderBy: { ordinal: "asc" },
             });
+
             // Reply-target membership must not depend on the active generation: a hard
             // checkpoint can summarize a target out of the retained tail mid-run. The lane
             // transcript is append-only and stays stable across retries, so D renders
@@ -341,9 +381,11 @@ export namespace ConversationContext {
               where: key,
               select: { sourceMessageId: true },
             });
+
             const knownMessageIds = new Set(
               transcriptTurns.flatMap((turn) => (turn.sourceMessageId === null ? [] : [turn.sourceMessageId])),
             );
+
             // The lane transcript is append-only, so retries derive the same guidance.
             // oxlint-disable-next-line react-doctor/server-sequential-independent-await
             const recentReplies = await transaction.conversationTranscriptTurn.findMany({
@@ -352,13 +394,17 @@ export namespace ConversationContext {
               select: { content: true },
               take: Prompt.signOffWindow,
             });
+
             const signOffGuidance = Prompt.renderSignOffGuidance(
               recentReplies.flatMap((turn) => {
                 const content = Schema.decodeUnknownOption(DeliveredTextSchema)(turn.content);
+
                 return Option.isSome(content) ? [content.value.action.text] : [];
               }),
             );
+
             const frozen = Schema.decodeUnknownSync(PreparedRequestSchema)(run.preparedRequest);
+
             const current: Model.Message[] = [
               {
                 role: "user" as const,
@@ -367,6 +413,7 @@ export namespace ConversationContext {
               ...(frozen.contextMemory === null ? [] : [{ role: "user" as const, text: frozen.contextMemory }]),
               ...run.inputs.map((runInput) => {
                 const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(runInput.input.payload);
+
                 return {
                   media: loadedMedia.get(runInput.input.id) ?? [],
                   role: "user" as const,
@@ -375,20 +422,25 @@ export namespace ConversationContext {
               }),
               ...(signOffGuidance === null ? [] : [{ role: "user" as const, text: signOffGuidance }]),
             ];
+
             const finalized: Model.Message[] = turns.map((turn) => ({
               role: turn.role === "assistant" ? ("assistant" as const) : ("user" as const),
               text: turn.renderedContent,
             }));
+
             const messages = [...finalized, ...current];
             const cacheBase = context.frozenMemory;
             const envelope = Schema.decodeUnknownSync(Prompt.FrozenEnvelope)(context.stableEnvelope);
             const finalizedTokens = turns.reduce((total, turn) => total + turn.estimatedTokens, 0);
+
             const currentTokens =
               current.reduce((total, message) => total + Math.ceil(message.text.length / 4), 0) +
               Math.ceil(mediaBytes / 1024);
+
             const baseTokens = Math.ceil(context.stableEnvelope.length / 4) + Math.ceil(cacheBase.length / 4);
             const terminalPrefixHash = Prompt.verifyPrefix(context.basePrefixHash, turns);
             const messageIdentities = messages.map(messageIdentity);
+
             const requestHash = new Bun.CryptoHasher("sha256")
               .update(
                 Prompt.canonicalEncode({
@@ -401,6 +453,7 @@ export namespace ConversationContext {
                 }),
               )
               .digest("hex");
+
             // Region estimates stay local so calibration recording can split A/B/C/D later.
             const prepared = {
               cacheBase,
@@ -411,11 +464,13 @@ export namespace ConversationContext {
               messages,
               toolProfile: envelope.tools,
             };
+
             // The explicit cache breakpoint sits after the finalized turns (model.ts
             // prepareMessages), so only that prefix is provider-cacheable. The live tail
             // intentionally changes shape when it seals (renderLiveMessage vs renderTurn)
             // and must not count as a change.
             const cachePrefixIdentities = finalized.map(messageIdentity);
+
             const snapshot: CacheDiagnostics.PrefixSnapshot = {
               messages: cachePrefixIdentities.map((identity) =>
                 new Bun.CryptoHasher("sha256").update(Prompt.canonicalEncode(identity)).digest("hex"),
@@ -426,6 +481,7 @@ export namespace ConversationContext {
                 new Bun.CryptoHasher("sha256").update(cacheBase).digest("hex"),
               ],
             };
+
             if (run.requestHash !== null && run.requestHash !== requestHash) {
               // Rendering changed between freeze and replay (typically a deploy). Retrying cannot
               // succeed because attemptCount only advances during model invocation, so surface a
@@ -435,33 +491,44 @@ export namespace ConversationContext {
                 retryable: false,
               });
             }
+
             await transaction.conversationRun.update({
               where: { id: run.id },
               data: { contextId: context.id, requestHash },
             });
+
             return { prepared, snapshot };
           })
           .pipe(Effect.mapError(failed("Failed to prepare context request")));
+
         const previous = prefixSnapshots.get(outcome.prepared.contextId);
+
         if (previous !== undefined) prefixSnapshots.delete(outcome.prepared.contextId);
         prefixSnapshots.set(outcome.prepared.contextId, outcome.snapshot);
+
         if (prefixSnapshots.size > PREFIX_SNAPSHOT_LIMIT) {
           prefixSnapshots.delete(prefixSnapshots.keys().next().value!);
         }
+
         const verdict = CacheDiagnostics.comparePrefix(previous, outcome.snapshot);
+
         const annotations: Record<string, string | number> = {
           contextId: outcome.prepared.contextId,
           messageCount: outcome.snapshot.messages.length,
           status: verdict.status,
         };
+
         if (verdict.status === "append-only") annotations.appendedMessages = verdict.appendedMessages;
+
         if (verdict.status === "changed") annotations.component = verdict.changed;
+
         if (previous !== undefined) annotations.previousMessageCount = previous.messages.length;
         yield* (
           verdict.status === "changed"
             ? Effect.logWarning("Prepared context prefix changed")
             : Effect.logDebug("Prepared context prefix compared")
         ).pipe(Effect.annotateLogs(annotations));
+
         return outcome.prepared;
       });
 
@@ -469,31 +536,36 @@ export namespace ConversationContext {
         checkpointInput: CheckpointInput,
       ) {
         const prepared = yield* database
-          .transaction((client) => prepareCheckpoint(client, checkpointInput))
+          .transaction(async (client) => await prepareCheckpoint(client, checkpointInput))
           .pipe(Effect.mapError(failed("Failed to prepare context checkpoint")));
+
         if (prepared.kind === "notPossible") {
           return yield* new ContextError({ message: prepared.message, retryable: false });
         }
+
         if (prepared.kind === "committed") {
           return prepared.result;
         }
 
         const summarized = prepared.summary ?? (yield* summarizeCheckpoint(database, model, prepared, checkpointInput));
         const frozenMemory = prepared.frozenMemory ?? Prompt.renderMemory({ checkpoint: summarized, scopes: [] });
+
         if (prepared.frozenMemory === null) {
           yield* database
-            .query((client) =>
-              client.conversationCheckpointAttempt.update({
-                where: { id: prepared.attemptId },
-                data: { frozenMemory },
-              }),
+            .query(
+              async (client) =>
+                await client.conversationCheckpointAttempt.update({
+                  where: { id: prepared.attemptId },
+                  data: { frozenMemory },
+                }),
             )
             .pipe(Effect.mapError(failed("Failed to persist checkpoint memory")));
         }
 
         const result = yield* database
-          .transaction((client) => commitCheckpoint(client, checkpointInput, prepared, frozenMemory))
+          .transaction(async (client) => await commitCheckpoint(client, checkpointInput, prepared, frozenMemory))
           .pipe(Effect.mapError(failed("Failed to commit context checkpoint")));
+
         yield* Effect.logInfo("Context checkpoint committed").pipe(
           Effect.annotateLogs({
             childContextId: result.childContextId,
@@ -503,6 +575,7 @@ export namespace ConversationContext {
             retainedTurns: result.retainedTurns,
           }),
         );
+
         return result;
       });
 
@@ -510,29 +583,35 @@ export namespace ConversationContext {
         checkpointInput: Omit<CheckpointInput, "reason">,
       ) {
         const attempt = yield* database
-          .query((client) =>
-            client.conversationCheckpointAttempt.findFirst({
-              where: {
-                OR: [
-                  { status: { in: ["prepared", "summarizing", "summarized", "committed"] } },
-                  { reason: "hardSafety", status: "failed" },
-                ],
-                runId: checkpointInput.runId,
-              },
-              orderBy: { createdAt: "desc" },
-            }),
+          .query(
+            async (client) =>
+              await client.conversationCheckpointAttempt.findFirst({
+                where: {
+                  OR: [
+                    { status: { in: ["prepared", "summarizing", "summarized", "committed"] } },
+                    { reason: "hardSafety", status: "failed" },
+                  ],
+                  runId: checkpointInput.runId,
+                },
+                orderBy: { createdAt: "desc" },
+              }),
           )
           .pipe(Effect.mapError(failed("Failed to find resumable context checkpoint")));
+
         if (!attempt) return null;
+
         if (attempt.status === "committed") {
           const { childContextId } = attempt;
+
           if (childContextId === null) throw new Error("Committed checkpoint has no child context");
+
           return yield* database
             .query(async (client) => {
               const [child, retainedTurns] = await Promise.all([
                 client.conversationContext.findUniqueOrThrow({ where: { id: childContextId } }),
                 client.conversationContextTurn.count({ where: { contextId: childContextId } }),
               ]);
+
               return {
                 childContextId: child.id,
                 generation: child.generation,
@@ -541,6 +620,7 @@ export namespace ConversationContext {
             })
             .pipe(Effect.mapError(failed("Failed to read committed context checkpoint")));
         }
+
         return yield* checkpoint({ ...checkpointInput, reason: attempt.reason });
       });
 
@@ -549,30 +629,36 @@ export namespace ConversationContext {
       ) {
         const key = ConversationKey.toDb(input.key);
         const profileFingerprint = new Bun.CryptoHasher("sha256").update(input.profileEnvelope).digest("hex");
+
         const decision = yield* database
           .transaction(async (transaction) => {
             await Lane.lockLane(transaction, key);
             await Lane.assertFence(transaction, key, input.run);
             const run = await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.run.runId } });
+
             if (run.modelProfileFingerprint !== profileFingerprint) {
               throw new ContextError({
                 message: PROFILE_MISMATCH_ERROR,
                 retryable: false,
               });
             }
-            const parent = run.contextId
-              ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
-              : await ActiveContext.ensure(
-                  transaction,
-                  key,
-                  Prompt.renderMemory({ checkpoint: "", scopes: [] }),
-                  input.profileEnvelope,
-                );
+
+            const parent =
+              run.contextId !== null && run.contextId !== ""
+                ? await transaction.conversationContext.findUniqueOrThrow({ where: { id: run.contextId } })
+                : await ActiveContext.ensure(
+                    transaction,
+                    key,
+                    Prompt.renderMemory({ checkpoint: "", scopes: [] }),
+                    input.profileEnvelope,
+                  );
+
             if (parent.modelProfileFingerprint === profileFingerprint) {
               await transaction.conversationRun.update({
                 where: { id: input.run.runId },
                 data: { contextId: parent.id },
               });
+
               return {
                 kind: "complete" as const,
                 generation: parent.generation,
@@ -587,12 +673,15 @@ export namespace ConversationContext {
               orderBy: { ordinal: "asc" },
               include: { transcriptTurn: true },
             });
+
             const boundaries = Checkpoint.selectProfileBoundary(turns, input.retainedTokenTarget);
+
             if (boundaries.head.length > 0) {
               await transaction.conversationRun.update({
                 where: { id: input.run.runId },
                 data: { contextId: parent.id, requestHash: null },
               });
+
               return { kind: "checkpoint" as const };
             }
 
@@ -605,6 +694,7 @@ export namespace ConversationContext {
                 status: "checkpointing",
               },
             });
+
             const child = await transaction.conversationContext.create({
               data: {
                 ...key,
@@ -618,8 +708,10 @@ export namespace ConversationContext {
                 ...Prompt.stableSeed(input.profileEnvelope, memory),
               },
             });
+
             let rollingHash = child.basePrefixHash;
             let estimatedTokens = child.estimatedStableTokens;
+
             for (const [index, turn] of boundaries.tail.entries()) {
               // Copy the stored rendered bytes so the child prefix stays identical to the
               // parent's published chain even if the encoder changes between deploys.
@@ -640,6 +732,7 @@ export namespace ConversationContext {
                 },
               });
             }
+
             await transaction.conversationContext.update({
               where: { id: parent.id },
               data: { status: "superseded" },
@@ -666,6 +759,7 @@ export namespace ConversationContext {
             };
           })
           .pipe(Effect.mapError(failed("Failed to transition context profile")));
+
         if (decision.kind === "complete") return decision;
 
         const result = yield* checkpoint({
@@ -675,6 +769,7 @@ export namespace ConversationContext {
           retainedTokenTarget: input.retainedTokenTarget,
           telemetryPrivate: input.telemetryPrivate,
         });
+
         return {
           generation: result.generation,
           id: result.childContextId,
@@ -709,7 +804,9 @@ export namespace ConversationContext {
       // ContextErrors thrown inside a Prisma callback arrive wrapped in TransactionError;
       // unwrap them so their retryability classification survives this mapping.
       const direct = cause instanceof Database.TransactionError ? cause.cause : cause;
+
       if (direct instanceof ContextError) return direct;
+
       return new ContextError({ cause, message, retryable: true });
     };
 
@@ -735,6 +832,7 @@ export namespace ConversationContext {
           });
         })
         .pipe(Effect.mapError(failed("Failed to start context summary")));
+
       const generated = yield* model
         .generate({
           instructions: Checkpoint.summaryInstructions,
@@ -756,6 +854,7 @@ export namespace ConversationContext {
               new ContextError({ cause: error, message: "Failed to summarize context", retryable: error.retryable }),
           ),
         );
+
       const summary = Checkpoint.renderRecords(generated.output);
       yield* database
         .transaction(async (transaction) => {
@@ -766,17 +865,14 @@ export namespace ConversationContext {
               status: "summarized",
               summaryOutput: { records: generated.output, summary },
               summaryUsage: {
-                // TS7 demands index signatures Json columns don't have; the chain
-                // is the boundary escape.
-                // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- deliberate
-                generation: structuredClone(generated.usage) as unknown as Prisma.InputJsonObject,
-                // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- deliberate
-                steps: structuredClone(generated.steps) as unknown as Prisma.InputJsonArray,
+                generation: structuredClone(generated.usage),
+                steps: structuredClone(generated.steps.map((step) => ({ ...step }))),
               },
             },
           });
         })
         .pipe(Effect.mapError(failed("Failed to persist context summary")));
+
       return summary;
     }).pipe(
       Effect.tapError((error) =>
@@ -804,11 +900,15 @@ export namespace ConversationContext {
     const run = await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.runId } });
     const key = { assistantId: run.assistantId, chatId: run.chatId, threadKey: run.threadKey };
     await Lane.assertFence(transaction, key, input);
+
     if (run.contextId === null) throw new Error("Run has no pinned context");
+
     const parent = await transaction.conversationContext.findUniqueOrThrow({
       where: { id: run.contextId },
     });
+
     assertCheckpointProfile(run, parent, input.reason);
+
     const existing = await transaction.conversationCheckpointAttempt.findUnique({
       where: {
         parentContextId_runId_reason: {
@@ -818,10 +918,12 @@ export namespace ConversationContext {
         },
       },
     });
-    if (existing?.status === "committed" && existing.childContextId) {
+
+    if (existing?.status === "committed" && existing.childContextId !== null && existing.childContextId !== "") {
       const child = await transaction.conversationContext.findUniqueOrThrow({
         where: { id: existing.childContextId },
       });
+
       return {
         kind: "committed",
         result: {
@@ -833,6 +935,7 @@ export namespace ConversationContext {
         },
       };
     }
+
     if (!["active", "checkpointing", "retryNeeded"].includes(parent.status)) {
       throw new Error("Context cannot be checkpointed from its current state");
     }
@@ -842,13 +945,17 @@ export namespace ConversationContext {
       orderBy: { ordinal: "asc" },
       include: { transcriptTurn: true },
     });
+
     if (existing && turns.at(-1)?.transcriptTurn.ordinal !== existing.sealedThroughTurnOrdinal) {
       throw new Error("Checkpoint parent changed after its boundary was sealed");
     }
+
     const boundaries = Checkpoint.resolveBoundary(turns, existing, input.retainedTokenTarget, input.reason);
+
     if (boundaries === null) {
       return { kind: "notPossible", message: "Context has no complete head unit to summarize" };
     }
+
     const summaryInput = existing
       ? existing.summaryInput
       : Prompt.canonicalEncode({
@@ -856,11 +963,13 @@ export namespace ConversationContext {
           // envelopes, so records can keep what it answered or promised.
           head: boundaries.head.flatMap((turn) => {
             if (turn.transcriptTurn.kind === "assistantIgnore") return [];
+
             if (turn.transcriptTurn.kind === "assistantMessage") {
               return Option.toArray(Schema.decodeUnknownOption(DeliveredTextSchema)(turn.transcriptTurn.content)).map(
                 (content) => Prompt.canonicalEncode({ role: "assistant", text: content.action.text }),
               );
             }
+
             return turn.transcriptTurn.kind === "toolResult" &&
               turn.renderedContent.length > CHECKPOINT_TOOL_OUTPUT_MAX_CHARS
               ? [`${turn.renderedContent.slice(0, CHECKPOINT_TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`]
@@ -869,14 +978,17 @@ export namespace ConversationContext {
           previousMemory: parent.frozenMemory,
           version: CHECKPOINT_INPUT_VERSION,
         });
+
     if (existing && new Bun.CryptoHasher("sha256").update(summaryInput).digest("hex") !== existing.summaryInputHash) {
       throw new Error("Stored checkpoint input hash is invalid");
     }
+
     const summaryProfileFingerprint = new Bun.CryptoHasher("sha256")
       .update(
         `${parent.modelProfileFingerprint}:${run.modelProfileFingerprint}:${input.reason}:${CHECKPOINT_INPUT_VERSION}`,
       )
       .digest("hex");
+
     const attempt = existing
       ? await transaction.conversationCheckpointAttempt.update({
           where: { id: existing.id },
@@ -901,11 +1013,15 @@ export namespace ConversationContext {
             summaryProfileFingerprint,
           },
         });
+
     await transaction.conversationContext.update({
       where: { id: parent.id },
       data: { status: "checkpointing" },
     });
-    const storedSummary = attempt.summaryOutput ? Checkpoint.Summary.parse(attempt.summaryOutput).summary.trim() : null;
+
+    const storedSummary =
+      attempt.summaryOutput === null ? null : Checkpoint.Summary.parse(attempt.summaryOutput).summary.trim();
+
     const summaryThroughInputSequence = await resolveSummaryThroughInputSequence(
       transaction,
       parent.summaryThroughInputSequence,
@@ -941,6 +1057,7 @@ export namespace ConversationContext {
             .update(Schema.decodeUnknownSync(PreparedToolProfileSchema)(run.preparedRequest).profileEnvelope)
             .digest("hex")
         : parent.modelProfileFingerprint;
+
     if (profileFingerprint === run.modelProfileFingerprint) return;
     throw new ContextError({
       message: PROFILE_MISMATCH_ERROR,
@@ -957,8 +1074,11 @@ export namespace ConversationContext {
       where: { runId: { in: [...new Set(head.map((turn) => turn.transcriptTurn.runId))] } },
       _max: { inputId: true },
     });
+
     if (summarizedInput._max.inputId === null) throw new Error("Checkpoint head has no source input");
+
     if (previous === null || summarizedInput._max.inputId > previous) return summarizedInput._max.inputId;
+
     return previous;
   }
 
@@ -969,45 +1089,56 @@ export namespace ConversationContext {
     frozenMemory: string,
   ): Promise<CheckpointResult> {
     await Lane.assertFence(transaction, prepared.key, input);
+
     const attempt = await transaction.conversationCheckpointAttempt.findUniqueOrThrow({
       where: { id: prepared.attemptId },
     });
-    if (attempt.status === "committed" && attempt.childContextId) {
+
+    if (attempt.status === "committed" && attempt.childContextId !== null && attempt.childContextId !== "") {
       const child = await transaction.conversationContext.findUniqueOrThrow({
         where: { id: attempt.childContextId },
       });
+
       return {
         childContextId: child.id,
         generation: child.generation,
         retainedTurns: prepared.tail.length,
       };
     }
+
     if (attempt.status !== "summarized") throw new Error("Checkpoint summary is not ready");
+
     const parent = await transaction.conversationContext.findUniqueOrThrow({
       where: { id: prepared.parentContextId },
     });
+
     if (!["checkpointing", "retryNeeded"].includes(parent.status)) {
       throw new Error("Checkpoint parent changed before publication");
     }
+
     await transaction.conversationContext.update({
       where: { id: parent.id },
       data: { activeKey: null },
     });
     const run = await transaction.conversationRun.findUniqueOrThrow({ where: { id: input.runId } });
+
     const profileEnvelope =
       input.reason === "profileChange"
         ? Schema.decodeUnknownSync(PreparedToolProfileSchema)(run.preparedRequest).profileEnvelope
         : parent.stableEnvelope;
+
     const profileFingerprint =
       input.reason === "profileChange"
         ? new Bun.CryptoHasher("sha256").update(profileEnvelope).digest("hex")
         : parent.modelProfileFingerprint;
+
     if (input.reason === "profileChange" && profileFingerprint !== run.modelProfileFingerprint) {
       throw new ContextError({
         message: PROFILE_MISMATCH_ERROR,
         retryable: false,
       });
     }
+
     const child = await transaction.conversationContext.create({
       data: {
         assistantId: parent.assistantId,
@@ -1023,8 +1154,10 @@ export namespace ConversationContext {
         ...Prompt.stableSeed(profileEnvelope, frozenMemory),
       },
     });
+
     let rollingHash = child.basePrefixHash;
     let estimatedTokens = child.estimatedStableTokens;
+
     for (const [index, turn] of prepared.tail.entries()) {
       const segment = Prompt.extendPrefix(rollingHash, turn.renderedContent);
       rollingHash = segment.rollingPrefixHash;
@@ -1043,6 +1176,7 @@ export namespace ConversationContext {
         },
       });
     }
+
     await transaction.conversationContext.update({
       where: { id: child.id },
       data: { estimatedStableTokens: estimatedTokens },
@@ -1059,12 +1193,14 @@ export namespace ConversationContext {
       where: { assistantId_chatId_threadKey: prepared.key },
       data: { activeContextId: child.id },
     });
+
     if (input.reason === "hardSafety" || input.reason === "profileChange") {
       await transaction.conversationRun.update({
         where: { id: input.runId },
         data: { contextId: child.id, requestHash: null },
       });
     }
+
     return { childContextId: child.id, generation: child.generation, retainedTurns: prepared.tail.length };
   }
 

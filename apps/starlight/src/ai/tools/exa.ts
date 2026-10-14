@@ -39,6 +39,7 @@ export namespace Exa {
   };
 
   type FetchInput = z.infer<typeof toolDefinitions.web_fetch_exa.inputSchema>;
+
   type SearchInput = z.infer<typeof toolDefinitions.web_search_exa.inputSchema>;
 
   const RATE_LIMIT_PATTERN = /free\s+(?:mcp\s+|plan\s+)?rate limit/iu;
@@ -49,8 +50,14 @@ export namespace Exa {
   // on CallToolResult covers the retry decision; other failures propagate.
   function isRateLimitedResult(output: CallToolResult): boolean {
     if (output._meta?.["ai.exa/rateLimited"] === true) return true;
+
     if (!("content" in output) || !Array.isArray(output.content)) return false;
-    return output.content.some((item) => item.type === "text" && RATE_LIMIT_PATTERN.test(item.text));
+
+    return output.content.some((item) => {
+      const text = z.object({ type: z.literal("text"), text: z.string() }).safeParse(item);
+
+      return text.success && RATE_LIMIT_PATTERN.test(text.data.text);
+    });
   }
 
   export class ExaError extends Schema.TaggedError<ExaError>()("ExaError", {
@@ -73,20 +80,23 @@ export namespace Exa {
     Effect.gen(function* layer() {
       const configuredApiKey = yield* Config.option(Config.Redacted("EXA_API_KEY"));
       const configuredMcpUrl = yield* Config.String("EXA_MCP_URL").pipe(Config.withDefault(DEFAULT_MCP_URL));
+
       const apiKey = configuredApiKey.pipe(
         Option.flatMap((value) => {
           const key = Redacted.value(value).trim();
+
           return key ? Option.some(key) : Option.none();
         }),
       );
+
       const mcpUrl = new URL(configuredMcpUrl.trim() || DEFAULT_MCP_URL);
       mcpUrl.searchParams.set("tools", ENABLED_TOOLS.join(","));
       const targetUrl = mcpUrl.toString();
 
       const freeClient = yield* Effect.acquireRelease(
         Effect.tryPromise({
-          try: () =>
-            createMCPClient({
+          try: async () =>
+            await createMCPClient({
               transport: {
                 type: "http",
                 url: targetUrl,
@@ -94,13 +104,18 @@ export namespace Exa {
             }),
           catch: (cause) => ExaError.fromCause("Failed to connect to Exa MCP", cause),
         }),
-        (mcpClient) => Effect.promise(() => mcpClient.close()),
+        (mcpClient) =>
+          Effect.promise(async () => {
+            await mcpClient.close();
+          }),
       );
+
       const freeDiscovered = yield* Effect.tryPromise({
-        try: () => freeClient.tools({ schemas: toolDefinitions }),
+        try: async () => await freeClient.tools({ schemas: toolDefinitions }),
         catch: (cause) => ExaError.fromCause("Failed to load Exa MCP tools", cause),
       });
-      if (ENABLED_TOOLS.some((name) => !freeDiscovered[name]?.execute)) {
+
+      if (ENABLED_TOOLS.some((name) => freeDiscovered[name]?.execute === undefined)) {
         return yield* new ExaError({ message: "Required Exa MCP tool is unavailable" });
       }
 
@@ -119,6 +134,7 @@ export namespace Exa {
             url: targetUrl,
           },
         });
+
         try {
           return await paidClient.callTool({ arguments: { ...args }, name, options: { signal } });
         } finally {
@@ -133,24 +149,27 @@ export namespace Exa {
         args: FetchInput | SearchInput,
         signal?: AbortSignal,
       ): Promise<CallToolResult> => {
-        const freeCall = () => freeClient.callTool({ arguments: { ...args }, name, options: { signal } });
-        if (paidKey === null) return freeCall();
+        const freeCall = async () => await freeClient.callTool({ arguments: { ...args }, name, options: { signal } });
+
+        if (paidKey === null) return await freeCall();
         const first = await freeCall();
+
         if (!isRateLimitedResult(first)) return first;
-        return runPaid(paidKey, name, args, signal);
+
+        return await runPaid(paidKey, name, args, signal);
       };
 
       const tools = {
         web_fetch_exa: {
           description: toolDefinitions.web_fetch_exa.description,
-          execute: (input: FetchInput, options: ToolExecutionOptions<unknown>) =>
-            runFreeOrPaid("web_fetch_exa", input, options.abortSignal),
+          execute: async (input: FetchInput, options: ToolExecutionOptions<unknown>) =>
+            await runFreeOrPaid("web_fetch_exa", input, options.abortSignal),
           inputSchema: toolDefinitions.web_fetch_exa.inputSchema,
         },
         web_search_exa: {
           description: toolDefinitions.web_search_exa.description,
-          execute: (input: SearchInput, options: ToolExecutionOptions<unknown>) =>
-            runFreeOrPaid("web_search_exa", input, options.abortSignal),
+          execute: async (input: SearchInput, options: ToolExecutionOptions<unknown>) =>
+            await runFreeOrPaid("web_search_exa", input, options.abortSignal),
           inputSchema: toolDefinitions.web_search_exa.inputSchema,
         },
       } satisfies ToolSet;

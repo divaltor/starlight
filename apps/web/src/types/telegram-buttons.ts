@@ -1,9 +1,8 @@
 export type ButtonState = "hidden" | "visible" | "disabled";
 
-export interface ButtonAction {
-  payload: string | (() => void) | (() => Promise<void>);
-  type: "navigate" | "callback" | "external";
-}
+export type ButtonAction =
+  | { type: "navigate" | "external"; payload: string }
+  | { type: "callback"; payload: () => void | Promise<void> };
 
 export interface BaseButtonConfig {
   action?: ButtonAction;

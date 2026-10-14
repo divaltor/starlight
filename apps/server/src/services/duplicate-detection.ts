@@ -1,6 +1,6 @@
 import { prisma } from "@starlight/utils";
 import { logger } from "@/logger";
-import { calculateHashDistance, calculatePerceptualHash } from "./image";
+import { calculateHashDistance, calculatePerceptualHash } from "@/services/image";
 
 interface SimilarPhoto {
   distance: number;
@@ -26,6 +26,8 @@ export async function findSimilarPhotos(
 
   for (const { len, field, maxCandidates } of buckets) {
     const prefix = targetHash.slice(0, len);
+    const hasExcludedPhoto = (excludePhotoId ?? "") !== "";
+    const hasExcludedUser = (excludeUserId ?? "") !== "";
 
     logger.debug({ prefix, field, maxCandidates }, "Searching for similar photos");
 
@@ -35,7 +37,7 @@ export async function findSimilarPhotos(
         perceptualHash: { not: null },
         deletedAt: null,
         NOT:
-          excludePhotoId && excludeUserId
+          hasExcludedPhoto && hasExcludedUser
             ? {
                 AND: [{ id: excludePhotoId }, { userId: excludeUserId }],
               }
@@ -69,7 +71,7 @@ export async function findSimilarPhotos(
             userId: candidate.userId,
             perceptualHash: candidate.perceptualHash!,
             distance,
-            s3Path: candidate.s3Path || undefined,
+            s3Path: candidate.s3Path === null || candidate.s3Path === "" ? undefined : candidate.s3Path,
             originalUrl: candidate.originalUrl,
             tweetId: candidate.tweetId,
           });

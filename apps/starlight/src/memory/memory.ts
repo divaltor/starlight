@@ -99,18 +99,23 @@ export namespace Memory {
                 },
                 select: { activeContextId: true },
               });
+
               if (lane.activeContextId === null) return null;
+
               const context = await client.conversationContext.findUniqueOrThrow({
                 where: { id: lane.activeContextId },
                 select: { summaryThroughInputSequence: true },
               });
+
               if (context.summaryThroughInputSequence === null) return null;
-              return client.memoryNamespace.findUnique({
+
+              return await client.memoryNamespace.findUnique({
                 where: { ownerKey: `conversation:${input.key.assistantId}:${input.key.chatId}:${input.key.threadKey}` },
                 select: { ownerKey: true, retentionWatermark: true },
               });
             })
             .pipe(Effect.mapError(failed("Failed to find conversation memory")));
+
           if (namespace === null || namespace.retentionWatermark === null) return { contextMemory: null };
 
           const results = yield* hindsight
@@ -125,14 +130,18 @@ export namespace Memory {
                   }),
               ),
             );
+
           const seen = new Set<string>();
           const lines: string[] = [];
+
           for (const result of results) {
             if (seen.has(result.text)) continue;
             seen.add(result.text);
             lines.push(`- ${result.text}`);
           }
+
           if (lines.length === 0) return { contextMemory: null };
+
           return {
             contextMemory: Prompt.renderMemory({
               checkpoint: "",
@@ -154,6 +163,7 @@ export namespace Memory {
     run: Prisma.ConversationRunGetPayload<{ include: { inputs: { include: { input: true } } } }>,
   ): Promise<void> {
     if (run.inputs.length === 0) return;
+
     const namespace = await transaction.memoryNamespace.upsert({
       where: { ownerKey: `conversation:${run.assistantId}:${run.chatId}:${run.threadKey}` },
       create: {
@@ -164,10 +174,13 @@ export namespace Memory {
       },
       update: {},
     });
+
     const scopedVisibility = run.threadKey === 0 ? "sameChat" : "sameTopic";
     const visibility = run.chatId > 0n ? "privateUser" : scopedVisibility;
+
     for (const runInput of run.inputs) {
       const payload = Schema.decodeUnknownSync(InputPayloadSchema)(runInput.input.payload);
+
       if ((payload.senderIsBot ?? false) || payload.forwardedFromSelf) continue;
       const kind = payload.editDate === null ? "fact" : "correction";
       const inputId = runInput.input.id;

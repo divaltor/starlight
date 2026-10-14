@@ -3,7 +3,7 @@ import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
-import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
+import { ATTR_HTTP_RESPONSE_STATUS_CODE, ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 import env from "@/env.server";
 
 declare global {
@@ -13,25 +13,30 @@ declare global {
 
 if (globalThis.starlightWebTracerProvider === undefined) {
   const otlpEndpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT;
-  const spanProcessors = otlpEndpoint
-    ? [
-        new BatchSpanProcessor(
-          new OTLPTraceExporter({
-            url: `${otlpEndpoint}/v1/traces`,
-            headers: Object.fromEntries(
-              env.OTEL_EXPORTER_OTLP_HEADERS.split(",").flatMap((pair) => {
-                const separator = pair.indexOf("=");
-                if (separator < 1) return [];
 
-                const key = pair.slice(0, separator).trim();
-                const value = pair.slice(separator + 1).trim();
-                return key.length > 0 && value.length > 0 ? [[key, value] as const] : [];
-              }),
-            ),
-          }),
-        ),
-      ]
-    : [];
+  const spanProcessors =
+    otlpEndpoint !== undefined && otlpEndpoint.length > 0
+      ? [
+          new BatchSpanProcessor(
+            new OTLPTraceExporter({
+              url: `${otlpEndpoint}/v1/traces`,
+              headers: Object.fromEntries(
+                env.OTEL_EXPORTER_OTLP_HEADERS.split(",").flatMap((pair) => {
+                  const separator = pair.indexOf("=");
+
+                  if (separator < 1) return [];
+
+                  const key = pair.slice(0, separator).trim();
+                  const value = pair.slice(separator + 1).trim();
+
+                  return key.length > 0 && value.length > 0 ? [[key, value] as const] : [];
+                }),
+              ),
+            }),
+          ),
+        ]
+      : [];
+
   const provider = new NodeTracerProvider({
     resource: resourceFromAttributes({ [ATTR_SERVICE_NAME]: "starlight-web" }),
     spanProcessors,
@@ -41,12 +46,13 @@ if (globalThis.starlightWebTracerProvider === undefined) {
   globalThis.starlightWebTracerProvider = provider;
 }
 
-export function shutdownTelemetry(): Promise<void> {
+export async function shutdownTelemetry(): Promise<void> {
   globalThis.starlightWebTelemetryShutdown ??= globalThis.starlightWebTracerProvider?.shutdown() ?? Promise.resolve();
-  return globalThis.starlightWebTelemetryShutdown;
+
+  await globalThis.starlightWebTelemetryShutdown;
 }
 
-export function traceRpcRequest(request: Request, handler: () => Promise<Response>): Promise<Response> {
+export async function traceRpcRequest(request: Request, handler: () => Promise<Response>): Promise<Response> {
   const parentContext = propagation.extract(context.active(), request.headers, {
     get(carrier, key) {
       return carrier.get(key) ?? undefined;
@@ -56,22 +62,26 @@ export function traceRpcRequest(request: Request, handler: () => Promise<Respons
     },
   });
 
-  return context.with(parentContext, () =>
-    trace.getTracer("starlight-web").startActiveSpan("RPC request", { kind: SpanKind.SERVER }, async (span) => {
-      try {
-        const response = await handler();
-        span.setAttribute('http.response.status_code', response.status);
-        if (response.status >= 500) {
+  return await context.with(
+    parentContext,
+    async () =>
+      await trace.getTracer("starlight-web").startActiveSpan("RPC request", { kind: SpanKind.SERVER }, async (span) => {
+        try {
+          const response = await handler();
+          span.setAttribute(ATTR_HTTP_RESPONSE_STATUS_CODE, response.status);
+
+          if (response.status >= 500) {
+            span.setStatus({ code: SpanStatusCode.ERROR });
+          }
+
+          return response;
+        } catch (error) {
           span.setStatus({ code: SpanStatusCode.ERROR });
+          span.recordException(error instanceof Error ? error : String(error));
+          throw error;
+        } finally {
+          span.end();
         }
-        return response;
-      } catch (error) {
-        span.setStatus({ code: SpanStatusCode.ERROR });
-        span.recordException(error instanceof Error ? error : String(error));
-        throw error;
-      } finally {
-        span.end();
-      }
-    }),
+      }),
   );
 }

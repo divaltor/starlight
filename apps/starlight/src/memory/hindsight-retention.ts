@@ -41,6 +41,7 @@ export namespace HindsightRetention {
   const NAMESPACE_CONCURRENCY = 5;
   const RETENTION_RENDER_VERSION = "conversation-retention-v1";
   const WORKER_SCAN_INTERVAL = "30 seconds";
+
   const ObservationContent = Schema.Struct({
     author: Schema.Struct({
       firstName: Schema.String,
@@ -86,19 +87,24 @@ export namespace HindsightRetention {
               orderBy: { id: "asc" },
             }),
           ]);
+
           return { ...stored, observations };
         });
+
         const pending = namespace.observations.filter(
           (observation) => observation.id > (namespace.retentionWatermark ?? 0n),
         );
+
         if (pending.length === 0) return null;
 
         const sourceThrough = pending.at(-1)!.id;
         const messagesById = new Map<number, typeof ObservationContent.Type>();
+
         for (const observation of namespace.observations) {
           const content = Schema.decodeUnknownSync(ObservationContent)(observation.content);
           messagesById.set(content.messageId, content);
         }
+
         const messages = [...messagesById.values()]
           .toSorted((left, right) => left.messageId - right.messageId)
           .map((content) => ({
@@ -109,7 +115,9 @@ export namespace HindsightRetention {
             role: "user",
             timestamp: content.timestamp,
           }));
+
         const rendered = Prompt.canonicalEncode(messages);
+
         const item: MemoryItemInput = {
           content: rendered,
           context:
@@ -124,19 +132,21 @@ export namespace HindsightRetention {
           timestamp: new Date(messages[0]!.timestamp),
           update_mode: "replace",
         };
+
         yield* hindsight.retain({
           bankId: namespace.ownerKey,
           items: [item],
           operationId: Bun.randomUUIDv5(`${namespace.id}:${sourceThrough}:${RETENTION_RENDER_VERSION}`, "url"),
         });
-        yield* database.query((client) =>
-          client.memoryNamespace.updateMany({
-            where: {
-              id: namespace.id,
-              OR: [{ retentionWatermark: null }, { retentionWatermark: { lt: sourceThrough } }],
-            },
-            data: { retentionWatermark: sourceThrough },
-          }),
+        yield* database.query(
+          async (client) =>
+            await client.memoryNamespace.updateMany({
+              where: {
+                id: namespace.id,
+                OR: [{ retentionWatermark: null }, { retentionWatermark: { lt: sourceThrough } }],
+              },
+              data: { retentionWatermark: sourceThrough },
+            }),
         );
         yield* Effect.logInfo("Hindsight conversation retention completed").pipe(
           Effect.annotateLogs({
@@ -146,24 +156,30 @@ export namespace HindsightRetention {
             pendingObservations: pending.length,
           }),
         );
+
         return sourceThrough;
       });
 
       const retainPending = Effect.fn("HindsightRetention.retainPending")(function* retainPending(namespaceId: string) {
         const existing = locks.get(namespaceId);
         const lock = existing ?? Semaphore.makeUnsafe(1);
+
         if (existing === undefined) locks.set(namespaceId, lock);
+
         return yield* lock.withPermit(processPending(namespaceId));
       });
 
       const flush = Effect.fn("HindsightRetention.flush")(function* flush(key: Lane.LaneKey) {
-        const namespace = yield* database.query((client) =>
-          client.memoryNamespace.findUnique({
-            where: { ownerKey: `conversation:${key.assistantId}:${key.chatId}:${key.threadKey}` },
-            select: { id: true },
-          }),
+        const namespace = yield* database.query(
+          async (client) =>
+            await client.memoryNamespace.findUnique({
+              where: { ownerKey: `conversation:${key.assistantId}:${key.chatId}:${key.threadKey}` },
+              select: { id: true },
+            }),
         );
+
         if (namespace === null) return;
+
         while ((yield* retainPending(namespace.id)) !== null) {
           // A finalized observation can arrive after one retain completed.
         }
@@ -181,8 +197,8 @@ export namespace HindsightRetention {
 
         const retainReady = database
           .query(
-            (client) =>
-              client.$queryRaw<{ readonly id: string }[]>`
+            async (client) =>
+              await client.$queryRaw<{ readonly id: string }[]>`
                 SELECT namespace.id
                 FROM memory_namespaces AS namespace
                 JOIN LATERAL (

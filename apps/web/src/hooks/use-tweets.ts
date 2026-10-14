@@ -26,6 +26,7 @@ export function useTweets(options: UseTweetsOptions = {}) {
       gcTime: 10 * 60 * 1000,
     }),
   );
+
   const tweets = data?.pages.flatMap((page) => page.tweets) ?? EMPTY_TWEETS;
 
   return {

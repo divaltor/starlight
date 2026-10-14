@@ -15,6 +15,7 @@ interface UseTelegramButtonsOptions {
 }
 
 type ActionExecutor = (action: ButtonAction, buttonType: string) => void;
+
 type CleanupRegistrar = (cleanup: () => void) => void;
 
 type BottomButtonParams = Parameters<typeof mainButton.setParams>[0];
@@ -44,6 +45,7 @@ function syncBottomButton(
     if (api.isMounted()) {
       api.setParams({ isVisible: false });
     }
+
     return;
   }
 
@@ -53,14 +55,15 @@ function syncBottomButton(
     isEnabled: state !== "disabled",
     isLoaderVisible: isLoading,
     hasShineEffect,
-    ...(config.color && { backgroundColor: config.color }),
-    ...(config.textColor && { textColor: config.textColor }),
+    ...(config.color !== undefined && config.color.length > 0 && { backgroundColor: config.color }),
+    ...(config.textColor !== undefined && config.textColor.length > 0 && { textColor: config.textColor }),
   });
 
   if (action && api.canSubscribeClick()) {
     const unsubscribe = api.subscribeClick(() => {
       executeAction(action, buttonType);
     });
+
     registerCleanup(() => unsubscribe?.());
   }
 }
@@ -81,6 +84,7 @@ function bindButtonTap(
   const unsubscribe = subscribeClick(() => {
     executeAction(action, buttonType);
   });
+
   registerCleanup(() => unsubscribe?.());
 }
 
@@ -89,7 +93,7 @@ export function useTelegramButtons(
   options?: UseTelegramButtonsOptions,
 ): ButtonManager {
   const router = useRouter();
-  const configRef = useRef<RouteButtonConfig>(initialConfig || {});
+  const configRef = useRef<RouteButtonConfig>(initialConfig ?? {});
   const cleanupFunctions = useRef<(() => void)[]>([]);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -100,23 +104,27 @@ export function useTelegramButtons(
     try {
       switch (action.type) {
         case "navigate": {
-          router.navigate({ to: action.payload as string });
+          void router.navigate({ to: action.payload });
           break;
         }
+
         case "callback": {
           if (typeof action.payload === "function") {
-            (action.payload as () => void | Promise<void>)();
+            void action.payload();
           }
+
           break;
         }
+
         case "external": {
-          window.open(action.payload as string, "_blank", "noopener");
+          window.open(action.payload, "_blank", "noopener");
           break;
         }
+
         default: {
           console.error("Failed to execute Telegram button action", {
             buttonType,
-            error: new Error(`Invalid action type: ${action.type}`),
+            error: new Error("Invalid action type"),
           });
         }
       }
@@ -142,7 +150,9 @@ export function useTelegramButtons(
       syncBottomButton(config.mainButton, "mainButton", executeButtonAction, registerCleanup, {
         canSubscribeClick: () => mainButton.onClick.isAvailable(),
         isMounted: () => mainButton.isMounted(),
-        setParams: (updates) => mainButton.setParams(updates),
+        setParams: (updates) => {
+          mainButton.setParams(updates);
+        },
         subscribeClick: (handler) => mainButton.onClick(handler),
       });
     }
@@ -151,7 +161,9 @@ export function useTelegramButtons(
       syncBottomButton(config.secondaryButton, "secondaryButton", executeButtonAction, registerCleanup, {
         canSubscribeClick: () => secondaryButton.onClick.isAvailable(),
         isMounted: () => secondaryButton.isMounted(),
-        setParams: (updates) => secondaryButton.setParams(updates),
+        setParams: (updates) => {
+          secondaryButton.setParams(updates);
+        },
         subscribeClick: (handler) => secondaryButton.onClick(handler),
       });
     }
@@ -194,9 +206,12 @@ export function useTelegramButtons(
       clearTimeout(updateTimeoutRef.current);
     }
 
-    updateTimeoutRef.current = setTimeout(() => {
-      updateButtonsInternal(config);
-    }, options?.debounceMs || 100);
+    updateTimeoutRef.current = setTimeout(
+      () => {
+        updateButtonsInternal(config);
+      },
+      options?.debounceMs === undefined || options.debounceMs === 0 ? 100 : options.debounceMs,
+    );
   };
 
   // Public API
@@ -212,7 +227,8 @@ export function useTelegramButtons(
 
   const getButtonState = (buttonType: keyof RouteButtonConfig): ButtonState => {
     const buttonConfig = configRef.current[buttonType];
-    return buttonConfig?.state || "hidden";
+
+    return buttonConfig?.state ?? "hidden";
   };
 
   // Latest-ref bridge so the mount effect below can call the current sync

@@ -27,17 +27,21 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   server: { allowedHosts: true },
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes("@telegram-apps/")) return "telegram-sdk";
-          if (id.includes("valibot")) return "telegram-sdk";
-          if (
+          const vendorChunk =
             id.includes("node_modules/react/") ||
             id.includes("node_modules/react-dom/") ||
             id.includes("node_modules/scheduler")
-          )
-            return "react-vendor";
+              ? "react-vendor"
+              : undefined;
+
+          if (id.includes("@telegram-apps/") || id.includes("valibot")) {
+            return "telegram-sdk";
+          }
+
+          return vendorChunk;
         },
       },
     },

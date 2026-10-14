@@ -50,18 +50,12 @@ export const prisma = new PrismaClient({
 }).$extends({
   query: {
     message: {
-      $allOperations({ operation, args, query }) {
+      async $allOperations({ operation, args, query }) {
         if (MESSAGE_READ_OPERATIONS.has(operation)) {
-          return query(
-            onlyNotDeletedMessages(
-              args as {
-                where?: PrismaGenerated.MessageWhereInput;
-              },
-            ),
-          );
+          return await query(onlyNotDeletedMessages({ ...args, where: "where" in args ? args.where : undefined }));
         }
 
-        return query(args);
+        return await query(args);
       },
     },
   },
@@ -91,11 +85,7 @@ export const prisma = new PrismaClient({
           s3Path: true,
         },
         compute(data: { s3Path: string }) {
-          if (!(data.s3Path && databaseEnv.BASE_CDN_URL)) {
-            return;
-          }
-
-          return `${databaseEnv.BASE_CDN_URL}/${data.s3Path}`;
+          return data.s3Path && databaseEnv.BASE_CDN_URL ? `${databaseEnv.BASE_CDN_URL}/${data.s3Path}` : undefined;
         },
       },
     },
@@ -105,11 +95,7 @@ export const prisma = new PrismaClient({
           photoThumbnail: true,
         },
         compute(data: { photoThumbnail: string }) {
-          if (!data.photoThumbnail) {
-            return;
-          }
-
-          return `${databaseEnv.BASE_CDN_URL}/${data.photoThumbnail}`;
+          return data.photoThumbnail ? `${databaseEnv.BASE_CDN_URL}/${data.photoThumbnail}` : undefined;
         },
       },
       bigUrl: {
@@ -117,11 +103,7 @@ export const prisma = new PrismaClient({
           photoBig: true,
         },
         compute(data: { photoBig: string }) {
-          if (!(data.photoBig && databaseEnv.BASE_CDN_URL)) {
-            return;
-          }
-
-          return `${databaseEnv.BASE_CDN_URL}/${data.photoBig}`;
+          return data.photoBig && databaseEnv.BASE_CDN_URL ? `${databaseEnv.BASE_CDN_URL}/${data.photoBig}` : undefined;
         },
       },
     },

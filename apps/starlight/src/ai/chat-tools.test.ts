@@ -17,7 +17,7 @@ const layer = ChatTools.layer.pipe(
     Layer.succeed(Exa.Service)({
       tools: {
         web_search_exa: {
-          execute: () => Promise.resolve({ result: "fixture" }),
+          execute: () => ({ result: "fixture" }),
           inputSchema: z.object({ query: z.string() }),
         },
       },
@@ -29,6 +29,7 @@ test("resolves the exact persisted tool profile", async () => {
   const result = await Effect.runPromise(
     Effect.gen(function* () {
       const tools = yield* ChatTools.Service;
+
       return {
         availableProfile: tools.availableProfile,
         all: yield* tools.resolve(tools.availableProfile),
@@ -48,6 +49,7 @@ test("rejects a persisted profile whose provider is unavailable", async () => {
   const error = await Effect.runPromise(
     Effect.gen(function* () {
       const tools = yield* ChatTools.Service;
+
       return yield* tools.resolve(["calendar-v1"]);
     }).pipe(Effect.flip, Effect.provide(layer)),
   );

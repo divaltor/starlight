@@ -5,10 +5,15 @@ import sharp from "sharp";
 import type { Node } from "takumi-js";
 import { Renderer } from "takumi-js/node";
 import { extractEmojis } from "takumi-js/helpers/emoji";
-import { buildTweetCard, collectRemoteImageSrcs, collectTweetImageUrls, stripUnavailableImages } from "./card";
-import { LAYOUT } from "./layout";
-import { themes } from "./themes";
-import type { Theme } from "./themes";
+import {
+  buildTweetCard,
+  collectRemoteImageSrcs,
+  collectTweetImageUrls,
+  stripUnavailableImages,
+} from "@/services/render/card";
+import { LAYOUT } from "@/services/render/layout";
+import { themes } from "@/services/render/themes";
+import type { Theme } from "@/services/render/themes";
 
 export interface ArticleCoverMedia {
   height: number;
@@ -64,13 +69,15 @@ export interface RenderResult {
   width: number;
 }
 
-export type { Theme } from "./themes";
+export type { Theme } from "@/services/render/themes";
 
 const FONT_FAMILIES = ["Inter", "Noto Sans", "Noto Sans CJK", "Noto Sans Math"];
 const IMAGE_FETCH_TIMEOUT_MS = 5000;
+
 // The napi build ignores `devicePixelRatio` when both width and height are
 // given, so the 2x output scale is applied to the tree itself instead.
 const SCALE_FACTOR = 2;
+
 // Scaling unitless values made lineHeight 2.8 and expanded every text block.
 const UNITLESS_STYLE_PROPERTIES = new Set(["flexGrow", "fontWeight", "lineHeight"]);
 
@@ -78,20 +85,21 @@ function scaleNode(node: Node, factor: number): Node {
   if (node.style) {
     for (const [prop, value] of Object.entries(node.style)) {
       if (typeof value === "number" && !UNITLESS_STYLE_PROPERTIES.has(prop)) {
-        // Style objects come from our own literals, so a numeric index view is safe here.
-        (node.style as Record<string, number>)[prop] = value * factor;
+        Object.assign(node.style, { [prop]: value * factor });
       }
     }
   }
+
   if (node.type === "container") {
     node.children = (node.children ?? []).map((child) => scaleNode(child, factor));
   }
+
   return node;
 }
 
 let rendererPromise: Promise<Renderer> | null = null;
 
-function getRenderer(): Promise<Renderer> {
+async function getRenderer(): Promise<Renderer> {
   rendererPromise ??= (async () => {
     const renderer = new Renderer();
     // Fonts live next to the process working directory (see apps/server README);
@@ -113,9 +121,11 @@ function getRenderer(): Promise<Renderer> {
         }
       }),
     );
+
     return renderer;
   })();
-  return rendererPromise;
+
+  return await rendererPromise;
 }
 
 async function prefetchImages(urls: Iterable<string>): Promise<Map<string, Uint8Array>> {
@@ -127,16 +137,20 @@ async function prefetchImages(urls: Iterable<string>): Promise<Map<string, Uint8
         const response = await http(url, {
           signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
         });
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
+
         const data = new Uint8Array(await response.arrayBuffer());
         // A successful response can contain an HTML error page, which makes Takumi abort the card.
         // Use sharp because extracted Twemoji assets are SVG, which Bun.Image cannot decode.
         await sharp(data).metadata();
+
         return [url, data] as const;
       } catch (error) {
         logger.warn({ error, url }, "Failed to load image for tweet card");
+
         return null;
       }
     }),
@@ -164,19 +178,21 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
   node = scaleNode(node, SCALE_FACTOR);
 
   const measured = await renderer.measure(node, { width: LAYOUT.WIDTH * SCALE_FACTOR });
+  const height = Math.ceil(measured.height);
 
   const rendered = await renderer.render(node, {
     fontFamilies: FONT_FAMILIES,
     format: "png",
-    height: measured.height,
+    height,
     images: [...bytesBySrc.entries()].map(([src, data]) => ({ data, src })),
     width: LAYOUT.WIDTH * SCALE_FACTOR,
   });
+
   const buffer = await sharp(rendered).flatten({ background: colors.background }).jpeg({ quality: 100 }).toBuffer();
 
   logger.debug(
     {
-      height: measured.height,
+      height,
       size: buffer.length,
       width: LAYOUT.WIDTH * SCALE_FACTOR,
     },
@@ -185,7 +201,7 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
 
   return {
     buffer,
-    height: measured.height,
+    height,
     width: LAYOUT.WIDTH * SCALE_FACTOR,
   };
 }

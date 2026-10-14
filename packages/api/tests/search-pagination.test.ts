@@ -43,11 +43,13 @@ describe("search post pagination", () => {
   test("rejects obsolete media-level cursors", () => {
     expect(
       Cursor.parse(
-        Cursor.create({
-          lastScore: 0.9,
-          lastPhotoId: "photo-1",
-          queryTime: "2026-01-01T00:00:00.000Z",
-        }),
+        Buffer.from(
+          JSON.stringify({
+            lastScore: 0.9,
+            lastPhotoId: "photo-1",
+            queryTime: "2026-01-01T00:00:00.000Z",
+          }),
+        ).toString("base64url"),
         SearchCursorPayloadSchema,
       ),
     ).toBeNull();

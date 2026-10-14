@@ -18,6 +18,7 @@ import { redis } from "@/storage";
 const DRY_RUN = process.env.DRY_RUN === "1";
 const CLEAR_QUEUE = process.env.CLEAR_QUEUE === "1" || process.env.CLEAR === "1";
 const FORCE = process.env.FORCE === "1";
+
 // When set, enqueue all photos regardless of stored classification state
 const ALL_PICTURES = process.env.ALL_PICTURES === "1";
 
@@ -61,11 +62,13 @@ async function main() {
   logger.info({ count: photos.length }, "Fetched all photos to enqueue");
 
   let enqueued = 0;
+
   if (!DRY_RUN && photos.length > 0) {
     await classificationQueue.addBulk(
       photos.map((photo) => {
         const base = `classify-${photo.id}-${photo.userId}`;
         const jobId = FORCE ? `${base}-${Date.now()}` : base;
+
         return {
           name: `classify-${photo.id}`,
           data: { photoId: photo.id, userId: photo.userId },
@@ -88,22 +91,22 @@ async function main() {
   );
 }
 
-main()
-  .catch((error) => {
-    logger.error({ error }, "Enqueue script failed");
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await Promise.all([classificationWorker.close(), embeddingsWorker.close()]).catch((error) => {
-      logger.error({ error }, "Failed to close queue workers");
-    });
-    await Promise.all([classificationQueue.close(), embeddingsQueue.close()]).catch((error) => {
-      logger.error({ error }, "Failed to close queue clients");
-    });
-    await prisma.$disconnect().catch((error) => {
-      logger.error({ error }, "Failed to disconnect from database");
-    });
-    await redis.quit().catch((error) => {
-      logger.error({ error }, "Failed to quit Redis");
-    });
+try {
+  await main();
+} catch (error) {
+  logger.error({ error }, "Enqueue script failed");
+  process.exitCode = 1;
+} finally {
+  await Promise.all([classificationWorker.close(), embeddingsWorker.close()]).catch((cause: unknown) => {
+    logger.error({ error: cause }, "Failed to close queue workers");
   });
+  await Promise.all([classificationQueue.close(), embeddingsQueue.close()]).catch((cause: unknown) => {
+    logger.error({ error: cause }, "Failed to close queue clients");
+  });
+  await prisma.$disconnect().catch((cause: unknown) => {
+    logger.error({ error: cause }, "Failed to disconnect from database");
+  });
+  await redis.quit().catch((cause: unknown) => {
+    logger.error({ error: cause }, "Failed to quit Redis");
+  });
+}

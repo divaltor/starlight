@@ -9,7 +9,8 @@ import { Prompt } from "@/context/prompt";
 import { Media } from "@/media/media";
 import { Database } from "@/services/database";
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL ?? "";
+
 const FROZEN_PROFILE_ENVELOPE = Prompt.canonicalEncode({
   instructions: "Frozen profile instructions",
   tools: [],
@@ -36,7 +37,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable attribute
     ConversationContext.layer.pipe(
       Layer.provideMerge(
         Layer.mergeAll(
-          Database.layer(databaseUrl!),
+          Database.layer(databaseUrl),
           Layer.succeed(ChatTools.Service)(disabledChatTools),
           Layer.succeed(Model.Service)(unavailableModel),
           mediaLayer,
@@ -44,6 +45,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable attribute
       ),
     ),
   );
+
   const assistantId = 8_000_000_092n;
   const chatId = -8_000_000_092n;
   let runId = "";
@@ -65,6 +67,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable attribute
               threadKey: 0,
             },
           });
+
           const input = await client.conversationInput.create({
             data: {
               admittedRevision: 1,
@@ -91,6 +94,7 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable attribute
               threadKey: 0,
             },
           });
+
           const run = await client.conversationRun.create({
             data: {
               actions: {
@@ -119,17 +123,20 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable attribute
               threadKey: 0,
             },
           });
+
           await client.conversationLane.update({
             where: {
               assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 },
             },
             data: { activeRunId: run.id, fencingToken: 1n },
           });
+
           return run.id;
         });
 
         const first = yield* context.appendFinalized({ fencingToken: 1n, runId });
         const repeated = yield* context.appendFinalized({ fencingToken: 1n, runId });
+
         const counts = yield* database.query(async (client) => ({
           contextTurns: await client.conversationContextTurn.count({
             where: { contextId: first.contextId },
@@ -171,7 +178,9 @@ test.skipIf(!databaseUrl)("repeated finalization appends one immutable attribute
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => clearConversation(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await clearConversation(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -183,7 +192,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
     ConversationContext.layer.pipe(
       Layer.provideMerge(
         Layer.mergeAll(
-          Database.layer(databaseUrl!),
+          Database.layer(databaseUrl),
           Layer.succeed(ChatTools.Service)(disabledChatTools),
           Layer.succeed(Model.Service)(unavailableModel),
           mediaLayer,
@@ -191,6 +200,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
       ),
     ),
   );
+
   const assistantId = 8_000_000_093n;
   const chatId = -8_000_000_093n;
   const retainedRenderedContent = '<message role="user">retained bytes</message>';
@@ -202,6 +212,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
       Effect.gen(function* transitionProfile() {
         const context = yield* ConversationContext.Service;
         const database = yield* Database.Service;
+
         const runId = yield* database.query(async (client) => {
           await clearConversation(client, assistantId, chatId);
           await client.chat.create({ data: { id: chatId } });
@@ -214,6 +225,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
               threadKey: 0,
             },
           });
+
           const parent = await client.conversationContext.create({
             data: {
               activeKey: `v1/${assistantId}/${chatId}/0`,
@@ -230,6 +242,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
               threadKey: 0,
             },
           });
+
           const run = await client.conversationRun.create({
             data: {
               assistantId,
@@ -244,6 +257,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
               threadKey: 0,
             },
           });
+
           const transcriptTurn = await client.conversationTranscriptTurn.create({
             data: {
               assistantId,
@@ -258,6 +272,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
               visibility: "conversation",
             },
           });
+
           await client.conversationContextTurn.create({
             data: {
               contextId: parent.id,
@@ -275,6 +290,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
             where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
             data: { activeContextId: parent.id, activeRunId: run.id, fencingToken: 1n },
           });
+
           return run.id;
         });
 
@@ -288,6 +304,7 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
           run: { fencingToken: 1n, runId },
           toolProfile: [],
         });
+
         const persisted = yield* database.query(async (client) => ({
           contexts: await client.conversationContext.findMany({
             where: { assistantId, chatId },
@@ -320,7 +337,9 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => clearConversation(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await clearConversation(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -330,13 +349,16 @@ test.skipIf(!databaseUrl)("a prepared run transitions profile while preserving r
 test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the newest eight", async () => {
   let summaryAttempts = 0;
   let summaryInput = "";
+
   const retryingSummaryModel: Model.Interface = {
     generate: (input) => {
       summaryAttempts += 1;
       summaryInput = input.messages.map((message) => message.text).join("\n");
+
       if (summaryAttempts === 1) {
         return Effect.fail(new Model.Unavailable({ message: "Interrupted profile summary", retryable: true }));
       }
+
       return Effect.succeed({
         finishReason: "stop",
         output: input.outputSchema.parse({
@@ -353,11 +375,12 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
       });
     },
   };
+
   const runtime = ManagedRuntime.make(
     ConversationContext.layer.pipe(
       Layer.provideMerge(
         Layer.mergeAll(
-          Database.layer(databaseUrl!),
+          Database.layer(databaseUrl),
           Layer.succeed(ChatTools.Service)(disabledChatTools),
           Layer.succeed(Model.Service)(retryingSummaryModel),
           mediaLayer,
@@ -365,6 +388,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
       ),
     ),
   );
+
   const assistantId = 8_000_000_105n;
   const chatId = -8_000_000_105n;
   const profileEnvelope = FROZEN_PROFILE_ENVELOPE;
@@ -375,6 +399,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
       Effect.gen(function* transitionProfileWithSummary() {
         const context = yield* ConversationContext.Service;
         const database = yield* Database.Service;
+
         const seeded = yield* database.query(async (client) => {
           await clearConversation(client, assistantId, chatId);
           await client.chat.create({ data: { id: chatId } });
@@ -387,6 +412,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
               threadKey: 0,
             },
           });
+
           const parent = await client.conversationContext.create({
             data: {
               activeKey: `v1/${assistantId}/${chatId}/0`,
@@ -398,7 +424,9 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
               ...Prompt.stableSeed(obsoleteEnvelope, Prompt.renderMemory({ checkpoint: "", scopes: [] })),
             },
           });
+
           let summarizedThroughInputSequence = 0n;
+
           for (const index of Array.from({ length: 10 }, (_, item) => item + 1)) {
             const input = await client.conversationInput.create({
               data: {
@@ -426,6 +454,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
                 threadKey: 0,
               },
             });
+
             const run = await client.conversationRun.create({
               data: {
                 assistantId,
@@ -442,6 +471,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
                 threadKey: 0,
               },
             });
+
             const transcriptTurn = await client.conversationTranscriptTurn.create({
               data: {
                 assistantId,
@@ -457,6 +487,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
                 visibility: "conversation",
               },
             });
+
             await client.conversationContextTurn.create({
               data: {
                 contextId: parent.id,
@@ -470,8 +501,10 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
                 transcriptTurnId: transcriptTurn.id,
               },
             });
+
             if (index === 2) {
               summarizedThroughInputSequence = input.id;
+
               const replyTurn = await client.conversationTranscriptTurn.create({
                 data: {
                   assistantId,
@@ -487,6 +520,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
                   visibility: "delivered",
                 },
               });
+
               await client.conversationContextTurn.create({
                 data: {
                   contextId: parent.id,
@@ -502,6 +536,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
               });
             }
           }
+
           const currentRun = await client.conversationRun.create({
             data: {
               assistantId,
@@ -516,10 +551,12 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
               threadKey: 0,
             },
           });
+
           await client.conversationLane.update({
             where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
             data: { activeContextId: parent.id, activeRunId: currentRun.id, fencingToken: 1n },
           });
+
           return { runId: currentRun.id, summarizedThroughInputSequence };
         });
 
@@ -535,6 +572,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
             toolProfile: [],
           }),
         );
+
         expect(firstAttempt._tag).toBe("Failure");
         yield* database.query(async (client) => {
           await client.conversationRun.update({ where: { id: seeded.runId }, data: { fencingToken: 2n } });
@@ -543,6 +581,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
             data: { fencingToken: 2n },
           });
         });
+
         const transitioned = yield* context.transitionProfile({
           key: { assistantId: Number(assistantId), chatId: Number(chatId), threadKey: 0 },
           leaseMs: 180_000,
@@ -553,6 +592,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
           run: { fencingToken: 2n, runId: seeded.runId },
           toolProfile: [],
         });
+
         const persisted = yield* database.query(async (client) => ({
           attempts: await client.conversationCheckpointAttempt.findMany({
             where: { runId: seeded.runId },
@@ -594,6 +634,7 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
           run: { fencingToken: 2n, runId: seeded.runId },
           toolProfile: [],
         });
+
         expect(repeated).toMatchObject({ id: transitioned.id, summarized: false });
       }),
     );
@@ -601,7 +642,9 @@ test.skipIf(!databaseUrl)("a profile change summarizes old runs and retains the 
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => clearConversation(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await clearConversation(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -613,7 +656,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
     ConversationContext.layer.pipe(
       Layer.provideMerge(
         Layer.mergeAll(
-          Database.layer(databaseUrl!),
+          Database.layer(databaseUrl),
           Layer.succeed(ChatTools.Service)(disabledChatTools),
           Layer.succeed(Model.Service)(unavailableModel),
           mediaLayer,
@@ -621,6 +664,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
       ),
     ),
   );
+
   const assistantId = 8_000_000_100n;
   const chatId = -8_000_000_100n;
   let runId = "";
@@ -636,6 +680,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
           await client.conversationLane.create({
             data: { assistantId, chatId, pendingRevision: 1, processedRevision: 1, threadKey: 0 },
           });
+
           const input = await client.conversationInput.create({
             data: {
               admittedRevision: 1,
@@ -662,6 +707,7 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
               threadKey: 0,
             },
           });
+
           const run = await client.conversationRun.create({
             data: {
               assistantId,
@@ -684,28 +730,33 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
               threadKey: 0,
             },
           });
+
           await client.conversationLane.update({
             where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
             data: { activeRunId: run.id, fencingToken: 1n },
           });
+
           return run.id;
         });
 
         // Freeze the request, then corrupt the stored hash the way an unversioned rendering
         // change between freeze and replay would.
         yield* context.appendFinalized({ fencingToken: 1n, runId });
-        yield* database.query((client) =>
-          client.conversationRun.update({ where: { id: runId }, data: { requestHash: "stale-hash" } }),
+        yield* database.query(
+          async (client) =>
+            await client.conversationRun.update({ where: { id: runId }, data: { requestHash: "stale-hash" } }),
         );
       }),
     );
 
     // Regression: a hash mismatch must be permanent. Marked retryable it would redrive
     // forever because attemptCount only advances during model invocation.
+    // oxlint-disable-next-line typescript/await-thenable, typescript/no-confusing-void-expression -- Bun rejects assertions are async at runtime but declared void
     await expect(
       runtime.runPromise(
         Effect.gen(function* reprepareFrozenRun() {
           const context = yield* ConversationContext.Service;
+
           return yield* context.prepare({ fencingToken: 1n, runId });
         }),
       ),
@@ -714,7 +765,9 @@ test.skipIf(!databaseUrl)("a frozen request that can no longer be reproduced fai
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => clearConversation(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await clearConversation(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();
@@ -728,7 +781,7 @@ test.skipIf(!databaseUrl)(
       ConversationContext.layer.pipe(
         Layer.provideMerge(
           Layer.mergeAll(
-            Database.layer(databaseUrl!),
+            Database.layer(databaseUrl),
             Layer.succeed(ChatTools.Service)(disabledChatTools),
             Layer.succeed(Model.Service)(unavailableModel),
             mediaLayer,
@@ -736,6 +789,7 @@ test.skipIf(!databaseUrl)(
         ),
       ),
     );
+
     const assistantId = 8_000_000_101n;
     const chatId = -8_000_000_101n;
 
@@ -744,12 +798,14 @@ test.skipIf(!databaseUrl)(
         Effect.gen(function* verifyLinkedReplyDedup() {
           const context = yield* ConversationContext.Service;
           const database = yield* Database.Service;
+
           const runIds = yield* database.query(async (client) => {
             await clearConversation(client, assistantId, chatId);
             await client.chat.create({ data: { id: chatId } });
             await client.conversationLane.create({
               data: { assistantId, chatId, pendingRevision: 2, processedRevision: 2, threadKey: 0 },
             });
+
             const replyPayloadA = {
               addressed: true,
               date: 1_700_000_100,
@@ -764,7 +820,9 @@ test.skipIf(!databaseUrl)(
               senderUsername: "alice",
               text: "what is this?",
             };
+
             const replyPayloadB = { ...replyPayloadA, messageId: 72, text: "and now this?" };
+
             const inputA = await client.conversationInput.create({
               data: {
                 admittedRevision: 1,
@@ -778,6 +836,7 @@ test.skipIf(!databaseUrl)(
                 threadKey: 0,
               },
             });
+
             const inputB = await client.conversationInput.create({
               data: {
                 admittedRevision: 2,
@@ -791,6 +850,7 @@ test.skipIf(!databaseUrl)(
                 threadKey: 0,
               },
             });
+
             const runA = await client.conversationRun.create({
               data: {
                 actions: {
@@ -817,6 +877,7 @@ test.skipIf(!databaseUrl)(
                 threadKey: 0,
               },
             });
+
             const runB = await client.conversationRun.create({
               data: {
                 actions: {
@@ -843,6 +904,7 @@ test.skipIf(!databaseUrl)(
                 threadKey: 0,
               },
             });
+
             return { runA: runA.id, runB: runB.id };
           });
 
@@ -860,6 +922,7 @@ test.skipIf(!databaseUrl)(
             });
           });
           const second = yield* context.appendFinalized({ fencingToken: 2n, runId: runIds.runB });
+
           const turns = yield* database.query(async (client) => ({
             linkedCount: await client.conversationTranscriptTurn.count({
               where: { assistantId, chatId, kind: "linkedReplyContext" },
@@ -890,7 +953,9 @@ test.skipIf(!databaseUrl)(
       await runtime.runPromise(
         Effect.gen(function* cleanup() {
           const database = yield* Database.Service;
-          yield* database.query((client) => clearConversation(client, assistantId, chatId));
+          yield* database.query(async (client) => {
+            await clearConversation(client, assistantId, chatId);
+          });
         }),
       );
       await runtime.dispose();
@@ -903,7 +968,7 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
     ConversationContext.layer.pipe(
       Layer.provideMerge(
         Layer.mergeAll(
-          Database.layer(databaseUrl!),
+          Database.layer(databaseUrl),
           Layer.succeed(ChatTools.Service)(disabledChatTools),
           Layer.succeed(Model.Service)(unavailableModel),
           mediaLayer,
@@ -911,12 +976,15 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
       ),
     ),
   );
+
   const assistantId = 8_000_000_102n;
   const chatId = -8_000_000_102n;
   const verdicts: { annotations: object; message: unknown }[] = [];
+
   const collector = Logger.formatStructured.pipe(
     Logger.map((output) => verdicts.push({ annotations: output.annotations, message: output.message })),
   );
+
   let runAId = "";
   let runBId = "";
 
@@ -925,12 +993,14 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
       Effect.gen(function* verifySealedPrefixIsAppendOnly() {
         const context = yield* ConversationContext.Service;
         const database = yield* Database.Service;
+
         const ids = yield* database.query(async (client) => {
           await clearConversation(client, assistantId, chatId);
           await client.chat.create({ data: { id: chatId } });
           await client.conversationLane.create({
             data: { assistantId, chatId, pendingRevision: 1, processedRevision: 1, threadKey: 0 },
           });
+
           const inputA = await client.conversationInput.create({
             data: {
               admittedRevision: 1,
@@ -957,6 +1027,7 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
               threadKey: 0,
             },
           });
+
           const runA = await client.conversationRun.create({
             data: {
               actions: {
@@ -989,6 +1060,7 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
               threadKey: 0,
             },
           });
+
           const inputB = await client.conversationInput.create({
             data: {
               admittedRevision: 2,
@@ -1015,6 +1087,7 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
               threadKey: 0,
             },
           });
+
           const runB = await client.conversationRun.create({
             data: {
               assistantId,
@@ -1037,17 +1110,21 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
               threadKey: 0,
             },
           });
+
           await client.conversationLane.update({
             where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
             data: { activeRunId: runA.id, fencingToken: 1n },
           });
+
           return { runA: runA.id, runB: runB.id };
         });
+
         runAId = ids.runA;
         runBId = ids.runB;
 
         yield* context.prepare({ fencingToken: 1n, runId: runAId });
         yield* context.appendFinalized({ fencingToken: 1n, runId: runAId });
+
         const contextId = yield* database.query(async (client) => {
           const runA = await client.conversationRun.findUniqueOrThrow({ where: { id: runAId } });
           await client.conversationRun.update({ where: { id: runBId }, data: { contextId: runA.contextId } });
@@ -1055,8 +1132,10 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
             where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey: 0 } },
             data: { activeRunId: runBId, fencingToken: 2n },
           });
+
           return runA.contextId;
         });
+
         expect(contextId).not.toBeNull();
 
         yield* context.prepare({ fencingToken: 2n, runId: runBId });
@@ -1078,7 +1157,9 @@ test.skipIf(!databaseUrl)("reports_append_only_when_a_sealed_turn_replaces_its_l
     await runtime.runPromise(
       Effect.gen(function* cleanup() {
         const database = yield* Database.Service;
-        yield* database.query((client) => clearConversation(client, assistantId, chatId));
+        yield* database.query(async (client) => {
+          await clearConversation(client, assistantId, chatId);
+        });
       }),
     );
     await runtime.dispose();

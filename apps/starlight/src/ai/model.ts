@@ -22,10 +22,13 @@ export namespace Model {
   const MODEL_TIMEOUT_MS = 40_000;
   const MAX_GENERATION_STEPS = 32;
   const FINAL_OUTPUT_TOOL_NAME = "final_output";
+
   const FINAL_OUTPUT_INSTRUCTION =
     "IMPORTANT: You MUST use the final_output tool to provide your final response. Complete any necessary research first, then call final_output exactly once. Do not return the final response as text.";
+
   const FINAL_OUTPUT_TOOL_DESCRIPTION =
     "Return the complete final response in the required structured format. You must call this tool exactly once after completing any necessary research.";
+
   const INVOCATION_FAILED_MESSAGE = "Model invocation failed";
   const CACHE_BREAKPOINT_OPTIONS = { openrouter: { cacheControl: { type: "ephemeral" as const } } };
 
@@ -141,6 +144,7 @@ export namespace Model {
         const outputs = new Map<string, OUTPUT>();
         const boundedTools = boundTools(input.tools, input.maxToolOutputBytes);
         const outputProtocol = provider.profile.output.protocol;
+
         const tools =
           outputProtocol === ModelProfile.outputProtocols.finalOutputTool
             ? {
@@ -149,15 +153,17 @@ export namespace Model {
                   description: FINAL_OUTPUT_TOOL_DESCRIPTION,
                   execute: (output, execution) => {
                     outputs.set(execution.toolCallId, output);
-                    return Promise.resolve({ captured: true });
+
+                    return { captured: true };
                   },
                   inputSchema: input.outputSchema,
                 }),
               }
             : boundedTools;
+
         const invocation = Effect.tryPromise({
-          try: (signal) =>
-            generateText({
+          try: async (signal) =>
+            await generateText({
               abortSignal: signal,
               headers: { "x-session-id": input.sessionId },
               instructions:
@@ -182,15 +188,17 @@ export namespace Model {
                 ) {
                   return;
                 }
+
                 toolEvents.push(createToolEvent(event));
               },
               ...(outputProtocol === ModelProfile.outputProtocols.jsonSchemaResponse && {
                 output: Output.object({ schema: input.outputSchema }),
               }),
               prepareStep: (step) => limitToolCalls(step.steps, input.maxToolCalls, outputProtocol),
-              providerOptions: input.promptCacheKey
-                ? { openrouter: { prompt_cache_key: input.promptCacheKey } }
-                : undefined,
+              providerOptions:
+                input.promptCacheKey !== undefined && input.promptCacheKey !== ""
+                  ? { openrouter: { prompt_cache_key: input.promptCacheKey } }
+                  : undefined,
               runtimeContext: {
                 "langfuse.session.id": input.sessionId,
                 ...(input.private !== true &&
@@ -204,6 +212,7 @@ export namespace Model {
                       // A step whose only tool call is final_output means the answer is complete.
                       (step) => {
                         const toolCalls = step.steps.at(-1)?.toolCalls;
+
                         return toolCalls?.length === 1 && toolCalls[0]?.toolName === FINAL_OUTPUT_TOOL_NAME;
                       },
                       isStepCount(MAX_GENERATION_STEPS),
@@ -225,10 +234,12 @@ export namespace Model {
               }
 
               const finalStep = result.steps.at(-1);
+
               const finalCall =
                 finalStep?.toolCalls.length === 1 && finalStep.toolCalls[0]?.toolName === FINAL_OUTPUT_TOOL_NAME
                   ? finalStep.toolCalls[0]
                   : undefined;
+
               if (!finalCall || !outputs.has(finalCall.toolCallId)) {
                 throw new NoOutputGeneratedError({ message: "Model did not produce exactly one final output" });
               }
@@ -251,6 +262,7 @@ export namespace Model {
             // Dot notation is the project convention; destructuring is intentionally disabled.
             // oxlint-disable-next-line prefer-destructuring
             const cause = error.cause;
+
             const usage = Usage.aggregate(
               completedSteps.map((step) => Usage.normalizeStep(step.usage, step.providerMetadata)),
             );
@@ -270,6 +282,7 @@ export namespace Model {
             );
           }),
         );
+
         const generated = yield* invocation;
         // Dot notation is the project convention; destructuring is intentionally disabled.
         // oxlint-disable-next-line prefer-destructuring
@@ -366,13 +379,15 @@ export namespace Model {
   ): ModelMessage[] {
     const conversation: ModelMessage[] = messages.map((message, index) => {
       const breakpoint = index === cachePrefixMessageCount - 1;
-      if (message.role === "assistant" || !message.media?.length) {
+
+      if (message.role === "assistant" || message.media === undefined || message.media.length === 0) {
         return {
           content: message.text,
           providerOptions: breakpoint ? CACHE_BREAKPOINT_OPTIONS : undefined,
           role: message.role,
         };
       }
+
       const content = [
         { text: message.text, type: "text" as const },
         ...message.media.map((item) =>
@@ -394,9 +409,11 @@ export namespace Model {
               },
         ),
       ];
+
       return { content, providerOptions: breakpoint ? CACHE_BREAKPOINT_OPTIONS : undefined, role: message.role };
     });
-    if (!cacheBase) return conversation;
+
+    if (cacheBase === undefined || cacheBase === "") return conversation;
 
     // OpenRouter's Vertex route does not provide reliable implicit caching for Gemini.
     // Advance one explicit breakpoint through the stable transcript instead.
@@ -404,25 +421,31 @@ export namespace Model {
       cachePrefixMessageCount === 0
         ? { content: cacheBase, providerOptions: CACHE_BREAKPOINT_OPTIONS, role: "user" }
         : { content: cacheBase, role: "user" };
+
     return [base, ...conversation];
   }
 
   function boundTools(tools: ToolSet, maximumBytes: number): ToolSet {
     let remainingBytes = Math.max(0, maximumBytes);
+
     return Object.fromEntries(
       Object.entries(tools).map(([name, definition]) => {
         const { execute } = definition;
+
         if (!execute) return [name, definition];
+
         return [
           name,
           {
             ...definition,
             execute: async (...parameters: Parameters<typeof execute>) => {
-              const output = await execute(...parameters);
+              const output: unknown = await execute(...parameters);
               const serialized = JSON.stringify(output) ?? String(output);
               const encoded = new TextEncoder().encode(serialized);
+
               if (encoded.byteLength <= remainingBytes) {
                 remainingBytes -= encoded.byteLength;
+
                 return output;
               }
 
@@ -431,6 +454,7 @@ export namespace Model {
                 0,
                 remainingBytes - new TextEncoder().encode(JSON.stringify(bounded)).byteLength,
               );
+
               return bounded;
             },
           },
@@ -445,28 +469,35 @@ export namespace Model {
       sha256: new Bun.CryptoHasher("sha256").update(serialized).digest("hex"),
       truncated: true as const,
     };
+
     const encode = (preview: string) => ({
       bytes: new TextEncoder().encode(JSON.stringify({ preview, truncation: metadata })).byteLength,
       output: { preview, truncation: metadata },
     });
+
     if (encode("").bytes > maximumBytes) {
       const marker = { truncated: true as const };
+
       return new TextEncoder().encode(JSON.stringify(marker)).byteLength <= maximumBytes ? marker : {};
     }
 
     let lower = 0;
     let upper = encoded.byteLength;
     let bounded = encode("");
+
     while (lower <= upper) {
       const middle = Math.floor((lower + upper) / 2);
       const candidate = encode(new TextDecoder().decode(encoded.slice(0, middle)));
+
       if (candidate.bytes <= maximumBytes) {
         bounded = candidate;
         lower = middle + 1;
         continue;
       }
+
       upper = middle - 1;
     }
+
     return bounded.output;
   }
 
@@ -488,10 +519,14 @@ export namespace Model {
         ).length,
       0,
     );
-    if (toolCallCount < Math.max(maximumCalls, 0)) return;
+
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- all prepare-step branches return values, including the no-override case
+    if (toolCallCount < Math.max(maximumCalls, 0)) return undefined;
+
     if (outputProtocol === ModelProfile.outputProtocols.finalOutputTool) {
       return { activeTools: [FINAL_OUTPUT_TOOL_NAME] as const };
     }
+
     return { activeTools: [], toolChoice: "none" as const };
   }
 
@@ -514,6 +549,7 @@ export namespace Model {
         };
   }): ToolEvent {
     const input = Predicate.isObject(event.toolOutput.input) ? structuredClone(event.toolOutput.input) : {};
+
     if (event.toolOutput.type === "tool-result") {
       return {
         durationMs: event.toolExecutionMs,

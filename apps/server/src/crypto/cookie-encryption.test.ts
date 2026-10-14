@@ -3,6 +3,7 @@ import { CookieEncryption } from "@starlight/crypto";
 
 const masterKey = "a".repeat(64);
 const userId = "123456789";
+
 const cookieData = JSON.stringify({
   auth_token: "test_auth_token_12345",
   ct0: "test_csrf_token_67890",

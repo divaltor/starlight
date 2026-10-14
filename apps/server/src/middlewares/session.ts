@@ -6,7 +6,10 @@ import type { Context } from "@/types";
 export async function attachUser(ctx: Context, next: NextFunction) {
   if (!ctx.from) {
     ctx.logger.warn("User not found, skipping session attachment.");
-    return await next();
+
+    await next();
+
+    return;
   }
 
   const user = await prisma.user.upsert({
@@ -34,7 +37,9 @@ export async function attachUser(ctx: Context, next: NextFunction) {
 
 export async function attachChat(ctx: Context, next: NextFunction) {
   if (!ctx.chat) {
-    return await next();
+    await next();
+
+    return;
   }
 
   const existingChat = await prisma.chat.findUnique({
@@ -105,7 +110,9 @@ export async function attachChatMember(ctx: Context, next: NextFunction) {
   const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
 
   if (!hasChatUserContext || !isGroupChat) {
-    return await next();
+    await next();
+
+    return;
   }
 
   const chatId = BigInt(ctx.chat.id);
@@ -122,10 +129,13 @@ export async function attachChatMember(ctx: Context, next: NextFunction) {
 
     if (existingMember) {
       ctx.userChatMember = existingMember;
-      return await next();
+
+      await next();
+
+      return;
     }
 
-    const telegramMember = await ctx.api.getChatMember(ctx.chat!.id, ctx.from!.id);
+    const telegramMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from!.id);
 
     ctx.userChatMember = await prisma.chatMember.upsert({
       where: {
@@ -147,7 +157,7 @@ export async function attachChatMember(ctx: Context, next: NextFunction) {
     ctx.logger.warn(
       {
         error,
-        chatId: ctx.chat!.id,
+        chatId: ctx.chat.id,
         userId: ctx.from!.id,
       },
       "Failed to attach chat member.",

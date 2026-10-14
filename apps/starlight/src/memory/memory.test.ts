@@ -8,7 +8,7 @@ import { HindsightRetention } from "@/memory/hindsight-retention";
 import { Memory } from "@/memory/memory";
 import { Database } from "@/services/database";
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL ?? "";
 
 test("classifies deterministic Hindsight rejections as permanent", () => {
   const error = Hindsight.HindsightError.fromCause(
@@ -29,25 +29,29 @@ test("classifies Hindsight throttling as retryable", () => {
 });
 
 test.skipIf(!databaseUrl)("recalls only the current conversation bank", async () => {
-  const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl! }) });
+  const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const assistantId = 8_100_000_101n;
   const chatId = -8_100_000_101n;
   const threadKey = 17;
   const ownerKey = `conversation:${assistantId}:${chatId}:${threadKey}`;
   const recalledBankIds: string[] = [];
-  const databaseLayer = Database.layer(databaseUrl!);
+  const databaseLayer = Database.layer(databaseUrl);
+
   const hindsightLayer = Layer.succeed(Hindsight.Service)({
     recall: (input) =>
       Effect.sync(() => {
         recalledBankIds.push(input.bankId);
+
         return [{ id: input.bankId, scores: { final: 1 }, text: "Alice chose Postgres", type: "world" }];
       }),
     retain: () => Effect.void,
   });
+
   const retentionLayer = Layer.succeed(HindsightRetention.Service)({
     flush: () => Effect.void,
     retainPending: () => Effect.succeed(null),
   });
+
   const runtime = ManagedRuntime.make(
     Memory.layer.pipe(Layer.provide(Layer.mergeAll(databaseLayer, hindsightLayer, retentionLayer))),
   );
@@ -55,6 +59,7 @@ test.skipIf(!databaseUrl)("recalls only the current conversation bank", async ()
   try {
     await client.chat.create({ data: { id: chatId } });
     await client.conversationLane.create({ data: { assistantId, chatId, threadKey } });
+
     const context = await client.conversationContext.create({
       data: {
         assistantId,
@@ -66,6 +71,7 @@ test.skipIf(!databaseUrl)("recalls only the current conversation bank", async ()
         ...Prompt.stableSeed(Prompt.renderEnvelope({ toolProfile: [] }), ""),
       },
     });
+
     await client.conversationLane.update({
       where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey } },
       data: { activeContextId: context.id },
@@ -83,6 +89,7 @@ test.skipIf(!databaseUrl)("recalls only the current conversation bank", async ()
     const recalled = await runtime.runPromise(
       Effect.gen(function* recallMemory() {
         const memory = yield* Memory.Service;
+
         return yield* memory.recall({
           key: { assistantId, chatId, threadKey },
           query: "Which database did Alice choose?",
@@ -102,12 +109,13 @@ test.skipIf(!databaseUrl)("recalls only the current conversation bank", async ()
 });
 
 test.skipIf(!databaseUrl)("propagates permanent Hindsight recall failures", async () => {
-  const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl! }) });
+  const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const assistantId = 8_100_000_102n;
   const chatId = -8_100_000_102n;
   const threadKey = 18;
   const ownerKey = `conversation:${assistantId}:${chatId}:${threadKey}`;
-  const databaseLayer = Database.layer(databaseUrl!);
+  const databaseLayer = Database.layer(databaseUrl);
+
   const hindsightLayer = Layer.succeed(Hindsight.Service)({
     recall: () =>
       Effect.fail(
@@ -118,10 +126,12 @@ test.skipIf(!databaseUrl)("propagates permanent Hindsight recall failures", asyn
       ),
     retain: () => Effect.void,
   });
+
   const retentionLayer = Layer.succeed(HindsightRetention.Service)({
     flush: () => Effect.void,
     retainPending: () => Effect.succeed(null),
   });
+
   const runtime = ManagedRuntime.make(
     Memory.layer.pipe(Layer.provide(Layer.mergeAll(databaseLayer, hindsightLayer, retentionLayer))),
   );
@@ -129,6 +139,7 @@ test.skipIf(!databaseUrl)("propagates permanent Hindsight recall failures", asyn
   try {
     await client.chat.create({ data: { id: chatId } });
     await client.conversationLane.create({ data: { assistantId, chatId, threadKey } });
+
     const context = await client.conversationContext.create({
       data: {
         assistantId,
@@ -140,6 +151,7 @@ test.skipIf(!databaseUrl)("propagates permanent Hindsight recall failures", asyn
         ...Prompt.stableSeed(Prompt.renderEnvelope({ toolProfile: [] }), ""),
       },
     });
+
     await client.conversationLane.update({
       where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey } },
       data: { activeContextId: context.id },
@@ -154,10 +166,12 @@ test.skipIf(!databaseUrl)("propagates permanent Hindsight recall failures", asyn
       },
     });
 
+    // oxlint-disable-next-line typescript/await-thenable, typescript/no-confusing-void-expression -- Bun rejects assertions are async at runtime but declared void
     await expect(
       runtime.runPromise(
         Effect.gen(function* recallMemory() {
           const memory = yield* Memory.Service;
+
           return yield* memory.recall({
             key: { assistantId, chatId, threadKey },
             query: "What should Alice remember?",

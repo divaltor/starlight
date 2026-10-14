@@ -17,7 +17,8 @@ import { z } from "zod";
 export namespace Youtube {
   export const profileId = "youtube-transcript-v1";
   export const urlPattern =
-    /^https?:\/\/(?:(?:www|m|music)\.)?(?:youtube\.com\/(?:watch\?[^#]*v=|shorts\/|embed\/|live\/|v\/)|youtu\.be\/)[a-zA-Z0-9_-]{11}(?:[?#&/].*)?$/iu;
+    // oxlint-disable-next-line sonarjs/regex-complexity -- supported YouTube URL forms share one validation boundary
+    /^https?:\/\/(?:(?:www|m|music)\.)?(?:youtube\.com\/(?:watch\?[^#]*v=|shorts\/|embed\/|live\/|v\/)|youtu\.be\/)[a-z0-9_-]{11}(?:[?#&/].*)?$/iu;
   const FETCH_TIMEOUT_MS = 20_000;
   const MAX_TEXT_CHARS = 12_000;
   const FETCH_RETRIES = 2;
@@ -85,6 +86,7 @@ export namespace Youtube {
 
     async set(key: string, value: string, ttl?: number): Promise<void> {
       const seconds = Math.max(1, Math.ceil((ttl ?? this.defaultTTL) / 1000));
+
       try {
         await this.client.set(`youtube:${key}`, value, "EX", seconds);
       } catch {
@@ -102,19 +104,22 @@ export namespace Youtube {
       Service,
       Effect.gen(function* make() {
         const redis = yield* BunRedis.BunRedis;
+
         const commands: RedisCommands = {
-          get: (key) => redis.client.get(key),
-          set: (key, value, ex, seconds) => redis.client.set(key, value, ex, seconds),
+          get: async (key) => await redis.client.get(key),
+          set: async (key, value, ex, seconds) => await redis.client.set(key, value, ex, seconds),
         };
+
         return makeService(makeFetcher(new RedisCache(commands)));
       }),
     );
+
     return redisBacked.pipe(Layer.provide(BunRedis.layer({ url: redisUrl })));
   }
 
   function makeFetcher(cache: CacheStrategy): Fetcher {
-    return (videoId, config) =>
-      fetchTranscript(videoId, {
+    return async (videoId, config) =>
+      await fetchTranscript(videoId, {
         cache,
         cacheTTL: CACHE_TTL_MS,
         lang: config.lang,
@@ -132,7 +137,7 @@ export namespace Youtube {
       signal: AbortSignal | undefined,
     ) {
       const result = yield* Effect.tryPromise({
-        try: () => fetcher(url, { lang, signal }),
+        try: async () => await fetcher(url, { lang, signal }),
         catch: (cause) => mapFetchError(cause),
       }).pipe(
         Effect.timeout(Duration.millis(FETCH_TIMEOUT_MS)),
@@ -142,21 +147,26 @@ export namespace Youtube {
             : YoutubeError.fromCause({ cause, message: "Timed out fetching the YouTube transcript" }),
         ),
       );
+
       if (result.segments.length === 0) {
         return yield* new YoutubeError({ message: "No transcript is available for this YouTube video" });
       }
+
       const full = result.segments.map((segment) => `[${formatTimestamp(segment.offset)}] ${segment.text}`).join("\n");
       const truncated = full.length > MAX_TEXT_CHARS;
+
       const transcript: Transcript = {
         author: result.videoDetails.author,
         durationSeconds: result.videoDetails.lengthSeconds,
         language: result.segments[0]?.lang ?? lang ?? "unknown",
+        // oxlint-disable-next-line typescript/no-misused-spread -- transcript budget counts code points, preserving surrogate pairs
         text: truncated ? [...full].slice(0, MAX_TEXT_CHARS).join("") : full,
         title: result.videoDetails.title,
         totalChars: full.length,
         truncated,
         videoId: result.videoDetails.videoId,
       };
+
       return transcript;
     });
 
@@ -166,8 +176,8 @@ export namespace Youtube {
           description:
             "Fetch the transcript (captions) of a public YouTube video with its title and author. This is the only tool for reading YouTube watch, shorts, embed, live, or youtu.be URLs. Never use Exa to inspect, identify, or summarize a specific YouTube video, including as a fallback when this tool fails; report that the video could not be retrieved instead. Returns timestamped transcript lines, not a summary; summarize from them yourself. Optional lang is a BCP 47 code such as 'en'; omit it for the default track. truncated:true means the tail was cut. Fails when captions are missing, disabled, or YouTube rate-limits this server.",
           inputSchema: z.object({ lang: bcp47.optional(), url: youtubeUrl }),
-          execute: (input, options) =>
-            Effect.runPromise(readTranscript(input.url, input.lang, options.abortSignal), {
+          execute: async (input, options) =>
+            await Effect.runPromise(readTranscript(input.url, input.lang, options.abortSignal), {
               signal: options.abortSignal,
             }),
         }),
@@ -181,23 +191,29 @@ export namespace Youtube {
         message: "YouTube is rate-limiting transcript requests from this server. Try again later",
       });
     }
+
     if (cause instanceof YoutubeTranscriptVideoUnavailableError) {
       return new YoutubeError({ message: "This YouTube video is unavailable or has been removed" });
     }
+
     if (cause instanceof YoutubeTranscriptDisabledError) {
       return new YoutubeError({ message: "Transcripts are disabled for this YouTube video" });
     }
+
     if (cause instanceof YoutubeTranscriptNotAvailableError) {
       return new YoutubeError({ message: "No transcript is available for this YouTube video" });
     }
+
     if (cause instanceof YoutubeTranscriptNotAvailableLanguageError) {
       return new YoutubeError({
         message: `No ${cause.lang} transcript for this video. Available languages: ${cause.availableLangs.join(", ") || "none"}`,
       });
     }
+
     if (cause instanceof YoutubeTranscriptInvalidVideoIdError) {
       return new YoutubeError({ message: "Expected a YouTube video URL" });
     }
+
     return YoutubeError.fromCause({ cause, message: "Failed to fetch the YouTube transcript" });
   }
 
@@ -208,6 +224,7 @@ export namespace Youtube {
     const seconds = total % 60;
     const minutePart = hours > 0 ? String(minutes).padStart(2, "0") : String(minutes);
     const hourPart = hours > 0 ? `${hours}:` : "";
+
     return `${hourPart}${minutePart}:${String(seconds).padStart(2, "0")}`;
   }
 }

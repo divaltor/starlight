@@ -3,23 +3,27 @@ import { Youtube } from "@/ai/tools/youtube";
 
 test("test_fail_open_to_youtube_when_redis_is_down", async () => {
   const cache = new Youtube.RedisCache({
-    get: () => Promise.reject(new Error("redis down")),
-    set: () => Promise.reject(new Error("redis down")),
+    get: async () => await Promise.reject(new Error("redis down")),
+    set: async () => await Promise.reject(new Error("redis down")),
   });
 
   expect(await cache.get("yt:transcript+details:dQw4w9WgXcQ:en")).toBeNull();
-  expect(await cache.set("yt:transcript+details:dQw4w9WgXcQ:en", "{}")).toBeUndefined();
+  await cache.set("yt:transcript+details:dQw4w9WgXcQ:en", "{}").then((result) => {
+    expect(result).toBeUndefined();
+  });
 });
 
 test("test_share_namespaced_keys_with_month_expiry_when_caching_transcripts", async () => {
   const stored = new Map<string, string>();
   const calls: (readonly [string, string, string, number])[] = [];
+
   const cache = new Youtube.RedisCache({
-    get: (key) => Promise.resolve(stored.get(key) ?? null),
-    set: (key, value, ex, seconds) => {
+    get: async (key) => await Promise.resolve(stored.get(key) ?? null),
+    set: async (key, value, ex, seconds) => {
       calls.push([key, value, ex, seconds]);
       stored.set(key, value);
-      return Promise.resolve("OK");
+
+      return await Promise.resolve("OK");
     },
   });
 

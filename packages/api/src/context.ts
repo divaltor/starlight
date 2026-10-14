@@ -12,7 +12,8 @@ export interface CreateContextOptions {
 }
 
 export function createContext(options: CreateContextOptions) {
-  const requestId = options.request.headers.get("X-Request-Id") || Bun.randomUUIDv7();
+  const header = options.request.headers.get("X-Request-Id");
+  const requestId = header === null || header === "" ? Bun.randomUUIDv7() : header;
 
   return {
     config: options.config,

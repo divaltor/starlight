@@ -15,6 +15,7 @@ test.each([
         Layer.succeed(HttpClient.HttpClient)(
           HttpClient.make((request) => {
             const id = request.url.split("/").at(-1)!;
+
             return Effect.succeed(
               HttpClientResponse.fromWeb(
                 request,
@@ -38,10 +39,11 @@ test.each([
     ),
   );
 
-  const result = await tools.tools.read_twitter!.execute!(
+  const result: unknown = await tools.tools.read_twitter.execute!(
     { url: `https://x.com/author/status/${requested}?s=20` },
     { toolCallId: "twitter", messages: [], context: null },
   );
+
   expect(result).toEqual({
     posts: ids.map((id) => ({
       id,

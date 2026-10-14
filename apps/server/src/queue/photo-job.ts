@@ -5,4 +5,5 @@ export const PhotoJobData = Schema.Struct({
   requestId: Schema.optional(Schema.String),
   userId: Schema.String,
 });
+
 export type PhotoJobData = typeof PhotoJobData.Type;

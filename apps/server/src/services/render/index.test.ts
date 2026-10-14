@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import sharp from "sharp";
 
 test("falls back when an image URL returns invalid bytes", async () => {
-  const { renderTweetImage } = await import(".");
+  const { renderTweetImage } = await import("@/services/render");
+
   const server = Bun.serve({
     port: 0,
     fetch: () => new Response("<html>not an image</html>", { status: 200 }),
@@ -24,12 +25,13 @@ test("falls back when an image URL returns invalid bytes", async () => {
       width: result.width,
     });
   } finally {
-    server.stop(true);
+    await server.stop(true);
   }
 });
 
 test("renders connector between avatars when reply is shorter than avatar", async () => {
   const { renderTweetImage } = await import("@/services/render");
+
   const server = Bun.serve({
     port: 0,
     fetch: () => new Response("<html>not an image</html>", { status: 200 }),
@@ -53,10 +55,12 @@ test("renders connector between avatars when reply is shorter than avatar", asyn
       },
       "light",
     );
+
     const connectorRow = await sharp(result.buffer)
       .extract({ height: 1, left: 82, top: 166, width: 30 })
       .raw()
       .toBuffer();
+
     const pixel = (x: number) => [...connectorRow.subarray(x * 3, x * 3 + 3)];
 
     expect(pixel(0).every((channel) => channel > 240)).toBeTrue();
@@ -66,12 +70,13 @@ test("renders connector between avatars when reply is shorter than avatar", asyn
     expect(pixel(17)).toEqual([209, 217, 220]);
     expect(pixel(29).every((channel) => channel > 240)).toBeTrue();
   } finally {
-    server.stop(true);
+    await server.stop(true);
   }
 });
 
 test("renders light card bottom corners without dark pixels", async () => {
-  const { renderTweetImage } = await import(".");
+  const { renderTweetImage } = await import("@/services/render");
+
   const server = Bun.serve({
     port: 0,
     fetch: () => new Response("<html>not an image</html>", { status: 200 }),
@@ -87,10 +92,12 @@ test("renders light card bottom corners without dark pixels", async () => {
       },
       "light",
     );
+
     const leftCorner = await sharp(result.buffer)
       .extract({ height: 1, left: 0, top: result.height - 1, width: 1 })
       .raw()
       .toBuffer();
+
     const rightCorner = await sharp(result.buffer)
       .extract({ height: 1, left: result.width - 1, top: result.height - 1, width: 1 })
       .raw()
@@ -99,12 +106,13 @@ test("renders light card bottom corners without dark pixels", async () => {
     expect([...leftCorner]).toEqual([255, 255, 255]);
     expect([...rightCorner]).toEqual([255, 255, 255]);
   } finally {
-    server.stop(true);
+    await server.stop(true);
   }
 });
 
 test("renders both bottom corner pixels as white on a light card", async () => {
-  const { renderTweetImage } = await import(".");
+  const { renderTweetImage } = await import("@/services/render");
+
   const server = Bun.serve({
     port: 0,
     fetch: () => new Response("<html>not an image</html>", { status: 200 }),
@@ -120,10 +128,12 @@ test("renders both bottom corner pixels as white on a light card", async () => {
       },
       "light",
     );
+
     const leftCorner = await sharp(result.buffer)
       .extract({ height: 1, left: 0, top: result.height - 1, width: 1 })
       .raw()
       .toBuffer();
+
     const rightCorner = await sharp(result.buffer)
       .extract({ height: 1, left: result.width - 1, top: result.height - 1, width: 1 })
       .raw()
@@ -132,6 +142,6 @@ test("renders both bottom corner pixels as white on a light card", async () => {
     expect([...leftCorner]).toEqual([255, 255, 255]);
     expect([...rightCorner]).toEqual([255, 255, 255]);
   } finally {
-    server.stop(true);
+    await server.stop(true);
   }
 });

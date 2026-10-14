@@ -38,9 +38,11 @@ export namespace RecallQuery {
             },
           ]),
     ]);
+
     // The one-token fallback keeps every validated positive cap representable, including
     // empty or pathological batches where no labeled segment can fit.
     const fullQuery = render(segments) || "context";
+
     if (isWithinTokenLimit(fullQuery, options.maxTokens, ENCODE_OPTIONS) !== false) return fullQuery;
 
     // Recall only selects durable memories; every frozen input still reaches the model.
@@ -51,34 +53,45 @@ export namespace RecallQuery {
         right.inputOrdinal - left.inputOrdinal ||
         left.kindOrdinal - right.kindOrdinal,
     );
+
     const selected: Segment[] = [];
     let exhausted = false;
+
     for (const segment of prioritized) {
       if (exhausted) continue;
+
       const completeFits =
         isWithinTokenLimit(render([...selected, segment]), options.maxTokens, ENCODE_OPTIONS) !== false;
+
       if (completeFits) selected.push(segment);
+
       if (!completeFits) {
         // Preserve both ends of the last useful segment rather than losing either its topic
         // or conclusion; encode every candidate because characters are not token-equivalent.
+        // oxlint-disable-next-line typescript/no-misused-spread -- slicing code points must not split UTF-16 surrogate pairs
         const characters = [...segment.body];
         let lower = 1;
         let upper = characters.length - 1;
         let fitting: Segment | null = null;
+
         while (lower <= upper) {
           const length = Math.floor((lower + upper) / 2);
           const prefixLength = Math.ceil(length / 2);
+
           const fragment = {
             ...segment,
             body: `${characters.slice(0, prefixLength).join("")} … ${characters.slice(-Math.floor(length / 2)).join("")}`,
           };
+
           if (isWithinTokenLimit(render([...selected, fragment]), options.maxTokens, ENCODE_OPTIONS) !== false) {
             fitting = fragment;
             lower = length + 1;
             continue;
           }
+
           upper = length - 1;
         }
+
         if (fitting !== null) selected.push(fitting);
         exhausted = true;
       }

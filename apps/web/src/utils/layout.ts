@@ -83,6 +83,7 @@ export class LayoutManager {
       };
 
       let valid = true;
+
       for (const placedRect of this.placedRects) {
         const paddedPlaced = {
           x: placedRect.x - padding,
@@ -90,6 +91,7 @@ export class LayoutManager {
           width: placedRect.width + 2 * padding,
           height: placedRect.height + 2 * padding,
         };
+
         if (LayoutManager.overlaps(paddedNew, paddedPlaced)) {
           valid = false;
           break;
@@ -98,9 +100,11 @@ export class LayoutManager {
 
       if (valid) {
         this.placedRects.push(rect);
+
         return { top: centerY, left: centerX };
       }
     }
+
     return null;
   }
 
@@ -109,27 +113,33 @@ export class LayoutManager {
       position: { top: number; left: number };
       index: number;
     }[] = [];
+
     const CONTAINER_WIDTH_PERCENT = 20;
 
     // Place in original order
     for (let i = 0; i < tweets.length; i++) {
       const tweet = tweets[i];
+
       if (!tweet.photos.length) {
         continue;
       }
 
       const [firstPhoto] = tweet.photos;
       let aspect = 0.8;
-      if (firstPhoto.width && firstPhoto.height && firstPhoto.width > 0) {
+
+      if (firstPhoto.width != null && firstPhoto.width > 0 && firstPhoto.height != null && firstPhoto.height !== 0) {
         aspect = firstPhoto.height / firstPhoto.width;
       }
+
       const computedHeight = CONTAINER_WIDTH_PERCENT * aspect;
 
       const placement = this.placeRectangle(CONTAINER_WIDTH_PERCENT, computedHeight);
+
       if (placement) {
         results.push({ position: placement, index: i });
       }
     }
+
     return results;
   }
 }

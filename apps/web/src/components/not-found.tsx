@@ -35,8 +35,8 @@ export function NotFound({
           {icon ?? <HugeiconsIcon className="size-10 text-base-content/20" icon={GhostIcon} />}
         </div>
         <h1 className="font-semibold text-3xl text-base-content">{title}</h1>
-        {description && <p className="mt-3 text-base-content/60">{description}</p>}
-        {(primaryAction || secondaryAction) && (
+        {description.length > 0 && <p className="mt-3 text-base-content/60">{description}</p>}
+        {(primaryAction !== undefined || secondaryAction !== undefined) && (
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             {primaryAction && (
               <Button
@@ -44,7 +44,11 @@ export function NotFound({
                 onMouseEnter={primaryAction.onMouseEnter}
                 variant={primaryAction.variant}
               >
-                {primaryAction.href ? <a href={primaryAction.href}>{primaryAction.label}</a> : primaryAction.label}
+                {primaryAction.href !== undefined && primaryAction.href.length > 0 ? (
+                  <a href={primaryAction.href}>{primaryAction.label}</a>
+                ) : (
+                  primaryAction.label
+                )}
               </Button>
             )}
             {secondaryAction && (
@@ -53,7 +57,7 @@ export function NotFound({
                 onMouseEnter={secondaryAction.onMouseEnter}
                 variant={secondaryAction.variant ?? "outline"}
               >
-                {secondaryAction.href ? (
+                {secondaryAction.href !== undefined && secondaryAction.href.length > 0 ? (
                   <a href={secondaryAction.href}>{secondaryAction.label}</a>
                 ) : (
                   secondaryAction.label

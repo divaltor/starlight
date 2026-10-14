@@ -3,17 +3,21 @@ import { Option, Schema, SchemaGetter } from "effect";
 
 export namespace Usage {
   const NullableNumber = Schema.NullOr(Schema.Number);
+
   const NullishNumber = Schema.NullishOr(Schema.Number).pipe(
     Schema.decodeTo(NullableNumber, {
       decode: SchemaGetter.transform((value) => value ?? null),
       encode: SchemaGetter.passthrough({ strict: false }),
     }),
   );
+
   const OpenRouterMetadata = Schema.Struct({
     provider: Schema.optional(Schema.String),
     usage: Schema.optional(Schema.Struct({ cost: Schema.optional(Schema.Number) })),
   });
+
   const ProviderMetadataSchema = Schema.Struct({ openrouter: Schema.optional(OpenRouterMetadata) });
+
   const ReportedCost = Schema.Unknown.pipe(
     Schema.decodeTo(NullableNumber, {
       decode: SchemaGetter.transform(
@@ -62,17 +66,24 @@ export namespace Usage {
         const inputTokens = input.usage.inputTokens;
         // oxlint-disable-next-line prefer-destructuring
         const cacheReadTokens = input.usage.inputTokenDetails.cacheReadTokens;
+
         const cacheResult: CacheResult = (() => {
           if (inputTokens === null || cacheReadTokens === null) return "unknown";
+
           if (cacheReadTokens > inputTokens) return "invalid";
+
           return cacheReadTokens > 0 ? "confirmed-hit" : "confirmed-miss";
         })();
+
         const uncachedInputTokens = (() => {
           if (cacheResult === "invalid") return null;
+
           if (input.usage.inputTokenDetails.noCacheTokens !== null) {
             return input.usage.inputTokenDetails.noCacheTokens;
           }
+
           if (inputTokens === null || cacheReadTokens === null) return null;
+
           return inputTokens - cacheReadTokens;
         })();
 
@@ -142,6 +153,7 @@ export namespace Usage {
 
   function sumKnown(values: readonly (number | null)[]): number | null {
     if (values.length === 0) return null;
+
     return values.includes(null) ? null : values.reduce<number>((total, value) => total + (value ?? 0), 0);
   }
 }

@@ -24,6 +24,7 @@ test("sums billing input but keeps final context input separate", () => {
     createUsage({ cacheReadTokens: 0, cacheWriteTokens: 0, inputTokens: 100 }),
     createProviderMetadata(0.001),
   );
+
   const second = Usage.normalizeStep(
     createUsage({ cacheReadTokens: 80, cacheWriteTokens: 0, inputTokens: 140 }),
     createProviderMetadata(0.002),

@@ -49,6 +49,7 @@ export namespace WakeQueue {
       Service,
       Effect.gen(function* make() {
         const redis = yield* BunRedis.BunRedis;
+
         const queue = new Queue<JobData>(`${prefix}-lane-wake`, {
           connection: createBunRedisClient(redis.client),
           defaultJobOptions: {
@@ -58,9 +59,12 @@ export namespace WakeQueue {
             removeOnFail: 5000,
           },
         });
+
         yield* Effect.addFinalizer(() => closeQueue(queue));
         yield* Effect.tryPromise({
-          try: () => queue.waitUntilReady(),
+          try: async () => {
+            await queue.waitUntilReady();
+          },
           catch: (cause) => new WorkerStartupError({ cause, message: "Conversation queue failed to start" }),
         }).pipe(
           Effect.timeout(Duration.seconds(10)),
@@ -77,8 +81,8 @@ export namespace WakeQueue {
         const publish = Effect.fn("ConversationWakeQueue.publish")(function* publish(wake: LaneWake) {
           const delay = Math.max(0, wake.wakeAt.getTime() - Date.now());
           yield* Effect.tryPromise({
-            try: () =>
-              queue.add(
+            try: async () =>
+              await queue.add(
                 "lane-wake",
                 {
                   key: wake.key,
@@ -113,12 +117,13 @@ export namespace WakeQueue {
     return Layer.effectDiscard(
       Effect.gen(function* makeWorker() {
         const conversation = yield* Conversation.Service;
-        const runPromise: typeof Effect.runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
+        const runPromise: typeof Effect.runPromise = Effect.runPromiseWith(yield* Effect.context());
         const redis = yield* BunRedis.BunRedis;
+
         const worker = new Worker<JobData>(
           `${options.prefix}-lane-wake`,
-          (job, _token, signal) =>
-            processJob(conversation, Schema.decodeUnknownSync(JobData)(job.data), runPromise, signal),
+          async (job, _token, signal) =>
+            await processJob(conversation, Schema.decodeUnknownSync(JobData)(job.data), runPromise, signal),
           {
             connection: createBunRedisClient(redis.client),
             concurrency: 10,
@@ -126,6 +131,7 @@ export namespace WakeQueue {
             stalledInterval: Math.floor(options.laneLeaseMs / 3),
           },
         );
+
         worker.on("error", (error) => {
           void runPromise(
             Effect.logError("Conversation worker error").pipe(Effect.annotateLogs({ error: error.message })),
@@ -133,7 +139,9 @@ export namespace WakeQueue {
         });
         yield* Effect.addFinalizer(() => closeWorker(worker));
         yield* Effect.tryPromise({
-          try: () => worker.waitUntilReady(),
+          try: async () => {
+            await worker.waitUntilReady();
+          },
           catch: (cause) => new WorkerStartupError({ cause, message: "Conversation worker failed to start" }),
         }).pipe(
           Effect.timeout(Duration.seconds(10)),
@@ -150,18 +158,22 @@ export namespace WakeQueue {
     ).pipe(Layer.provide(BunRedis.layer({ url: options.redisUrl })));
   }
 
-  function processJob(
+  async function processJob(
     conversation: Conversation.Interface,
     data: JobData,
     runPromise: typeof Effect.runPromise,
     signal?: AbortSignal,
   ) {
-    return context.with(propagation.extract(ROOT_CONTEXT, data), () =>
-      trace
-        .getTracer("starlight-bot")
-        .startActiveSpan("Conversation lane wake", { kind: SpanKind.CONSUMER }, (span) =>
-          drainConversation(conversation, data, runPromise, signal, span),
-        ),
+    return await context.with(
+      propagation.extract(ROOT_CONTEXT, data),
+      async () =>
+        await trace
+          .getTracer("starlight-bot")
+          .startActiveSpan(
+            "Conversation lane wake",
+            { kind: SpanKind.CONSUMER },
+            async (span) => await drainConversation(conversation, data, runPromise, signal, span),
+          ),
     );
   }
 
@@ -177,9 +189,11 @@ export namespace WakeQueue {
     } catch (error) {
       span.setStatus({ code: SpanStatusCode.ERROR });
       span.recordException(error instanceof Error ? error : String(error));
+
       if (error instanceof Conversation.ConversationError && !error.retryable) {
         throw new UnrecoverableError(error.message);
       }
+
       throw error;
     } finally {
       span.end();
@@ -188,17 +202,23 @@ export namespace WakeQueue {
 
   function closeQueue(queue: Queue<JobData>) {
     // Graceful close; the BunRedis layer finalizer quits the underlying client afterwards.
-    return Effect.promise(() => queue.close()).pipe(Effect.timeout(Duration.seconds(10)), Effect.ignore);
+    return Effect.promise(async () => {
+      await queue.close();
+    }).pipe(Effect.timeout(Duration.seconds(10)), Effect.ignore);
   }
 
   function closeWorker(worker: Worker<JobData>) {
     // Graceful close; if it times out, force-close, then the BunRedis layer
     // finalizer quits the underlying client.
-    return Effect.promise(() => worker.close()).pipe(
+    return Effect.promise(async () => {
+      await worker.close();
+    }).pipe(
       Effect.timeout(Duration.seconds(10)),
       Effect.catch(() =>
         Effect.tryPromise({
-          try: () => worker.close(true),
+          try: async () => {
+            await worker.close(true);
+          },
           catch: () => null,
         }),
       ),

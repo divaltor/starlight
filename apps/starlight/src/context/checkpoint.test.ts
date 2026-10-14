@@ -54,6 +54,7 @@ test("profile rollover avoids summarizing when recent history fits", () => {
 
 function sealedTurn(ordinal: number, runId: string, estimatedTokens: number): Checkpoint.SealedTurn {
   const createdAt = new Date(0);
+
   return {
     contextId: "context",
     createdAt,

@@ -34,6 +34,7 @@ export function TweetImageGrid({
   const [isImageLoading, setIsImageLoading] = useState<{
     [key: string]: boolean;
   }>({});
+
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const handleImageLoad = (imageId: string, isLoading: boolean) => {
@@ -58,43 +59,48 @@ export function TweetImageGrid({
         outlineID: "pswp__icn-download",
       },
       appendTo: "bar",
-      onClick: async (e: MouseEvent, _el: HTMLElement, pswpInstance: PhotoSwipe) => {
+      onClick: (e: MouseEvent, _el: HTMLElement, pswpInstance: PhotoSwipe) => {
         e.preventDefault();
-        const currItem = pswpInstance.currSlide?.data;
-        const url = currItem?.src;
-        if (!url) {
-          return;
-        }
+        void (async () => {
+          const currItem = pswpInstance.currSlide?.data;
+          const url = currItem?.src;
 
-        const filename = currItem?.alt ?? "image.jpg";
-
-        // No `throw` inside try/catch: React Compiler cannot lower that
-        // pattern, and the fallback below covers every failure path.
-        try {
-          const response = await fetch(url);
-
-          if (response.ok) {
-            const blob = await response.blob();
-            const blobUrl = window.URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = blobUrl;
-            link.download = filename;
-            document.body.append(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(blobUrl);
+          if (url === undefined || url.length === 0) {
             return;
           }
-          console.error("Image download failed", {
-            status: response.status,
-            filename,
-            url,
-          });
-        } catch (error) {
-          console.error("Image download failed", { error, filename, url });
-        }
 
-        window.open(url, "_blank", "noopener,noreferrer");
+          const filename = currItem?.alt ?? "image.jpg";
+
+          // No `throw` inside try/catch: React Compiler cannot lower that
+          // pattern, and the fallback below covers every failure path.
+          try {
+            const response = await fetch(url);
+
+            if (response.ok) {
+              const blob = await response.blob();
+              const blobUrl = window.URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = blobUrl;
+              link.download = filename;
+              document.body.append(link);
+              link.click();
+              link.remove();
+              window.URL.revokeObjectURL(blobUrl);
+
+              return;
+            }
+
+            console.error("Image download failed", {
+              status: response.status,
+              filename,
+              url,
+            });
+          } catch (error) {
+            console.error("Image download failed", { error, filename, url });
+          }
+
+          window.open(url, "_blank", "noopener,noreferrer");
+        })();
       },
     },
   ];
@@ -128,14 +134,18 @@ export function TweetImageGrid({
               <img
                 alt={photo.alt}
                 className={`pointer-events-none ${
-                  photo.is_nsfw ? "blur-sm" : ""
+                  photo.is_nsfw === true ? "blur-sm" : ""
                 } h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
-                height={photo.height || 400}
-                onLoad={() => handleImageLoad(photo.id, false)}
-                onLoadStart={() => handleImageLoad(photo.id, true)}
+                height={photo.height == null || photo.height === 0 ? 400 : photo.height}
+                onLoad={() => {
+                  handleImageLoad(photo.id, false);
+                }}
+                onLoadStart={() => {
+                  handleImageLoad(photo.id, true);
+                }}
                 ref={ref}
                 src={photo.url}
-                width={photo.width || 400}
+                width={photo.width == null || photo.width === 0 ? 400 : photo.width}
               />
               <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
               <div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
@@ -150,7 +160,9 @@ export function TweetImageGrid({
                     >
                       <button
                         className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-primary"
-                        onClick={(e) => handleArtistClick(e)}
+                        onClick={(e) => {
+                          handleArtistClick(e);
+                        }}
                         type="button"
                       >
                         {tweet.artist}
@@ -178,10 +190,12 @@ export function TweetImageGrid({
         <DeleteConfirmDialog
           deleteConfirm={deleteConfirm}
           onConfirm={() => {
-            if (deleteConfirm) onDeleteImage?.(deleteConfirm);
+            if (deleteConfirm !== null && deleteConfirm.length > 0) onDeleteImage?.(deleteConfirm);
             setDeleteConfirm(null);
           }}
-          onOpenChange={(open) => !open && setDeleteConfirm(null)}
+          onOpenChange={(open) => {
+            if (!open) setDeleteConfirm(null);
+          }}
         />
       </Gallery>
     );
@@ -209,10 +223,10 @@ export function TweetImageGrid({
         renderSlide={(item) => (
           <Item
             alt={item.alt}
-            height={item.height || 400}
+            height={item.height == null || item.height === 0 ? 400 : item.height}
             original={item.src}
             thumbnail={item.src}
-            width={item.width || 400}
+            width={item.width == null || item.width === 0 ? 400 : item.width}
           >
             {({ ref, open }) => (
               <div className="group relative h-full w-full overflow-hidden rounded-box hover:z-10">
@@ -222,7 +236,7 @@ export function TweetImageGrid({
                   onClick={open}
                   type="button"
                 />
-                {isImageLoading[item.id || ""] && (
+                {isImageLoading[item.id ?? ""] && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100/80">
                     <div className="loading loading-spinner loading-sm" />
                   </div>
@@ -231,14 +245,18 @@ export function TweetImageGrid({
                 <img
                   alt={item.alt}
                   className={`pointer-events-none ${
-                    item.is_nsfw ? "blur-sm" : ""
+                    item.is_nsfw === true ? "blur-sm" : ""
                   } block h-full w-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
-                  height={item.height || 400}
-                  onLoad={() => handleImageLoad(item.id || "", false)}
-                  onLoadStart={() => handleImageLoad(item.id || "", true)}
+                  height={item.height == null || item.height === 0 ? 400 : item.height}
+                  onLoad={() => {
+                    handleImageLoad(item.id ?? "", false);
+                  }}
+                  onLoadStart={() => {
+                    handleImageLoad(item.id ?? "", true);
+                  }}
                   ref={ref}
                   src={item.src}
-                  width={item.width || 400}
+                  width={item.width == null || item.width === 0 ? 400 : item.width}
                 />
                 <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
                 <div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
@@ -253,7 +271,9 @@ export function TweetImageGrid({
                       >
                         <button
                           className="cursor-pointer text-left font-medium text-sm drop-shadow-lg transition-colors duration-200 hover:text-primary"
-                          onClick={(e) => handleArtistClick(e)}
+                          onClick={(e) => {
+                            handleArtistClick(e);
+                          }}
                           type="button"
                         >
                           {tweet.artist}
@@ -264,7 +284,7 @@ export function TweetImageGrid({
                           className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setDeleteConfirm(item.id || "");
+                            setDeleteConfirm(item.id ?? "");
                           }}
                           size="sm"
                           variant="ghost"
@@ -283,10 +303,12 @@ export function TweetImageGrid({
       <DeleteConfirmDialog
         deleteConfirm={deleteConfirm}
         onConfirm={() => {
-          if (deleteConfirm) onDeleteImage?.(deleteConfirm);
+          if (deleteConfirm !== null && deleteConfirm.length > 0) onDeleteImage?.(deleteConfirm);
           setDeleteConfirm(null);
         }}
-        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteConfirm(null);
+        }}
       />
     </Gallery>
   );

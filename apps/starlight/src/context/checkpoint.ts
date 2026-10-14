@@ -38,6 +38,7 @@ Omit durable profile facts, trivia, resolved topics, and greetings; long-term me
       ["Open questions", records.openQuestions],
       ["Tool facts", records.toolFacts],
     ] as const;
+
     return sections
       .flatMap((section) =>
         section[1].length === 0 ? [] : [[`${section[0]}:`, ...section[1].map((line) => `- ${line}`)].join("\n")],
@@ -70,23 +71,29 @@ Omit durable profile facts, trivia, resolved topics, and greetings; long-term me
     retainedTokenTarget: number,
   ): { readonly head: SealedTurn[]; readonly tail: SealedTurn[] } | null {
     const units: { runId: string; start: number; tokens: number }[] = [];
+
     for (const [index, turn] of turns.entries()) {
       const current = units.at(-1);
+
       if (current?.runId === turn.transcriptTurn.runId) {
         current.tokens += turn.estimatedTokens;
         continue;
       }
+
       units.push({ runId: turn.transcriptTurn.runId, start: index, tokens: turn.estimatedTokens });
     }
+
     if (units.length < 2) return null;
 
     let retainedTokens = 0;
     let tailStart = turns.length;
+
     for (const unit of units.slice(1).toReversed()) {
       if (retainedTokens >= retainedTokenTarget) break;
       tailStart = unit.start;
       retainedTokens += unit.tokens;
     }
+
     return { head: turns.slice(0, tailStart), tail: turns.slice(tailStart) };
   }
 
@@ -95,13 +102,16 @@ Omit durable profile facts, trivia, resolved topics, and greetings; long-term me
     retainedTokenTarget: number,
   ): { readonly head: SealedTurn[]; readonly tail: SealedTurn[] } {
     const units: { runId: string; start: number; tokens: number }[] = [];
+
     for (const [index, turn] of turns.entries()) {
       const current = units.at(-1);
       // oxlint-disable-next-line prefer-destructuring -- project style keeps property access explicit
       const runId = turn.transcriptTurn.runId;
+
       if (current?.runId === runId) {
         current.tokens += turn.estimatedTokens;
       }
+
       if (current?.runId !== runId) {
         units.push({ runId, start: index, tokens: turn.estimatedTokens });
       }
@@ -110,6 +120,7 @@ Omit durable profile facts, trivia, resolved topics, and greetings; long-term me
     let retainedRuns = 0;
     let retainedTokens = 0;
     let tailStart = turns.length;
+
     for (const unit of units.toReversed()) {
       if (
         retainedRuns >= PROFILE_RETAINED_RUN_LIMIT ||
@@ -117,10 +128,12 @@ Omit durable profile facts, trivia, resolved topics, and greetings; long-term me
       ) {
         break;
       }
+
       tailStart = unit.start;
       retainedRuns += 1;
       retainedTokens += unit.tokens;
     }
+
     return { head: turns.slice(0, tailStart), tail: turns.slice(tailStart) };
   }
 
@@ -137,7 +150,9 @@ Omit durable profile facts, trivia, resolved topics, and greetings; long-term me
         ? selectProfileBoundary(turns, retainedTokenTarget)
         : selectBoundary(turns, retainedTokenTarget);
     }
+
     const retainedStart = existing.retainedStartTurnOrdinal;
+
     return {
       head: turns.filter((turn) => turn.transcriptTurn.ordinal <= existing.headEndTurnOrdinal),
       tail: retainedStart === null ? [] : turns.filter((turn) => turn.transcriptTurn.ordinal >= retainedStart),

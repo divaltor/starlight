@@ -20,10 +20,10 @@ export function createApiContext(request: Request) {
       botToken: env.BOT_TOKEN,
       cookieEncryptionKey: env.COOKIE_ENCRYPTION_KEY,
       cookieEncryptionSalt: env.COOKIE_ENCRYPTION_SALT,
-      embeddingsEnabled: !!(env.ML_BASE_URL && env.ML_API_TOKEN),
+      embeddingsEnabled: (env.ML_BASE_URL?.length ?? 0) > 0 && (env.ML_API_TOKEN?.length ?? 0) > 0,
       nodeEnv: env.NODE_ENV,
     },
-    generateTextEmbedding: (query, requestId) =>
-      runtime.runPromise(EmbeddingsService.Service.use((service) => service.generateText(query, requestId))),
+    generateTextEmbedding: async (query, requestId) =>
+      await runtime.runPromise(EmbeddingsService.Service.use((service) => service.generateText(query, requestId))),
   });
 }

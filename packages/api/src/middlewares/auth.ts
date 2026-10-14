@@ -21,7 +21,7 @@ export interface AuthContext {
 export const authMiddleware = o.middleware(async ({ next, context }) => {
   const auth = context.request.headers.get("Authorization");
 
-  if (!auth) {
+  if (auth === null || auth === "") {
     throw new ORPCError("UNAUTHORIZED", {
       message: "Unauthorized: No init data provided",
       status: 401,
@@ -60,7 +60,7 @@ export const authMiddleware = o.middleware(async ({ next, context }) => {
     });
   }
 
-  return next({
+  return await next({
     context: {
       ...context,
       user: parsedData.user,
@@ -75,7 +75,7 @@ export const optionalAuthMiddleware = o.middleware(({ next, context }) => {
 
   const auth = context.request.headers.get("Authorization");
 
-  if (auth) {
+  if (auth !== null && auth !== "") {
     try {
       if (context.config.nodeEnv === "production") {
         validate(auth, context.config.botToken);

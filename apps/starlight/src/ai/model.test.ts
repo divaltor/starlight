@@ -11,6 +11,7 @@ import { ModelProvider } from "@/ai/model-provider";
 
 test("returns an immutable completed tool event", async () => {
   const toolOutput = { value: "before" };
+
   const result = await runModel(
     new MockLanguageModelV3({
       doGenerate: [toolCallResult("call-1"), finalOutputResult("done")],
@@ -21,16 +22,18 @@ test("returns an immutable completed tool event", async () => {
       tools: {
         web_lookup: {
           description: "Return a fixture",
-          execute: () => Promise.resolve(toolOutput),
+          execute: () => toolOutput,
           inputSchema: z.object({ query: z.string() }),
         },
       },
     },
   );
+
   toolOutput.value = "after";
 
   expect(result.toolEvents).toEqual([
     {
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Bun's asymmetric matcher is declared any
       durationMs: expect.any(Number),
       input: { query: "current fact" },
       output: { value: "before" },
@@ -53,14 +56,17 @@ test("bounds cumulative tool output before another model step", async () => {
       tools: {
         web_lookup: {
           description: "Return a large fixture",
-          execute: () => Promise.resolve({ value: "x".repeat(1000) }),
+          execute: () => ({ value: "x".repeat(1000) }),
           inputSchema: z.object({ query: z.string() }),
         },
       },
     },
   );
 
-  const { output } = result.toolEvents[0] as Model.CompletedToolEvent;
+  const [event] = result.toolEvents;
+
+  if (event?.state !== "completed") throw new Error("Expected a completed tool event");
+  const { output } = event;
   expect(output).toMatchObject({
     truncation: { originalBytes: 1012, truncated: true },
   });
@@ -78,7 +84,9 @@ test("returns a failed tool event when generation recovers", async () => {
       tools: {
         web_lookup: {
           description: "Fail with a fixture error",
-          execute: () => Promise.reject(new Error("fixture failure")),
+          execute: () => {
+            throw new Error("fixture failure");
+          },
           inputSchema: z.object({ query: z.string() }),
         },
       },
@@ -88,6 +96,7 @@ test("returns a failed tool event when generation recovers", async () => {
   expect(result.output).toEqual({ answer: "recovered" });
   expect(result.toolEvents).toEqual([
     {
+      // oxlint-disable-next-line typescript/no-unsafe-assignment -- Bun's asymmetric matcher is declared any
       durationMs: expect.any(Number),
       errorMessage: "fixture failure",
       errorName: "Error",
@@ -114,7 +123,7 @@ test("returns schema output after research without recording its JSON carrier", 
       tools: {
         web_lookup: {
           description: "Return a fixture",
-          execute: () => Promise.resolve({ value: "fresh fact" }),
+          execute: () => ({ value: "fresh fact" }),
           inputSchema: z.object({ query: z.string() }),
         },
       },
@@ -128,6 +137,7 @@ test("returns schema output after research without recording its JSON carrier", 
 
 test("executes parallel research calls before the final answer", async () => {
   let executionCount = 0;
+
   const result = await runModel(
     new MockLanguageModelV3({
       doGenerate: [
@@ -143,9 +153,10 @@ test("executes parallel research calls before the final answer", async () => {
       tools: {
         web_lookup: {
           description: "Count executions",
-          execute: (input) => {
+          execute: (input: { query: string }) => {
             executionCount += 1;
-            return Promise.resolve(input);
+
+            return input;
           },
           inputSchema: z.object({ query: z.string() }),
         },
@@ -159,18 +170,21 @@ test("executes parallel research calls before the final answer", async () => {
 
 test("allows a second sequential research call before the final answer", async () => {
   let executionCount = 0;
+
   const model = new MockLanguageModelV3({
     doGenerate: [toolCallResult("call-1"), toolCallResult("call-2"), finalOutputResult("done")],
   });
+
   const result = await runModel(model, {
     maxToolCalls: 2,
     outputSchema: z.object({ answer: z.string() }),
     tools: {
       web_lookup: {
         description: "Count executions",
-        execute: (input) => {
+        execute: (input: { query: string }) => {
           executionCount += 1;
-          return Promise.resolve(input);
+
+          return input;
         },
         inputSchema: z.object({ query: z.string() }),
       },
@@ -188,18 +202,21 @@ test("allows a second sequential research call before the final answer", async (
 
 test("counts parallel research calls toward the two-call budget", async () => {
   let executionCount = 0;
+
   const model = new MockLanguageModelV3({
     doGenerate: [parallelToolCallResult("call-1", "call-2"), finalOutputResult("done")],
   });
+
   const result = await runModel(model, {
     maxToolCalls: 2,
     outputSchema: z.object({ answer: z.string() }),
     tools: {
       web_lookup: {
         description: "Count executions",
-        execute: (input) => {
+        execute: (input: { query: string }) => {
           executionCount += 1;
-          return Promise.resolve(input);
+
+          return input;
         },
         inputSchema: z.object({ query: z.string() }),
       },
@@ -244,7 +261,7 @@ test("waits for external tool results before accepting final output", async () =
       tools: {
         web_lookup: {
           description: "Return a fixture",
-          execute: () => Promise.resolve({ value: "fresh fact" }),
+          execute: () => ({ value: "fresh fact" }),
           inputSchema: z.object({ query: z.string() }),
         },
       },
@@ -265,10 +282,13 @@ test("rejects malformed final output tool input", async () => {
 test("stops after 32 model steps", async () => {
   let executionCount = 0;
   let callCount = 0;
+
   const error = await runModelEffect(
     new MockLanguageModelV3({
+      // oxlint-disable-next-line typescript/promise-function-async -- settled fixture promise needs no async wrapper
       doGenerate: () => {
         callCount += 1;
+
         return Promise.resolve(toolCallResult(`call-${callCount}`));
       },
     }),
@@ -278,9 +298,10 @@ test("stops after 32 model steps", async () => {
       tools: {
         web_lookup: {
           description: "Count executions",
-          execute: (input) => {
+          execute: (input: { query: string }) => {
             executionCount += 1;
-            return Promise.resolve(input);
+
+            return input;
           },
           inputSchema: z.object({ query: z.string() }),
         },
@@ -294,9 +315,11 @@ test("stops after 32 model steps", async () => {
 
 test("does not put prompt or tool-result content in model logs", async () => {
   const logs: { annotations: object; message: unknown }[] = [];
+
   const collector = Logger.formatStructured.pipe(
     Logger.map((output) => logs.push({ annotations: output.annotations, message: output.message })),
   );
+
   const result = await runModelEffect(
     new MockLanguageModelV3({
       doGenerate: [toolCallResult("call-1"), finalOutputResult("done")],
@@ -309,12 +332,13 @@ test("does not put prompt or tool-result content in model logs", async () => {
       tools: {
         web_lookup: {
           description: "Return sensitive fixture content",
-          execute: () => Promise.resolve({ value: "TOP_SECRET_TOOL_RESULT" }),
+          execute: () => ({ value: "TOP_SECRET_TOOL_RESULT" }),
           inputSchema: z.object({ query: z.string() }),
         },
       },
     },
   ).pipe(Effect.provide(Logger.layer([collector])), Effect.runPromise);
+
   const serializedLogs = JSON.stringify(logs);
 
   expect(result.output).toEqual({ answer: "done" });
@@ -331,6 +355,7 @@ test("does not put prompt or tool-result content in model logs", async () => {
 test("classifies a provider context rejection before output", async () => {
   const error = await runModelEffect(
     new MockLanguageModelV3({
+      // oxlint-disable-next-line typescript/promise-function-async -- rejected fixture promise needs no async wrapper
       doGenerate: () =>
         Promise.reject(
           new APICallError({
@@ -351,22 +376,27 @@ test("classifies a provider context rejection before output", async () => {
 
 test("aborts provider work and returns TimedOut at the total deadline", async () => {
   let aborted = false;
+
   const model = new MockLanguageModelV3({
-    doGenerate: ({ abortSignal }) => {
+    doGenerate: async ({ abortSignal }) => {
       const pending = Promise.withResolvers<never>();
       abortSignal?.addEventListener("abort", () => {
         aborted = true;
         pending.reject(new Error("provider request aborted"));
       });
-      return pending.promise;
+
+      return await pending.promise;
     },
   });
+
   const error = await Effect.runPromise(
     Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(
         runModelEffect(model, { outputSchema: z.object({ answer: z.string() }) }).pipe(Effect.flip),
       );
+
       yield* TestClock.adjust("40 seconds");
+
       return yield* Fiber.join(fiber);
     }).pipe(Effect.provide(TestClock.layer())),
   );
@@ -378,6 +408,7 @@ test("aborts provider work and returns TimedOut at the total deadline", async ()
 test("aborts an active tool when the total deadline expires", async () => {
   let toolAborted = false;
   const pending = Promise.withResolvers<object>();
+
   const error = await Effect.runPromise(
     Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(
@@ -387,19 +418,22 @@ test("aborts an active tool when the total deadline expires", async () => {
           tools: {
             web_lookup: {
               description: "Wait until cancellation",
-              execute: (_input, execution) => {
+              execute: async (_input, execution) => {
                 execution.abortSignal?.addEventListener("abort", () => {
                   toolAborted = true;
                   pending.reject(new Error("tool aborted"));
                 });
-                return pending.promise;
+
+                return await pending.promise;
               },
               inputSchema: z.object({ query: z.string() }),
             },
           },
         }).pipe(Effect.flip),
       );
+
       yield* TestClock.adjust("40 seconds");
+
       return yield* Fiber.join(fiber);
     }).pipe(Effect.provide(TestClock.layer())),
   );
@@ -418,13 +452,14 @@ interface ModelTestInput<OUTPUT> {
   readonly tools?: ToolSet;
 }
 
-function runModel<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTPUT>) {
-  return runModelEffect(model, input).pipe(Effect.runPromise);
+async function runModel<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTPUT>) {
+  return await runModelEffect(model, input).pipe(Effect.runPromise);
 }
 
 function runModelEffect<OUTPUT>(model: LanguageModel, input: ModelTestInput<OUTPUT>) {
   return Effect.gen(function* () {
     const service = yield* Model.Service;
+
     return yield* service.generate({
       instructions: input.instructions ?? "fixture instructions",
       maxToolOutputBytes: input.maxToolOutputBytes ?? 16 * 1024,

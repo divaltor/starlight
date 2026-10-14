@@ -11,7 +11,7 @@ import "swiper/css";
 
 import { cn } from "@/lib/utils";
 
-const loadDomAnimation = () => import("motion/react").then((features) => features.domAnimation);
+const loadDomAnimation = async () => await import("motion/react").then((features) => features.domAnimation);
 
 const Carousel = ({
   images,

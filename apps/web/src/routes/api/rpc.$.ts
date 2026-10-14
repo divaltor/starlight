@@ -23,8 +23,8 @@ const rpcHandler = new RPCHandler(appRouter, {
   ],
 });
 
-function handleRPC({ request }: { request: Request }) {
-  return traceRpcRequest(request, async () => {
+async function handleRPC({ request }: { request: Request }) {
+  return await traceRpcRequest(request, async () => {
     const context = createApiContext(request);
 
     const { matched, response } = await rpcHandler.handle(request, {

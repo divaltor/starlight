@@ -36,22 +36,25 @@ export const searchImages = maybeAuthProcedure
     }
 
     let databaseUserId: string | null = null;
+
     if (ownOnly && user) {
       const dbUser = await prisma.user.findUnique({
         where: { telegramId: user.id },
         select: { id: true },
       });
+
       if (!dbUser) {
         throw new ORPCError("NOT_FOUND", {
           message: "User not found",
           status: 404,
         });
       }
+
       databaseUserId = dbUser.id;
     }
 
     const { requestId } = context;
-    const text = await resolveQueryEmbedding(() => context.generateTextEmbedding(query, requestId), query);
+    const text = await resolveQueryEmbedding(async () => await context.generateTextEmbedding(query, requestId), query);
 
     if (!text) {
       throw new ORPCError("Failed to search images", {
@@ -60,7 +63,8 @@ export const searchImages = maybeAuthProcedure
     }
 
     let cursorData: SearchCursorPayload | null = null;
-    if (cursor) {
+
+    if (cursor !== undefined && cursor !== "") {
       cursorData = Cursor.parse(cursor, SearchCursorPayloadSchema);
 
       if (!cursorData) {
@@ -81,7 +85,7 @@ export const searchImages = maybeAuthProcedure
     const hasLexicalQuery = queryLower.length > 0;
 
     const userFilter =
-      ownOnly && databaseUserId
+      ownOnly && databaseUserId !== null && databaseUserId !== ""
         ? Prisma.sql`p.user_id = ${databaseUserId}`
         : Prisma.sql`p.user_id IN (SELECT id FROM users WHERE is_public = true)`;
 
@@ -134,7 +138,7 @@ export const searchImages = maybeAuthProcedure
     const images = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true)`;
 
-      return tx.$queryRaw<SearchResult[]>(Prisma.sql`
+      return await tx.$queryRaw<SearchResult[]>(Prisma.sql`
 			WITH image_candidates AS (
 				SELECT p.id, p.user_id
 				FROM photos p
@@ -322,8 +326,9 @@ export const searchImages = maybeAuthProcedure
     const transformedResults = transformSearchResults(page.rows, context.config.baseCdnUrl);
 
     let nextCursor: string | null = null;
+
     if (page.hasNextPage && page.lastPost) {
-      nextCursor = Cursor.create<SearchCursorPayload>({
+      nextCursor = Cursor.create({
         lastScore: page.lastPost.final_score,
         lastTweetId: page.lastPost.tweet_id,
         queryTime,

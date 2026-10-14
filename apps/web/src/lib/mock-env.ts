@@ -25,29 +25,39 @@ export async function mockEnv(): Promise<void> {
       subtitle_text_color: "#708499",
       text_color: "#f5f5f5",
     } as const;
+
     const noInsets = { left: 0, top: 0, bottom: 0, right: 0 } as const;
 
     mockTelegramEnv({
       onEvent(e) {
         // Here you can write your own handlers for all known Telegram Mini Apps methods.
         if (e[0] === "web_app_request_theme") {
-          return emitEvent("theme_changed", {
+          emitEvent("theme_changed", {
             theme_params: themeParams,
           });
+
+          return;
         }
+
         if (e[0] === "web_app_request_viewport") {
-          return emitEvent("viewport_changed", {
+          emitEvent("viewport_changed", {
             height: window.innerHeight,
             width: window.innerWidth,
             is_expanded: true,
             is_state_stable: true,
           });
+
+          return;
         }
+
         if (e[0] === "web_app_request_content_safe_area") {
-          return emitEvent("content_safe_area_changed", noInsets);
+          emitEvent("content_safe_area_changed", noInsets);
+
+          return;
         }
+
         if (e[0] === "web_app_request_safe_area") {
-          return emitEvent("safe_area_changed", noInsets);
+          emitEvent("safe_area_changed", noInsets);
         }
       },
       launchParams: new URLSearchParams([

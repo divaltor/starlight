@@ -5,7 +5,7 @@ import { prepareTweetData } from "@/services/tweet/tweet-image.service";
 import { TwitterApi } from "@/services/twitter-api";
 
 test("test_preserves_russian_text_in_main_quotes_and_replies_while_translating_other_languages", async () => {
-  const original = new FxEmbedTweet({
+  const original = {
     author: { avatar_url: "", id: "1", name: "Author", screen_name: "author" },
     created_at: "2026-09-30",
     created_timestamp: 1_790_726_400,
@@ -20,7 +20,8 @@ test("test_preserves_russian_text_in_main_quotes_and_replies_while_translating_o
       text: "@parent Translated text",
     }),
     url: "https://x.com/author/status/1",
-  });
+  };
+
   const parent = new FxEmbedTweet({
     ...original,
     id: "2",
@@ -31,6 +32,7 @@ test("test_preserves_russian_text_in_main_quotes_and_replies_while_translating_o
       translation: new FxEmbedTranslation({ source_lang: "es", target_lang: "en", text: "Spanish text" }),
     }),
   });
+
   const tweet = new FxEmbedTweet({
     ...original,
     replying_to: "parent",
@@ -58,7 +60,7 @@ test("test_preserves_russian_text_in_main_quotes_and_replies_while_translating_o
 });
 
 test("test_renders_the_classified_tweet_without_refetching_it", async () => {
-  const tweet = new FxEmbedTweet({
+  const tweetData = {
     author: { avatar_url: "", id: "1", name: "Author", screen_name: "author" },
     created_at: "2026-09-30",
     created_timestamp: 1_790_726_400,
@@ -70,7 +72,9 @@ test("test_renders_the_classified_tweet_without_refetching_it", async () => {
     url: "https://x.com/author/status/1",
     replying_to: "parent",
     replying_to_status: "2",
-  });
+  };
+
+  const tweet = new FxEmbedTweet(tweetData);
 
   const result = await Effect.runPromise(
     prepareTweetData("1", tweet).pipe(
@@ -78,7 +82,9 @@ test("test_renders_the_classified_tweet_without_refetching_it", async () => {
         getTweet: () => Effect.succeed(null),
         getFxTweet: (id) =>
           id === "2"
-            ? Effect.succeed(new FxEmbedTweet({ ...tweet, id: "2", text: "Parent tweet", replying_to_status: null }))
+            ? Effect.succeed(
+                new FxEmbedTweet({ ...tweetData, id: "2", text: "Parent tweet", replying_to_status: null }),
+              )
             : Effect.fail(new TwitterApi.TwitterApiError({ message: "Main tweet must not be refetched" })),
       }),
     ),

@@ -29,6 +29,7 @@ test("bounds oversized recall queries while preserving prioritized context in FI
     { addressed: true, repliedText: "quoted ".repeat(700), senderFirstName: "Alice", text: "addressed 中文 🪶🌿" },
     { addressed: false, repliedText: null, senderFirstName: "Recent", text: "surrounding context" },
   ];
+
   const query = RecallQuery.build({ inputs, maxTokens: 800 });
 
   expect(countTokens(query, { disallowedSpecial: new Set<string>() })).toBeLessThanOrEqual(800);

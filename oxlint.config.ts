@@ -12,6 +12,7 @@ import tanstackJsPlugins from "ultracite/oxlint/tanstack/js-plugins";
 
 export default defineConfig({
   extends: [core, react, tanstack, jsPlugins, tanstackJsPlugins, antiSlop],
+  options: { typeAware: true },
   ignorePatterns: [
     ...(core.ignorePatterns ?? []),
     ".agent/**",
@@ -57,6 +58,8 @@ export default defineConfig({
     "github/no-then": "off",
     "promise/prefer-await-to-then": "off",
     "promise/prefer-await-to-callbacks": "off",
+    // Anti-slop permits unknown rejection causes, but catch-error-name would rename them back to error.
+    "unicorn/catch-error-name": ["error", { ignore: ["^cause$"] }],
     // Non-null assertions are the repo convention for middleware-guaranteed
     // values (`ctx.from!`) and internal invariants (lookup tables, env).
     "typescript/no-non-null-assertion": "off",

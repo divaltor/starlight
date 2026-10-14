@@ -20,6 +20,7 @@ export const ScrapperJobData = Schema.Struct({
   limit: Schema.Int,
   userId: Schema.String,
 });
+
 export type ScrapperJobData = typeof ScrapperJobData.Type;
 
 export const FEED_SCRAPPER_QUEUE = "feed-scrapper";
@@ -63,7 +64,7 @@ function collectTimelineTweets(
   };
 
   for (const [index, tweet] of tweets.entries()) {
-    if (tweet.id) {
+    if (tweet.id !== undefined && tweet.id !== "") {
       const isNewTweet = !existingTweetMap.has(tweet.id);
 
       if (isNewTweet) {
@@ -129,7 +130,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 
     const userCookies = user.cookies;
 
-    if (!userCookies) {
+    if (userCookies === null || userCookies === "") {
       logger.error({ userId }, "User cookies not found");
       await scrapperQueue.removeJobScheduler(`scrapper-${userId}`);
 
@@ -143,6 +144,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 
     // Decrypt cookies with migration support
     let cookiesJson: string;
+
     try {
       cookiesJson = cookieEncryption.safeDecrypt(userCookies, user.telegramId.toString());
     } catch (error) {
@@ -154,7 +156,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
 
     const twid = cookies.userId();
 
-    if (!twid) {
+    if (twid === undefined || twid === "") {
       logger.error({ userId }, "User ID not found");
       throw new Error("User ID not found");
     }
@@ -198,6 +200,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
       },
       select: { id: true, createdAt: true },
     });
+
     const existingTweetMap = new Map(existingTweets.map((tweet) => [tweet.id, tweet.createdAt]));
 
     // Step 2: Process tweets and build batch operations
@@ -221,11 +224,12 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
       // Batch update existing tweets
       if (updatedTweets.length > 0) {
         await Promise.all(
-          updatedTweets.map((tweet) =>
-            tx.tweet.update({
-              where: { tweetId: { userId, id: tweet.id } },
-              data: { tweetData: tweet.tweetData },
-            }),
+          updatedTweets.map(
+            async (tweet) =>
+              await tx.tweet.update({
+                where: { tweetId: { userId, id: tweet.id } },
+                data: { tweetData: tweet.tweetData },
+              }),
           ),
         );
       }
@@ -248,9 +252,12 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
     const count = data.count + timeline.tweets.length;
 
     // Stop if we hit consecutive threshold or other limits
-    if ((!data.force && consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) || count >= data.limit || !timeline.next) {
+    const reachedKnownTweetThreshold = data.force !== true && consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD;
+
+    if (reachedKnownTweetThreshold || count >= data.limit || (timeline.next ?? "") === "") {
       let reason: string;
-      if (!data.force && consecutiveKnownTweets >= CONSECUTIVE_THRESHOLD) {
+
+      if (reachedKnownTweetThreshold) {
         reason = "consecutive_threshold";
       } else if (count >= data.limit) {
         reason = "count_limit";
@@ -270,6 +277,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
         },
         "Stopping scrape job",
       );
+
       return;
     }
 

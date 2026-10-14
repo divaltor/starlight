@@ -29,14 +29,23 @@ export const classificationWorker = new Worker<PhotoJobData>(
   async (job) => {
     if (!env.ENABLE_CLASSIFICATION) {
       logger.warn({ jobId: job.id }, "Classification skipped: feature disabled");
+
       return;
     }
 
     const { photoId, userId, requestId: incomingRequestId } = Schema.decodeUnknownSync(PhotoJobData)(job.data);
-    const requestId = incomingRequestId || Bun.randomUUIDv7();
 
-    if (!(env.ML_BASE_URL && env.ML_API_TOKEN)) {
+    const requestId =
+      incomingRequestId === undefined || incomingRequestId === "" ? Bun.randomUUIDv7() : incomingRequestId;
+
+    if (
+      env.ML_BASE_URL === undefined ||
+      env.ML_BASE_URL === "" ||
+      env.ML_API_TOKEN === undefined ||
+      env.ML_API_TOKEN === ""
+    ) {
       logger.warn({ photoId, userId, requestId }, "Classification skipped: service not configured");
+
       return;
     }
 
@@ -56,10 +65,11 @@ export const classificationWorker = new Worker<PhotoJobData>(
 
     if (!photo) {
       logger.error({ photoId, userId, requestId }, "Photo not found");
+
       return;
     }
 
-    if (!photo.s3Url) {
+    if (photo.s3Url === undefined || photo.s3Url === "") {
       logger.warn({ photoId, userId, requestId }, "Photo is missing an S3 URL");
       throw new Error("Photo has no URL for classification");
     }

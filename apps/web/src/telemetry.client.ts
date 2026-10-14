@@ -1,5 +1,6 @@
 import { context, propagation, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { WebTracerProvider } from "@opentelemetry/sdk-trace-web";
+import { ATTR_HTTP_RESPONSE_STATUS_CODE } from "@opentelemetry/semantic-conventions";
 
 const provider = new WebTracerProvider();
 
@@ -16,7 +17,8 @@ export async function traceRpcRequest(request: Request, init: RequestInit): Prom
 
   try {
     const response = await fetch(request, { ...init, headers });
-    span.setAttribute('http.response.status_code', response.status);
+    span.setAttribute(ATTR_HTTP_RESPONSE_STATUS_CODE, response.status);
+
     return response;
   } catch (error) {
     span.setStatus({ code: SpanStatusCode.ERROR });

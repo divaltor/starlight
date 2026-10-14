@@ -9,11 +9,13 @@ import type { Media } from "@/media/media";
 
 export namespace GuestReply {
   const MAX_OUTPUT_TOKENS = 2048;
+
   const paragraphs = z
     .array(z.string().trim().min(1).max(1200))
     .min(1)
     .max(3)
     .describe("Ordered plain-text paragraphs for one Telegram guest response");
+
   const outputSchema = z.object({
     type: z.enum(["answer", "clarification"]),
     paragraphs,
@@ -62,9 +64,11 @@ export namespace GuestReply {
             telemetryFunctionId: "guest-reply",
             tools: input.toolset.tools,
           });
+
           if (generated.output.type === "clarification") {
             return generated.output.paragraphs[0]!;
           }
+
           return generated.output.paragraphs
             .map((paragraph, index) =>
               generated.output.followUp !== null && index === generated.output.paragraphs.length - 1

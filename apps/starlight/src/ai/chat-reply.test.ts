@@ -27,6 +27,7 @@ test("uses Gemini-compatible enum discriminators for JSON schema replies", async
       warnings: [],
     },
   });
+
   await runReply(model, {
     ...ModelProfile.profiles["google/gemini-3-flash-preview"],
     output: { protocol: ModelProfile.outputProtocols.jsonSchemaResponse },
@@ -80,13 +81,14 @@ function replyModel() {
   });
 }
 
-function runReply(
+async function runReply(
   model: LanguageModel,
   profile: ModelProfile.Profile = ModelProfile.profiles["google/gemini-3-flash-preview"],
 ) {
-  return Effect.runPromise(
+  return await Effect.runPromise(
     Effect.gen(function* () {
       const chatReply = yield* ChatReply.Service;
+
       return yield* chatReply.generate({
         messages: [{ role: "user", text: "LIVE MESSAGE #1: привет" }],
         sessionId: "chat-reply-test",

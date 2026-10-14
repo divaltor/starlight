@@ -13,27 +13,34 @@ const TWEET_IMAGE_TRANSLATION_LANGUAGE = "en";
 const MOSAIC_METADATA_TIMEOUT_MS = 5000;
 
 const getMosaicDimensions = Effect.fn("getMosaicDimensions")(
-  (mosaic: FxEmbedMosaicPhoto): Effect.Effect<{ width: number; height: number }, never, never> =>
+  (mosaic: FxEmbedMosaicPhoto): Effect.Effect<{ width: number; height: number }> =>
     Effect.gen(function* () {
-      if (mosaic.width && mosaic.height) {
-        return { width: mosaic.width, height: mosaic.height };
+      const hasWidth = (mosaic.width ?? 0) !== 0 && !Number.isNaN(mosaic.width);
+      const hasHeight = (mosaic.height ?? 0) !== 0 && !Number.isNaN(mosaic.height);
+
+      if (hasWidth && hasHeight) {
+        return { width: mosaic.width!, height: mosaic.height! };
       }
 
-      const dimensions = yield* Effect.tryPromise({
+      return yield* Effect.tryPromise({
         try: async () => {
           // Abort signal bounds headers AND body; ky's `timeout` alone only
           // covers time-to-headers, so arrayBuffer() could hang on a stalled stream.
           const response = await http(mosaic.formats.jpeg, {
             signal: AbortSignal.timeout(MOSAIC_METADATA_TIMEOUT_MS),
           });
+
           if (!response.ok) {
             throw new Error(`Failed to fetch mosaic: ${response.status}`);
           }
+
           const buffer = Buffer.from(await response.arrayBuffer());
           const metadata = await new Bun.Image(buffer).metadata();
+
           if (!metadata.width || !metadata.height) {
             throw new Error("Missing metadata");
           }
+
           return { width: metadata.width, height: metadata.height };
         },
         catch: (error) => error,
@@ -46,43 +53,41 @@ const getMosaicDimensions = Effect.fn("getMosaicDimensions")(
         ),
         Effect.orElseSucceed(() => ({ width: 1200, height: 900 })),
       );
-
-      return dimensions;
     }),
 );
 
-const mapMediaData = Effect.fn("mapMediaData")(
-  (media: FxEmbedTweet["media"]): Effect.Effect<TweetData["media"], never, never> =>
-    Effect.gen(function* () {
-      if (!media) {
-        return null;
-      }
+const mapMediaData = Effect.fn("mapMediaData")((media: FxEmbedTweet["media"]): Effect.Effect<TweetData["media"]> =>
+  Effect.gen(function* () {
+    if (!media) {
+      return null;
+    }
 
-      let mosaic: NonNullable<TweetData["media"]>["mosaic"];
-      if (media.mosaic) {
-        const dimensions = yield* getMosaicDimensions(media.mosaic);
-        mosaic = {
-          url: media.mosaic.url ?? media.mosaic.formats.jpeg,
-          width: dimensions.width,
-          height: dimensions.height,
-          formats: media.mosaic.formats,
-        };
-      }
+    let mosaic: NonNullable<TweetData["media"]>["mosaic"];
 
-      return {
-        mosaic,
-        photos: media.photos?.map((p) => ({ url: p.url, width: p.width, height: p.height })),
-        videos: media.videos?.map((v) => ({
-          thumbnailUrl: v.thumbnail_url,
-          width: v.width,
-          height: v.height,
-          type: v.type,
-        })),
+    if (media.mosaic) {
+      const dimensions = yield* getMosaicDimensions(media.mosaic);
+      mosaic = {
+        url: media.mosaic.url ?? media.mosaic.formats.jpeg,
+        width: dimensions.width,
+        height: dimensions.height,
+        formats: media.mosaic.formats,
       };
-    }),
+    }
+
+    return {
+      mosaic,
+      photos: media.photos?.map((p) => ({ url: p.url, width: p.width, height: p.height })),
+      videos: media.videos?.map((v) => ({
+        thumbnailUrl: v.thumbnail_url,
+        width: v.width,
+        height: v.height,
+        type: v.type,
+      })),
+    };
+  }),
 );
 
-function buildTweetData(tweet: FxEmbedTweet, replyingTo?: string): Effect.Effect<TweetData, never, never> {
+function buildTweetData(tweet: FxEmbedTweet, replyingTo?: string): Effect.Effect<TweetData> {
   return Effect.gen(function* () {
     const media = yield* mapMediaData(tweet.media);
     const translation = tweet.translation?.source_lang === "ru" ? null : tweet.translation;
@@ -93,7 +98,10 @@ function buildTweetData(tweet: FxEmbedTweet, replyingTo?: string): Effect.Effect
       authorName: tweet.author.name,
       authorUsername: tweet.author.screen_name,
       authorAvatarUrl: tweet.author.avatar_url,
-      text: replyingTo ? text.replace(new RegExp(`^@${replyingTo}\\s*`, "iu"), "").trim() : text,
+      text:
+        replyingTo !== undefined && replyingTo !== ""
+          ? text.replace(new RegExp(`^@${replyingTo}\\s*`, "iu"), "").trim()
+          : text,
       createdAt: new Date(tweet.created_timestamp * 1000),
       media,
       article: tweet.article?.toArticleData() ?? null,
@@ -132,8 +140,13 @@ function fetchReplyChain(
 
     const tweetData = yield* buildTweetData(tweet, childReplyingTo);
 
-    if (tweet.replying_to_status) {
+    if (
+      tweet.replying_to_status !== undefined &&
+      tweet.replying_to_status !== null &&
+      tweet.replying_to_status !== ""
+    ) {
       const parentResult = yield* fetchReplyChain(tweet.replying_to_status, depth + 1, tweet.replying_to ?? undefined);
+
       return {
         chain: [...parentResult.chain, tweetData],
         hasMore: parentResult.hasMore,
@@ -155,13 +168,18 @@ export const prepareTweetData = Effect.fn("prepareTweetData")(
 
       if (!tweet) {
         yield* Effect.logWarning("Could not fetch tweet", { tweetId });
+
         return yield* Effect.fail(new Error("Tweet not found"));
       }
 
       let replyChain: TweetData[] = [];
       let hasMoreInChain = false;
 
-      if (tweet.replying_to_status) {
+      if (
+        tweet.replying_to_status !== undefined &&
+        tweet.replying_to_status !== null &&
+        tweet.replying_to_status !== ""
+      ) {
         const chainResult = yield* fetchReplyChain(tweet.replying_to_status);
         replyChain = chainResult.chain;
         hasMoreInChain = chainResult.hasMore;
@@ -194,12 +212,14 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
           if (await s3File.exists()) {
             const buffer = Buffer.from(await s3File.arrayBuffer());
             const metadata = await new Bun.Image(buffer).metadata();
+
             return {
               buffer,
               width: metadata.width ?? 1100,
               height: metadata.height ?? 1200,
             } satisfies RenderResult;
           }
+
           return null;
         },
         catch: (error) => error,
@@ -217,6 +237,7 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
 
       if (cachedResult) {
         yield* Effect.logDebug("Found cached tweet image in S3", { tweetId, theme, s3Path });
+
         return cachedResult;
       }
 
@@ -225,13 +246,14 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
       yield* Effect.logDebug("Rendering tweet image", { tweetId, theme });
 
       const result = yield* Effect.tryPromise({
-        try: () => renderTweetImage(tweetData, theme),
-        catch: (error) => new Error(`Failed to render tweet image: ${error}`),
+        try: async () => await renderTweetImage(tweetData, theme),
+        catch: (error) => new Error(`Failed to render tweet image: ${String(error)}`),
       });
 
       const uploaded = yield* Effect.tryPromise({
         try: async () => {
           await s3.write(s3Path, result.buffer, { type: "image/jpeg" });
+
           return true;
         },
         catch: (error) => error,

@@ -26,10 +26,13 @@ test("test_system_context_omits_chat_metadata_when_the_title_is_missing", () => 
 test("appending a finalized turn preserves every prior context segment", () => {
   const envelope = Prompt.renderEnvelope({ toolProfile: ["tool-v1"] });
   const memory = Prompt.renderMemory({ checkpoint: "", scopes: [] });
+
   const base = new Bun.CryptoHasher("sha256")
     .update(`${envelope.length}:${envelope}${memory.length}:${memory}`)
     .digest("hex");
+
   const first = Prompt.extendPrefix(base, Prompt.renderTurn({ content: "Alice: hello", role: "user" }));
+
   const second = Prompt.extendPrefix(
     first.rollingPrefixHash,
     Prompt.renderTurn({ content: "Assistant: hello", role: "assistant" }),

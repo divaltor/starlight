@@ -51,6 +51,7 @@ async function main() {
       photos.map((photo) => {
         const base = `embed-${photo.id}-${photo.userId}`;
         const jobId = FORCE ? `${base}-${Date.now()}` : base;
+
         return {
           name: `embed-${photo.id}`,
           data: { photoId: photo.id, userId: photo.userId },
@@ -72,22 +73,22 @@ async function main() {
   );
 }
 
-main()
-  .catch((error) => {
-    logger.error({ error }, "Enqueue script failed");
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await embeddingsWorker.close().catch((error) => {
-      logger.error({ error }, "Failed to close embeddings worker");
-    });
-    await embeddingsQueue.close().catch((error) => {
-      logger.error({ error }, "Failed to close embeddings queue client");
-    });
-    await prisma.$disconnect().catch((error) => {
-      logger.error({ error }, "Failed to disconnect from database");
-    });
-    await redis.quit().catch((error) => {
-      logger.error({ error }, "Failed to quit Redis");
-    });
+try {
+  await main();
+} catch (error) {
+  logger.error({ error }, "Enqueue script failed");
+  process.exitCode = 1;
+} finally {
+  await embeddingsWorker.close().catch((cause: unknown) => {
+    logger.error({ error: cause }, "Failed to close embeddings worker");
   });
+  await embeddingsQueue.close().catch((cause: unknown) => {
+    logger.error({ error: cause }, "Failed to close embeddings queue client");
+  });
+  await prisma.$disconnect().catch((cause: unknown) => {
+    logger.error({ error: cause }, "Failed to disconnect from database");
+  });
+  await redis.quit().catch((cause: unknown) => {
+    logger.error({ error: cause }, "Failed to quit Redis");
+  });
+}

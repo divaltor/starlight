@@ -68,49 +68,66 @@ async function runDecision(options: {
   readonly probability?: number;
   readonly replyMessageId?: number;
 }) {
-  const client = new PrismaClient({
+  const baseClient = new PrismaClient({
     adapter: new PrismaPg({ connectionString: "postgresql://test:test@127.0.0.1:1/test" }),
-  }).$extends({
-    query: {
-      chat: {
-        findUniqueOrThrow: () => Promise.resolve({ isPrivate: options.isPrivate ?? false }),
+  });
+
+  const client = Object.assign(
+    baseClient,
+    baseClient.$extends({
+      query: {
+        chat: {
+          // oxlint-disable-next-line typescript/promise-function-async -- settled fixture promise needs no async wrapper
+          findUniqueOrThrow: () => Promise.resolve({ isPrivate: options.isPrivate ?? false }),
+        },
+        conversationInput: {
+          // oxlint-disable-next-line typescript/promise-function-async -- settled fixture promise needs no async wrapper
+          findMany: () =>
+            Promise.resolve(
+              (options.messageIds ?? []).map((messageId) => ({
+                sourceMessageId: messageId,
+                payload: {
+                  addressed: false,
+                  date: 1,
+                  editDate: null,
+                  forwardOrigin: null,
+                  messageId,
+                  replyToMessageId: 40,
+                  repliedText: "Вопрос",
+                  senderFirstName: "Vlad",
+                  senderId: 7,
+                  text: `Сообщение ${messageId}`,
+                },
+              })),
+            ),
+        },
+        conversationRunAction: {
+          // oxlint-disable-next-line typescript/promise-function-async -- settled fixture promise needs no async wrapper
+          findMany: () =>
+            Promise.resolve(
+              options.replyMessageId === undefined
+                ? []
+                : [
+                    {
+                      telegramMessageId: options.replyMessageId,
+                      payload: { type: "text", text: "Первый ответ" },
+                    },
+                  ],
+            ),
+        },
       },
-      conversationInput: {
-        findMany: () =>
-          Promise.resolve(
-            (options.messageIds ?? []).map((messageId) => ({
-              sourceMessageId: messageId,
-              payload: {
-                replyToMessageId: 40,
-                repliedText: "Вопрос",
-                senderFirstName: "Vlad",
-                senderId: 7,
-                text: `Сообщение ${messageId}`,
-              },
-            })),
-          ),
-      },
-      conversationRunAction: {
-        findMany: () =>
-          Promise.resolve(
-            options.replyMessageId === undefined
-              ? []
-              : [
-                  {
-                    telegramMessageId: options.replyMessageId,
-                    payload: { type: "text", text: "Первый ответ" },
-                  },
-                ],
-          ),
-      },
-    },
-  }) as PrismaClient;
+    }),
+  );
+
   const requests: Parameters<Experimental_DecisionMockModelV4["doDecide"]>[0][] = [];
+
   const model = new Experimental_DecisionMockModelV4({
+    // oxlint-disable-next-line typescript/promise-function-async -- settled fixture promise needs no async wrapper
     doDecide: (request) => {
       requests.push(request);
       const action = options.action ?? "text";
       const probability = options.probability ?? 0.95;
+
       return Promise.resolve({
         answers: {
           action: {
@@ -135,10 +152,13 @@ async function runDecision(options: {
       });
     },
   });
+
   const spans: Tracer.Span[] = [];
+
   const decision = await Effect.runPromise(
     Effect.gen(function* () {
       const evaluator = yield* DialogueContinuation.Service;
+
       return yield* evaluator.evaluate({
         key: { assistantId: 42, chatId: -77, threadKey: 9 },
         messageId: 70,
@@ -153,7 +173,7 @@ async function runDecision(options: {
         DialogueContinuation.layer(model).pipe(
           Layer.provide(
             Layer.succeed(Database.Service)({
-              query: (operation) => Effect.promise(() => operation(client)),
+              query: (operation) => Effect.promise(async () => await operation(client)),
               transaction: () => Effect.die(new Error("Unexpected transaction")),
             }),
           ),
@@ -164,12 +184,15 @@ async function runDecision(options: {
           span: (input) => {
             const span = new Tracer.NativeSpan(input);
             spans.push(span);
+
             return span;
           },
         }),
       ),
     ),
   );
+
   await client.$disconnect();
+
   return { decision, spans, state: requests[0]?.state };
 }

@@ -4,8 +4,8 @@ import { NotFound } from "@/components/not-found";
 import { routeTree } from "@/routeTree.gen";
 import { orpc, queryClient } from "@/utils/orpc";
 
-export const getRouter = () => {
-  const router = createTanstackRouter({
+export const getRouter = () =>
+  createTanstackRouter({
     routeTree,
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
@@ -17,8 +17,6 @@ export const getRouter = () => {
     ),
     Wrap: ({ children }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
   });
-  return router;
-};
 
 declare module "@tanstack/react-router" {
   interface Register {

@@ -5,11 +5,14 @@ const LOW_SIZE = 8;
 
 function initSQRT(N: number): number[] {
   // oxlint-disable-next-line no-new-array
-  const c = new Array(N);
+  const c = new Array<number>(N);
+
   for (let i = 1; i < N; i++) {
     c[i] = 1;
   }
+
   c[0] = 1 / Math.sqrt(2);
+
   return c;
 }
 
@@ -17,14 +20,17 @@ const SQRT = initSQRT(SAMPLE_SIZE);
 
 function initCOS(N: number): number[][] {
   // oxlint-disable-next-line no-new-array
-  const cosines = new Array(N);
+  const cosines = new Array<number[]>(N);
+
   for (let k = 0; k < N; k++) {
     // oxlint-disable-next-line no-new-array
-    cosines[k] = new Array(N);
+    cosines[k] = new Array<number>(N);
+
     for (let n = 0; n < N; n++) {
-      cosines[k][n] = Math.cos(((2 * k + 1) / (2 * N)) * n * Math.PI);
+      cosines[k]![n] = Math.cos(((2 * k + 1) / (2 * N)) * n * Math.PI);
     }
   }
+
   return cosines;
 }
 
@@ -33,24 +39,28 @@ const COS = initCOS(SAMPLE_SIZE);
 function applyDCT(f: number[][], size: number): number[][] {
   const N = size;
   // oxlint-disable-next-line no-new-array
-  const F = new Array(N);
+  const F = new Array<number[]>(N);
 
   for (let u = 0; u < N; u++) {
     // oxlint-disable-next-line no-new-array
-    F[u] = new Array(N);
+    F[u] = new Array<number>(N);
+
     for (let v = 0; v < N; v++) {
       let sum = 0;
+
       for (let i = 0; i < N; i++) {
         for (let j = 0; j < N; j++) {
           // biome-ignore lint/style/noNonNullAssertion: We predefine the array
           sum += COS[i]![u]! * COS[j]![v]! * f[i]![j]!;
         }
       }
+
       // biome-ignore lint/style/noNonNullAssertion: We predefine the array
       sum *= (SQRT[u]! * SQRT[v]!) / 4;
-      F[u][v] = sum;
+      F[u]![v] = sum;
     }
   }
+
   return F;
 }
 
@@ -66,18 +76,21 @@ export async function calculatePerceptualHash(
     .toBuffer();
 
   // oxlint-disable-next-line no-new-array
-  const s = new Array(SAMPLE_SIZE);
+  const s = new Array<number[]>(SAMPLE_SIZE);
+
   for (let x = 0; x < SAMPLE_SIZE; x++) {
     // oxlint-disable-next-line no-new-array
-    s[x] = new Array(SAMPLE_SIZE);
+    s[x] = new Array<number>(SAMPLE_SIZE);
+
     for (let y = 0; y < SAMPLE_SIZE; y++) {
-      s[x][y] = data[SAMPLE_SIZE * y + x];
+      s[x]![y] = data[SAMPLE_SIZE * y + x]!;
     }
   }
 
   const dct = applyDCT(s, SAMPLE_SIZE);
 
   let totalSum = 0;
+
   for (let x = 0; x < LOW_SIZE; x++) {
     for (let y = 0; y < LOW_SIZE; y++) {
       // biome-ignore lint/style/noNonNullAssertion: We predefine the array
@@ -88,6 +101,7 @@ export async function calculatePerceptualHash(
   const avg = totalSum / (LOW_SIZE * LOW_SIZE);
 
   let fingerprint = "";
+
   for (let x = 0; x < LOW_SIZE; x++) {
     for (let y = 0; y < LOW_SIZE; y++) {
       // biome-ignore lint/style/noNonNullAssertion: We predefine the array
@@ -100,10 +114,12 @@ export async function calculatePerceptualHash(
 
 export function calculateHashDistance(hashA: string, hashB: string): number {
   let count = 0;
+
   for (let i = 0; i < hashA.length; i++) {
     if (hashA[i] !== hashB[i]) {
       count++;
     }
   }
+
   return count;
 }

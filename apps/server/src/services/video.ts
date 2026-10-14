@@ -16,6 +16,7 @@ export const VideoMetadata = Schema.Struct({
   height: Schema.optional(Schema.Number),
   width: Schema.optional(Schema.Number),
 });
+
 export type VideoMetadata = typeof VideoMetadata.Type;
 
 export interface VideoInformation {

@@ -11,6 +11,7 @@ export const RFC6265Cookie = Schema.Struct({
   key: Schema.String,
   value: Schema.String,
 });
+
 export type RFC6265Cookie = typeof RFC6265Cookie.Type;
 
 const FirefoxCookieRecord = Schema.Struct({
@@ -20,13 +21,14 @@ const FirefoxCookieRecord = Schema.Struct({
 }).pipe(
   Schema.decodeTo(RFC6265Cookie, {
     decode: SchemaGetter.transform((cookie) => ({
-      domain: cookie["Host raw"].match(DOMAIN_REGEX)?.groups?.domain ?? "x.com",
+      domain: DOMAIN_REGEX.exec(cookie["Host raw"])?.groups?.domain ?? "x.com",
       key: cookie["Name raw"],
       value: cookie["Content raw"],
     })),
     encode: SchemaGetter.passthrough({ strict: false }),
   }),
 );
+
 const FirefoxCookiesFromJson = Schema.fromJsonString(Schema.Array(FirefoxCookieRecord));
 
 const TWID_REGEX = /u=(?<twidValue>\d+)/u;
@@ -52,13 +54,9 @@ export class Cookies {
   userId() {
     const twidValue = this.cookies.find((cookie) => cookie.key === "twid")?.value;
 
-    if (!twidValue) {
-      return;
-    }
-
-    const decoded = decodeURIComponent(twidValue);
-    const match = decoded.match(TWID_REGEX);
-    return match?.groups?.twidValue;
+    return twidValue === undefined || twidValue === ""
+      ? undefined
+      : TWID_REGEX.exec(decodeURIComponent(twidValue))?.groups?.twidValue;
   }
 }
 

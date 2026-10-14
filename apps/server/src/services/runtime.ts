@@ -10,6 +10,7 @@ type StructuredLogOutput = ReturnType<(typeof Logger.formatStructured)["log"]>;
 
 function forwardEffectLog(output: StructuredLogOutput): void {
   const text = Array.isArray(output.message) ? output.message.join(" ") : String(output.message);
+
   const metadata = {
     annotations: output.annotations,
     cause: output.cause,
@@ -23,18 +24,22 @@ function forwardEffectLog(output: StructuredLogOutput): void {
       logger.error(metadata, text);
       break;
     }
+
     case "WARN": {
       logger.warn(metadata, text);
       break;
     }
+
     case "DEBUG": {
       logger.debug(metadata, text);
       break;
     }
+
     case "TRACE": {
       logger.trace(metadata, text);
       break;
     }
+
     default: {
       logger.info(metadata, text);
     }
@@ -45,22 +50,27 @@ function forwardEffectLog(output: StructuredLogOutput): void {
 const effectLogger = pipe(Logger.formatStructured, Logger.map(forwardEffectLog));
 
 const getEffectLogLevel = (): LogLevel => {
-  switch ((env.LOG_LEVEL || (env.NODE_ENV === "development" ? "debug" : "info")).toLowerCase()) {
+  switch ((env.LOG_LEVEL ?? (env.NODE_ENV === "development" ? "debug" : "info")).toLowerCase()) {
     case "trace": {
       return "Trace";
     }
+
     case "debug": {
       return "Debug";
     }
+
     case "warn": {
       return "Warn";
     }
+
     case "error": {
       return "Error";
     }
+
     case "fatal": {
       return "Fatal";
     }
+
     default: {
       return "Info";
     }

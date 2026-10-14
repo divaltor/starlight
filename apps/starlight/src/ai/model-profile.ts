@@ -57,11 +57,13 @@ export namespace ModelProfile {
     if (model === undefined || model === ids.gemini3FlashPreview) {
       return profiles[ids.gemini3FlashPreview];
     }
+
     if (model === ids.gemini37Flash) {
       return profiles[ids.gemini37Flash];
     }
+
     throw new Error(`Unsupported Starlight model: ${model}`);
   }
 
-  export const selected = fromModelId(process.env.STARLIGHT_MODEL || undefined);
+  export const selected = fromModelId(process.env.STARLIGHT_MODEL === "" ? undefined : process.env.STARLIGHT_MODEL);
 }

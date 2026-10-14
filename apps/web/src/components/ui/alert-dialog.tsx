@@ -88,7 +88,16 @@ function AlertDialogAction({ className, ...props }: React.ComponentProps<typeof 
 function AlertDialogCancel({ className, variant = "outline", ...props }: React.ComponentProps<typeof Button>) {
   const { onOpenChange } = useAlertDialogContext();
 
-  return <Button variant={variant} className={className} onClick={() => onOpenChange(false)} {...props} />;
+  return (
+    <Button
+      variant={variant}
+      className={className}
+      onClick={() => {
+        onOpenChange(false);
+      }}
+      {...props}
+    />
+  );
 }
 
 export {

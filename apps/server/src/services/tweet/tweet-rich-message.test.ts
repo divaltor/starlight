@@ -6,7 +6,7 @@ test.each([
   { mainLanguage: "ru", quoteLanguage: "es", mainText: "Русский текст", quoteText: "Translated quote" },
   { mainLanguage: "es", quoteLanguage: "ru", mainText: "Translated main", quoteText: "Русская цитата" },
 ])("test_preserves_russian_video_text_when_main_is_$mainLanguage_and_quote_is_$quoteLanguage", (params) => {
-  const tweet = new FxEmbedTweet({
+  const tweetData = {
     author: { avatar_url: "", id: "1", name: "Author", screen_name: "author" },
     created_at: "2026-10-07",
     created_timestamp: 1_791_331_200,
@@ -21,9 +21,18 @@ test.each([
       text: "Translated main",
     }),
     url: "https://x.com/author/status/1",
-  });
+  };
+
+  const tweet = new FxEmbedTweet(tweetData);
+
   const quote = new FxEmbedTweet({
-    ...tweet,
+    author: tweet.author,
+    created_at: tweet.created_at,
+    created_timestamp: tweet.created_timestamp,
+    likes: tweet.likes,
+    replies: tweet.replies,
+    retweets: tweet.retweets,
+    url: tweet.url,
     id: "2",
     text: params.quoteLanguage === "ru" ? "Русская цитата" : "Cita española",
     translation: new FxEmbedTranslation({
@@ -32,7 +41,8 @@ test.each([
       text: "Translated quote",
     }),
   });
-  const message = TweetRichMessage.build({ tweet: new FxEmbedTweet({ ...tweet, quote }), video: "telegram-video" });
+
+  const message = TweetRichMessage.build({ tweet: new FxEmbedTweet({ ...tweetData, quote }), video: "telegram-video" });
 
   expect(tweet.getDisplayText()).toBe(params.mainText);
   expect(quote.getDisplayText()).toBe(params.quoteText);
@@ -60,6 +70,7 @@ test("test_preserves_x_reading_order_for_quoted_video_posts", () => {
     text: "Quoted text",
     url: "https://x.com/quoted/status/quoted-tweet",
   });
+
   const tweet = new FxEmbedTweet({
     author: {
       avatar_url: "https://example.com/author.jpg",

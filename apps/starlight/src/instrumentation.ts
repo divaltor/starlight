@@ -14,7 +14,7 @@ import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 import { heapSize, memoryUsage } from "bun:jsc";
 import { registerTelemetry } from "ai";
-import type { Context, MiddlewareFn } from "grammy";
+import type { MiddlewareFn } from "grammy";
 import type { LangfuseConfig, OtlpConfig } from "@/env";
 
 let provider: NodeTracerProvider | undefined;
@@ -35,6 +35,7 @@ export function initTelemetry(backends: TelemetryConfig): void {
         const sessionId = span.runtimeContext?.["langfuse.session.id"];
         const traceName = span.runtimeContext?.["langfuse.trace.name"];
         const userId = span.runtimeContext?.["langfuse.user.id"];
+
         return {
           ...(typeof sessionId === "string" && { "langfuse.session.id": sessionId }),
           ...(typeof traceName === "string" && { "langfuse.trace.name": traceName }),
@@ -49,9 +50,11 @@ export function initTelemetry(backends: TelemetryConfig): void {
   const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: INSTRUMENTATION_NAME });
 
   const spanProcessors: SpanProcessor[] = [];
+
   if (backends.langfuse) {
     spanProcessors.push(new LangfuseSpanProcessor(backends.langfuse));
   }
+
   if (backends.otlp) {
     spanProcessors.push(
       new BatchSpanProcessor(
@@ -79,12 +82,14 @@ export function initTelemetry(backends: TelemetryConfig): void {
       ],
     });
     metrics.setGlobalMeterProvider(meterProvider);
+
     const memoryGauge = meterProvider
       .getMeter(INSTRUMENTATION_NAME)
       .createObservableGauge("process.runtime.bun.memory.usage", {
         description: "Bun process memory by category",
         unit: "By",
       });
+
     memoryGauge.addCallback((result) => {
       const processMemory = process.memoryUsage();
       const bunMemory = memoryUsage();
@@ -119,13 +124,14 @@ function signalEndpoint(endpoint: string, signal: "traces" | "metrics" | "logs")
   return `${endpoint.replace(/(?<!\/)\/+$/u, "")}/v1/${signal}`;
 }
 
-export function createUpdateTracer(): MiddlewareFn<Context> {
-  return (ctx, next) =>
-    trace.getTracer(INSTRUMENTATION_NAME).startActiveSpan("Telegram update", async (span) => {
+export function createUpdateTracer(): MiddlewareFn {
+  return async (ctx, next) => {
+    await trace.getTracer(INSTRUMENTATION_NAME).startActiveSpan("Telegram update", async (span) => {
       span.setAttributes({
         "telegram.update_id": ctx.update.update_id,
         "telegram.update_type": Object.keys(ctx.update).find((key) => key !== "update_id") ?? "unknown",
       });
+
       // langfuse.session.id / langfuse.user.id / langfuse.trace.name are set by the
       // access middleware once the chat (and its privacy flag) is loaded.
       try {
@@ -138,11 +144,13 @@ export function createUpdateTracer(): MiddlewareFn<Context> {
         span.end();
       }
     });
+  };
 }
 
-export function shutdownTelemetry(): Promise<void> {
+export async function shutdownTelemetry(): Promise<void> {
   shutdownPromise ??= shutdownProviders();
-  return shutdownPromise;
+
+  await shutdownPromise;
 }
 
 async function shutdownProviders(): Promise<void> {

@@ -36,7 +36,7 @@ export namespace TwitterApi {
         const scraper = new Scraper({ experimental: { xClientTransactionId: false, xpff: false } });
         await scraper.setCookies(cookies.toString().split(";"));
 
-        return scraper.getTweet(tweetId);
+        return await scraper.getTweet(tweetId);
       },
       catch: (error) =>
         TwitterApiError.fromCause({
@@ -51,6 +51,7 @@ export namespace TwitterApi {
     translateTo?: string,
   ) {
     const twitterApi = yield* Service;
+
     return yield* twitterApi.getFxTweet(tweetId, translateTo);
   });
 
@@ -63,7 +64,7 @@ export namespace TwitterApi {
         tweetId: string,
         translateTo?: string,
       ) {
-        const translatePath = translateTo ? `/${translateTo}` : "";
+        const translatePath = translateTo !== undefined && translateTo !== "" ? `/${translateTo}` : "";
         const url = `${FXEMBED_BASE_URL}/status/${tweetId}${translatePath}`;
 
         const response = yield* client
@@ -104,11 +105,7 @@ export namespace TwitterApi {
           ),
         );
 
-        const decoded = Schema.decodeUnknownEffect(FxEmbedResponseSchema)(raw) as Effect.Effect<
-          typeof FxEmbedResponseSchema.Type,
-          Schema.SchemaError,
-          never
-        >;
+        const decoded = Schema.decodeUnknownEffect(FxEmbedResponseSchema)(raw);
 
         const data = yield* decoded.pipe(
           Effect.mapError((error) =>
@@ -125,6 +122,7 @@ export namespace TwitterApi {
             message: data.message,
             tweetId,
           });
+
           return null;
         }
 

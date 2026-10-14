@@ -61,6 +61,7 @@ export namespace ChatReply {
     Service,
     Effect.gen(function* layer() {
       const model = yield* Model.Service;
+
       return Service.of({
         generate: Effect.fn("ChatReply.generate")(function* generate(input) {
           return yield* model.generate({

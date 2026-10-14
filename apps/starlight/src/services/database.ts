@@ -35,22 +35,29 @@ export namespace Database {
         const client = new PrismaClient({
           adapter: new PrismaPg({ connectionString }),
         });
+
         yield* Effect.acquireRelease(
           Effect.tryPromise({
-            try: () => client.$connect(),
+            try: async () => {
+              await client.$connect();
+            },
             catch: (cause) => new StartupError({ cause, message: "Failed to connect to PostgreSQL" }),
           }),
-          () => Effect.promise(() => client.$disconnect()),
+          () =>
+            Effect.promise(async () => {
+              await client.$disconnect();
+            }),
         );
 
         const query: Interface["query"] = (operation) =>
           Effect.tryPromise({
-            try: () => operation(client),
+            try: async () => await operation(client),
             catch: (cause) => new QueryError({ cause, message: "Database query failed" }),
           });
+
         const transaction: Interface["transaction"] = (operation) =>
           Effect.tryPromise({
-            try: () => client.$transaction(operation),
+            try: async () => await client.$transaction(operation),
             catch: (cause) => new TransactionError({ cause, message: "Database transaction failed" }),
           }).pipe(Effect.uninterruptible);
 

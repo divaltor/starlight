@@ -10,10 +10,10 @@
     "test": "bun test src"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "2.0.70",
+    "@ai-sdk/mcp": "2.0.74",
     "@ai-sdk/otel": "1.0.132",
-    "@effect/opentelemetry": "4.0.2",
-    "@effect/platform-bun": "4.0.2",
+    "@effect/opentelemetry": "4.0.4",
+    "@effect/platform-bun": "4.0.4",
     "@firecrawl/pdf-inspector": "1.25.2",
     "@grammyjs/auto-retry": "2.0.2",
     "@grammyjs/files": "1.2.0",
@@ -34,17 +34,17 @@
     "@prisma/adapter-pg": "catalog:",
     "@starlight/utils": "workspace:*",
     "@t3-oss/env-core": "0.13.11",
-    "@vectorize-io/hindsight-client": "0.10.2",
+    "@vectorize-io/hindsight-client": "1.0.0",
     "ai": "7.0.132",
-    "bullmq": "6.3.11",
-    "effect": "4.0.2",
+    "bullmq": "6.3.15",
+    "effect": "4.0.4",
     "gpt-tokenizer": "4.0.0",
     "grammy": "catalog:",
     "youtube-transcript-plus": "2.0.3",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "1.4.2"
+    "@types/bun": "1.4.3"
   },
   "peerDependencies": {
     "typescript": "7.0.2"

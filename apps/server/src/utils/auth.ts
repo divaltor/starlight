@@ -6,5 +6,6 @@ export const isAdminOrCreator = (ctx: Context) => {
   }
 
   const status = ctx.userChatMember?.status;
+
   return status === "administrator" || status === "creator";
 };

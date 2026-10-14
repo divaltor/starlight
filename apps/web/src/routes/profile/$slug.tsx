@@ -6,7 +6,9 @@ import { NotFound } from "@/components/not-found";
 import { useTweets } from "@/hooks/use-tweets";
 import { orpc } from "@/utils/orpc";
 
-const TweetImageGrid = lazy(() => import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })));
+const TweetImageGrid = lazy(
+  async () => await import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
+);
 
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
@@ -31,7 +33,7 @@ function SharedProfileViewer() {
       }
     },
     {
-      isItemLoaded: (index, items) => !!items[index],
+      isItemLoaded: (index, items) => items[index] !== undefined,
       minimumBatchSize: 30,
       threshold: 5,
     },
@@ -71,7 +73,9 @@ function SharedProfileViewer() {
                 itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
                 itemKey={(tweet) => tweet.id}
                 items={tweets}
-                onRender={infiniteLoader}
+                onRender={(...args) => {
+                  infiniteLoader(...args);
+                }}
                 overscanBy={MASONRY_OVERSCAN_BY}
                 render={renderMasonryItem}
               />
@@ -90,7 +94,7 @@ export const Route = createFileRoute("/profile/$slug")({
       return;
     }
 
-    await queryClient.fetchInfiniteQuery(
+    await queryClient.infiniteQuery(
       orpc.tweets.list.infiniteOptions({
         input: (pageParam: string | null | undefined) => ({
           cursor: pageParam ?? undefined,

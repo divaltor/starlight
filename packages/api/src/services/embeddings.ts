@@ -64,6 +64,7 @@ export namespace EmbeddingsService {
             "X-API-Token": config.apiToken!,
             "X-Request-Id": requestId ?? Bun.randomUUIDv7(),
           };
+
           propagation.inject(context.active(), headers);
 
           const request = yield* HttpClientRequest.post(`${config.baseUrl}/v1/embeddings`).pipe(
@@ -107,6 +108,7 @@ export namespace EmbeddingsService {
           );
 
           yield* Effect.logInfo(`EmbeddingsService: Successfully generated embeddings for ${image}`);
+
           return {
             image: data.image ? [...data.image] : null,
             text: [...data.text],
@@ -123,6 +125,7 @@ export namespace EmbeddingsService {
             "X-API-Token": config.apiToken!,
             "X-Request-Id": requestId ?? Bun.randomUUIDv7(),
           };
+
           propagation.inject(context.active(), headers);
 
           const request = yield* HttpClientRequest.post(`${config.baseUrl}/v1/embeddings`).pipe(
@@ -164,11 +167,16 @@ export namespace EmbeddingsService {
           );
 
           yield* Effect.logInfo("EmbeddingsService: Successfully generated text embeddings");
+
           return [...data.text];
         });
 
         return Service.of({
-          isEnabled: () => !!(config.baseUrl && config.apiToken),
+          isEnabled: () =>
+            config.baseUrl !== undefined &&
+            config.baseUrl !== "" &&
+            config.apiToken !== undefined &&
+            config.apiToken !== "",
           generate,
           generateText,
         });

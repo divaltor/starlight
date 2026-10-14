@@ -20,11 +20,15 @@ export const appRouter = {
     random: randomImages,
   },
 };
+
 export type AppRouter = typeof appRouter;
+
 export type AppRouterClient = RouterClient<typeof appRouter>;
 
 export type Inputs = InferRouterInputs<typeof appRouter>;
+
 export type Outputs = InferRouterOutputs<typeof appRouter>;
 
 export type ProfileResult = Outputs["profiles"]["get"];
+
 export type PostingChannelResult = ProfileResult["postingChannel"];

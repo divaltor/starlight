@@ -40,6 +40,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
 
     if (tweet.photos.length === 0) {
       logger.debug({ tweetId: tweet.id, userId }, "Tweet has no photos, skipping job");
+
       return;
     }
 
@@ -72,7 +73,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
     const refreshTimestamp = new Date();
 
     for (const photo of tweetRecord.photos) {
-      if (photo.s3Path && photo.perceptualHash) {
+      if ((photo.s3Path ?? "") !== "" && (photo.perceptualHash ?? "") !== "") {
         logger.debug(
           {
             tweetId: tweet.id,

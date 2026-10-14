@@ -84,6 +84,7 @@ function otelSink(): Logger.Logger<unknown, void> {
 }
 
 const production = env.NODE_ENV === "production";
+
 const logging = Layer.mergeAll(
   Logger.layer([
     production ? Logger.consoleJson : Logger.consolePretty(),
@@ -92,12 +93,15 @@ const logging = Layer.mergeAll(
   ]),
   Layer.succeed(References.MinimumLogLevel)(parseLogLevel(env.LOG_LEVEL ?? (production ? "info" : "debug"))),
 );
+
 const chatTools = ChatTools.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(Exa.defaultLayer, Twitter.layer, Youtube.layer(env.REDIS_URL))),
 );
+
 const replies = Layer.mergeAll(ChatReply.layer, GuestReply.layer).pipe(
   Layer.provideMerge(Model.defaultLayer(env.OPENROUTER_API_KEY)),
 );
+
 const topicMetadata = TopicMetadata.layer.pipe(
   Layer.provide(
     Model.defaultLayer(env.OPENROUTER_API_KEY, {
@@ -106,6 +110,7 @@ const topicMetadata = TopicMetadata.layer.pipe(
     }),
   ),
 );
+
 const dialogueContinuation = DialogueContinuation.layer(
   createOpenRouter({
     apiKey: env.OPENROUTER_API_KEY,
@@ -113,11 +118,14 @@ const dialogueContinuation = DialogueContinuation.layer(
     compatibility: "strict",
   }).evaluationModel("typesafe/jev-1.13"),
 );
+
 const database = Database.layer(env.DATABASE_URL);
+
 const tracing =
   env.langfuse === undefined && env.otlp === undefined
     ? Layer.empty
     : OtelTracer.layerGlobal.pipe(Layer.provide(Resource.layer({ serviceName: "starlight-bot" })));
+
 const observability = Layer.mergeAll(logging, tracing);
 
 const infrastructure = Layer.provide(
@@ -146,16 +154,20 @@ const infrastructure = Layer.provide(
   ).pipe(Layer.provideMerge(database)),
   FetchHttpClient.layer,
 );
+
 const hindsightRetention = HindsightRetention.layer.pipe(Layer.provideMerge(infrastructure));
 const memory = Memory.layer.pipe(Layer.provideMerge(hindsightRetention), Layer.provideMerge(infrastructure));
 const context = ConversationContext.layer.pipe(Layer.provideMerge(infrastructure));
+
 const conversation = Conversation.layer.pipe(
   Layer.provideMerge(context),
   Layer.provideMerge(memory),
   Layer.provideMerge(infrastructure),
 );
+
 const outbox = WakeOutbox.layer.pipe(Layer.provideMerge(infrastructure));
 const domain = Layer.mergeAll(infrastructure, memory, hindsightRetention, context, conversation, outbox);
+
 const background = Layer.mergeAll(
   WakeOutbox.publisherLayer,
   WakeQueue.workerLayer({

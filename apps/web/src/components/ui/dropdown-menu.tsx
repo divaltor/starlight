@@ -87,7 +87,7 @@ function DropdownMenuCheckboxItem({
       {...props}
     >
       <span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">
-        {checked && <HugeiconsIcon className="size-4" icon={Tick02Icon} />}
+        {checked === true && <HugeiconsIcon className="size-4" icon={Tick02Icon} />}
       </span>
       {children}
     </MenuItem>
@@ -108,6 +108,7 @@ function DropdownMenuRadioItem({
   ...props
 }: { children: ReactNode } & React.ComponentProps<typeof MenuItem>) {
   const [selected, setSelected] = useState(false);
+
   return (
     <MenuItem
       className={cn(
@@ -115,7 +116,9 @@ function DropdownMenuRadioItem({
         className,
       )}
       data-slot="dropdown-menu-radio-item"
-      onAction={() => setSelected(true)}
+      onAction={() => {
+        setSelected(true);
+      }}
       {...props}
     >
       <span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">

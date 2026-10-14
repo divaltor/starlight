@@ -1,9 +1,9 @@
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import type * as React from "react";
-import type { Ref, RefObject } from "react";
+import type { Ref } from "react";
+import { mergeProps, useObjectRef } from "react-aria";
 import { useButton } from "react-aria/useButton";
-import type { AriaButtonOptions } from "react-aria/useButton";
 
 import { cn } from "@/lib/utils";
 
@@ -54,11 +54,9 @@ function Button({
   VariantProps<typeof buttonVariants> & {
     ref?: Ref<HTMLButtonElement>;
   }) {
-  const options = { ...props } as AriaButtonOptions<"button">;
-  const {
-    buttonProps: { id, ...buttonProps },
-    isPressed,
-  } = useButton(options, ref as RefObject<HTMLButtonElement | null>);
+  const buttonRef = useObjectRef(ref);
+
+  const { buttonProps, isPressed } = useButton({ isDisabled: props.disabled }, buttonRef);
 
   const classes = cn(
     buttonVariants({
@@ -73,11 +71,10 @@ function Button({
 
   return (
     <button
-      {...buttonProps}
+      {...mergeProps(buttonProps, props)}
       className={classes}
       data-pressed={isPressed || undefined}
-      id={id}
-      ref={ref}
+      ref={buttonRef}
       type="button"
       // Consumers may override the default type (e.g. type="submit" in forms).
       {...(type === "button" ? {} : { type })}

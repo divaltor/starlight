@@ -13,7 +13,9 @@ import { cn } from "@/lib/utils";
 import { LayoutManager } from "@/utils/layout";
 import { orpc } from "@/utils/orpc";
 
-const TweetImageGrid = lazy(() => import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })));
+const TweetImageGrid = lazy(
+  async () => await import("@/components/tweet-image-grid").then((m) => ({ default: m.TweetImageGrid })),
+);
 
 const MASONRY_ITEM_HEIGHT_ESTIMATE = 360;
 const MASONRY_OVERSCAN_BY = 1.25;
@@ -47,42 +49,26 @@ const examples = [
 export default function DiscoverPage() {
   const [urlQuery, setUrlQuery] = useQueryState("q", parseAsString.withDefault(""));
   const [inputValue, setInputValue] = useState(urlQuery);
-  const [isLargeScreen, setIsLargeScreen] = useState(false);
 
   const inputPosition: "initial" | "bottom" = urlQuery ? "bottom" : "initial";
   const showExamples = !urlQuery;
-
-  useEffect(() => {
-    const observer = new ResizeObserver(() => {
-      setIsLargeScreen(window.innerWidth > 1024);
-    });
-    observer.observe(document.documentElement);
-    return () => observer.disconnect();
-  }, []);
 
   const { results, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useSearch({
     query: urlQuery,
   });
 
-  const randomQuery = useQuery({
-    ...orpc.tweets.random.queryOptions({ retry: false }),
-    queryKey: ["tweets-random"],
-    enabled: true,
-    staleTime: Number.POSITIVE_INFINITY,
-    gcTime: Number.POSITIVE_INFINITY,
-  });
-
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmedQuery = inputValue.trim();
+
     if (trimmedQuery) {
-      setUrlQuery(trimmedQuery, { history: "push" });
+      void setUrlQuery(trimmedQuery, { history: "push" });
     }
   };
 
   const handleExampleClick = (example: string) => {
     setInputValue(example);
-    setUrlQuery(example, { history: "push" });
+    void setUrlQuery(example, { history: "push" });
   };
 
   const infiniteLoader = useInfiniteLoader(
@@ -92,20 +78,13 @@ export default function DiscoverPage() {
       }
     },
     {
-      isItemLoaded: (index, items) => !!items[index],
+      isItemLoaded: (index, items) => items[index] !== undefined,
       minimumBatchSize: 30,
       threshold: 5,
     },
   );
 
-  const randomImages = randomQuery.data || [];
-  // Positions come from Math.random(); compute once per dataset so unrelated
-  // re-renders (e.g. search input keystrokes) don't shuffle the collage.
-  // oxlint-disable-next-line react-doctor/react-compiler-no-manual-memoization
-  const placedData = useMemo(() => placeRandomImages(randomQuery.data ?? []), [randomQuery.data]);
-
   const isHomeIdle = !isLoading && results.length === 0;
-  const showHeroCollage = isLargeScreen && randomQuery.isSuccess && placedData.length > 0 && isHomeIdle;
 
   return (
     <div className="flex min-h-dvh flex-col bg-base-100">
@@ -120,7 +99,9 @@ export default function DiscoverPage() {
                 itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
                 itemKey={(tweet) => tweet.id}
                 items={results}
-                onRender={infiniteLoader}
+                onRender={(...args) => {
+                  infiniteLoader(...args);
+                }}
                 overscanBy={MASONRY_OVERSCAN_BY}
                 render={renderMasonryItem}
               />
@@ -150,23 +131,14 @@ export default function DiscoverPage() {
                       <div className="join flex w-full">
                         <Input
                           className="input input-bordered join-item flex-1"
-                          onChange={(e) => setInputValue(e.target.value)}
+                          onChange={(e) => {
+                            setInputValue(e.target.value);
+                          }}
                           placeholder="Search for images…"
                           type="text"
                           value={inputValue}
                         />
-                        <Button
-                          className={cn("btn btn-primary join-item", isLoading && "btn-disabled")}
-                          disabled={isLoading}
-                          type="submit"
-                        >
-                          {isLoading ? (
-                            <span className="loading loading-spinner size-4" />
-                          ) : (
-                            <HugeiconsIcon className="size-4" icon={Search01Icon} />
-                          )}
-                          <span className="hidden sm:inline">Search</span>
-                        </Button>
+                        <SearchSubmitButton isLoading={isLoading} />
                       </div>
                     </div>
                   </div>
@@ -180,7 +152,14 @@ export default function DiscoverPage() {
                 >
                   <div className="flex flex-wrap justify-center gap-2">
                     {examples.map((example) => (
-                      <Button key={example} onClick={() => handleExampleClick(example)} size="sm" variant="outline">
+                      <Button
+                        key={example}
+                        onClick={() => {
+                          handleExampleClick(example);
+                        }}
+                        size="sm"
+                        variant="outline"
+                      >
                         {example}
                       </Button>
                     ))}
@@ -191,32 +170,7 @@ export default function DiscoverPage() {
           </section>
         )}
       </div>
-      {showHeroCollage && (
-        <Suspense fallback={null}>
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            {placedData.map(({ position, index }, i) => {
-              const tweet = randomImages[index];
-              return (
-                <div
-                  className="pointer-events-auto absolute motion-safe:animate-fade-in opacity-85"
-                  key={tweet.id}
-                  style={{
-                    animationDelay: `${i * 500}ms`,
-                    top: `${position.top}%`,
-                    left: `${position.left}%`,
-                    width: "250px",
-                    height: "auto",
-                    transform: "translate(-50%, -50%)",
-                    zIndex: 1,
-                  }}
-                >
-                  <TweetImageGrid showArtistOnHover tweet={tweet} />
-                </div>
-              );
-            })}
-          </div>
-        </Suspense>
-      )}
+      <HeroCollage isHomeIdle={isHomeIdle} />
 
       {/* Sticky Search Bar - only when results */}
       {results.length > 0 && (
@@ -226,23 +180,14 @@ export default function DiscoverPage() {
               <div className="join w-full">
                 <Input
                   className="input input-bordered join-item flex-1"
-                  onChange={(e) => setInputValue(e.target.value)}
+                  onChange={(e) => {
+                    setInputValue(e.target.value);
+                  }}
                   placeholder="Search for images…"
                   type="text"
                   value={inputValue}
                 />
-                <Button
-                  className={cn("btn btn-primary join-item", isLoading && "btn-disabled")}
-                  disabled={isLoading}
-                  type="submit"
-                >
-                  {isLoading ? (
-                    <span className="loading loading-spinner size-4" />
-                  ) : (
-                    <HugeiconsIcon className="size-4" icon={Search01Icon} />
-                  )}
-                  <span className="hidden sm:inline">Search</span>
-                </Button>
+                <SearchSubmitButton isLoading={isLoading} />
               </div>
             </form>
           </div>
@@ -252,12 +197,92 @@ export default function DiscoverPage() {
   );
 }
 
+function HeroCollage({ isHomeIdle }: { isHomeIdle: boolean }) {
+  const [isLargeScreen, setIsLargeScreen] = useState(false);
+
+  useEffect(() => {
+    const observer = new ResizeObserver(() => {
+      setIsLargeScreen(window.innerWidth > 1024);
+    });
+
+    observer.observe(document.documentElement);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  const randomQuery = useQuery({
+    ...orpc.tweets.random.queryOptions({ retry: false }),
+    queryKey: ["tweets-random"],
+    enabled: true,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+  });
+
+  const randomImages = randomQuery.data ?? [];
+
+  // Positions come from Math.random(); compute once per dataset so unrelated
+  // re-renders (e.g. search input keystrokes) don't shuffle the collage.
+  // oxlint-disable-next-line react-doctor/react-compiler-no-manual-memoization
+  const placedData = useMemo(() => placeRandomImages(randomQuery.data ?? []), [randomQuery.data]);
+
+  if (!isLargeScreen || !randomQuery.isSuccess || placedData.length === 0 || !isHomeIdle) {
+    return null;
+  }
+
+  return (
+    <Suspense fallback={null}>
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        {placedData.map(({ position, index }, i) => {
+          const tweet = randomImages[index];
+
+          return (
+            <div
+              className="pointer-events-auto absolute motion-safe:animate-fade-in opacity-85"
+              key={tweet.id}
+              style={{
+                animationDelay: `${i * 500}ms`,
+                top: `${position.top}%`,
+                left: `${position.left}%`,
+                width: "250px",
+                height: "auto",
+                transform: "translate(-50%, -50%)",
+                zIndex: 1,
+              }}
+            >
+              <TweetImageGrid showArtistOnHover tweet={tweet} />
+            </div>
+          );
+        })}
+      </div>
+    </Suspense>
+  );
+}
+
+function SearchSubmitButton({ isLoading }: { isLoading: boolean }) {
+  return (
+    <Button className={cn("btn btn-primary join-item", isLoading && "btn-disabled")} disabled={isLoading} type="submit">
+      {isLoading ? (
+        <span className="loading loading-spinner size-4" />
+      ) : (
+        <HugeiconsIcon className="size-4" icon={Search01Icon} />
+      )}
+      <span className="hidden sm:inline">Search</span>
+    </Button>
+  );
+}
+
 export const Route = createFileRoute("/")({
   loader: ({ context: { queryClient } }) => {
-    queryClient.prefetchQuery({
-      ...orpc.tweets.random.queryOptions({ retry: false }),
-      queryKey: ["tweets-random"],
-    });
+    void queryClient
+      .query({
+        ...orpc.tweets.random.queryOptions({ retry: false }),
+        queryKey: ["tweets-random"],
+      })
+      .catch(() => {
+        // Prefetch failures are rendered by the query consumer.
+      });
   },
   component: DiscoverPage,
 });
