@@ -116,7 +116,7 @@ const dialogueContinuation = DialogueContinuation.layer(
     apiKey: env.OPENROUTER_API_KEY,
     appName: "Starlight",
     compatibility: "strict",
-  }).evaluationModel("typesafe/jev-1.13"),
+  }).evaluationModel("typesafe/jev-1.14"),
 );
 
 const database = Database.layer(env.DATABASE_URL);
