@@ -4,7 +4,7 @@ import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
 import env from "@/env";
 import { bot } from "@/bot";
-import type { FxEmbedTweet } from "@/services/fxembed/types";
+import type { FxEmbedTweet, FxEmbedVideo } from "@/services/fxembed/types";
 import { runtime } from "@/services/runtime";
 import { generateTweetImage } from "@/services/tweet/tweet-image.service";
 import { TweetRichMessage } from "@/services/tweet/tweet-rich-message";
@@ -139,11 +139,11 @@ async function sendExistingVideoIfExists(
 }
 
 interface FreshDownloadParams {
+  apiVideos: readonly FxEmbedVideo[];
   ctx: Context;
   link: string;
   messageThreadId?: number;
   tempDirName: string;
-  tweet: FxEmbedTweet | null;
 }
 
 interface FreshDownloadSuccess {
@@ -153,7 +153,7 @@ interface FreshDownloadSuccess {
 }
 
 async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDownloadSuccess | { status: "failed" }> {
-  const { ctx, link, messageThreadId, tempDirName, tweet } = params;
+  const { apiVideos, ctx, link, messageThreadId, tempDirName } = params;
 
   try {
     try {
@@ -164,9 +164,7 @@ async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDo
       ctx.logger.warn({ error }, "yt-dlp download failed, trying fxtwitter API fallback");
     }
 
-    const apiVideos = tweet?.media?.videos;
-
-    if (!(apiVideos && apiVideos.length > 0)) {
+    if (apiVideos.length === 0) {
       return { status: "ok", videos: [], videoDownloadFailed: true };
     }
 
@@ -346,7 +344,9 @@ async function handleVideoRequest(
           return null;
         });
 
-  if (tweet && (tweet.media?.videos?.length ?? 0) === 0) {
+  const apiVideos = [tweet, tweet?.quote].flatMap((item) => item?.media?.videos ?? []);
+
+  if (tweet && apiVideos.length === 0) {
     await ctx.replyWithChatAction("upload_photo", { message_thread_id: messageThreadId });
     await sendTweetImageFallback(ctx, tweet, messageThreadId);
 
@@ -363,11 +363,11 @@ async function handleVideoRequest(
 
   try {
     const outcome = await downloadFreshVideos({
+      apiVideos,
       ctx,
       link,
       messageThreadId,
       tempDirName: tempDir.name,
-      tweet,
     });
 
     if (outcome.status === "failed") {
