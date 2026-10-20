@@ -15,7 +15,7 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_PYTHON=/usr/local/bin/python3.14
 ENV PATH="/code/.venv/bin:$PATH"
 
-COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /bin/uv
 
 WORKDIR /code
 
