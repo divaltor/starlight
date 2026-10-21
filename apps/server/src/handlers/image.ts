@@ -188,7 +188,7 @@ function parseInlineImageQuery(query: string) {
 
   return {
     authors: [...new Set(authors)],
-    textQuery: query.replace(INLINE_QUERY_AUTHOR_REGEX, " ").replaceAll(/\s+/gu, " ").trim(),
+    textQuery: query.replaceAll(INLINE_QUERY_AUTHOR_REGEX, " ").replaceAll(/\s+/gu, " ").trim(),
   };
 }
 
