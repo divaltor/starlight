@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.4.3-alpine
+FROM oven/bun:1.4.4-alpine
 
 WORKDIR /code
 
@@ -22,6 +22,6 @@ COPY . .
 
 RUN bun run --cwd packages/utils db:generate
 
-RUN rm -rf node_modules/typescript node_modules/@typescript node_modules/@babel bun.lock
+RUN rm -rf node_modules/typescript node_modules/@babel bun.lock
 
 CMD ["bun", "run", "--cwd", "apps/starlight", "start"]

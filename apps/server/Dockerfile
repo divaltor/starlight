@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.4.3-alpine AS base
+FROM oven/bun:1.4.4-alpine AS base
 
 WORKDIR /code
 
@@ -38,11 +38,11 @@ COPY . .
 RUN bun run --cwd packages/utils db:generate
 
 # Build tooling can leak back via peers; the runtime never uses it
-RUN rm -rf node_modules/typescript node_modules/@typescript node_modules/@babel bun.lock
+RUN rm -rf node_modules/typescript node_modules/@babel bun.lock
 
 FROM mwader/static-ffmpeg:9.0 AS ffmpeg
 
-FROM oven/bun:1.4.3-alpine AS runtime
+FROM oven/bun:1.4.4-alpine AS runtime
 
 WORKDIR /code
 
