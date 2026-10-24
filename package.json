@@ -13,8 +13,8 @@
       "@prisma/adapter-pg": "7.10.1",
       "@prisma/instrumentation": "^7.10.1",
       "tsdown": "0.23.2",
-      "@orpc/server": "1.15.7",
-      "@orpc/client": "1.15.7",
+      "@orpc/server": "1.16.1",
+      "@orpc/client": "1.16.1",
       "zod": "4.6.7",
       "prisma": "7.10.1",
       "grammy": "1.46.0",
@@ -50,11 +50,11 @@
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
     "oxlint-plugin-react-doctor": "0.9.18",
-    "oxlint-tsgolint": "7.0.2004",
+    "oxlint-tsgolint": "7.0.2005",
     "tsdown": "0.23.2",
     "turbo": "2.11.10",
     "typescript": "7.1.0-beta",
-    "ultracite": "8.0.1"
+    "ultracite": "8.0.2"
   },
   "packageManager": "bun@1.4.4",
   "overrides": {

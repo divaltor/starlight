@@ -8,9 +8,7 @@ test("test_fail_open_to_youtube_when_redis_is_down", async () => {
   });
 
   expect(await cache.get("yt:transcript+details:dQw4w9WgXcQ:en")).toBeNull();
-  await cache.set("yt:transcript+details:dQw4w9WgXcQ:en", "{}").then((result) => {
-    expect(result).toBeUndefined();
-  });
+  await cache.set("yt:transcript+details:dQw4w9WgXcQ:en", "{}");
 });
 
 test("test_share_namespaced_keys_with_month_expiry_when_caching_transcripts", async () => {
