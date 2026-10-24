@@ -65,6 +65,7 @@ export interface TweetData {
 
 export interface RenderResult {
   buffer: Buffer;
+  failedUrls: string[];
   height: number;
   width: number;
 }
@@ -73,6 +74,7 @@ export type { Theme } from "@/services/render/themes";
 
 const FONT_FAMILIES = ["Inter", "Noto Sans", "Noto Sans CJK", "Noto Sans Math"];
 const IMAGE_FETCH_TIMEOUT_MS = 5000;
+const IMAGE_FETCH_ATTEMPTS = 2;
 
 // The napi build ignores `devicePixelRatio` when both width and height are
 // given, so the 2x output scale is applied to the tree itself instead.
@@ -129,34 +131,40 @@ async function getRenderer(): Promise<Renderer> {
 }
 
 async function prefetchImages(urls: Iterable<string>): Promise<Map<string, Uint8Array>> {
-  const entries = await Promise.all(
-    [...urls].map(async (url) => {
-      try {
-        // Abort signal bounds headers AND body; ky's `timeout` alone only
-        // covers time-to-headers, so arrayBuffer() could hang on a stalled stream.
-        const response = await http(url, {
-          signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const data = new Uint8Array(await response.arrayBuffer());
-        // A successful response can contain an HTML error page, which makes Takumi abort the card.
-        // Use sharp because extracted Twemoji assets are SVG, which Bun.Image cannot decode.
-        await sharp(data).metadata();
-
-        return [url, data] as const;
-      } catch (error) {
-        logger.warn({ error, url }, "Failed to load image for tweet card");
-
-        return null;
-      }
-    }),
-  );
+  const entries = await Promise.all([...urls].map(prefetchImage));
 
   return new Map(entries.filter((entry) => entry !== null));
+}
+
+async function prefetchImage(url: string, attempt = 1): Promise<readonly [string, Uint8Array] | null> {
+  try {
+    // Abort signal bounds headers AND body; ky's `timeout` alone only
+    // covers time-to-headers, so arrayBuffer() could hang on a stalled stream.
+    const response = await http(url, {
+      signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = new Uint8Array(await response.arrayBuffer());
+    // A successful response can contain an HTML error page, which makes Takumi abort the card.
+    // Use sharp because extracted Twemoji assets are SVG, which Bun.Image cannot decode.
+    await sharp(data).metadata();
+
+    return [url, data] as const;
+  } catch (error) {
+    // One retry recovers a transient CDN timeout or error page; without it the
+    // degraded card is written to the S3 cache and served on every later request.
+    if (attempt < IMAGE_FETCH_ATTEMPTS) {
+      return await prefetchImage(url, attempt + 1);
+    }
+
+    logger.warn({ err: error, url }, "Failed to load image for tweet card");
+
+    return null;
+  }
 }
 
 export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<RenderResult> {
@@ -201,6 +209,7 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
 
   return {
     buffer,
+    failedUrls: [...failedUrls],
     height,
     width: LAYOUT.WIDTH * SCALE_FACTOR,
   };

@@ -215,6 +215,7 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
 
             return {
               buffer,
+              failedUrls: [],
               width: metadata.width ?? 1100,
               height: metadata.height ?? 1200,
             } satisfies RenderResult;
@@ -249,6 +250,19 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
         try: async () => await renderTweetImage(tweetData, theme),
         catch: (error) => new Error(`Failed to render tweet image: ${String(error)}`),
       });
+
+      // A card that lost an image to a transient fetch must not become the
+      // cached result: every later /q or theme toggle would serve the hole.
+      if (result.failedUrls.length > 0) {
+        yield* Effect.logWarning("Skipping S3 write for tweet image with failed image fetches", {
+          failedUrls: result.failedUrls,
+          s3Path,
+          theme,
+          tweetId,
+        });
+
+        return result;
+      }
 
       const uploaded = yield* Effect.tryPromise({
         try: async () => {

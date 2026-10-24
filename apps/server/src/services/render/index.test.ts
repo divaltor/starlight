@@ -145,3 +145,114 @@ test("renders both bottom corner pixels as white on a light card", async () => {
     await server.stop(true);
   }
 });
+
+test("retries a failed media fetch so the card still shows the image", async () => {
+  const { renderTweetImage } = await import("@/services/render");
+
+  const red = await sharp({ create: { background: "#ff0000", channels: 3, height: 8, width: 8 } })
+    .jpeg()
+    .toBuffer();
+
+  const blue = await sharp({ create: { background: "#0000ff", channels: 3, height: 8, width: 8 } })
+    .jpeg()
+    .toBuffer();
+
+  let mediaAttempts = 0;
+
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const { pathname } = new URL(request.url);
+
+      if (pathname !== "/media.jpg") {
+        return new Response(blue, { headers: { "content-type": "image/jpeg" } });
+      }
+
+      mediaAttempts += 1;
+
+      return mediaAttempts === 1
+        ? new Response("temporary outage", { status: 503 })
+        : new Response(red, { headers: { "content-type": "image/jpeg" } });
+    },
+  });
+
+  try {
+    const base = server.url.toString();
+
+    const result = await renderTweetImage(
+      {
+        authorAvatarUrl: `${base}avatar.jpg`,
+        authorName: "Test author",
+        authorUsername: "test",
+        media: { photos: [{ url: `${base}media.jpg`, width: 300, height: 150 }] },
+        text: "The card keeps its media",
+      },
+      "light",
+    );
+
+    expect(result.failedUrls).toEqual([]);
+    expect(
+      await countPixels(result.buffer, (pixel) => pixel[0] > 200 && pixel[1] < 60 && pixel[2] < 60),
+    ).toBeGreaterThan(1000);
+  } finally {
+    await server.stop(true);
+  }
+});
+
+// The cache layer skips its write when this list is non-empty, so it must name
+// the images the card lost instead of reporting a clean render.
+test("reports the media URL when the image never loads", async () => {
+  const { renderTweetImage } = await import("@/services/render");
+
+  const blue = await sharp({ create: { background: "#0000ff", channels: 3, height: 8, width: 8 } })
+    .jpeg()
+    .toBuffer();
+
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const { pathname } = new URL(request.url);
+
+      return pathname === "/media.jpg"
+        ? new Response("permanent outage", { status: 503 })
+        : new Response(blue, { headers: { "content-type": "image/jpeg" } });
+    },
+  });
+
+  try {
+    const base = server.url.toString();
+    const mediaUrl = `${base}media.jpg`;
+
+    const result = await renderTweetImage(
+      {
+        authorAvatarUrl: `${base}avatar.jpg`,
+        authorName: "Test author",
+        authorUsername: "test",
+        media: { photos: [{ url: mediaUrl, width: 300, height: 150 }] },
+        text: "The card loses its media",
+      },
+      "light",
+    );
+
+    expect(result.failedUrls).toEqual([mediaUrl]);
+    expect(await new Bun.Image(result.buffer).metadata()).toMatchObject({
+      height: result.height,
+      width: result.width,
+    });
+  } finally {
+    await server.stop(true);
+  }
+});
+
+async function countPixels(buffer: Buffer, predicate: (pixel: [number, number, number]) => boolean): Promise<number> {
+  const { data, info } = await sharp(buffer).raw().toBuffer({ resolveWithObject: true });
+  let count = 0;
+
+  for (let offset = 0; offset < data.length; offset += info.channels) {
+    if (predicate([data[offset]!, data[offset + 1]!, data[offset + 2]!])) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
