@@ -8,7 +8,7 @@
     "build": "bun run -b tsdown",
     "lint": "bun check",
     "typecheck": "bun check",
-    "format": "oxfmt",
+    "format": "bun fmt",
     "test": "bun test",
     "queue:classify": "bun run src/scripts/classification.ts",
     "queue:embeddings": "bun run src/scripts/embeddings.ts"

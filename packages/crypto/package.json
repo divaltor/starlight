@@ -15,7 +15,7 @@
     "build": "bun run -b tsdown",
     "lint": "bun check -b",
     "typecheck": "bun check -b",
-    "format": "oxfmt"
+    "format": "bun fmt"
   },
   "devDependencies": {
     "tsdown": "catalog:"

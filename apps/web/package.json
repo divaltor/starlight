@@ -8,7 +8,7 @@
     "dev": "bunx --bun vite dev --port=3001",
     "lint": "bun check",
     "typecheck": "bun check",
-    "format": "oxfmt"
+    "format": "bun fmt"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "4.3.5",

@@ -16,7 +16,7 @@
     "lint": "bun check -b",
     "typecheck": "bun check -b",
     "test": "bun test src",
-    "format": "oxfmt",
+    "format": "bun fmt",
     "db:deploy": "prisma --config prisma.config.ts migrate deploy",
     "db:generate": "prisma --config prisma.config.ts generate",
     "db:migrate": "prisma --config prisma.config.ts migrate dev"

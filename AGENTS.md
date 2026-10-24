@@ -71,6 +71,7 @@ Services follow the namespace-wrapped module anatomy in `.opencode/skills/effect
 
 - MUST use `bun` for package management.
 - Run `lint` command to check for linting errors, then run `typecheck` for type errors. DON'T use bare `tsc` from the repo root and DON'T run `format` — it's triggered automatically by other pipelines.
+- `bun fmt` formats in scripts and the pre-commit hook; it reads `.oxfmtrc.jsonc`. `oxfmt` stays installed only for editor LSP format-on-save, so don't call it from scripts or hooks.
 - ALWAYS use scripts from package.json to create and apply migrations via Prisma. Never write migration files manually.
 - Never hand-edit `packages/utils/src/generated/prisma`; regenerate with `bun run db:generate`.
 - Follow conventional commits: `type(scope): summary` with types `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
