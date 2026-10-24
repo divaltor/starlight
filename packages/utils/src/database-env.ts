@@ -32,7 +32,8 @@ const databaseEnv = createEnv({
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
-  skipValidation: false,
+  // bun test sets NODE_ENV=test; unit tests import prisma without configuring it.
+  skipValidation: process.env.NODE_ENV === "test",
 });
 
 export default databaseEnv;
