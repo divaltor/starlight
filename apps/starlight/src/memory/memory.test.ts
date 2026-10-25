@@ -2,7 +2,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { expect, test } from "bun:test";
 import { PrismaClient } from "@starlight/utils/generated/prisma/client";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { Prompt } from "@/context/prompt";
 import { Hindsight } from "@/memory/hindsight";
 import { HindsightRetention } from "@/memory/hindsight-retention";
 import { Memory } from "@/memory/memory";
@@ -58,24 +57,6 @@ test.skipIf(!databaseUrl)("recalls only the current conversation bank", async ()
 
   try {
     await client.chat.create({ data: { id: chatId } });
-    await client.conversationLane.create({ data: { assistantId, chatId, threadKey } });
-
-    const context = await client.conversationContext.create({
-      data: {
-        assistantId,
-        chatId,
-        generation: 0,
-        modelProfileFingerprint: Prompt.profileFingerprint([]),
-        summaryThroughInputSequence: 1n,
-        threadKey,
-        ...Prompt.stableSeed(Prompt.renderEnvelope({ toolProfile: [] }), ""),
-      },
-    });
-
-    await client.conversationLane.update({
-      where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey } },
-      data: { activeContextId: context.id },
-    });
     await client.memoryNamespace.create({
       data: {
         chatId,
@@ -102,7 +83,6 @@ test.skipIf(!databaseUrl)("recalls only the current conversation bank", async ()
   } finally {
     await runtime.dispose();
     await client.memoryNamespace.deleteMany({ where: { ownerKey } });
-    await client.conversationLane.deleteMany({ where: { assistantId, chatId, threadKey } });
     await client.chat.deleteMany({ where: { id: chatId } });
     await client.$disconnect();
   }
@@ -138,24 +118,6 @@ test.skipIf(!databaseUrl)("propagates permanent Hindsight recall failures", asyn
 
   try {
     await client.chat.create({ data: { id: chatId } });
-    await client.conversationLane.create({ data: { assistantId, chatId, threadKey } });
-
-    const context = await client.conversationContext.create({
-      data: {
-        assistantId,
-        chatId,
-        generation: 0,
-        modelProfileFingerprint: Prompt.profileFingerprint([]),
-        summaryThroughInputSequence: 1n,
-        threadKey,
-        ...Prompt.stableSeed(Prompt.renderEnvelope({ toolProfile: [] }), ""),
-      },
-    });
-
-    await client.conversationLane.update({
-      where: { assistantId_chatId_threadKey: { assistantId, chatId, threadKey } },
-      data: { activeContextId: context.id },
-    });
     await client.memoryNamespace.create({
       data: {
         chatId,
@@ -182,7 +144,6 @@ test.skipIf(!databaseUrl)("propagates permanent Hindsight recall failures", asyn
   } finally {
     await runtime.dispose();
     await client.memoryNamespace.deleteMany({ where: { ownerKey } });
-    await client.conversationLane.deleteMany({ where: { assistantId, chatId, threadKey } });
     await client.chat.deleteMany({ where: { id: chatId } });
     await client.$disconnect();
   }

@@ -1,19 +1,15 @@
-import { Context, Effect, Layer } from "effect";
 import { z } from "zod";
-import type { ChatTools } from "@/ai/chat-tools";
-import { Model } from "@/ai/model";
 import { TelegramDelivery } from "@/conversation/delivery";
 import personaPromptText from "@/ai/persona-prompt.txt";
 import systemPromptText from "@/ai/system-prompt.txt";
 
 export namespace ChatReply {
   export const systemPrompt = `${personaPromptText}\n\n${systemPromptText}`;
-  export const outputSchemaVersion = "chat-reply-v2";
   export const maxOutputTokens = 4096;
   export const maxToolOutputBytes = 16 * 1024;
   export const maxToolCalls = 3;
-  const groupReplyLimit = 3;
-  const privateReplyLimit = 5;
+  export const groupReplyLimit = 3;
+  export const privateReplyLimit = 5;
 
   const reactionEmojiSchema = z.enum(TelegramDelivery.reactionEmojis);
 
@@ -31,61 +27,10 @@ export namespace ChatReply {
     }),
   ]);
 
+  // The widest limit; final_output narrows it to the chat's limit per run.
   export const responseSchema = z.object({
-    replies: z.array(actionSchema).min(1).max(groupReplyLimit),
+    replies: z.array(actionSchema).min(1).max(privateReplyLimit),
   });
 
   export type Response = z.infer<typeof responseSchema>;
-
-  export interface GenerateInput {
-    readonly cacheBase?: string;
-    readonly cachePrefixMessageCount?: number;
-    readonly instructions?: string;
-    // Private chats keep cost/usage telemetry but never export input/output content.
-    readonly private?: boolean;
-    readonly messages: readonly Model.Message[];
-    readonly promptCacheKey?: string;
-    readonly sessionId: string;
-    readonly telemetryTraceName?: string;
-    readonly telemetryUserId?: string;
-    readonly toolset: ChatTools.Resolved;
-  }
-
-  export type GenerateResult = Model.GenerationResult<Response>;
-
-  export interface Interface {
-    readonly generate: (input: GenerateInput) => Effect.Effect<GenerateResult, Model.Error>;
-  }
-
-  export class Service extends Context.Service<Service, Interface>()("starlight/ChatReply") {}
-
-  export const layer: Layer.Layer<Service, never, Model.Service> = Layer.effect(
-    Service,
-    Effect.gen(function* layer() {
-      const model = yield* Model.Service;
-
-      return Service.of({
-        generate: Effect.fn("ChatReply.generate")(function* generate(input) {
-          const replyLimit = input.private === true ? privateReplyLimit : groupReplyLimit;
-
-          return yield* model.generate({
-            cacheBase: input.cacheBase,
-            cachePrefixMessageCount: input.cachePrefixMessageCount,
-            instructions: `${input.instructions ?? systemPrompt}\n\nReply-item limit for this chat: ${replyLimit}.`,
-            maxOutputTokens,
-            maxToolOutputBytes,
-            maxToolCalls: Object.keys(input.toolset.tools).length > 0 ? maxToolCalls : 0,
-            messages: input.messages,
-            outputSchema: responseSchema.extend({ replies: z.array(actionSchema).min(1).max(replyLimit) }),
-            private: input.private,
-            promptCacheKey: input.promptCacheKey,
-            sessionId: input.sessionId,
-            telemetryTraceName: input.telemetryTraceName,
-            telemetryUserId: input.telemetryUserId,
-            tools: input.toolset.tools,
-          });
-        }),
-      });
-    }),
-  );
 }

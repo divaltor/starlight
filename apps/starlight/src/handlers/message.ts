@@ -85,37 +85,39 @@ async function admitMessage(
 
       const decision =
         options.trigger === "random" && text !== null && message.sticker === undefined
-          ? yield* dialogueContinuation
-              .evaluate({
-                key: { assistantId: ctx.me.id, chatId: ctx.chat!.id, threadKey },
-                messageId: message.message_id,
-                replyTo: replyTo
-                  ? {
-                      messageId: replyTo.message_id,
-                      senderFirstName: replyTo.from?.first_name ?? replyTo.sender_chat?.title ?? "unknown",
-                      senderId: replyTo.from?.id ?? null,
-                      text: TelegramMessageText.withEntityLinks(replyTo) ?? "[non-text message]",
-                    }
-                  : null,
-                senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
-                senderId: message.from?.id ?? null,
-                text,
-                trigger: options.trigger,
-              })
-              .pipe(
-                Effect.catch((error) =>
-                  Effect.logWarning("Group response decision evaluation failed").pipe(
-                    Effect.annotateLogs({
-                      chatId: ctx.chat!.id,
-                      errorTag: error._tag,
-                      messageId: message.message_id,
-                      threadKey,
-                      trigger: options.trigger,
-                    }),
-                    Effect.as<DialogueContinuation.Decision>({ type: "silence" }),
-                  ),
+          ? yield* conversation.recent({ assistantId: ctx.me.id, chatId: ctx.chat!.id, threadKey }).pipe(
+              Effect.flatMap((recent) =>
+                dialogueContinuation.evaluate({
+                  key: { assistantId: ctx.me.id, chatId: ctx.chat!.id, threadKey },
+                  messageId: message.message_id,
+                  recent,
+                  replyTo: replyTo
+                    ? {
+                        messageId: replyTo.message_id,
+                        senderFirstName: replyTo.from?.first_name ?? replyTo.sender_chat?.title ?? "unknown",
+                        senderId: replyTo.from?.id ?? null,
+                        text: TelegramMessageText.withEntityLinks(replyTo) ?? "[non-text message]",
+                      }
+                    : null,
+                  senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
+                  senderId: message.from?.id ?? null,
+                  text,
+                  trigger: "random",
+                }),
+              ),
+              Effect.catch((error) =>
+                Effect.logWarning("Group response decision evaluation failed").pipe(
+                  Effect.annotateLogs({
+                    chatId: ctx.chat!.id,
+                    errorTag: error._tag,
+                    messageId: message.message_id,
+                    threadKey,
+                    trigger: options.trigger,
+                  }),
+                  Effect.as<DialogueContinuation.Decision>({ type: "silence" }),
                 ),
-              )
+              ),
+            )
           : baseline;
 
       if (options.trigger) {

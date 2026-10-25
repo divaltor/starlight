@@ -1,10 +1,9 @@
 import { experimental_decide } from "ai";
 import type { Experimental_DecisionModel } from "ai";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
-import { ChatReply } from "@/ai/chat-reply";
 import type { TelegramDelivery } from "@/conversation/delivery";
 import { ConversationKey } from "@/conversation/key";
-import { StoredPayloadSchema } from "@/conversation/run-artifacts";
+import type { LaneDoc } from "@/conversation/lane-doc";
 import { Database } from "@/services/database";
 
 export namespace DialogueContinuation {
@@ -14,6 +13,7 @@ export namespace DialogueContinuation {
   export interface Input {
     readonly key: ConversationKey.Value;
     readonly messageId: number;
+    readonly recent: readonly LaneDoc.Recent[];
     readonly replyTo: Pick<Input, "messageId" | "senderFirstName" | "senderId" | "text"> | null;
     readonly senderFirstName: string;
     readonly senderId: number | null;
@@ -50,39 +50,6 @@ export namespace DialogueContinuation {
         const evaluate = Effect.fn("DialogueContinuation.evaluate")(function* evaluate(input: Input) {
           const key = ConversationKey.toDb(input.key);
 
-          const deliveredReplies = yield* database
-            .query(
-              async (client) =>
-                await client.conversationRunAction.findMany({
-                  where: {
-                    deliveryStatus: "delivered",
-                    telegramMessageId: { lt: input.messageId },
-                    type: "text",
-                    run: key,
-                  },
-                  orderBy: { telegramMessageId: "desc" },
-                  select: { payload: true, telegramMessageId: true },
-                  take: RECENT_MESSAGE_LIMIT,
-                }),
-            )
-            .pipe(Effect.mapError((cause) => EvaluationError.fromCause(cause)));
-
-          const recentInputs = yield* database
-            .query(
-              async (client) =>
-                await client.conversationInput.findMany({
-                  where: {
-                    ...key,
-                    sourceMessageId: { lt: input.messageId },
-                  },
-                  orderBy: [{ sourceMessageId: "desc" }, { admittedRevision: "desc" }],
-                  distinct: ["sourceMessageId"],
-                  select: { payload: true, sourceMessageId: true },
-                  take: RECENT_MESSAGE_LIMIT,
-                }),
-            )
-            .pipe(Effect.mapError((cause) => EvaluationError.fromCause(cause)));
-
           const chat = yield* database
             .query(
               async (client) =>
@@ -98,37 +65,8 @@ export namespace DialogueContinuation {
             ...(chat.isPrivate && { "starlight.private": true }),
           });
 
-          const recentExchange = [
-            ...recentInputs.map((item) => {
-              const payload = Schema.decodeUnknownSync(StoredPayloadSchema)(item.payload);
-
-              return {
-                messageId: item.sourceMessageId,
-                replyToMessageId: payload.replyToMessageId,
-                repliedText: payload.repliedText,
-                speaker: payload.senderFirstName,
-                speakerId: payload.senderId?.toString() ?? "unknown",
-                text: payload.text || "[non-text message]",
-              };
-            }),
-            ...deliveredReplies.flatMap((action) => {
-              const parsed = ChatReply.actionSchema.parse(action.payload);
-
-              return parsed.type === "text"
-                ? [
-                    {
-                      messageId: action.telegramMessageId!,
-                      replyToMessageId: parsed.replyTo ?? null,
-                      repliedText: null,
-                      speaker: "Starlight",
-                      speakerId: input.key.assistantId.toString(),
-                      text: parsed.text,
-                    },
-                  ]
-                : [];
-            }),
-          ]
-            .toSorted((left, right) => left.messageId - right.messageId)
+          const recentExchange = input.recent
+            .filter((message) => message.messageId < input.messageId)
             .slice(-RECENT_MESSAGE_LIMIT);
 
           const state = {

@@ -80,41 +80,6 @@ async function runDecision(options: {
           // oxlint-disable-next-line typescript/promise-function-async -- settled fixture promise needs no async wrapper
           findUniqueOrThrow: () => Promise.resolve({ isPrivate: options.isPrivate ?? false }),
         },
-        conversationInput: {
-          // oxlint-disable-next-line typescript/promise-function-async -- settled fixture promise needs no async wrapper
-          findMany: () =>
-            Promise.resolve(
-              (options.messageIds ?? []).map((messageId) => ({
-                sourceMessageId: messageId,
-                payload: {
-                  addressed: false,
-                  date: 1,
-                  editDate: null,
-                  forwardOrigin: null,
-                  messageId,
-                  replyToMessageId: 40,
-                  repliedText: "Вопрос",
-                  senderFirstName: "Vlad",
-                  senderId: 7,
-                  text: `Сообщение ${messageId}`,
-                },
-              })),
-            ),
-        },
-        conversationRunAction: {
-          // oxlint-disable-next-line typescript/promise-function-async -- settled fixture promise needs no async wrapper
-          findMany: () =>
-            Promise.resolve(
-              options.replyMessageId === undefined
-                ? []
-                : [
-                    {
-                      telegramMessageId: options.replyMessageId,
-                      payload: { type: "text", text: "Первый ответ" },
-                    },
-                  ],
-            ),
-        },
       },
     }),
   );
@@ -165,6 +130,28 @@ async function runDecision(options: {
         replyTo: { messageId: 50, senderId: 42, senderFirstName: "Starlight", text: "Первый ответ" },
         senderFirstName: "Vlad",
         senderId: 7,
+        recent: [
+          ...(options.replyMessageId === undefined
+            ? []
+            : [
+                {
+                  messageId: options.replyMessageId,
+                  repliedText: null,
+                  replyToMessageId: null,
+                  speaker: "Starlight",
+                  speakerId: "42",
+                  text: "Первый ответ",
+                },
+              ]),
+          ...(options.messageIds ?? []).map((messageId) => ({
+            messageId,
+            repliedText: "Вопрос",
+            replyToMessageId: 40,
+            speaker: "Vlad",
+            speakerId: "7",
+            text: `Сообщение ${messageId}`,
+          })),
+        ].toSorted((left, right) => left.messageId - right.messageId),
         text: "А почему?",
         trigger: "random",
       });

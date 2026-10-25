@@ -19,6 +19,8 @@ export namespace ConversationKey {
     return `v1/${key.assistantId}/${key.chatId}/${key.threadKey}`;
   }
 
+  export type Db = ReturnType<typeof toDb>;
+
   // Prisma stores the lane identity columns as BigInt; convert once here instead of
   // re-deriving the shape at every query builder.
   export function toDb(key: Value) {
@@ -26,19 +28,6 @@ export namespace ConversationKey {
       assistantId: BigInt(key.assistantId),
       chatId: BigInt(key.chatId),
       threadKey: key.threadKey,
-    };
-  }
-
-  // Sole remaining use: BullMQ job payloads are JSON, so BigInt rows must become numbers.
-  export function fromDb(row: {
-    readonly assistantId: bigint;
-    readonly chatId: bigint;
-    readonly threadKey: number;
-  }): Value {
-    return {
-      assistantId: Number(row.assistantId),
-      chatId: Number(row.chatId),
-      threadKey: row.threadKey,
     };
   }
 }
