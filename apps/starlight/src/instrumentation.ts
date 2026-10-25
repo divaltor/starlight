@@ -60,7 +60,7 @@ export function initTelemetry(backends: TelemetryConfig): void {
       new BatchSpanProcessor(
         new OTLPTraceExporter({
           url: signalEndpoint(backends.otlp.endpoint, "traces"),
-          headers: backends.otlp.headers,
+          headers: { ...backends.otlp.headers, "X-Axiom-Dataset": backends.otlp.axiomDatasets.traces },
         }),
       ),
     );
@@ -76,7 +76,10 @@ export function initTelemetry(backends: TelemetryConfig): void {
         new PeriodicExportingMetricReader({
           exporter: new OTLPMetricExporter({
             url: signalEndpoint(backends.otlp.endpoint, "metrics"),
-            headers: backends.otlp.headers,
+            headers: {
+              ...backends.otlp.headers,
+              "X-Axiom-Metrics-Dataset": backends.otlp.axiomDatasets.metrics,
+            },
           }),
         }),
       ],
@@ -109,7 +112,7 @@ export function initTelemetry(backends: TelemetryConfig): void {
         new BatchLogRecordProcessor({
           exporter: new OTLPLogExporter({
             url: signalEndpoint(backends.otlp.endpoint, "logs"),
-            headers: backends.otlp.headers,
+            headers: { ...backends.otlp.headers, "X-Axiom-Dataset": backends.otlp.axiomDatasets.logs },
           }),
         }),
       ],

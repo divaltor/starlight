@@ -12,6 +12,11 @@ export interface LangfuseConfig {
 export interface OtlpConfig {
   readonly endpoint: string;
   readonly headers: Record<string, string>;
+  readonly axiomDatasets: {
+    readonly traces: string;
+    readonly logs: string;
+    readonly metrics: string;
+  };
 }
 
 /**
@@ -64,6 +69,12 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
 
       OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
       OTEL_EXPORTER_OTLP_HEADERS: z.string().default(""),
+
+      // Axiom requires a dedicated dataset per signal, sent as a header; other
+      // OTLP backends (including the shared Alloy gateway) ignore them.
+      AXIOM_TRACES_DATASET: z.string().default("starlight-traces"),
+      AXIOM_LOGS_DATASET: z.string().default("starlight-logs"),
+      AXIOM_METRICS_DATASET: z.string().default("starlight-metrics"),
     },
     runtimeEnv,
     emptyStringAsUndefined: true,
@@ -88,6 +99,11 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
         : {
             endpoint: raw.OTEL_EXPORTER_OTLP_ENDPOINT,
             headers: parseOtlpHeaders(raw.OTEL_EXPORTER_OTLP_HEADERS),
+            axiomDatasets: {
+              traces: raw.AXIOM_TRACES_DATASET,
+              logs: raw.AXIOM_LOGS_DATASET,
+              metrics: raw.AXIOM_METRICS_DATASET,
+            },
           },
   };
 }
