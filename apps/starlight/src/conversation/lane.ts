@@ -223,7 +223,7 @@ export namespace Lane {
     return { duplicate: false };
   }
 
-  async function createLane(tx: Tx, agent: AgentChange) {
+  export async function createLane(tx: Tx, agent: AgentChange) {
     const created = await tx.createConversation({ ownership: { kind: "ownerless" } });
     await configure(tx, created.id, agent);
 
@@ -354,7 +354,7 @@ export namespace Lane {
     return batch.map((item) => ({ text: Prompt.renderLiveMessage(item.payload, seen), type: "text" as const }));
   }
 
-  function batchEntry(batch: readonly LaneDoc.Item[], lane: LaneDoc.Value): EntryDraft {
+  export function batchEntry(batch: readonly LaneDoc.Item[], lane: LaneDoc.Value): EntryDraft {
     const message: UserMessage = { content: renderBatch(batch, lane), role: "user", timestamp: Date.now() };
 
     return {

@@ -57,6 +57,10 @@ The `starlight.delivery` task commits its intent before every send.
 
 Finalized batches write canonical message observations to PostgreSQL, unique per message revision. The memory worker scans every 30 seconds and flushes a lane after 15 minutes idle, 8K pending characters, or a correction. A flush sends one full canonical transcript as one `replace` item to the lane's stable `transcript` document.
 
+## Legacy import (`conversation/legacy-import.ts`)
+
+The Pi migration moved the previous engine's tables to the `legacy_conversation` schema. At startup, before the bot takes updates, every lane not yet in Pi is rebuilt from it: each transcript run becomes a batch entry and a `starlight.legacy-reply` entry shaped like a final_output round, and the old active context's frozen memory becomes a compaction summary heading the turns that context held. Lane documents are replayed through the live `LaneDoc` functions. Memory observations and Hindsight banks carry over unchanged.
+
 ## Known limitations
 
 - `@netzlabor/pi-durable-postgres` is a community package pinned at 0.2.0 with a local patch; an upstream release for Pi ≥ 1.2 should replace the patch.

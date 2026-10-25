@@ -14,6 +14,7 @@ import { Dispatch } from "@/conversation/dispatch";
 import { ConversationKey } from "@/conversation/key";
 import { Lane } from "@/conversation/lane";
 import { LaneDoc } from "@/conversation/lane-doc";
+import { LegacyImport } from "@/conversation/legacy-import";
 import type { InputPayload } from "@/conversation/run-artifacts";
 import { Reply } from "@/conversation/reply";
 import { Memory } from "@/memory/memory";
@@ -96,6 +97,12 @@ export namespace Conversation {
       const run = Effect.runPromiseWith(yield* Effect.context());
       const profile = ModelProfile.selected;
       const timing = { maxWaitMs: options.maxWaitMs, quietMs: options.quietMs };
+
+      const agent = {
+        model: { modelId: profile.model, provider: OpenRouter.providerId },
+        thinkingLevel: "low",
+      } as const;
+
       const research = yield* chatTools.resolve(chatTools.availableProfile).pipe(Effect.orDie);
 
       const log: Lane.Deps["log"] = (level, message, fields) => {
@@ -243,6 +250,11 @@ export namespace Conversation {
         }),
       );
 
+      // Before admissions start, so no new message can open a lane its history has not reached.
+      yield* LegacyImport.run(harness, { agent, timing }).pipe(
+        Effect.mapError((cause) => new StartupError({ cause, message: "Failed to import legacy conversations" })),
+      );
+
       // The first failed Storage call (e.g. a dropped connection) closes the harness for good; reopening resumes
       // from what was committed. Forked after the finalizer, so shutdown stops it before closing the harness.
       yield* Effect.forkScoped(
@@ -332,7 +344,7 @@ export namespace Conversation {
             await harness.commit(
               async (tx) =>
                 await Lane.admit(tx, {
-                  agent: { model: { modelId: profile.model, provider: OpenRouter.providerId }, thinkingLevel: "low" },
+                  agent,
                   item: { payload: input.payload, senderUserId },
                   key: input.key,
                   now: Date.now(),

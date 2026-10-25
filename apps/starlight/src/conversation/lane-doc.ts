@@ -64,18 +64,7 @@ export namespace LaneDoc {
     scope: "conversation",
     history: "latest",
     fork: "initial",
-    initial: () => ({
-      admittedKeys: [],
-      firstPendingAt: null,
-      key: null,
-      pending: [],
-      recent: [],
-      recentReplies: [],
-      runner: null,
-      seenMessageIds: [],
-      sleeper: null,
-      wakeAt: null,
-    }),
+    initial: empty,
     checkpointWhen: (_value, _ops, info) => info.deltasSinceBase >= 64,
   });
 
@@ -88,6 +77,21 @@ export namespace LaneDoc {
     initial: () => ({ conversationId: null }),
     checkpointWhen: () => true,
   });
+
+  export function empty(): Value & JsonObject {
+    return {
+      admittedKeys: [],
+      firstPendingAt: null,
+      key: null,
+      pending: [],
+      recent: [],
+      recentReplies: [],
+      runner: null,
+      seenMessageIds: [],
+      sleeper: null,
+      wakeAt: null,
+    };
+  }
 
   // Returns false for a duplicate update or an unchanged message revision.
   export function admit(lane: Draft, item: Item, updateId: number, now: number, timing: Timing): boolean {

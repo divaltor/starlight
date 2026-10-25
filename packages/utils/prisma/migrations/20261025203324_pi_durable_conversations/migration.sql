@@ -1,20 +1,10 @@
 /*
   Warnings:
 
+  - The `conversation_*` tables move to the `legacy_conversation` schema, which the bot imports into Pi.
   - You are about to drop the column `source_event_sequence` on the `memory_observations` table. All the data in the column will be lost.
   - You are about to drop the column `source_input_id` on the `memory_observations` table. All the data in the column will be lost.
   - You are about to drop the column `source_run_id` on the `memory_observations` table. All the data in the column will be lost.
-  - You are about to drop the `conversation_checkpoint_attempts` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `conversation_context_turns` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `conversation_contexts` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `conversation_inputs` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `conversation_lanes` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `conversation_run_actions` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `conversation_run_inputs` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `conversation_runs` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `conversation_tool_calls` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `conversation_transcript_turns` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `conversation_wake_outbox` table. If the table is not empty, all the data it contains will be lost.
   - A unique constraint covering the columns `[namespace_id,source_message_id,source_revision]` on the table `memory_observations` will be added. If there are existing duplicate values, this will fail.
   - Added the required column `source_message_id` to the `memory_observations` table without a default value. This is not possible if the table is not empty.
   - Added the required column `source_revision` to the `memory_observations` table without a default value. This is not possible if the table is not empty.
@@ -92,65 +82,28 @@ DROP COLUMN "source_run_id",
 ALTER COLUMN "source_message_id" SET NOT NULL,
 ALTER COLUMN "source_revision" SET NOT NULL;
 
--- DropTable
-DROP TABLE "conversation_checkpoint_attempts";
-
--- DropTable
-DROP TABLE "conversation_context_turns";
-
--- DropTable
-DROP TABLE "conversation_contexts";
-
--- DropTable
-DROP TABLE "conversation_inputs";
-
--- DropTable
-DROP TABLE "conversation_lanes";
-
--- DropTable
-DROP TABLE "conversation_run_actions";
-
--- DropTable
-DROP TABLE "conversation_run_inputs";
-
--- DropTable
-DROP TABLE "conversation_runs";
-
--- DropTable
-DROP TABLE "conversation_tool_calls";
-
--- DropTable
-DROP TABLE "conversation_transcript_turns";
-
--- DropTable
-DROP TABLE "conversation_wake_outbox";
-
--- DropEnum
-DROP TYPE "ConversationActionType";
-
--- DropEnum
-DROP TYPE "ConversationCheckpointReason";
-
--- DropEnum
-DROP TYPE "ConversationCheckpointStatus";
-
--- DropEnum
-DROP TYPE "ConversationContextRole";
-
--- DropEnum
-DROP TYPE "ConversationContextStatus";
-
--- DropEnum
-DROP TYPE "ConversationDeliveryStatus";
-
--- DropEnum
-DROP TYPE "ConversationRunStatus";
-
--- DropEnum
-DROP TYPE "ConversationToolCallStatus";
-
--- DropEnum
-DROP TYPE "ConversationTranscriptKind";
+-- Keep the old conversation engine's history out of Prisma's schema; the bot imports it into Pi once.
+CREATE SCHEMA "legacy_conversation";
+ALTER TABLE "conversation_checkpoint_attempts" SET SCHEMA "legacy_conversation";
+ALTER TABLE "conversation_context_turns" SET SCHEMA "legacy_conversation";
+ALTER TABLE "conversation_contexts" SET SCHEMA "legacy_conversation";
+ALTER TABLE "conversation_inputs" SET SCHEMA "legacy_conversation";
+ALTER TABLE "conversation_lanes" SET SCHEMA "legacy_conversation";
+ALTER TABLE "conversation_run_actions" SET SCHEMA "legacy_conversation";
+ALTER TABLE "conversation_run_inputs" SET SCHEMA "legacy_conversation";
+ALTER TABLE "conversation_runs" SET SCHEMA "legacy_conversation";
+ALTER TABLE "conversation_tool_calls" SET SCHEMA "legacy_conversation";
+ALTER TABLE "conversation_transcript_turns" SET SCHEMA "legacy_conversation";
+ALTER TABLE "conversation_wake_outbox" SET SCHEMA "legacy_conversation";
+ALTER TYPE "ConversationActionType" SET SCHEMA "legacy_conversation";
+ALTER TYPE "ConversationCheckpointReason" SET SCHEMA "legacy_conversation";
+ALTER TYPE "ConversationCheckpointStatus" SET SCHEMA "legacy_conversation";
+ALTER TYPE "ConversationContextRole" SET SCHEMA "legacy_conversation";
+ALTER TYPE "ConversationContextStatus" SET SCHEMA "legacy_conversation";
+ALTER TYPE "ConversationDeliveryStatus" SET SCHEMA "legacy_conversation";
+ALTER TYPE "ConversationRunStatus" SET SCHEMA "legacy_conversation";
+ALTER TYPE "ConversationToolCallStatus" SET SCHEMA "legacy_conversation";
+ALTER TYPE "ConversationTranscriptKind" SET SCHEMA "legacy_conversation";
 
 -- CreateIndex
 CREATE UNIQUE INDEX "memory_observations_namespace_id_source_message_id_source_r_key" ON "memory_observations"("namespace_id", "source_message_id", "source_revision");
