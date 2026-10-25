@@ -357,6 +357,7 @@ export namespace Conversation {
       });
 
       const recent = Effect.fn("Conversation.recent")(function* recent(key: ConversationKey.Value) {
+        // The first read after a dropped connection fails and closes the harness; the retry reads the reopened one.
         return yield* Effect.tryPromise({
           try: async () => {
             const index = await harness.snapshot(LaneDoc.index, ConversationKey.format(key), BACKGROUND_CONTEXT);
@@ -368,7 +369,7 @@ export namespace Conversation {
             return lane?.recent ?? [];
           },
           catch: (cause) => new ReadError({ cause, message: "Failed to read recent conversation messages" }),
-        });
+        }).pipe(Effect.retry({ schedule: Schedule.spaced("200 millis"), times: 2 }));
       });
 
       return Service.of({ admit, recent });
