@@ -144,6 +144,27 @@ async function admitMessage(
           concurrency: "unbounded",
         }).pipe(Effect.mapError(mediaAdmissionError));
 
+        const payload = {
+          addressed: decision.type !== "silence",
+          date: message.date,
+          editDate: message.edit_date ?? null,
+          forwardOrigin: message.forward_origin ? Prompt.canonicalEncode(message.forward_origin) : null,
+          forwardedFromSelf:
+            message.forward_origin?.type === "user" && message.forward_origin.sender_user.id === ctx.me.id,
+          messageId: message.message_id,
+          media: references,
+          mediaGroupId: message.media_group_id ?? null,
+          repliedText: TelegramMessageText.withEntityLinks(replyTo),
+          repliedMedia,
+          replyToMessageId: replyTo?.message_id ?? null,
+          senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
+          senderId: message.from?.id ?? null,
+          senderIsBot: message.from?.is_bot ?? false,
+          senderLastName: message.from?.last_name ?? null,
+          senderUsername: message.from?.username ?? null,
+          text: text ?? "",
+        };
+
         return yield* conversation.admit({
           chatTitle: ctx.chat!.title ?? null,
           chatType: ctx.chat!.type,
@@ -154,28 +175,11 @@ async function admitMessage(
             // Only forum topics open a distinct lane; ordinary reply threads stay in the chat lane.
             threadKey,
           },
-          payload: {
-            addressed: decision.type !== "silence",
-            date: message.date,
-            editDate: message.edit_date ?? null,
-            forwardOrigin: message.forward_origin ? Prompt.canonicalEncode(message.forward_origin) : null,
-            forwardedFromSelf:
-              message.forward_origin?.type === "user" && message.forward_origin.sender_user.id === ctx.me.id,
-            messageId: message.message_id,
-            media: references,
-            mediaGroupId: message.media_group_id ?? null,
-            precomputedReaction:
-              decision.type === "reaction" ? { emoji: decision.emoji, messageId: message.message_id } : undefined,
-            repliedText: TelegramMessageText.withEntityLinks(replyTo),
-            repliedMedia,
-            replyToMessageId: replyTo?.message_id ?? null,
-            senderFirstName: message.from?.first_name ?? message.sender_chat?.title ?? "unknown",
-            senderId: message.from?.id ?? null,
-            senderIsBot: message.from?.is_bot ?? false,
-            senderLastName: message.from?.last_name ?? null,
-            senderUsername: message.from?.username ?? null,
-            text: text ?? "",
-          },
+          // Pi documents are strict JSON: an undefined precomputedReaction fails the commit, so the key is omitted.
+          payload:
+            decision.type === "reaction"
+              ? { ...payload, precomputedReaction: { emoji: decision.emoji, messageId: message.message_id } }
+              : payload,
           updateId: ctx.update.update_id,
         });
       }).pipe(
