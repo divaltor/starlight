@@ -24,6 +24,7 @@ RUN set -eux; \
 	chmod +x /usr/local/bin/yt-dlp
 
 COPY package.json bun.lock ./
+COPY patches ./patches
 COPY apps/server/package.json ./apps/server/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/api/package.json ./packages/api/package.json

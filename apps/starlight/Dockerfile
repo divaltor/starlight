@@ -9,6 +9,7 @@ ENV NODE_ENV=production
 RUN apk add --no-cache openssl zlib
 
 COPY package.json bun.lock ./
+COPY patches ./patches
 COPY apps/server/package.json ./apps/server/package.json
 COPY apps/starlight/package.json ./apps/starlight/package.json
 COPY apps/web/package.json ./apps/web/package.json
