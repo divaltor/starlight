@@ -1,6 +1,16 @@
 import { OpenTelemetry } from "@ai-sdk/otel";
+import type {
+  SpanLink,
+  SpanOptions,
+  SpanStatus,
+  TelemetryContext,
+  TelemetryMetrics,
+  TelemetryPropagation,
+  TelemetrySpan,
+} from "@earendil-works/pi-telemetry";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
-import { metrics, SpanStatusCode, trace } from "@opentelemetry/api";
+import { context, metrics, propagation, ROOT_CONTEXT, SpanStatusCode, trace } from "@opentelemetry/api";
+import type { Context, Link, Span } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
@@ -11,7 +21,7 @@ import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
-import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
+import { ATTR_ERROR_TYPE, ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 import { heapSize, memoryUsage } from "bun:jsc";
 import { registerTelemetry } from "ai";
 import type { MiddlewareFn } from "grammy";
@@ -148,6 +158,144 @@ export function createUpdateTracer(): MiddlewareFn {
       }
     });
   };
+}
+
+/**
+ * Pi's telemetry adapter over the global OTel providers. Pi passes parents explicitly, so roots start from
+ * `ROOT_CONTEXT`: harness phases run from timers and wake-ups, where the ambient context belongs to whatever
+ * scheduled them. Each callback runs with its span active, so Effect and AI SDK spans and logs nest under it.
+ */
+export function createPiTelemetry(): TelemetryContext {
+  const tracer = trace.getTracer(INSTRUMENTATION_NAME);
+  const meter = metrics.getMeter(INSTRUMENTATION_NAME);
+  // Pi hands back its own span handles as parents, link targets and exemplar contexts.
+  const otelContexts = new WeakMap<TelemetryContext, Context>();
+
+  const piMetrics: TelemetryMetrics = {
+    counter: (name, options) => meter.createCounter(name, options),
+    upDownCounter: (name, options) => meter.createUpDownCounter(name, options),
+    histogram: (name, options) => {
+      const histogram = meter.createHistogram(name, {
+        description: options?.description,
+        unit: options?.unit,
+        advice: options?.boundaries === undefined ? undefined : { explicitBucketBoundaries: [...options.boundaries] },
+      });
+
+      return {
+        record: (value, attributes, piContext) => {
+          histogram.record(value, attributes, piContext && otelContexts.get(piContext));
+        },
+      };
+    },
+  };
+
+  const piPropagation: TelemetryPropagation = {
+    inject: (piContext) => {
+      const otelContext = otelContexts.get(piContext);
+
+      // Roots have no carrier.
+      if (otelContext === undefined) return otelContext;
+
+      const carrier: Record<string, string> = {};
+
+      propagation.inject(otelContext, carrier);
+
+      return carrier;
+    },
+    extract: (carrier) => {
+      const otelContext = propagation.extract(ROOT_CONTEXT, carrier ?? {});
+
+      if (trace.getSpan(otelContext) === undefined) return root;
+
+      const parent: TelemetryContext = {
+        metrics: piMetrics,
+        propagation: piPropagation,
+        startSpan: async (options, callback) => await startSpan(otelContext, options, callback),
+      };
+
+      otelContexts.set(parent, otelContext);
+
+      return parent;
+    },
+  };
+
+  const root: TelemetryContext = {
+    metrics: piMetrics,
+    propagation: piPropagation,
+    startSpan: async (options, callback) => await startSpan(ROOT_CONTEXT, options, callback),
+  };
+
+  return root;
+
+  async function startSpan<T>(
+    parent: Context,
+    options: SpanOptions,
+    callback: (span: TelemetrySpan) => T | Promise<T>,
+  ): Promise<T> {
+    const otelSpan = tracer.startSpan(
+      options.name,
+      { attributes: options.attributes, links: options.links?.flatMap(toOtelLink) },
+      parent,
+    );
+
+    const active = trace.setSpan(parent, otelSpan);
+    let explicitStatus = false;
+
+    const span: TelemetrySpan = {
+      metrics: piMetrics,
+      propagation: piPropagation,
+      startSpan: async (childOptions, childCallback) => await startSpan(active, childOptions, childCallback),
+      addLink: (link) => {
+        otelSpan.addLinks(toOtelLink(link));
+      },
+      addEvent: (name, attributes) => {
+        otelSpan.addEvent(name, attributes);
+      },
+      setAttributes: (attributes) => {
+        otelSpan.setAttributes(attributes);
+      },
+      setStatus: (status) => {
+        explicitStatus = true;
+        setOtelStatus(otelSpan, status);
+      },
+    };
+
+    otelContexts.set(span, active);
+
+    try {
+      return await context.with(active, async () => await callback(span));
+    } catch (error) {
+      if (!explicitStatus) {
+        setOtelStatus(otelSpan, {
+          status: "error",
+          ...(error instanceof Error && { error: { name: error.name, message: error.message } }),
+        });
+      }
+
+      throw error;
+    } finally {
+      otelSpan.end();
+    }
+  }
+
+  function toOtelLink(link: SpanLink): Link[] {
+    const otelContext = otelContexts.get(link.context);
+    const spanContext = otelContext && trace.getSpanContext(otelContext);
+
+    return spanContext === undefined ? [] : [{ context: spanContext, attributes: link.attributes }];
+  }
+}
+
+function setOtelStatus(span: Span, status: SpanStatus): void {
+  if (status.status === "ok") {
+    span.setStatus({ code: SpanStatusCode.OK });
+
+    return;
+  }
+
+  span.setStatus({ code: SpanStatusCode.ERROR, message: status.error?.message });
+
+  if (status.error) span.setAttribute(ATTR_ERROR_TYPE, status.error.name);
 }
 
 export async function shutdownTelemetry(): Promise<void> {

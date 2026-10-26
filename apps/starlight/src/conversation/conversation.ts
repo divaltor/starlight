@@ -17,6 +17,7 @@ import { LaneDoc } from "@/conversation/lane-doc";
 import { LegacyImport } from "@/conversation/legacy-import";
 import type { InputPayload } from "@/conversation/run-artifacts";
 import { Reply } from "@/conversation/reply";
+import { createPiTelemetry } from "@/instrumentation";
 import { Memory } from "@/memory/memory";
 import { RecallQuery } from "@/memory/recall-query";
 import { Media } from "@/media/media";
@@ -191,6 +192,7 @@ export namespace Conversation {
       );
       registry.install(defineExtension({ name: "starlight.lanes", tasks: [laneTask] }));
 
+      const telemetry = createPiTelemetry();
       const models = createModels();
       models.setProvider(OpenRouter.provider(options.openRouterApiKey, profile));
 
@@ -231,6 +233,7 @@ export namespace Conversation {
                 retry: { maxRetries: 4 },
                 stream: { timeoutMs: 40_000 },
               },
+              telemetry,
             },
             BACKGROUND_CONTEXT,
           );

@@ -65,4 +65,4 @@ The Pi migration moved the previous engine's tables to the `legacy_conversation`
 
 - `@netzlabor/pi-durable-postgres` is a community package pinned at 0.2.0 with a local patch; an upstream release for Pi ≥ 1.2 should replace the patch.
 - pi-ai user messages carry only text and images; non-image media rides as an image part and `ai/openrouter.ts` rewrites it into OpenRouter's `video_url`, `input_audio` or `file` parts.
-- Telemetry is not connected to Pi yet.
+- Lane tasks carry no trace carrier, so each lane phase is its own root trace; the generation it submits is a separate trace linked to the `answer` phase.
