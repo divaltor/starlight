@@ -1,7 +1,9 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, defineExtension, Harness } from "@earendil-works/pi-durable";
+import type { TelemetryCarrier } from "@earendil-works/pi-telemetry";
 import { openNodePostgresStorage } from "@netzlabor/pi-durable-postgres";
+import { context, propagation } from "@opentelemetry/api";
 import { Context, Effect, Layer, Predicate, Schedule, Schema } from "effect";
 import type { Chat as TelegramChat } from "grammy/types";
 import { ChatTools } from "@/ai/chat-tools";
@@ -343,12 +345,17 @@ export namespace Conversation {
           .pipe(Effect.mapError(admissionFailed));
 
         const admitted = yield* Effect.tryPromise({
-          try: async () =>
-            await harness.commit(
+          try: async () => {
+            // The lane links its phases to this admission, so a reply can be traced back to its updates.
+            const trace: TelemetryCarrier = {};
+            propagation.inject(context.active(), trace);
+
+            return await harness.commit(
               async (tx) =>
                 await Lane.admit(tx, {
                   agent,
-                  item: { payload: input.payload, senderUserId },
+                  // Pi documents are strict JSON, so an empty carrier is omitted rather than left undefined.
+                  item: { payload: input.payload, senderUserId, ...(trace.traceparent !== undefined && { trace }) },
                   key: input.key,
                   now: Date.now(),
                   task: laneTask,
@@ -356,7 +363,8 @@ export namespace Conversation {
                   updateId: input.updateId,
                 }),
               BACKGROUND_CONTEXT,
-            ),
+            );
+          },
           catch: admissionFailed,
         });
 

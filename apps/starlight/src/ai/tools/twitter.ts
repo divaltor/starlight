@@ -64,6 +64,8 @@ export namespace Twitter {
     Service,
     Effect.gen(function* layer() {
       const client = yield* HttpClient.HttpClient;
+      // The layer's context carries the app tracer and loggers; bare `Effect.runPromise` would drop both.
+      const run = Effect.runPromiseWith(yield* Effect.context());
 
       const fetchPost = Effect.fn("Twitter.fetchPost")(function* fetchPost(id: string) {
         const data = yield* client.get(`https://api.fxtwitter.com/status/${encodeURIComponent(id)}`).pipe(
@@ -103,10 +105,9 @@ export namespace Twitter {
               "Read an X/Twitter post via FxTwitter, including up to three parent posts (four total), oldest first. Includes quoted-post text, media URLs, and article previews when available; media URLs are not visual analysis and article previews are not full articles. Use this instead of web_fetch_exa for Twitter/X post URLs. hasMore means earlier ancestors were omitted. This does not fetch replies below the post.",
             inputSchema: z.object({ url: postUrl }),
             execute: async (input, options) =>
-              await Effect.runPromise(
-                readChain(/\/status\/(?<id>\d+)/iu.exec(new URL(input.url).pathname)!.groups!.id!, MAX_POSTS),
-                { signal: options.abortSignal },
-              ),
+              await run(readChain(/\/status\/(?<id>\d+)/iu.exec(new URL(input.url).pathname)!.groups!.id!, MAX_POSTS), {
+                signal: options.abortSignal,
+              }),
           }),
         },
       });

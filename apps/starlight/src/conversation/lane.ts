@@ -94,6 +94,11 @@ export namespace Lane {
         run: async (current, runtime, context) => {
           const state = current.state.checkpoint;
 
+          // One lane runner serves many batches, so each admitting update is a link rather than the parent.
+          for (const carrier of state.batch.flatMap((item) => (item.trace === undefined ? [] : [item.trace]))) {
+            context.telemetry.addLink({ context: context.telemetry.propagation!.extract(carrier) });
+          }
+
           try {
             await start(deps, runtime, state, context);
           } catch (error) {
@@ -128,6 +133,11 @@ export namespace Lane {
         },
         answer: async (current, runtime, context) => {
           const state = current.state.checkpoint;
+
+          // Pi links the reply's submission trace to this phase; linking the updates here connects both ends.
+          for (const carrier of state.batch.flatMap((item) => (item.trace === undefined ? [] : [item.trace]))) {
+            context.telemetry.addLink({ context: context.telemetry.propagation!.extract(carrier) });
+          }
 
           const [lane, conversation] = await Promise.all([
             runtime.snapshot(LaneDoc.token, runtime.conversationId, context),

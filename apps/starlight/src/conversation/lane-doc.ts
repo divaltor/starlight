@@ -1,5 +1,6 @@
 import { defineDoc, defineDocFamily } from "@earendil-works/pi-durable";
 import type { ConversationId, JsonObject, TaskId } from "@earendil-works/pi-durable";
+import type { TelemetryCarrier } from "@earendil-works/pi-telemetry";
 import { CanonicalJson } from "@/context/canonical-json";
 import type { ConversationKey } from "@/conversation/key";
 import type { InputPayload } from "@/conversation/run-artifacts";
@@ -21,6 +22,8 @@ export namespace LaneDoc {
   export interface Item {
     readonly payload: InputPayload;
     readonly senderUserId: string | null;
+    // Propagation carrier of the admitting Telegram update.
+    readonly trace?: TelemetryCarrier;
   }
 
   // One line of the recent exchange that dialogue continuation judges participation against.

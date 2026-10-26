@@ -96,7 +96,7 @@ export namespace Youtube {
   }
 
   export function layerWithFetcher(fetcher: Fetcher): Layer.Layer<Service> {
-    return Layer.succeed(Service, makeService(fetcher));
+    return Layer.effect(Service, makeService(fetcher));
   }
 
   export function layer(redisUrl: string): Layer.Layer<Service> {
@@ -110,7 +110,7 @@ export namespace Youtube {
           set: async (key, value, ex, seconds) => await redis.client.set(key, value, ex, seconds),
         };
 
-        return makeService(makeFetcher(new RedisCache(commands)));
+        return yield* makeService(makeFetcher(new RedisCache(commands)));
       }),
     );
 
@@ -130,7 +130,7 @@ export namespace Youtube {
       });
   }
 
-  function makeService(fetcher: Fetcher): Interface {
+  function makeService(fetcher: Fetcher): Effect.Effect<Interface> {
     const readTranscript = Effect.fn("Youtube.readTranscript")(function* readTranscript(
       url: string,
       lang: string | undefined,
@@ -170,19 +170,20 @@ export namespace Youtube {
       return transcript;
     });
 
-    return {
+    return Effect.map(Effect.context(), (context) => ({
       tools: {
         read_youtube: tool({
           description:
             "Fetch the transcript (captions) of a public YouTube video with its title and author. This is the only tool for reading YouTube watch, shorts, embed, live, or youtu.be URLs. Never use Exa to inspect, identify, or summarize a specific YouTube video, including as a fallback when this tool fails; report that the video could not be retrieved instead. Returns timestamped transcript lines, not a summary; summarize from them yourself. Optional lang is a BCP 47 code such as 'en'; omit it for the default track. truncated:true means the tail was cut. Fails when captions are missing, disabled, or YouTube rate-limits this server.",
           inputSchema: z.object({ lang: bcp47.optional(), url: youtubeUrl }),
           execute: async (input, options) =>
-            await Effect.runPromise(readTranscript(input.url, input.lang, options.abortSignal), {
+            // The layer's context carries the app tracer and loggers; bare `Effect.runPromise` would drop both.
+            await Effect.runPromiseWith(context)(readTranscript(input.url, input.lang, options.abortSignal), {
               signal: options.abortSignal,
             }),
         }),
       },
-    };
+    }));
   }
 
   function mapFetchError(cause: unknown): YoutubeError {

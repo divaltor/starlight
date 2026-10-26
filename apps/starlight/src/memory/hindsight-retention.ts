@@ -221,21 +221,32 @@ export namespace HindsightRetention {
               `,
           )
           .pipe(
+            // Idle scans run every 30 seconds; only scans with work get a trace.
             Effect.flatMap((namespaces) =>
-              Effect.all(
-                namespaces.map((namespace) =>
-                  retention.retainPending(namespace.id).pipe(
-                    // One unavailable bank must not prevent unrelated conversations from progressing.
-                    // oxlint-disable-next-line sonarjs/no-nested-functions
-                    Effect.catch((error) =>
-                      Effect.logError("Hindsight conversation retention failed").pipe(
-                        Effect.annotateLogs({ error: error.message, errorTag: error._tag, namespaceId: namespace.id }),
+              namespaces.length === 0
+                ? Effect.void
+                : Effect.all(
+                    namespaces.map((namespace) =>
+                      retention.retainPending(namespace.id).pipe(
+                        // One unavailable bank must not prevent unrelated conversations from progressing.
+                        // oxlint-disable-next-line sonarjs/no-nested-functions
+                        Effect.catch((error) =>
+                          Effect.logError("Hindsight conversation retention failed").pipe(
+                            Effect.annotateLogs({
+                              error: error.message,
+                              errorTag: error._tag,
+                              namespaceId: namespace.id,
+                            }),
+                          ),
+                        ),
                       ),
                     ),
+                    { concurrency: NAMESPACE_CONCURRENCY, discard: true },
+                  ).pipe(
+                    Effect.withSpan("HindsightRetention.scan", {
+                      attributes: { "memory.namespace_count": namespaces.length },
+                    }),
                   ),
-                ),
-                { concurrency: NAMESPACE_CONCURRENCY, discard: true },
-              ),
             ),
             Effect.catch((error) =>
               Effect.logError("Hindsight retention scan failed").pipe(
