@@ -1,112 +1,68 @@
 # Starlight conversation engine
 
-Map of the durable machinery under `src/`. Every invariant lists the function that owns it. Paths are relative to `src/`.
+Map of the conversation engine under `src/`. It runs on a Pi Durable harness (`@earendil-works/pi-durable`) with the Postgres backend `@netzlabor/pi-durable-postgres` (patched in `patches/` for Pi 1.4). Every invariant lists the function that owns it. Paths are relative to `src/`.
 
 ## Pipeline
 
 ```text
-Telegram update ──▶ admit() ──▶ ConversationInput + wake outbox ──▶ BullMQ delayed wake ──▶ drain()
+Telegram update ──▶ Conversation.admit ──▶ Lane.admit (one Pi commit) ──▶ starlight.lane task
+                                                                            │
+                     ┌──────────────────────┬───────────────────────────────┼─────────────────────┐
+                     ▼                      ▼                               ▼                     │
+              silent batch           Jev-only batch                  model batch                  │
+           batch entry only     reactions → delivery task    Pi submission → final_output         │
+                                                                     → delivery task              │
+                     └──────────────────────┴───────────────────────────────┴──▶ settle ──────────┘
 ```
+
+Telegram facts (chats, users, messages, memory observations) stay in Prisma tables. Everything about running a conversation — batching state, transcripts, runs, compaction, delivery progress, crash recovery — lives in the harness's own `durable` schema. One process owns it at a time through the storage's advisory lock.
 
 ## Constants
 
-`quietMs` 1000, `maxWaitMs` 3000, `leaseMs` 180000 (`packages/utils/src/env.ts`), model timeout 40s (`ai/model.ts`), batch 20 messages, 5 model attempts, 5 delivery attempts (`conversation/conversation.ts`).
+`quietMs` 1000, `maxWaitMs` 3000 (`env.ts`), album settle 35s, batch 20 messages (+10 to finish an album) (`conversation/lane-doc.ts`), model stream timeout 40s and 5 model attempts (`conversation/conversation.ts`), 4 delivery attempts (`conversation/dispatch.ts`).
 
-## Admission (`conversation/conversation.ts`, `admit`)
+## Lanes (`conversation/lane-doc.ts`, `conversation/lane.ts`)
 
-One transaction per update: upserts Chat/Message/lane, then locks the lane row.
+A lane is `(assistantId, chatId, threadKey)`, one Pi conversation each. The session doc family `starlight.lane-index` maps the lane key to its conversation; the conversation doc `starlight.lane` holds the pending batch, dedup keys, `wakeAt`, the claiming `runner`, the newest `sleeper`, and the recent history the next prompt and dialogue continuation read.
 
-- Dedup key: `sourceUpdateId`, or `(chatId, messageId, sourceRevision)` where the revision hashes edit state plus canonical payload — retries and Telegram edits collapse here.
-- Wake math: `wakeAt = min(now + quietMs, firstPendingAt + maxWaitMs)`; debounces bursts without starving the first message.
+- Admission (`Lane.admit`): dedups on update id and message revision, then `wakeAt = min(now + quietMs, firstPendingAt + maxWaitMs)`. It creates a background lane task only when no runner exists and no sleeper wakes early enough. Pi commits are serialized, so this read-modify-write needs no locks or fencing.
+- The lane task runs `wait → run → answer → settle`. `wait` sleeps durably until `wakeAt`, then claims the lane and freezes a batch. A sleeping task cannot be re-armed, so an admission that moves `wakeAt` earlier starts another sleeper; whichever wakes first claims and the rest exit.
+- `run` checks premium access, then: a silent batch is appended as a `starlight.batch` entry without a model call; a batch answered only by Jev reactions goes straight to a delivery task; anything else freezes recall and the date in a memo and writes `starlight.run`.
+- `answer` submits the batch with a stable `requestId`, so a rerun after a crash finds the same submission instead of asking twice.
+- Retryable failures back off exponentially (cap 300s) on the same frozen batch. Permanent ones (`Lane.BlockedError`, or errors with `retryable: false`) drop only that batch.
 
-## Wake transport (`conversation/wake-queue.ts`, `wake-outbox.ts`)
+## Reply (`conversation/reply.ts`)
 
-BullMQ delayed jobs keyed by lane (`v1/<assistant>/<chat>/<thread>`), deduplicated with `replace`. The outbox row is the durable intent; the queue is a replica. On any ambiguity the drain side recomputes from lane state and republishes.
+The `starlight` Pi extension supplies the system prompt sections, tools and hooks.
 
-## Run lifecycle (`drain`, `claimRun`)
+- `final_output` validates against the chat's reply limit, merges precomputed Jev reactions (`mergePrecomputedReactions`), creates the delivery task once (linked through the task doc `starlight.delivery-ref`), waits for it, and terminates the run without another model request.
+- Research tools wrap the AI SDK toolset with a 3-call and 16 KiB output budget tracked in `starlight.run`.
+- `beforeRequest` rewrites only the outgoing request: date, recalled memory, media and sign-off guidance go next to the live batch, so the stored transcript stays stable for provider-side caching.
+- `onYield` nudges a model that answered in plain text, at most twice per batch.
 
-Lane keys: `(assistantId, chatId, threadKey)`. Claim rules, in order: no pending → `up-to-date`; not yet due → `not-due` (republish); active run with live lease → `busy`; otherwise claim.
+## Checkpoints (`CompactionTask.beforeCompact` in `conversation/reply.ts`)
 
-A claim bumps `fencingToken` (lane + run), sets `leaseOwner`/`leaseUntil`, and either revives an expired run or freezes a batch of ≤20 pending inputs into a new run.
+Pi decides when to compact and where to cut (`settings.compaction`, from `CONTEXT_COMPACTION_TRIGGER_TOKENS` and `CONTEXT_RETAINED_TOKEN_TARGET`). The hook flushes Hindsight first, then summarizes the dropped head into typed `Checkpoint.Records` and stores the summary in a memo so a retry reuses it. Assistant turns reach the summarizer as delivered reply text only. Recall runs only once the lane's context starts from a compaction summary; before that the transcript still holds the full history.
 
-```text
-prepared ──▶ invoking ──▶ generated ──▶ dispatching ──▶ finalized
-    │            │                          │
-    │            └─▶ failed (attempts exhausted)
-    └─▶ blocked (permanent: checkpoint impossible, oversized input, request-hash drift)
-```
+## Delivery (`conversation/dispatch.ts`)
 
-Recovery paths in `drain`: `generated`/`dispatching` resumes at dispatch (delivery records are the ledger); `failed` appends the failure turn and finalizes; a still-active `blocked` run releases the lane instead of failing forever. Non-terminal model failure resets the run to `prepared` and expires the lease for fast redrive.
+The `starlight.delivery` task commits its intent before every send.
 
-**Fencing**: every stage write goes through `Lane.assertFence` (`conversation/lane.ts`) inside the same transaction. A stale worker's writes throw after a newer claim. Fences protect database state and prevent duplicate Telegram sends; they do not cancel in-flight provider calls.
+- A crash between intent and result is an unknown outcome and gets exactly one more send; a second blind resend risks duplicate messages.
+- Known transient failures retry after 1, 2.5 and 5 seconds; non-retryable or exhausted actions fail.
+- A failure closes delivery for the rest of its segment. The precomputed reaction prefix and the model suffix are separate segments.
+- Consecutive text replies wait 1.5–2.5s through a durable sleep.
 
-**Lease renewal**: the transactions that open each long stage — model invocation (`invokeModel`), checkpoint summarization (`summarizeCheckpoint`), and dispatch (`dispatchRun`) — also rewrite `leaseUntil = now + leaseMs` on the lane. Every awaitable stage is bounded by the 40s model timeout or a short delivery burst, so gaps between renewals stay below one lease period without heartbeat timers. A crashed worker stops renewing, so crash-recovery latency stays at one lease period. Before this renewal, a worst-case drain (summary + generation ≈ 240s) outlived the 180s lease and let a second worker re-invoke the model on the same run — duplicate spend with no benefit.
+## Memory
 
-## Prepared request freeze and replay (`conversation/run-artifacts.ts`, `prepareRun`)
+Finalized batches write canonical message observations to PostgreSQL, unique per message revision. The memory worker scans every 30 seconds and flushes a lane after 15 minutes idle, 8K pending characters, or a correction. A flush sends one full canonical transcript as one `replace` item to the lane's stable `transcript` document.
 
-`ConversationRun.preparedRequest` is the durable boundary between mutable external state and deterministic retries. A new run freezes only values that can change with time; immutable batch inputs remain normalized `ConversationInput` rows.
+## Legacy import (`conversation/legacy-import.ts`)
 
-```text
-claimed run ──▶ preparedRequest null? ── yes ──▶ context checkpoint exists?
-                          │                                      │
-                          │                                  yes │ no
-                          │                                      ▼
-                          │                         recall one lane bank / no recall
-                          │                                      │
-                          │                                      ▼
-                          │                            freeze result + date + affinity
-                          │                                                   │
-                          │                                                   ▼
-                          │                                              persist JSONB
-                          │
-                          no
-                         ▼
-                PreparedRequestSchema.decode
-                         │
-                         ▼
-           Context.prepare renders date + recalled context memory
-                         │
-                         ▼
-             same stored values on every retry
-```
-
-The stored shape is `{ contextMemory, currentDate, sessionId, toolProfile }`. Before the first checkpoint, the lane transcript already contains complete history, so preparation does not call Hindsight. After a checkpoint, the current input batch becomes a bounded recall query against the lane's single conversation bank. `Context.prepare` injects that frozen block once; retries decode the stored result and never repeat recall.
-
-The model receives query-relevant memory from `preparedRequest` and checkpoint continuity from `ConversationContext.frozenMemory`; no mental-model profile is maintained. Generation persists actions before Telegram dispatch. Successful and terminal model-failure paths append available transcript/context turns. Every terminal path advances `processedRevision`, clears the lane lease and `activeRunId`, and schedules another wake if later revisions exist.
-
-Finalization writes canonical message observations to PostgreSQL only. The memory worker scans every 30 seconds and flushes a lane after 15 minutes idle, 8K pending characters, or a correction; hard-safety checkpoint flows flush before compaction. A flush sends one full canonical transcript as one `replace` item to the lane's stable `transcript` document. Hindsight keeps derived facts but not raw document text, and advances the local watermark only after the async operation completes.
-
-## Model invocation and the tool budget
-
-Each reply allows at most three Exa tool **calls** (`MAX_TOOL_CALLS` in `ai/chat-reply.ts`, enforced as `maxToolCalls` in `ai/model.ts`): enough for an initial search plus one follow-up — a refined search or a page fetch — before the final answer. The budget counts individual tool executions across all steps, so parallel calls inside one step each consume it. Enforcement lands on the next step boundary via `prepareStep`/`limitToolCalls`: once completed non-`final_output` calls reach the cap, only the `final_output` tool stays active and the model must answer from what it has. A single parallel fan-out can overshoot the cap by its own width; executor-side rejection was considered and rejected as complexity on a path models rarely hit.
-
-## Context generations (`context/context.ts`, `context/active-context.ts`)
-
-Per-lane chain of `ConversationContext` rows (generation N+1 supersedes N). Turns are global per lane (`ConversationTranscriptTurn`) and projected per context with a hash chain: `basePrefixHash = sha256(envelope + checkpoint memory)`, each turn extends it (`Prompt.extendPrefix`). `verifyPrefix` re-walks the whole chain on every `prepare` — rendering drift or tampering fails the run permanently.
-
-All context creation paths (`ActiveContext.ensure`, `transitionProfile`, `commitCheckpoint`) must produce byte-identical seeds via `stableSeed`; divergence breaks every later chain.
-
-**Profile fingerprints**: `Prompt.profileFingerprint(webLookupEnabled)` pins the prompt/toolset pair. A mismatch forces `transitionProfile`, which seals the parent and copies retained turns into a fresh generation.
-
-## Checkpoints (`checkpoint`, `resumeCheckpoint`)
-
-Triggers: soft cap after append (`softCost`), projected hard cap before invocation (`hardSafety`). Attempt states:
-
-```text
-prepared ──▶ summarizing ──▶ summarized ──▶ committed
-                 │
-                 └─▶ failed ──▶ aborted (stale profile) | resumed
-```
-
-The summary input is sealed and hash-checked at prepare time; commits create the child generation with `frozenMemory` = rendered checkpoint summary and retain whole-run tail units toward `retainedTokenTarget`. Failed `hardSafety` attempts resume without an attempt bound by design — a permanent summarization failure must block, not redrive forever.
-
-## Delivery (`dispatchRun`, `deliverStoredAction`)
-
-Actions are validated against the frozen batch's message ids before persistence. Statuses: `pending` → `delivered` | `failed` | `unknown`.
-
-- `unknown` outcome: send result never confirmed. Retried exactly once (`unknownRetryCount` guard) — a second blind resend risks duplicate messages.
-- Retryable failures redrive until `MAX_DELIVERY_ATTEMPTS`; non-retryable or exhausted → `failed` (recorded as a transcript turn, never silently dropped).
+The Pi migration moved the previous engine's tables to the `legacy_conversation` schema. At startup, before the bot takes updates, every lane not yet in Pi is rebuilt from it: each transcript run becomes a batch entry and a `starlight.legacy-reply` entry shaped like a final_output round, and the old active context's frozen memory becomes a compaction summary heading the turns that context held. Lane documents are replayed through the live `LaneDoc` functions. Memory observations and Hindsight banks carry over unchanged.
 
 ## Known limitations
 
-- Token estimates use `chars/4`, which under-counts Cyrillic text by roughly 33–57% (Russian runs ~1.7–3.0 chars/token against common BPE encodings). Planned fix: Pi-style anchored deltas — predict `lastObservedInputTokens` (provider-reported, persisted per context) plus heuristic estimates of only the turns added since that measurement. A real BPE tokenizer was evaluated and rejected: o200k counts are exact only for OpenAI-family models, while OpenRouter reports native-tokenizer usage as ground truth after every call; integration adds a dependency without cross-provider exactness. Revisit only if cold-start misses (no anchor before the first successful generation) show up in telemetry.
+- `@netzlabor/pi-durable-postgres` is a community package pinned at 0.2.0 with a local patch; an upstream release for Pi ≥ 1.2 should replace the patch.
+- pi-ai user messages carry only text and images; non-image media rides as an image part and `ai/openrouter.ts` rewrites it into OpenRouter's `video_url`, `input_audio` or `file` parts.
+- Telemetry is not connected to Pi yet.

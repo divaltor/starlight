@@ -6,7 +6,6 @@ import { OtelTracer, Resource } from "@effect/opentelemetry";
 import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
 import { FetchHttpClient } from "effect/http";
 import type { LogLevel } from "effect/LogLevel";
-import { ChatReply } from "@/ai/chat-reply";
 import { ChatTools } from "@/ai/chat-tools";
 import { DialogueContinuation } from "@/ai/dialogue-continuation";
 import { GuestReply } from "@/ai/guest-reply";
@@ -15,9 +14,6 @@ import { TopicMetadata } from "@/ai/topic-metadata";
 import { fileApi } from "@/bot";
 import { Conversation } from "@/conversation/conversation";
 import { TelegramDelivery } from "@/conversation/delivery";
-import { WakeOutbox } from "@/conversation/wake-outbox";
-import { WakeQueue } from "@/conversation/wake-queue";
-import { ConversationContext } from "@/context/context";
 import { createBotEnv } from "@/env";
 import { Hindsight } from "@/memory/hindsight";
 import { HindsightRetention } from "@/memory/hindsight-retention";
@@ -98,9 +94,7 @@ const chatTools = ChatTools.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(Exa.defaultLayer, Twitter.layer, Youtube.layer(env.REDIS_URL))),
 );
 
-const replies = Layer.mergeAll(ChatReply.layer, GuestReply.layer).pipe(
-  Layer.provideMerge(Model.defaultLayer(env.OPENROUTER_API_KEY)),
-);
+const replies = GuestReply.layer.pipe(Layer.provideMerge(Model.defaultLayer(env.OPENROUTER_API_KEY)));
 
 const topicMetadata = TopicMetadata.layer.pipe(
   Layer.provide(
@@ -135,7 +129,6 @@ const infrastructure = Layer.provide(
     topicMetadata,
     dialogueContinuation,
     TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
-    WakeQueue.layer(env.REDIS_URL, env.CONVERSATION_QUEUE_PREFIX),
     Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),
     Media.layer({
       accessKeyId: env.AWS_ACCESS_KEY_ID,
@@ -146,8 +139,9 @@ const infrastructure = Layer.provide(
     Conversation.optionsLayer({
       contextCompactionTriggerTokens: env.CONTEXT_COMPACTION_TRIGGER_TOKENS,
       contextRetainedTokenTarget: env.CONTEXT_RETAINED_TOKEN_TARGET,
-      leaseMs: env.CONVERSATION_LANE_LEASE_MS,
+      databaseUrl: env.DATABASE_URL,
       maxWaitMs: env.CONVERSATION_BATCH_MAX_WAIT_MS,
+      openRouterApiKey: env.OPENROUTER_API_KEY,
       quietMs: env.CONVERSATION_BATCH_QUIET_MS,
       recallMaxQueryTokens: env.HINDSIGHT_RECALL_MAX_QUERY_TOKENS,
     }),
@@ -157,24 +151,10 @@ const infrastructure = Layer.provide(
 
 const hindsightRetention = HindsightRetention.layer.pipe(Layer.provideMerge(infrastructure));
 const memory = Memory.layer.pipe(Layer.provideMerge(hindsightRetention), Layer.provideMerge(infrastructure));
-const context = ConversationContext.layer.pipe(Layer.provideMerge(infrastructure));
-
-const conversation = Conversation.layer.pipe(
-  Layer.provideMerge(context),
-  Layer.provideMerge(memory),
-  Layer.provideMerge(infrastructure),
-);
-
-const outbox = WakeOutbox.layer.pipe(Layer.provideMerge(infrastructure));
-const domain = Layer.mergeAll(infrastructure, memory, hindsightRetention, context, conversation, outbox);
+const conversation = Conversation.layer.pipe(Layer.provideMerge(memory), Layer.provideMerge(infrastructure));
+const domain = Layer.mergeAll(infrastructure, memory, hindsightRetention, conversation);
 
 const background = Layer.mergeAll(
-  WakeOutbox.publisherLayer,
-  WakeQueue.workerLayer({
-    laneLeaseMs: env.CONVERSATION_LANE_LEASE_MS,
-    prefix: env.CONVERSATION_QUEUE_PREFIX,
-    redisUrl: env.REDIS_URL,
-  }),
   HindsightRetention.workerLayer({
     idleMs: env.MEMORY_RETENTION_IDLE_MS,
     maxPendingChars: env.MEMORY_RETENTION_MAX_PENDING_CHARS,

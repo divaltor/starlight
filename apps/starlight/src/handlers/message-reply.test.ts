@@ -128,7 +128,7 @@ test.each([
 test("test_bypasses_jev_unless_group_message_has_random_trigger", async () => {
   const handler = await Bun.file(new URL("message.ts", import.meta.url)).text();
   const lines = handler.split("\n");
-  expect(lines[lines.findIndex((line) => line.trim().startsWith(".evaluate(")) - 2]).toContain(
+  expect(lines[lines.findIndex((line) => line.includes("dialogueContinuation.evaluate(")) - 3]).toContain(
     '.trigger === "random" &&',
   );
 });

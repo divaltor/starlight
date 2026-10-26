@@ -67,5 +67,8 @@
   },
   "engines": {
     "bun": ">=1.4.4"
+  },
+  "patchedDependencies": {
+    "@netzlabor/pi-durable-postgres@0.2.0": "patches/@netzlabor%2Fpi-durable-postgres@0.2.0.patch"
   }
 }

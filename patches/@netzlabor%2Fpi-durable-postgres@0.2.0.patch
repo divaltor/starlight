@@ -1,0 +1,30 @@
+diff --git a/dist/migrations.js b/dist/migrations.js
+index d0b0ef9c57a4f7b34d585090fa780edb7790ba0b..c14681b47e97c42c695476e07d8e7766d68703f5 100644
+--- a/dist/migrations.js
++++ b/dist/migrations.js
+@@ -93,6 +93,14 @@ const INITIAL_SCHEMA = [
+ /** Immutable, ordered schema history. Append new migrations after the initial schema ships. */
+ export const POSTGRES_MIGRATIONS = [
+     { version: 1, statements: INITIAL_SCHEMA },
++    // Pi Durable 1.4.0 added the `sleeping` task status (its SQLite schema version 2).
++    {
++        version: 2,
++        statements: [
++            "ALTER TABLE tasks DROP CONSTRAINT tasks_status_check",
++            "ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('pending', 'running', 'waiting', 'sleeping', 'completing', 'terminal'))",
++        ],
++    },
+ ];
+ export const CURRENT_POSTGRES_SCHEMA_VERSION = POSTGRES_MIGRATIONS.at(-1)?.version ?? 0;
+ /** Apply all pending schema migrations atomically. */
+diff --git a/dist/storage.js b/dist/storage.js
+index 441f71526bdff906c7454e08ddcd9f2a1431b69a..ea67bb7cd7a21235bd353163235eb3f89b312d43 100644
+--- a/dist/storage.js
++++ b/dist/storage.js
+@@ -1,5 +1,5 @@
+ import { apply } from "@earendil-works/chord/delta";
+-import { StorageRejected } from "@earendil-works/pi-durable";
++import { StorageRequestError as StorageRejected } from "@earendil-works/pi-durable";
+ import { applyPostgresMigrations } from "./migrations.js";
+ /** Apply an erased ID brand at a trusted numeric allocation or decoding boundary. */
+ const idFromNumber = (value) => value;

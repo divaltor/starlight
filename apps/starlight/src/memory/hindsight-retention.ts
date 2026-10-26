@@ -1,7 +1,7 @@
 import type { MemoryItemInput } from "@vectorize-io/hindsight-client";
 import { Context, Effect, Layer, Schedule, Schema, Semaphore } from "effect";
 import { Prompt } from "@/context/prompt";
-import type { Lane } from "@/conversation/lane";
+import type { ConversationKey } from "@/conversation/key";
 import { Hindsight } from "@/memory/hindsight";
 import { Database } from "@/services/database";
 
@@ -61,7 +61,7 @@ export namespace HindsightRetention {
   }
 
   export interface Interface {
-    readonly flush: (key: Lane.LaneKey) => Effect.Effect<void, Database.QueryError | Hindsight.HindsightError>;
+    readonly flush: (key: ConversationKey.Db) => Effect.Effect<void, Database.QueryError | Hindsight.HindsightError>;
     readonly retainPending: (
       namespaceId: string,
     ) => Effect.Effect<bigint | null, Database.QueryError | Hindsight.HindsightError>;
@@ -169,7 +169,7 @@ export namespace HindsightRetention {
         return yield* lock.withPermit(processPending(namespaceId));
       });
 
-      const flush = Effect.fn("HindsightRetention.flush")(function* flush(key: Lane.LaneKey) {
+      const flush = Effect.fn("HindsightRetention.flush")(function* flush(key: ConversationKey.Db) {
         const namespace = yield* database.query(
           async (client) =>
             await client.memoryNamespace.findUnique({
