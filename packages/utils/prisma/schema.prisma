@@ -1,6 +1,6 @@
 datasource db {
   provider   = "postgresql"
-  extensions = [pgvector(map: "vector")]
+  extensions = [pgvector(map: "vector"), pg_trgm]
 }
 
 generator client {

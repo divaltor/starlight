@@ -86,10 +86,15 @@ export const searchImages = maybeAuthProcedure
     const candidateLimit = Math.max(limit * 8, 200);
     const hasLexicalQuery = queryLower.length > 0;
 
+    // Public user IDs are passed as a literal list: an `IN (SELECT ...)` semi-join makes the planner
+    // expect ~2% of photos instead of nearly all, so it skips the HNSW indexes for an exact scan.
+    const publicUsers =
+      databaseUserId === null ? await prisma.user.findMany({ where: { isPublic: true }, select: { id: true } }) : [];
+
     const userFilter =
-      ownOnly && databaseUserId !== null && databaseUserId !== ""
-        ? Prisma.sql`p.user_id = ${databaseUserId}`
-        : Prisma.sql`p.user_id IN (SELECT id FROM users WHERE is_public = true)`;
+      databaseUserId === null
+        ? Prisma.sql`p.user_id = ANY(${publicUsers.map((publicUser) => publicUser.id)}::uuid[])`
+        : Prisma.sql`p.user_id = ${databaseUserId}`;
 
     const baseFilter = Prisma.sql`
 			p.deleted_at IS NULL
@@ -100,35 +105,7 @@ export const searchImages = maybeAuthProcedure
 			AND ${userFilter}
 		`;
 
-    const lexicalMatch = hasLexicalQuery
-      ? Prisma.sql`
-				(
-					EXISTS (
-						SELECT 1
-						FROM jsonb_array_elements_text(COALESCE(p.classification->'characters', '[]'::jsonb)) AS character_tag(value)
-						WHERE lower(character_tag.value) = ${queryLower}
-							OR lower(character_tag.value) LIKE ${queryStartsWithSeries}
-							OR lower(character_tag.value) LIKE ${queryStartsWith}
-							OR lower(character_tag.value) LIKE ${queryContains}
-					)
-					OR EXISTS (
-						SELECT 1
-						FROM jsonb_array_elements_text(COALESCE(p.classification->'tags', '[]'::jsonb)) AS general_tag(value)
-						WHERE lower(general_tag.value) = ${queryLower}
-							OR lower(general_tag.value) LIKE ${queryStartsWith}
-							OR lower(general_tag.value) LIKE ${queryContains}
-					)
-					OR lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains}
-					OR EXISTS (
-						SELECT 1
-						FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
-						WHERE lower(hashtag.value) = ${queryLower}
-							OR lower(hashtag.value) LIKE ${queryStartsWith}
-							OR lower(hashtag.value) LIKE ${queryContains}
-					)
-				)
-			`
-      : Prisma.sql`FALSE`;
+    const lexicalMatch = hasLexicalQuery ? SearchRanking.lexicalMatch(queryContains) : Prisma.sql`FALSE`;
 
     const paginationClause = cursorData
       ? Prisma.sql`WHERE (

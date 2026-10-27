@@ -13,6 +13,23 @@ export namespace SearchRanking {
     return { lexicalQuery, cosplayWeight: Number(lexicalQuery !== query) * COSPLAY_WEIGHT };
   }
 
+  // Selects photos `p` whose characters, tags, tweet text or hashtags contain the query. Contains
+  // subsumes the equal and prefix checks the scores grade, so one LIKE per text blob selects the same
+  // photos. The expressions must match the trigram indexes from migration
+  // 20261027184818_search_lexical_trigram_indexes verbatim, or the planner falls back to a full scan.
+  export function lexicalMatch(queryContains: string) {
+    return Prisma.sql`(p.id, p.user_id) IN (
+			SELECT lp.id, lp.user_id
+			FROM photos lp
+			WHERE lower(COALESCE(lp.classification->>'characters', '') || ' ' || COALESCE(lp.classification->>'tags', '')) LIKE ${queryContains}
+			UNION
+			SELECT lp.id, lp.user_id
+			FROM tweets lt
+			JOIN photos lp ON lp.tweet_id = lt.id AND lp.user_id = lt.user_id
+			WHERE lower(COALESCE(lt.tweet_text, '') || ' ' || COALESCE(lt.tweet_data->>'hashtags', '')) LIKE ${queryContains}
+		)`;
+  }
+
   // Reads the scored CTE columns s_image, s_tag_semantic, cosplay_score, s_character, s_tag_lexical,
   // s_hashtag, s_tweet_text and tweet_created_at. Semantic scores are z-normalised over the candidate
   // pool so image and tag similarities, which sit on different scales, contribute equally.

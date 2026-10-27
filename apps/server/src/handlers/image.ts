@@ -243,38 +243,6 @@ function buildAuthorFilters(authors: string[]): { filter: Prisma.Sql; score: Pri
   return { filter, score };
 }
 
-function buildLexicalMatch(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
-  const { queryContains, queryLower, queryStartsWith, queryStartsWithSeries } = inputs;
-
-  return Prisma.sql`
-				(
-					EXISTS (
-						SELECT 1
-						FROM jsonb_array_elements_text(COALESCE(p.classification->'characters', '[]'::jsonb)) AS character_tag(value)
-						WHERE lower(character_tag.value) = ${queryLower}
-							OR lower(character_tag.value) LIKE ${queryStartsWithSeries}
-							OR lower(character_tag.value) LIKE ${queryStartsWith}
-							OR lower(character_tag.value) LIKE ${queryContains}
-					)
-					OR EXISTS (
-						SELECT 1
-						FROM jsonb_array_elements_text(COALESCE(p.classification->'tags', '[]'::jsonb)) AS general_tag(value)
-						WHERE lower(general_tag.value) = ${queryLower}
-							OR lower(general_tag.value) LIKE ${queryStartsWith}
-							OR lower(general_tag.value) LIKE ${queryContains}
-					)
-					OR lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains}
-					OR EXISTS (
-						SELECT 1
-						FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
-						WHERE lower(hashtag.value) = ${queryLower}
-							OR lower(hashtag.value) LIKE ${queryStartsWith}
-							OR lower(hashtag.value) LIKE ${queryContains}
-					)
-				)
-			`;
-}
-
 function buildCharacterScore(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
   const { queryContains, queryLower, queryStartsWith, queryStartsWithSeries } = inputs;
 
@@ -380,7 +348,11 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
     logger,
     { searchMode: "semantic", userId, pageQueryLimit, candidateLimit: INLINE_QUERY_CANDIDATE_LIMIT },
     async () =>
-      await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
+      // Without iterative scan, HNSW stops at ef_search (40) rows and silently caps the vector pools.
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true)`;
+
+        return await tx.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH image_candidates AS (
 						SELECT p.id, p.user_id
 						FROM photos p
@@ -492,7 +464,8 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
             }
 					ORDER BY final_score DESC NULLS LAST, photo_id DESC
 					LIMIT ${pageQueryLimit}
-						`),
+						`);
+      }),
   );
 }
 
@@ -584,7 +557,7 @@ async function searchRankedInlinePhotos(
   const authorFilters = buildAuthorFilters(authors);
   const authorFilter = authorFilters.filter;
   const authorScore = authorFilters.score;
-  const lexicalMatch = hasLexicalQuery ? buildLexicalMatch(fragmentInputs) : Prisma.sql`FALSE`;
+  const lexicalMatch = hasLexicalQuery ? SearchRanking.lexicalMatch(fragmentInputs.queryContains) : Prisma.sql`FALSE`;
   const characterScore = hasLexicalQuery ? buildCharacterScore(fragmentInputs) : Prisma.sql`0.0`;
   const tagLexicalScore = hasLexicalQuery ? buildTagLexicalScore(fragmentInputs) : Prisma.sql`0.0`;
   const hashtagScore = hasLexicalQuery ? buildHashtagScore(fragmentInputs) : Prisma.sql`0.0`;
