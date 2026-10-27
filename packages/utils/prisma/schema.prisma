@@ -194,6 +194,9 @@ model Photo {
   imageVec Unsupported("vector(1024)")? @map("image_vec")
   tagVec   Unsupported("vector(1024)")? @map("tag_vec")
 
+  // Generated from image_vec in SQL migration: zero-shot cosplay-photo score
+  cosplayScore Float? @default(dbgenerated()) @map("cosplay_score")
+
   height Int? @map("height")
   width  Int? @map("width")
 

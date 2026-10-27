@@ -8,6 +8,7 @@ import type { SearchResult } from "../types/tweets";
 import { Cursor, SearchCursorPayloadSchema } from "../utils/cursor";
 import type { SearchCursorPayload } from "../utils/cursor";
 import { paginateSearchResults } from "../utils/search-pagination";
+import { SearchRanking } from "../utils/search-ranking";
 import { transformSearchResults } from "../utils/transformations";
 
 export const searchImages = maybeAuthProcedure
@@ -77,7 +78,8 @@ export const searchImages = maybeAuthProcedure
 
     const queryTime = cursorData?.queryTime ?? new Date().toISOString();
     const textQuery = `[${text.join(",")}]`;
-    const queryLower = query.toLowerCase();
+    const ranking = SearchRanking.parseQuery(query);
+    const queryLower = ranking.lexicalQuery.toLowerCase();
     const queryContains = `%${queryLower}%`;
     const queryStartsWith = `${queryLower}%`;
     const queryStartsWithSeries = `${queryLower} (%`;
@@ -159,6 +161,7 @@ export const searchImages = maybeAuthProcedure
 				JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
 				WHERE ${baseFilter}
 					AND ${lexicalMatch}
+				ORDER BY t.created_at DESC, p.id DESC
 				LIMIT ${candidateLimit}
 			),
 			candidate_pool AS (
@@ -186,9 +189,7 @@ export const searchImages = maybeAuthProcedure
 					COALESCE((p.classification->'nsfw'->>'is_nsfw')::boolean, false) AS is_nsfw,
 					COALESCE(1.0 - (p.image_vec <=> ${textQuery}::vector), 0.0) AS s_image,
 					COALESCE(1.0 - (p.tag_vec <=> ${textQuery}::vector), 0.0) AS s_tag_semantic,
-					COALESCE((p.classification->>'aesthetic')::float, 0.0) AS aesthetic,
-					COALESCE((p.classification->'style'->>'anime')::float, 0.0) AS style_anime,
-					COALESCE((p.classification->'style'->>'real_life')::float, 0.0) AS style_real_life,
+					p.cosplay_score,
 					COALESCE(
 						(
 							SELECT MAX(
@@ -250,14 +251,7 @@ export const searchImages = maybeAuthProcedure
 					tweet_created_at,
 					tweet_id,
 					is_nsfw,
-					(
-						(s_character * 0.44) +
-						(GREATEST(s_tag_semantic, s_tag_lexical) * 0.28) +
-						(GREATEST(s_hashtag, s_tweet_text) * 0.12) +
-						(s_image * 0.1) +
-						LEAST(0.04, GREATEST(0.0, aesthetic * (1.0 - style_real_life) * (0.65 + (style_anime * 0.35))) * 0.04) +
-						(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime}::timestamptz - tweet_created_at)) / (180.0 * 24 * 3600.0))))
-					) AS final_score
+					${SearchRanking.finalScore({ cosplayWeight: ranking.cosplayWeight, queryTime })} AS final_score
 				FROM scored
 				),
 				deduped AS (

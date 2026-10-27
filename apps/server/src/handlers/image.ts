@@ -2,6 +2,7 @@ import { FormattedString } from "@grammyjs/parse-mode";
 import { CookieEncryption } from "@starlight/crypto";
 import { resolveQueryEmbedding } from "@starlight/api/services/embedding-cache";
 import { EmbeddingsService } from "@starlight/api/services/embeddings";
+import { SearchRanking } from "@starlight/api/utils/search-ranking";
 import { isTwitterUrl, Prisma, prisma } from "@starlight/utils";
 import { Composer, InlineKeyboard, InlineQueryResultBuilder } from "grammy";
 import env from "@/env";
@@ -340,6 +341,7 @@ interface SemanticInlineSearch {
   authorScore: Prisma.Sql;
   candidateLimit: number;
   characterScore: Prisma.Sql;
+  cosplayWeight: number;
   hashtagScore: Prisma.Sql;
   lexicalMatch: Prisma.Sql;
   logger: Logger;
@@ -359,6 +361,7 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
     authorScore,
     candidateLimit,
     characterScore,
+    cosplayWeight,
     hashtagScore,
     lexicalMatch,
     logger,
@@ -414,6 +417,7 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
 							AND p.s3_path IS NOT NULL
 							AND ${lexicalMatch}
 							${authorFilter}
+						ORDER BY t.created_at DESC, p.id DESC
 						LIMIT ${candidateLimit}
 					),
 					candidate_pool AS (
@@ -438,6 +442,7 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
 							t.created_at AS tweet_created_at,
 							COALESCE(1.0 - (p.image_vec <=> ${textVector}::vector), 0.0) AS s_image,
 							COALESCE(1.0 - (p.tag_vec <=> ${textVector}::vector), 0.0) AS s_tag_semantic,
+							p.cosplay_score,
 							${characterScore} AS s_character,
 							${tagLexicalScore} AS s_tag_lexical,
 							${hashtagScore} AS s_hashtag,
@@ -457,14 +462,8 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
 							tweet_created_at,
 							height,
 							width,
-							(
-								(s_character * 0.4) +
-								(GREATEST(s_tag_semantic, s_tag_lexical) * 0.24) +
-								(GREATEST(s_hashtag, s_tweet_text) * 0.12) +
-								(s_image * 0.1) +
-								(s_author * 0.08) +
-								(0.02 * EXP(LN(0.5) * (EXTRACT(EPOCH FROM (${queryTime}::timestamptz - tweet_created_at)) / (180.0 * 24 * 3600.0))))
-							) AS final_score
+							-- Author match keeps its old 0.2 ratio to a character match.
+							${SearchRanking.finalScore({ cosplayWeight, queryTime })} + (s_author * 0.8) AS final_score
 						FROM scored
 					),
 					deduped AS (
@@ -558,8 +557,9 @@ interface RankedInlinePhotoSearch {
 async function searchRankedInlinePhotos(search: RankedInlinePhotoSearch): Promise<InlineImageSearchResult[]> {
   const { authors, logger, photoOffset, query, textQuery, userId } = search;
 
-  const queryLower = textQuery.toLowerCase();
-  const hasTextQuery = queryLower.length > 0;
+  const ranking = SearchRanking.parseQuery(textQuery);
+  const queryLower = ranking.lexicalQuery.toLowerCase();
+  const hasLexicalQuery = queryLower.length > 0;
   const queryContains = `%${queryLower}%`;
   const queryStartsWith = `${queryLower}%`;
   const queryStartsWithSeries = `${queryLower} (%`;
@@ -578,12 +578,12 @@ async function searchRankedInlinePhotos(search: RankedInlinePhotoSearch): Promis
   const authorFilters = buildAuthorFilters(authors);
   const authorFilter = authorFilters.filter;
   const authorScore = authorFilters.score;
-  const lexicalMatch = hasTextQuery ? buildLexicalMatch(fragmentInputs) : Prisma.sql`FALSE`;
-  const characterScore = hasTextQuery ? buildCharacterScore(fragmentInputs) : Prisma.sql`0.0`;
-  const tagLexicalScore = hasTextQuery ? buildTagLexicalScore(fragmentInputs) : Prisma.sql`0.0`;
-  const hashtagScore = hasTextQuery ? buildHashtagScore(fragmentInputs) : Prisma.sql`0.0`;
+  const lexicalMatch = hasLexicalQuery ? buildLexicalMatch(fragmentInputs) : Prisma.sql`FALSE`;
+  const characterScore = hasLexicalQuery ? buildCharacterScore(fragmentInputs) : Prisma.sql`0.0`;
+  const tagLexicalScore = hasLexicalQuery ? buildTagLexicalScore(fragmentInputs) : Prisma.sql`0.0`;
+  const hashtagScore = hasLexicalQuery ? buildHashtagScore(fragmentInputs) : Prisma.sql`0.0`;
 
-  const tweetTextScore = hasTextQuery
+  const tweetTextScore = hasLexicalQuery
     ? Prisma.sql`CASE WHEN lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END`
     : Prisma.sql`0.0`;
 
@@ -591,7 +591,7 @@ async function searchRankedInlinePhotos(search: RankedInlinePhotoSearch): Promis
     return [];
   }
 
-  if (!hasTextQuery) {
+  if (textQuery === "") {
     return await runRecencyInlineSearch({
       authorFilter,
       logger,
@@ -619,6 +619,7 @@ async function searchRankedInlinePhotos(search: RankedInlinePhotoSearch): Promis
     authorScore,
     candidateLimit,
     characterScore,
+    cosplayWeight: ranking.cosplayWeight,
     hashtagScore,
     lexicalMatch,
     logger,
