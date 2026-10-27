@@ -185,7 +185,9 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
   stripUnavailableImages(node, bytesBySrc);
   node = scaleNode(node, SCALE_FACTOR);
 
-  const measured = await renderer.measure(node, { width: LAYOUT.WIDTH * SCALE_FACTOR });
+  // Without explicit families, measure() falls back to whichever font registered
+  // first (parallel, so random); a taller fallback left blank space under the card.
+  const measured = await renderer.measure(node, { fontFamilies: FONT_FAMILIES, width: LAYOUT.WIDTH * SCALE_FACTOR });
   const height = Math.ceil(measured.height);
 
   const rendered = await renderer.render(node, {
