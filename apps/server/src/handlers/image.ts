@@ -14,7 +14,10 @@ import { Cookies } from "@/storage";
 import type { Context } from "@/types";
 
 const INLINE_QUERY_PAGE_SIZE = 50;
-const INLINE_QUERY_CANDIDATE_MULTIPLIER = 8;
+
+// Fixed across pages: scores are normalised over the candidate pool, so a pool
+// that grew with depth would re-rank earlier pages and repeat photos.
+const INLINE_QUERY_CANDIDATE_LIMIT = 400;
 
 // The offset is client-controlled; clamping it bounds the legacy paging loop,
 // which otherwise scans the whole tweet corpus accumulating every photo in
@@ -339,15 +342,14 @@ function buildHashtagScore(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
 interface SemanticInlineSearch {
   authorFilter: Prisma.Sql;
   authorScore: Prisma.Sql;
-  candidateLimit: number;
   characterScore: Prisma.Sql;
   cosplayWeight: number;
+  cursor: InlineSearchCursor.Payload | null;
   hashtagScore: Prisma.Sql;
   lexicalMatch: Prisma.Sql;
   logger: Logger;
   pageQueryLimit: number;
   photoDedupeKey: Prisma.Sql;
-  photoOffset: number;
   queryTime: string;
   tagLexicalScore: Prisma.Sql;
   textVector: string;
@@ -359,15 +361,14 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
   const {
     authorFilter,
     authorScore,
-    candidateLimit,
     characterScore,
     cosplayWeight,
+    cursor,
     hashtagScore,
     lexicalMatch,
     logger,
     pageQueryLimit,
     photoDedupeKey,
-    photoOffset,
     queryTime,
     tagLexicalScore,
     textVector,
@@ -377,7 +378,7 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
 
   return await runInlineImageQuery(
     logger,
-    { searchMode: "semantic", userId, photoOffset, pageQueryLimit, candidateLimit },
+    { searchMode: "semantic", userId, pageQueryLimit, candidateLimit: INLINE_QUERY_CANDIDATE_LIMIT },
     async () =>
       await prisma.$queryRaw<InlineImageSearchResult[]>(Prisma.sql`
 					WITH image_candidates AS (
@@ -392,7 +393,7 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
 							AND p.tag_vec IS NOT NULL
 							${authorFilter}
 						ORDER BY p.image_vec <=> ${textVector}::vector
-						LIMIT ${candidateLimit}
+						LIMIT ${INLINE_QUERY_CANDIDATE_LIMIT}
 					),
 					tag_candidates AS (
 						SELECT p.id, p.user_id
@@ -406,7 +407,7 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
 							AND p.tag_vec IS NOT NULL
 							${authorFilter}
 						ORDER BY p.tag_vec <=> ${textVector}::vector
-						LIMIT ${candidateLimit}
+						LIMIT ${INLINE_QUERY_CANDIDATE_LIMIT}
 					),
 					lexical_candidates AS (
 						SELECT p.id, p.user_id
@@ -418,7 +419,7 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
 							AND ${lexicalMatch}
 							${authorFilter}
 						ORDER BY t.created_at DESC, p.id DESC
-						LIMIT ${candidateLimit}
+						LIMIT ${INLINE_QUERY_CANDIDATE_LIMIT}
 					),
 					candidate_pool AS (
 						SELECT DISTINCT id, user_id
@@ -484,8 +485,12 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
 					SELECT photo_id, s3_path, tweet_id, username, height, width, final_score
 					FROM deduped
 					WHERE duplicate_rank = 1
+						${
+              cursor
+                ? Prisma.sql`AND (final_score, photo_id) < (${cursor.lastScore}::float8, ${cursor.lastPhotoId})`
+                : Prisma.empty
+            }
 					ORDER BY final_score DESC NULLS LAST, photo_id DESC
-					OFFSET ${photoOffset}
 					LIMIT ${pageQueryLimit}
 						`),
   );
@@ -548,14 +553,16 @@ async function runRecencyInlineSearch(search: RecencyInlineSearch): Promise<Inli
 interface RankedInlinePhotoSearch {
   authors: string[];
   logger: Logger;
-  photoOffset: number;
+  offset: string;
   query: string;
   textQuery: string;
   userId: string | undefined;
 }
 
-async function searchRankedInlinePhotos(search: RankedInlinePhotoSearch): Promise<InlineImageSearchResult[]> {
-  const { authors, logger, photoOffset, query, textQuery, userId } = search;
+async function searchRankedInlinePhotos(
+  search: RankedInlinePhotoSearch,
+): Promise<{ photos: InlineImageSearchResult[]; nextOffset: string }> {
+  const { authors, logger, offset, query, textQuery, userId } = search;
 
   const ranking = SearchRanking.parseQuery(textQuery);
   const queryLower = ranking.lexicalQuery.toLowerCase();
@@ -564,8 +571,7 @@ async function searchRankedInlinePhotos(search: RankedInlinePhotoSearch): Promis
   const queryStartsWith = `${queryLower}%`;
   const queryStartsWithSeries = `${queryLower} (%`;
   const pageQueryLimit = INLINE_QUERY_PAGE_SIZE + 1;
-  const candidateLimit = Math.max((photoOffset + pageQueryLimit) * INLINE_QUERY_CANDIDATE_MULTIPLIER, 200);
-  const queryTime = new Date().toISOString();
+  const photoOffset = Math.min(Math.max(Number(offset || "0") || 0, 0), MAX_INLINE_QUERY_PHOTO_OFFSET);
   const photoDedupeKey = Prisma.sql`COALESCE(NULLIF(p.perceptual_hash, ''), p.id)`;
 
   const fragmentInputs = {
@@ -588,11 +594,11 @@ async function searchRankedInlinePhotos(search: RankedInlinePhotoSearch): Promis
     : Prisma.sql`0.0`;
 
   if (userId === undefined || userId === "") {
-    return [];
+    return { photos: [], nextOffset: "" };
   }
 
   if (textQuery === "") {
-    return await runRecencyInlineSearch({
+    const photos = await runRecencyInlineSearch({
       authorFilter,
       logger,
       pageQueryLimit,
@@ -600,6 +606,11 @@ async function searchRankedInlinePhotos(search: RankedInlinePhotoSearch): Promis
       photoOffset,
       userId,
     });
+
+    return {
+      photos: photos.slice(0, INLINE_QUERY_PAGE_SIZE),
+      nextOffset: photos.length > INLINE_QUERY_PAGE_SIZE ? String(photoOffset + INLINE_QUERY_PAGE_SIZE) : "",
+    };
   }
 
   let textEmbedding: number[] | null = null;
@@ -611,27 +622,77 @@ async function searchRankedInlinePhotos(search: RankedInlinePhotoSearch): Promis
   }
 
   if (!textEmbedding) {
-    return await searchInlineImagesWithLegacyQuery(logger, userId, query, photoOffset, pageQueryLimit);
+    const photos = await searchInlineImagesWithLegacyQuery(logger, userId, query, photoOffset, pageQueryLimit);
+
+    return {
+      photos: photos.slice(0, INLINE_QUERY_PAGE_SIZE),
+      nextOffset: photos.length > INLINE_QUERY_PAGE_SIZE ? String(photoOffset + INLINE_QUERY_PAGE_SIZE) : "",
+    };
   }
 
-  return await runSemanticInlineSearch({
+  const cursor = InlineSearchCursor.parse(offset);
+  // Frozen for the whole paging session so recency decay scores every page alike.
+  const queryTime = cursor?.queryTime ?? new Date();
+
+  const photos = await runSemanticInlineSearch({
     authorFilter,
     authorScore,
-    candidateLimit,
     characterScore,
     cosplayWeight: ranking.cosplayWeight,
+    cursor,
     hashtagScore,
     lexicalMatch,
     logger,
     pageQueryLimit,
     photoDedupeKey,
-    photoOffset,
-    queryTime,
+    queryTime: queryTime.toISOString(),
     tagLexicalScore,
     textVector: `[${textEmbedding.join(",")}]`,
     tweetTextScore,
     userId,
   });
+
+  const page = photos.slice(0, INLINE_QUERY_PAGE_SIZE);
+  const lastPhoto = page.at(-1);
+
+  return {
+    photos: page,
+    nextOffset:
+      photos.length > INLINE_QUERY_PAGE_SIZE && lastPhoto
+        ? InlineSearchCursor.create({ lastPhotoId: lastPhoto.photo_id, lastScore: lastPhoto.final_score, queryTime })
+        : "",
+  };
+}
+
+// Telegram caps next_offset at 64 bytes, too small for the mini app's base64 JSON cursor,
+// so this one is `<queryTimeMs>_<lastScore>_<lastPhotoId>` (at most ~57 bytes).
+namespace InlineSearchCursor {
+  const CURSOR_REGEX = /^(?<queryTime>\d{13})_(?<lastScore>[^_]+)_(?<lastPhotoId>\d+)$/u;
+
+  export interface Payload {
+    lastPhotoId: string;
+    lastScore: number;
+    queryTime: Date;
+  }
+
+  export function create(payload: Payload) {
+    return `${payload.queryTime.getTime()}_${payload.lastScore}_${payload.lastPhotoId}`;
+  }
+
+  // Any other offset, such as a numeric one from recency or legacy paging, restarts at the first page.
+  export function parse(offset: string): Payload | null {
+    const groups = CURSOR_REGEX.exec(offset)?.groups;
+
+    if (!groups) {
+      return null;
+    }
+
+    return {
+      queryTime: new Date(Number(groups.queryTime)),
+      lastScore: Number(groups.lastScore),
+      lastPhotoId: groups.lastPhotoId!,
+    };
+  }
 }
 
 const cookieEncryption = new CookieEncryption(env.COOKIE_ENCRYPTION_KEY, env.COOKIE_ENCRYPTION_SALT);
@@ -644,27 +705,20 @@ composer
   .on("inline_query")
   .filter((ctx) => !isTwitterUrl(ctx.inlineQuery.query.trim()))
   .use(async (ctx) => {
-    const photoOffset = Math.min(
-      Math.max(Number(ctx.inlineQuery.offset || "0") || 0, 0),
-      MAX_INLINE_QUERY_PHOTO_OFFSET,
-    );
-
     const query = ctx.inlineQuery.query.trim();
     const { authors, textQuery } = parseInlineImageQuery(query);
 
-    const rankedPhotos = await searchRankedInlinePhotos({
+    const page = await searchRankedInlinePhotos({
       authors,
       logger: ctx.logger,
-      photoOffset,
+      offset: ctx.inlineQuery.offset,
       query,
       textQuery,
       userId: ctx.user?.id,
     });
 
-    const photosForThisPage = rankedPhotos.slice(0, INLINE_QUERY_PAGE_SIZE);
-
     if (
-      photosForThisPage.length === 0 &&
+      page.photos.length === 0 &&
       (ctx.user?.cookies === undefined || ctx.user.cookies === null || ctx.user.cookies === "")
     ) {
       // User didn't setup the bot yet
@@ -682,7 +736,7 @@ composer
       return;
     }
 
-    const results = photosForThisPage.map((photo) => {
+    const results = page.photos.map((photo) => {
       const photoUrl = `${env.BASE_CDN_URL}/${photo.s3_path}`;
 
       const caption =
@@ -699,15 +753,8 @@ composer
       });
     });
 
-    // Calculate next offset for pagination
-    let nextOffset = "";
-
-    if (rankedPhotos.length > INLINE_QUERY_PAGE_SIZE) {
-      nextOffset = String(photoOffset + INLINE_QUERY_PAGE_SIZE);
-    }
-
     await ctx.answerInlineQuery(results, {
-      next_offset: nextOffset,
+      next_offset: page.nextOffset,
       is_personal: true,
       cache_time: 30,
     });
