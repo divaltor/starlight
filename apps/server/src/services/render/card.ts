@@ -3,7 +3,7 @@ import type { Node } from "takumi-js";
 import { container, image, text } from "takumi-js/helpers";
 import { LAYOUT } from "@/services/render/layout";
 import type { ThemeColors } from "@/services/render/themes";
-import type { ArticleData, TweetData } from "@/services/render";
+import type { ArticleData, LinkCardData, TweetData } from "@/services/render";
 
 // Takumi derives its style types from react's CSSProperties, which this
 // package deliberately does not depend on; a permissive local shape covers
@@ -31,6 +31,9 @@ const REPLY_LINE_WIDTH = 2;
 const ARTICLE_PADDING = 12;
 const ARTICLE_TITLE_FONT_SIZE = 15;
 const ARTICLE_PREVIEW_FONT_SIZE = 14;
+
+const LINK_CARD_TITLE_INSET = 12;
+const LINK_CARD_TITLE_FONT_SIZE = 14;
 
 const DOTS_INDICATOR_HEIGHT = 32;
 const DOT_SIZE = 4;
@@ -138,6 +141,10 @@ export function collectTweetImageUrls(tweet: TweetData): Set<string> {
 
   if (tweet.article?.coverMedia) {
     urls.add(tweet.article.coverMedia.url);
+  }
+
+  if (tweet.card?.image) {
+    urls.add(tweet.card.image.url);
   }
 
   if (tweet.quote) {
@@ -510,11 +517,12 @@ function tweetExtrasNodes(
   return [
     ...(media ? [mediaBlock(colors, contentWidth, media, failedUrls)] : []),
     ...(tweet.article ? [articleBlock(colors, contentWidth, tweet.article)] : []),
+    ...(tweet.card ? [linkCardBlock(colors, contentWidth, tweet.card, failedUrls)] : []),
   ];
 }
 
 function hasTweetExtras(tweet: TweetData): boolean {
-  return getFirstMedia(tweet.media) !== null || tweet.article != null;
+  return getFirstMedia(tweet.media) !== null || tweet.article != null || tweet.card != null;
 }
 
 // Keep quote text beside the avatar as in the canvas renderer. The preceding
@@ -651,6 +659,80 @@ function articleBlock(colors: ThemeColors, contentWidth: number, article: Articl
       width: contentWidth,
     },
     children,
+  });
+}
+
+// X's large link preview: image with the title overlaid, domain underneath.
+// Without a usable image the title and domain sit in a bordered box instead.
+function linkCardBlock(colors: ThemeColors, contentWidth: number, card: LinkCardData, failedUrls: Set<string>): Node {
+  const cover = card.image && !failedUrls.has(card.image.url) ? card.image : null;
+
+  const domainText = text(`From ${card.domain}`, {
+    color: colors.secondaryText,
+    fontSize: LAYOUT.FONT_SIZE_STATS,
+  });
+
+  if (!cover) {
+    return box({
+      children: [
+        domainText,
+        text(card.title, {
+          color: colors.text,
+          fontSize: LINK_CARD_TITLE_FONT_SIZE,
+          lineHeight: LAYOUT.LINE_HEIGHT,
+          marginTop: LAYOUT.TEXT_GAP,
+        }),
+      ],
+      style: {
+        borderColor: colors.border,
+        borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
+        borderStyle: "solid",
+        borderWidth: 1,
+        marginBottom: BLOCK_GAP_BOTTOM,
+        marginTop: LAYOUT.AVATAR_GAP,
+        padding: ARTICLE_PADDING,
+        width: contentWidth,
+      },
+    });
+  }
+
+  const height = scaledHeight(cover.width, cover.height, contentWidth);
+
+  return box({
+    children: [
+      box({
+        children: [
+          image({ src: cover.url, style: { height, objectFit: "cover", width: contentWidth } }),
+          box({
+            children: [text(card.title, { color: "#ffffff", fontSize: LINK_CARD_TITLE_FONT_SIZE })],
+            style: {
+              backgroundColor: "rgba(0, 0, 0, 0.75)",
+              borderRadius: 4,
+              bottom: LINK_CARD_TITLE_INSET,
+              left: LINK_CARD_TITLE_INSET,
+              maxWidth: contentWidth - LINK_CARD_TITLE_INSET * 2,
+              paddingBottom: 2,
+              paddingLeft: 6,
+              paddingRight: 6,
+              paddingTop: 2,
+              position: "absolute",
+            },
+          }),
+        ],
+        style: {
+          borderColor: colors.border,
+          borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
+          borderStyle: "solid",
+          borderWidth: 1,
+          height,
+          overflow: "hidden",
+          position: "relative",
+          width: contentWidth,
+        },
+      }),
+      box({ children: [domainText], style: { marginTop: LAYOUT.TEXT_GAP } }),
+    ],
+    style: { marginBottom: BLOCK_GAP_BOTTOM, marginTop: LAYOUT.AVATAR_GAP, width: contentWidth },
   });
 }
 

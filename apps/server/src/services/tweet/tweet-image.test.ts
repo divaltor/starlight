@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { FxEmbedTranslation, FxEmbedTweet } from "@/services/fxembed/types";
+import { FxEmbedCard, FxEmbedTranslation, FxEmbedTweet } from "@/services/fxembed/types";
 import { prepareTweetData } from "@/services/tweet/tweet-image.service";
 import { TwitterApi } from "@/services/twitter-api";
 
@@ -92,4 +92,42 @@ test("test_renders_the_classified_tweet_without_refetching_it", async () => {
 
   expect(result.text).toBe("Already fetched tweet");
   expect(result.replyChain?.map((reply) => reply.text)).toEqual(["Parent tweet"]);
+});
+
+// The link preview stands in for the trailing link as on X; when media takes
+// the card's place the link must stay in the text, or the image loses it.
+test.each([
+  ["no_media", undefined, "Read this", "Cognitive Mercantilism"],
+  [
+    "media",
+    { photos: [{ height: 1, type: "photo", url: "https://pbs.twimg.com/p.jpg", width: 1 }] },
+    "Read this\n\nhttps://example.com/post",
+    undefined,
+  ],
+] as const)("test_card_replaces_trailing_link_when_%s", async (_, media, expectedText, expectedTitle) => {
+  const tweet = new FxEmbedTweet({
+    author: { avatar_url: "", id: "1", name: "Author", screen_name: "author" },
+    card: new FxEmbedCard({ title: "Cognitive Mercantilism", url: "https://example.com/post" }),
+    created_at: "2026-10-26",
+    created_timestamp: 1_793_047_419,
+    id: "1",
+    likes: 0,
+    media,
+    replies: 0,
+    retweets: 0,
+    text: "Read this\n\nhttps://example.com/post",
+    url: "https://x.com/author/status/1",
+  });
+
+  const result = await Effect.runPromise(
+    prepareTweetData("1", tweet).pipe(
+      Effect.provideService(TwitterApi.Service, {
+        getTweet: () => Effect.succeed(null),
+        getFxTweet: () => Effect.succeed(null),
+      }),
+    ),
+  );
+
+  expect(result.text).toBe(expectedText);
+  expect(result.card?.title).toBe(expectedTitle);
 });

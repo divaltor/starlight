@@ -27,11 +27,18 @@ export interface ArticleData {
   title: string;
 }
 
+export interface LinkCardData {
+  domain: string;
+  image: ArticleCoverMedia | null;
+  title: string;
+}
+
 export interface TweetData {
   article?: ArticleData | null;
   authorAvatarUrl: string;
   authorName: string;
   authorUsername: string;
+  card?: LinkCardData | null;
   createdAt?: Date | null;
   hasMoreInChain?: boolean;
   likes?: number | null;

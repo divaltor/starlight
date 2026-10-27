@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import type { ArticleData, TweetData } from "@/services/render";
+import type { ArticleData, LinkCardData, TweetData } from "@/services/render";
 
 export const FxEmbedAuthorSchema = Schema.Struct({
   avatar_url: Schema.String,
@@ -83,6 +83,37 @@ export class FxEmbedArticle extends Schema.Class<FxEmbedArticle>("FxEmbedArticle
   }
 }
 
+// Mirrors upstream APICardSchema: only `url` is guaranteed.
+export class FxEmbedCard extends Schema.Class<FxEmbedCard>("FxEmbedCard")({
+  domain: Schema.optional(Schema.String),
+  image: Schema.optional(
+    Schema.Struct({
+      height: Schema.optional(Schema.Number),
+      url: Schema.optional(Schema.String),
+      width: Schema.optional(Schema.Number),
+    }),
+  ),
+  title: Schema.optional(Schema.String),
+  url: Schema.String,
+}) {
+  toLinkCardData(): LinkCardData | null {
+    if (this.title === undefined || this.title === "") {
+      return null;
+    }
+
+    const { image } = this;
+
+    return {
+      domain: this.domain ?? new URL(this.url).hostname,
+      image:
+        image?.url !== undefined && image.width !== undefined && image.height !== undefined
+          ? { url: image.url, width: image.width, height: image.height }
+          : null,
+      title: this.title,
+    };
+  }
+}
+
 export class FxEmbedTranslation extends Schema.Class<FxEmbedTranslation>("FxEmbedTranslation")({
   provider: Schema.optional(Schema.String),
   source_lang: Schema.String,
@@ -110,6 +141,7 @@ function FxEmbedTweetSelf(): Schema.Codec<FxEmbedTweet, unknown> {
 export class FxEmbedTweet extends Schema.Class<FxEmbedTweet>("FxEmbedTweet")({
   article: Schema.optional(Schema.NullOr(FxEmbedArticle)),
   author: FxEmbedAuthorSchema,
+  card: Schema.optional(Schema.NullOr(FxEmbedCard)),
   created_at: Schema.String,
   created_timestamp: Schema.Number,
   id: Schema.String,
@@ -125,6 +157,24 @@ export class FxEmbedTweet extends Schema.Class<FxEmbedTweet>("FxEmbedTweet")({
   url: Schema.String,
   views: Schema.optional(Schema.Number),
 }) {
+  // Like X, the link preview only shows when no media or article takes its place.
+  getLinkCard(): LinkCardData | null {
+    const hasMedia = (this.media?.photos?.length ?? 0) > 0 || (this.media?.videos?.length ?? 0) > 0;
+
+    return hasMedia || this.article ? null : (this.card?.toLinkCardData() ?? null);
+  }
+
+  // A shown link preview stands in for the trailing link, as on X.
+  stripLinkCardUrl(text: string): string {
+    const url = this.card?.url;
+
+    if (url === undefined || this.getLinkCard() === null || !text.trimEnd().endsWith(url)) {
+      return text;
+    }
+
+    return text.trimEnd().slice(0, -url.length).trimEnd();
+  }
+
   getDisplayText(): string {
     return this.translation?.source_lang === "ru" ? this.text : (this.translation?.text ?? this.text);
   }

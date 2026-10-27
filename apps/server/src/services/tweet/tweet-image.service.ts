@@ -8,7 +8,7 @@ import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";
 
-export const TWEET_IMAGE_CACHE_PREFIX = "tweets/v2";
+export const TWEET_IMAGE_CACHE_PREFIX = "tweets/v3";
 const TWEET_IMAGE_TRANSLATION_LANGUAGE = "en";
 const MOSAIC_METADATA_TIMEOUT_MS = 5000;
 
@@ -91,13 +91,14 @@ function buildTweetData(tweet: FxEmbedTweet, replyingTo?: string): Effect.Effect
   return Effect.gen(function* () {
     const media = yield* mapMediaData(tweet.media);
     const translation = tweet.translation?.source_lang === "ru" ? null : tweet.translation;
-    const text = translation?.text ?? tweet.text;
     const quote = tweet.quote ? yield* buildTweetData(tweet.quote) : null;
+    const text = tweet.stripLinkCardUrl(translation?.text ?? tweet.text);
 
     return {
       authorName: tweet.author.name,
       authorUsername: tweet.author.screen_name,
       authorAvatarUrl: tweet.author.avatar_url,
+      card: tweet.getLinkCard(),
       text:
         replyingTo !== undefined && replyingTo !== ""
           ? text.replace(new RegExp(`^@${replyingTo}\\s*`, "iu"), "").trim()
