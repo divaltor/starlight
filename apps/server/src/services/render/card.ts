@@ -399,9 +399,16 @@ function nameRowNodes(colors: ThemeColors, fontSize: number, tweet: TweetData): 
 
   return [
     text(tweet.authorName, { color: colors.text, fontSize, fontWeight: 700 }),
-    text(` @${tweet.authorUsername}`, { color: colors.secondaryText, fontSize }),
+    // Takumi trims leading spaces in text nodes, so separators need explicit margins.
+    text(`@${tweet.authorUsername}`, { color: colors.secondaryText, fontSize, marginLeft: 4 }),
     ...(tweet.createdAt
-      ? [text(` · ${formatShortDate(tweet.createdAt)}`, { color: colors.secondaryText, fontSize })]
+      ? [
+          text(`· ${formatShortDate(tweet.createdAt)}`, {
+            color: colors.secondaryText,
+            fontSize,
+            marginLeft: 4,
+          }),
+        ]
       : []),
     ...(language !== null && language !== "" ? translationBadge(language, colors, fontSize) : []),
   ];
