@@ -17,6 +17,7 @@
 
 - Human-facing output (replies, commit messages, PR text): fewest words that carry the point.
 - No superlatives, praise, or agreement padding. State disagreements and risks plainly.
+- Report what you ran. Unqualified "done", "should work", and "probably fixed" are not evidence.
 
 ## Design Principles
 
@@ -32,6 +33,7 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 - Before adding code, confirm that a change is needed. Then understand and trace the real flow. Reuse an established local pattern, the standard library, platform features, or an installed dependency before writing custom code; search for a maintained third-party library before building one.
 - If the correct implementation is one line over the platform or an existing API, write that line — inline, unexported, unwrapped.
 - For a bug, check all callers and fix the root cause in the lowest shared owner. Do not patch each visible symptom separately.
+- When the evidence points at a library, the runtime, or the test harness, the cause is still unproven: rule out our own code first, and blame the external only with an artifact such as a minimal reproduction, captured log, or request trace. A matching report elsewhere is not evidence.
 - For non-trivial business logic owned by this repository, add the smallest focused test or runnable check that proves the changed behavior.
 
 ## TypeScript Style
@@ -48,7 +50,8 @@ Optimize the design for the normal flow. If the happy path is 95% of behavior, i
 - Prefer functional array methods (`map`, `filter`, `flatMap`) over `for` loops.
 - NEVER extract a one-liner, even a heavily used one: a body that is a single call or expression — `estimateTokens(value)` = `Math.ceil(value.length / 4)`, `hash(value)` = one `Bun.CryptoHasher` chain, `profileFingerprint(input)` = `hash(renderEnvelope(input))` — gets written inline at every call site. A wrapper name sends every human reader on a hop to find a line they already know; repetition is not complexity.
 - Keep helpers below the code they support; do not extract multi-line logic used fewer than three times.
-- Comments are rare and explain why, not what.
+- Comments are rare and explain why, not what; delete any comment a careful reader could reconstruct in one hop.
+- A workaround that needs a paragraph to justify is the wrong code; fix the code.
 - Name recurring or spec-defined values (HTTP statuses, limits, callback prefixes) as consts or enums; inline self-explanatory one-off literals.
 - Prefer options objects or enums over positional boolean parameters; `send({ retry: true })` reads better at the call site than `send(true)`.
 
@@ -75,6 +78,7 @@ Services follow the namespace-wrapped module anatomy in `.opencode/skills/effect
 - Never hand-edit `packages/utils/src/generated/prisma`; regenerate with `bun run db:generate`.
 - Follow conventional commits: `type(scope): summary` with types `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
 - Scopes are optional; use the affected app or package, for example `web`, `server`, `starlight`, `utils`.
+- Push only after the tests covering the change pass. If a check could not run, report that instead of implying it passed.
 
 <!-- BEGIN:turborepo-agent-rules -->
 
