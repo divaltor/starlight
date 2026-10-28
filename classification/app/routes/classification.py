@@ -6,7 +6,7 @@ from transformers import AutoImageProcessor, AutoModelForImageClassification
 from transformers.pipelines import ImageClassificationPipeline, pipeline
 
 from app.device import resolve_model_device
-from app.imgutils.pixai import PIXAI_MODEL_ID, PixAITagger
+from app.imgutils.pixai import PIXAI_MODEL_ID, TAGGER_VERSION, PixAITagger
 from app.models import ClassificationResult, ImageRequest
 from app.otel import pipeline_span
 from app.utils import preprocess_image
@@ -84,5 +84,6 @@ async def classify(
             'cafe': {'aesthetic': aestetic_outputs, 'style': style_outputs},
             'nsfw': nsfw_outputs,
             'tags': tags,
+            'tagger': TAGGER_VERSION,
         },
     )

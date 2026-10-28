@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import types
 from operator import itemgetter
 from pathlib import Path
@@ -20,6 +21,10 @@ PIXAI_MODEL_ID = 'pixai-labs/pixai-tagger-v1.0'
 REVISION = '9fe10addf9326e292da8a85a98ea74cd91b41771'
 CATEGORIES = ('general', 'character')
 TOP_K = 50
+# Stored with each classification; bump when tags change so the backfill re-enqueues photos.
+TAGGER_VERSION = 'pixai-v1.0'
+_QUALIFIED_TAG = re.compile(r'(.+?)((?:_\([^()]+\))+)')
+_QUALIFIER = re.compile(r'_\([^()]+\)')
 
 _KAOMOJIS = frozenset(
     {
@@ -71,11 +76,14 @@ class PixAITagger:
         self.size: int = config.img_size
         self.tags: list[str] = config.tags
         self.categories: list[tuple[str, int, int, float]] = []
+        self.base_characters: dict[str, str] = {}
         start = 0
         for name, count in config.tags_split:
             if name in CATEGORIES:
                 threshold = config.category_best_threshold[name]
                 self.categories.append((name, start, start + count, threshold))
+            if name == 'character':
+                self.base_characters = _base_characters(self.tags[start : start + count])
             start += count
 
         overlap_file = hf_hub_download(
@@ -108,6 +116,12 @@ class PixAITagger:
             )[:TOP_K]
             if name == 'general':
                 pairs = self._drop_overlap(pairs)
+            if name == 'character':
+                # Pairs are sorted by score, so setdefault keeps each base's best score.
+                collapsed: dict[str, float] = {}
+                for tag, score in pairs:
+                    collapsed.setdefault(self.base_characters.get(tag, tag), score)
+                pairs = list(collapsed.items())
             result[name] = [
                 (tag if tag in _KAOMOJIS else tag.replace('_', ' '), score) for tag, score in pairs
             ]
@@ -143,6 +157,31 @@ class PixAITagger:
             if not names.intersection(self.overlap_tags.get(tag, ()))
             and not any(tag in other and tag != other for other in names)
         ]
+
+
+def _base_characters(characters: list[str]) -> dict[str, str]:
+    """Map outfit/form variants such as `hoshino_(swimsuit)_(blue_archive)` to `hoshino_(blue_archive)`.
+
+    Prefers the name with only its series qualifier, then the longest qualifier prefix
+    (`fujimaru_ritsuka_(male)_(polar_chaldea_uniform)` -> `fujimaru_ritsuka_(male)`),
+    and only maps to tags the model itself knows.
+    """
+    vocabulary = set(characters)
+    bases: dict[str, str] = {}
+    for tag in characters:
+        match = _QUALIFIED_TAG.fullmatch(tag)
+        if match is None:
+            continue
+        name, qualifiers = match[1], _QUALIFIER.findall(match[2])
+        if len(qualifiers) < 2:
+            continue
+        candidates = [name + qualifiers[-1]] + [
+            name + ''.join(qualifiers[:end]) for end in range(len(qualifiers) - 1, -1, -1)
+        ]
+        base = next((candidate for candidate in candidates if candidate in vocabulary), None)
+        if base is not None:
+            bases[tag] = base
+    return bases
 
 
 def _apply_real_rope(

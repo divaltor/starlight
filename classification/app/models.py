@@ -172,6 +172,7 @@ class ClassificationResult(ResponseModel):
     nsfw: NSFWResult
     characters: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    tagger: str
 
     @override
     @classmethod
@@ -186,6 +187,7 @@ class ClassificationResult(ResponseModel):
                 'nsfw': NSFWResult.from_response(model_response['nsfw']),
                 'characters': tag_groups.characters,
                 'tags': tag_groups.tags,
+                'tagger': model_response['tagger'],
             },
         )
 
