@@ -1,5 +1,11 @@
 import { createAssistantMessageEventStream, createProvider } from "@earendil-works/pi-ai";
-import type { AssistantMessageEventStream, Model, Provider, StreamOptions } from "@earendil-works/pi-ai";
+import type {
+  AssistantMessage,
+  AssistantMessageEventStream,
+  Model,
+  Provider,
+  StreamOptions,
+} from "@earendil-works/pi-ai";
 import { stream, streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { z } from "zod";
 import { ChatReply } from "@/ai/chat-reply";
@@ -61,6 +67,14 @@ export namespace OpenRouter {
 
   export type Payload = z.infer<typeof payloadSchema>;
 
+  // The OpenAI assistant message Langfuse renders as chat, without the reasoning signatures pi-ai keeps for replay.
+  export interface ChatMessage {
+    readonly content: string | null;
+    readonly reasoning?: string;
+    readonly role: "assistant";
+    readonly tool_calls?: { function: { arguments: string; name: string }; id: string; type: "function" }[];
+  }
+
   const usageChunkSchema = z.object({ usage: z.object({ cost: z.number() }) });
 
   const userMessageSchema = z.looseObject({
@@ -104,7 +118,11 @@ export namespace OpenRouter {
         // Before the media rewrite every attachment is still a data URI, which LangfuseSpanProcessor uploads as media.
         const parsed = payloadSchema.parse(payload);
 
-        recordModelContent(options?.telemetry, "input", parsed);
+        recordModelContent(options?.telemetry, "input", {
+          ...parsed,
+          // reasoning_details replays earlier turns' reasoning with encrypted signatures, which is noise in Langfuse.
+          messages: parsed.messages.map(({ reasoning_details: _replay, ...message }) => message),
+        });
 
         return rewriteMedia(parsed);
       },
@@ -120,7 +138,7 @@ export namespace OpenRouter {
       for await (const event of inner) {
         if (event.type === "done" && billedCost !== undefined) event.message.usage.cost.total = billedCost;
 
-        if (event.type === "done") recordModelContent(options?.telemetry, "output", event.message.content);
+        if (event.type === "done") recordModelContent(options?.telemetry, "output", chatMessage(event.message));
 
         if (event.type === "error" && billedCost !== undefined) event.error.usage.cost.total = billedCost;
 
@@ -131,6 +149,30 @@ export namespace OpenRouter {
     })();
 
     return outer;
+  }
+
+  function chatMessage(message: AssistantMessage): ChatMessage {
+    const text = message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("");
+    const reasoning = message.content.flatMap((part) => (part.type === "thinking" ? [part.thinking] : [])).join("\n");
+
+    const toolCalls = message.content.flatMap((part) =>
+      part.type === "toolCall"
+        ? [
+            {
+              function: { arguments: JSON.stringify(part.arguments), name: part.name },
+              id: part.id,
+              type: "function" as const,
+            },
+          ]
+        : [],
+    );
+
+    return {
+      content: text === "" ? null : text,
+      ...(reasoning !== "" && { reasoning }),
+      role: "assistant",
+      ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
+    };
   }
 
   function rewriteMedia(payload: Payload) {

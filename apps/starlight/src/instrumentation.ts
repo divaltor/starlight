@@ -1,5 +1,4 @@
 import { OpenTelemetry } from "@ai-sdk/otel";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type {
   SpanLink,
   SpanAttributes,
@@ -279,7 +278,10 @@ export function createPiTelemetry(): TelemetryContext {
           inherited,
           Object.fromEntries(Object.entries(attributes).filter((entry) => INHERITED_ATTRIBUTES.has(entry[0]))),
         );
-        otelSpan.setAttributes(isModelRequest ? toLangfuseGeneration(attributes) : attributes);
+
+        if (typeof attributes["tool.name"] === "string") otelSpan.updateName(attributes["tool.name"]);
+
+        otelSpan.setAttributes(isModelRequest ? toLangfuseGeneration(attributes) : toLangfuseTool(attributes));
       },
       setStatus: (status) => {
         explicitStatus = true;
@@ -320,7 +322,7 @@ function toOtelLink(link: SpanLink): Link[] {
 export function recordModelContent(
   parent: TelemetryContext | undefined,
   field: "input" | "output",
-  value: OpenRouter.Payload | AssistantMessage["content"],
+  value: OpenRouter.Payload | OpenRouter.ChatMessage,
 ): void {
   const otelContext = parent && otelContexts.get(parent);
 
@@ -347,6 +349,19 @@ function toLangfuseGeneration(attributes: SpanAttributes): SpanAttributes {
       }),
     }),
     ...(attributes["cost.total"] !== undefined && { "gen_ai.usage.cost": attributes["cost.total"] }),
+  };
+}
+
+// Pi names a tool call's phase span only once it reads the call, through `tool.name`.
+function toLangfuseTool(attributes: SpanAttributes): SpanAttributes {
+  return {
+    ...attributes,
+    ...(attributes["tool.name"] !== undefined && {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.call.id": attributes["tool.call_id"],
+      "gen_ai.tool.name": attributes["tool.name"],
+      "langfuse.observation.type": "tool",
+    }),
   };
 }
 

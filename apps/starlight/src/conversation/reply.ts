@@ -10,6 +10,7 @@ import {
   GenerationTask,
   hook,
   section,
+  ToolTask,
 } from "@earendil-works/pi-durable";
 import type { ConversationId, JsonObject, TaskId, ToolExecutionResult, Tx } from "@earendil-works/pi-durable";
 import { asSchema } from "ai";
@@ -198,6 +199,22 @@ export namespace Reply {
             nudges.set(api.conversationId, { count: count + 1, marker });
 
             return { continue: NUDGE };
+          },
+        }),
+        hook(ToolTask, {
+          afterTool: async (call, result, api, context) => {
+            const run = await api.snapshot(runDoc, api.conversationId, context);
+
+            // Same opt-in as model request content: only chats known to be non-private.
+            if (run?.isPrivate === false) {
+              context.telemetry.setAttributes({
+                "langfuse.observation.input": JSON.stringify(call.arguments),
+                "langfuse.observation.output": JSON.stringify(result.output ?? null),
+              });
+            }
+
+            // oxlint-disable-next-line unicorn/no-useless-undefined -- Pi hooks signal "no change" with undefined
+            return undefined;
           },
         }),
         hook(CompactionTask, {
