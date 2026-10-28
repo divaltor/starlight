@@ -6,7 +6,7 @@ from transformers import AutoImageProcessor, AutoModelForImageClassification
 from transformers.pipelines import ImageClassificationPipeline, pipeline
 
 from app.device import resolve_model_device
-from app.imgutils.camie import get_camie_tags
+from app.imgutils.pixai import PIXAI_MODEL_ID, PixAITagger
 from app.models import ClassificationResult, ImageRequest
 from app.otel import pipeline_span
 from app.utils import preprocess_image
@@ -42,6 +42,7 @@ nsfw_dtype = torch.bfloat16 if model_device == 'cuda' else torch.float32
 nsfw_pipe = create_classification_pipeline(NSFW_MODEL_ID, nsfw_dtype)
 aesthetic_pipe = create_classification_pipeline(AESTHETIC_MODEL_ID, classification_dtype)
 style_pipe = create_classification_pipeline(STYLE_MODEL_ID, classification_dtype)
+tagger = PixAITagger(model_device)
 
 
 router = APIRouter()
@@ -75,8 +76,8 @@ async def classify(
     with pipeline_span('style_classification', STYLE_MODEL_ID):
         style_outputs = style_pipe(img)
 
-    with pipeline_span('tag_generation', 'Camais03/camie-tagger-v2'):
-        tags = get_camie_tags(img)
+    with pipeline_span('tag_generation', PIXAI_MODEL_ID):
+        tags = tagger(img)
 
     return ClassificationResult.from_response(
         model_response={

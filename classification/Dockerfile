@@ -7,8 +7,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 libatomic1 libnuma1 \
     && rm -rf /var/lib/apt/lists/*
 
-# HF cache dir, pre-created so the runtime stage can COPY --chown it
-RUN mkdir -p /cache/huggingface
+# HF and torch.compile cache dirs, pre-created so the runtime stage can COPY --chown them
+RUN mkdir -p /cache/huggingface /cache/torch
 
 ENV UV_NO_CACHE=1
 ENV UV_COMPILE_BYTECODE=1
@@ -39,9 +39,10 @@ RUN uv pip install \
 
 FROM python:3.14-slim-trixie AS runtime
 
-# Shared libraries PyTorch ROCm needs at runtime
+# Shared libraries PyTorch ROCm needs at runtime; gcc lets Triton build its
+# launcher for torch.compile
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 libatomic1 libnuma1 \
+    && apt-get install -y --no-install-recommends libgomp1 libatomic1 libnuma1 gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Deployment grants GPU device access via group_add (host render group) and
@@ -53,6 +54,8 @@ WORKDIR /code
 
 ENV PATH="/code/.venv/bin:$PATH"
 ENV HF_HOME="/cache/huggingface"
+ENV TORCHINDUCTOR_CACHE_DIR="/cache/torch/inductor"
+ENV TRITON_CACHE_DIR="/cache/torch/triton"
 # /code is root-owned; as uid 1000 the app cannot write __pycache__
 ENV PYTHONDONTWRITEBYTECODE=1
 

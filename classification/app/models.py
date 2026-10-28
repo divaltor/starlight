@@ -137,10 +137,10 @@ class AestheticResult(ResponseModel):
         )
 
 
-# Camie tag scores schema -> mapping of category -> list[(tag, score)]
+# Tagger scores schema -> mapping of category -> list[(tag, score)]
 
 
-class CamieTags(ResponseModel):
+class ImageTags(ResponseModel):
     characters: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
@@ -177,7 +177,7 @@ class ClassificationResult(ResponseModel):
     @classmethod
     def from_response(cls, model_response: Any) -> Self:
         aesthetic = AestheticResult.from_response(model_response['cafe'])
-        tag_groups = CamieTags.from_response(model_response['tags'])
+        tag_groups = ImageTags.from_response(model_response['tags'])
 
         return cls.model_validate(
             {

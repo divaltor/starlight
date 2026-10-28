@@ -11,6 +11,12 @@ services:
       CLASSIFICATION_API_TOKEN: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
       MODEL_DEVICE: cuda
       TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL: "1"
+      TORCH_BLAS_PREFER_HIPBLASLT: "1"
+      # Replay GEMM kernels tuned for PixAI on gfx1150 without tuning at request
+      # time. TunableOp appends the device ordinal: this reads results0.csv.
+      PYTORCH_TUNABLEOP_ENABLED: "1"
+      PYTORCH_TUNABLEOP_TUNING: "0"
+      PYTORCH_TUNABLEOP_FILENAME: /code/tunableop/results.csv
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri/renderD128:/dev/dri/renderD128
@@ -36,7 +42,9 @@ services:
       start_period: 300s
     volumes:
       - classification_models:/cache/huggingface
+      - classification_torch_cache:/cache/torch
     restart: unless-stopped
 
 volumes:
   classification_models:
+  classification_torch_cache:
