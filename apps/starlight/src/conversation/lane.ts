@@ -335,6 +335,7 @@ export namespace Lane {
       run.precomputed = precomputed;
       run.replyLimit = chat.isPrivate ? ChatReply.privateReplyLimit : ChatReply.groupReplyLimit;
       run.research = [];
+      run.senderId = state.batch.at(-1)!.payload.senderId;
       run.signOff = Prompt.renderSignOffGuidance(lane.recentReplies);
 
       return running({ batch: state.batch, phase: "answer", requestId });

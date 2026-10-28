@@ -1,6 +1,7 @@
 import { OpenTelemetry } from "@ai-sdk/otel";
 import type {
   SpanLink,
+  SpanAttributes,
   SpanOptions,
   SpanStatus,
   TelemetryContext,
@@ -32,6 +33,8 @@ let meterProvider: MeterProvider | undefined;
 let logProvider: LoggerProvider | undefined;
 let shutdownPromise: Promise<void> | undefined;
 const INSTRUMENTATION_NAME = "starlight-bot";
+const PI_MODEL_REQUEST_SPAN = "pi.ai.request";
+const LANGFUSE_TRACE_ATTRIBUTES = new Set(["langfuse.session.id", "langfuse.user.id"]);
 
 export interface TelemetryConfig {
   readonly langfuse?: LangfuseConfig;
@@ -170,6 +173,8 @@ export function createPiTelemetry(): TelemetryContext {
   const meter = metrics.getMeter(INSTRUMENTATION_NAME);
   // Pi hands back its own span handles as parents, link targets and exemplar contexts.
   const otelContexts = new WeakMap<TelemetryContext, Context>();
+  // Pi starts model requests itself, so they inherit the Langfuse trace attributes Starlight sets on an ancestor.
+  const traceAttributes = new WeakMap<Context, SpanAttributes>();
 
   const piMetrics: TelemetryMetrics = {
     counter: (name, options) => meter.createCounter(name, options),
@@ -232,13 +237,21 @@ export function createPiTelemetry(): TelemetryContext {
     options: SpanOptions,
     callback: (span: TelemetrySpan) => T | Promise<T>,
   ): Promise<T> {
+    const isModelRequest = options.name === PI_MODEL_REQUEST_SPAN;
+    const inherited = { ...traceAttributes.get(parent) };
+    const startAttributes = { ...inherited, ...options.attributes };
+
     const otelSpan = tracer.startSpan(
       options.name,
-      { attributes: options.attributes, links: options.links?.flatMap(toOtelLink) },
+      {
+        attributes: isModelRequest ? toLangfuseGeneration(startAttributes) : startAttributes,
+        links: options.links?.flatMap(toOtelLink),
+      },
       parent,
     );
 
     const active = trace.setSpan(parent, otelSpan);
+    traceAttributes.set(active, inherited);
     let explicitStatus = false;
 
     const span: TelemetrySpan = {
@@ -252,7 +265,11 @@ export function createPiTelemetry(): TelemetryContext {
         otelSpan.addEvent(name, attributes);
       },
       setAttributes: (attributes) => {
-        otelSpan.setAttributes(attributes);
+        Object.assign(
+          inherited,
+          Object.fromEntries(Object.entries(attributes).filter((entry) => LANGFUSE_TRACE_ATTRIBUTES.has(entry[0]))),
+        );
+        otelSpan.setAttributes(isModelRequest ? toLangfuseGeneration(attributes) : attributes);
       },
       setStatus: (status) => {
         explicitStatus = true;
@@ -284,6 +301,26 @@ export function createPiTelemetry(): TelemetryContext {
 
     return spanContext === undefined ? [] : [{ context: spanContext, attributes: link.attributes }];
   }
+}
+
+// LangfuseSpanProcessor drops spans without gen_ai.* attributes, and pi-ai reports usage and cost under its own names.
+function toLangfuseGeneration(attributes: SpanAttributes): SpanAttributes {
+  return {
+    ...attributes,
+    ...(attributes.model !== undefined && {
+      "gen_ai.request.model": attributes.model,
+      "langfuse.observation.type": "generation",
+    }),
+    ...(attributes["usage.input"] !== undefined && {
+      "langfuse.observation.usage_details": JSON.stringify({
+        input: attributes["usage.input"],
+        input_cache_read: attributes["usage.cache_read"],
+        input_cache_write: attributes["usage.cache_write"],
+        output: attributes["usage.output"],
+      }),
+    }),
+    ...(attributes["cost.total"] !== undefined && { "gen_ai.usage.cost": attributes["cost.total"] }),
+  };
 }
 
 function setOtelStatus(span: Span, status: SpanStatus): void {

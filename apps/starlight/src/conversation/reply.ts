@@ -58,6 +58,8 @@ export namespace Reply {
     precomputed: TelegramDelivery.ReactionAction[];
     replyLimit: number;
     research: { bytes: number; taskId: number }[];
+    // Telegram sender of the batch's last message.
+    senderId: number | null;
     signOff: string | null;
   }
 
@@ -76,6 +78,7 @@ export namespace Reply {
       precomputed: [],
       replyLimit: 3,
       research: [],
+      senderId: null,
       signOff: null,
     }),
     checkpointWhen: () => true,
@@ -131,7 +134,16 @@ export namespace Reply {
       hooks: [
         hook(GenerationTask, {
           beforeRequest: async (request, api, context) => {
-            const run = await api.snapshot(runDoc, api.conversationId, context);
+            const [run, lane] = await Promise.all([
+              api.snapshot(runDoc, api.conversationId, context),
+              api.snapshot(LaneDoc.token, api.conversationId, context),
+            ]);
+
+            // Pi starts the model request span under this phase, and it inherits these for Langfuse.
+            context.telemetry.setAttributes({
+              "langfuse.session.id": `${lane!.key!.chatId}/${lane!.key!.threadKey}`,
+              "langfuse.user.id": run?.senderId?.toString(),
+            });
 
             if (run?.marker == null) return request;
             const batch = request.messages.findLast((message) => isBatch(message, run.marker!));
