@@ -17,7 +17,7 @@ export namespace SearchRanking {
   // subsumes the equal and prefix checks the scores grade, so one LIKE per text blob selects the same
   // photos. The expressions must match the trigram indexes from migration
   // 20261027184818_search_lexical_trigram_indexes verbatim, or the planner falls back to a full scan.
-  export function lexicalMatch(queryContains: string) {
+  export function lexicalMatch(queryContains: string): Prisma.Sql {
     return Prisma.sql`(p.id, p.user_id) IN (
 			SELECT lp.id, lp.user_id
 			FROM photos lp
