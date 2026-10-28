@@ -1,4 +1,4 @@
-import { prisma } from "@starlight/utils";
+import { Prisma, prisma } from "@starlight/utils";
 import { logger } from "@/logger";
 import { classificationQueue, classificationWorker } from "@/queue/classification";
 import { embeddingsQueue, embeddingsWorker } from "@/queue/embeddings";
@@ -11,9 +11,11 @@ import { redis } from "@/storage";
 //   CLEAR_QUEUE=1         (drain waiting and delayed jobs before enqueueing)
 //   FORCE=1               (enqueue even if jobs existed previously; bypass dedupe)
 //   ALL_PICTURES=1        (enqueue all pictures)
+//   TAGGER=<version>      (also enqueue photos classified by another tagger version)
 // Notes:
-//   FORCE only bypasses queue job de-duplication. The worker still skips
-//   photos that already have a classification saved.
+//   FORCE only bypasses queue job de-duplication. The worker always overwrites
+//   the stored classification.
+//   Jobs are enqueued at low priority, so photos from the image collector run first.
 
 const DRY_RUN = process.env.DRY_RUN === "1";
 const CLEAR_QUEUE = process.env.CLEAR_QUEUE === "1" || process.env.CLEAR === "1";
@@ -22,6 +24,14 @@ const FORCE = process.env.FORCE === "1";
 // When set, enqueue all photos regardless of stored classification state
 const ALL_PICTURES = process.env.ALL_PICTURES === "1";
 
+const { TAGGER } = process.env;
+
+const otherTagger =
+  TAGGER === undefined ? Prisma.empty : Prisma.sql`OR classification ->> 'tagger' IS DISTINCT FROM ${TAGGER}`;
+
+// Jobs without a priority run before prioritized ones in BullMQ.
+const BACKFILL_PRIORITY = 10;
+
 async function main() {
   logger.info(
     {
@@ -29,6 +39,7 @@ async function main() {
       clear: CLEAR_QUEUE,
       force: FORCE,
       allPictures: ALL_PICTURES,
+      tagger: TAGGER,
     },
     "Starting enqueue of all photos for classification",
   );
@@ -55,6 +66,7 @@ async function main() {
 			    OR (classification -> 'nsfw' -> 'is_nsfw') IS NULL
 			    OR jsonb_typeof(classification -> 'characters') IS DISTINCT FROM 'array'
 			    OR jsonb_typeof(classification -> 'tags') IS DISTINCT FROM 'array'
+			    ${otherTagger}
 			  )
 			ORDER BY id ASC
 		`;
@@ -72,7 +84,9 @@ async function main() {
         return {
           name: `classify-${photo.id}`,
           data: { photoId: photo.id, userId: photo.userId },
-          opts: FORCE ? { jobId } : { jobId, deduplication: { id: base } },
+          opts: FORCE
+            ? { jobId, priority: BACKFILL_PRIORITY }
+            : { jobId, priority: BACKFILL_PRIORITY, deduplication: { id: base } },
         };
       }),
     );
@@ -86,6 +100,7 @@ async function main() {
       force: FORCE,
       clearQueue: CLEAR_QUEUE,
       allPictures: ALL_PICTURES,
+      tagger: TAGGER,
     },
     "Finished enqueue script",
   );

@@ -34,6 +34,8 @@ export const Classification = Schema.Struct({
     manga_like: Schema.Number,
   }),
   tags: Schema.Array(Schema.String),
+  // Absent on photos classified before PixAI.
+  tagger: Schema.optional(Schema.String),
 });
 
 export type Classification = typeof Classification.Type;
