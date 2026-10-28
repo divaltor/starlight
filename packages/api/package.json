@@ -15,6 +15,7 @@
     "build": "bun run -b tsdown",
     "lint": "bun check -b",
     "typecheck": "bun check -b",
+    "test": "bun test",
     "format": "bun fmt"
   },
   "devDependencies": {

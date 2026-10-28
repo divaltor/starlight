@@ -15,7 +15,7 @@
     "build": "bun run db:generate && bun run -b tsdown",
     "lint": "bun check -b",
     "typecheck": "bun check -b",
-    "test": "bun test src",
+    "test": "bun test src --pass-with-no-tests",
     "format": "bun fmt",
     "db:deploy": "prisma --config prisma.config.ts migrate deploy",
     "db:generate": "prisma --config prisma.config.ts generate",
