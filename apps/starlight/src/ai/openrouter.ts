@@ -1,5 +1,5 @@
-import { createProvider } from "@earendil-works/pi-ai";
-import type { Model, Provider } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, createProvider } from "@earendil-works/pi-ai";
+import type { AssistantMessageEventStream, Model, Provider, StreamOptions } from "@earendil-works/pi-ai";
 import { stream, streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { z } from "zod";
 import { ChatReply } from "@/ai/chat-reply";
@@ -58,6 +58,8 @@ export namespace OpenRouter {
   // Only the parts this rewrite reads; everything else passes through untouched.
   const payloadSchema = z.looseObject({ messages: z.array(z.looseObject({ role: z.string() })) });
 
+  const usageChunkSchema = z.object({ usage: z.object({ cost: z.number() }) });
+
   const userMessageSchema = z.looseObject({
     content: z.array(z.looseObject({ image_url: z.object({ url: z.string() }).optional(), type: z.string() })),
     role: z.literal("user"),
@@ -76,20 +78,47 @@ export namespace OpenRouter {
       },
       api: {
         stream: (_target, context, options) =>
-          stream(completions, context, {
-            ...options,
-            onPayload: (payload) => rewriteMedia(payloadSchema.parse(payload)),
-          }),
+          withBilledCost((hooks) => stream(completions, context, { ...options, ...hooks }), options),
         streamSimple: (_target, context, options) =>
-          streamSimple(completions, context, {
-            ...options,
-            onPayload: (payload) => rewriteMedia(payloadSchema.parse(payload)),
-          }),
+          withBilledCost((hooks) => streamSimple(completions, context, { ...options, ...hooks }), options),
       },
       baseUrl: BASE_URL,
       id: providerId,
       models: [completions],
     });
+  }
+
+  // pi-ai prices usage from the model's catalog rates, which are zero here; OpenRouter reports the billed cost on
+  // its final usage chunk, so it replaces the total before the result reaches pi-ai's telemetry and the harness.
+  function withBilledCost(
+    start: (hooks: Pick<StreamOptions, "onPayload" | "onProviderStreamEvent">) => AssistantMessageEventStream,
+    options?: StreamOptions,
+  ): AssistantMessageEventStream {
+    let billedCost: number | undefined;
+
+    const inner = start({
+      onPayload: (payload) => rewriteMedia(payloadSchema.parse(payload)),
+      onProviderStreamEvent: async (chunk, chunkModel) => {
+        billedCost = usageChunkSchema.safeParse(chunk).data?.usage.cost ?? billedCost;
+        await options?.onProviderStreamEvent?.(chunk, chunkModel);
+      },
+    });
+
+    const outer = createAssistantMessageEventStream();
+
+    void (async () => {
+      for await (const event of inner) {
+        if (event.type === "done" && billedCost !== undefined) event.message.usage.cost.total = billedCost;
+
+        if (event.type === "error" && billedCost !== undefined) event.error.usage.cost.total = billedCost;
+
+        outer.push(event);
+      }
+
+      outer.end();
+    })();
+
+    return outer;
   }
 
   function rewriteMedia(payload: z.infer<typeof payloadSchema>) {
