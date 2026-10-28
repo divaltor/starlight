@@ -52,6 +52,7 @@ export namespace Reply {
     chatTitle: string | null;
     contextMemory: string | null;
     currentDate: string;
+    isPrivate: boolean;
     // First text part of the batch input; locates the live batch among request messages.
     marker: string | null;
     media: { part: number; reference: Media.Reference }[];
@@ -73,6 +74,7 @@ export namespace Reply {
       chatTitle: null,
       contextMemory: null,
       currentDate: "",
+      isPrivate: true,
       marker: null,
       media: [],
       precomputed: [],
@@ -143,6 +145,7 @@ export namespace Reply {
             context.telemetry.setAttributes({
               "langfuse.session.id": `${lane!.key!.chatId}/${lane!.key!.threadKey}`,
               "langfuse.user.id": run?.senderId?.toString(),
+              "starlight.private": run?.isPrivate !== false,
             });
 
             if (run?.marker == null) return request;

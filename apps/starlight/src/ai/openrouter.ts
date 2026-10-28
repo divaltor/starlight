@@ -4,6 +4,7 @@ import { stream, streamSimple } from "@earendil-works/pi-ai/api/openai-completio
 import { z } from "zod";
 import { ChatReply } from "@/ai/chat-reply";
 import type { ModelProfile } from "@/ai/model-profile";
+import { recordModelContent } from "@/instrumentation";
 
 /**
  * The pi-ai provider for Starlight's chat model: OpenRouter's completions API pinned to the
@@ -58,6 +59,8 @@ export namespace OpenRouter {
   // Only the parts this rewrite reads; everything else passes through untouched.
   const payloadSchema = z.looseObject({ messages: z.array(z.looseObject({ role: z.string() })) });
 
+  export type Payload = z.infer<typeof payloadSchema>;
+
   const usageChunkSchema = z.object({ usage: z.object({ cost: z.number() }) });
 
   const userMessageSchema = z.looseObject({
@@ -97,7 +100,14 @@ export namespace OpenRouter {
     let billedCost: number | undefined;
 
     const inner = start({
-      onPayload: (payload) => rewriteMedia(payloadSchema.parse(payload)),
+      onPayload: (payload) => {
+        // Before the media rewrite every attachment is still a data URI, which LangfuseSpanProcessor uploads as media.
+        const parsed = payloadSchema.parse(payload);
+
+        recordModelContent(options?.telemetry, "input", parsed);
+
+        return rewriteMedia(parsed);
+      },
       onProviderStreamEvent: async (chunk, chunkModel) => {
         billedCost = usageChunkSchema.safeParse(chunk).data?.usage.cost ?? billedCost;
         await options?.onProviderStreamEvent?.(chunk, chunkModel);
@@ -110,6 +120,8 @@ export namespace OpenRouter {
       for await (const event of inner) {
         if (event.type === "done" && billedCost !== undefined) event.message.usage.cost.total = billedCost;
 
+        if (event.type === "done") recordModelContent(options?.telemetry, "output", event.message.content);
+
         if (event.type === "error" && billedCost !== undefined) event.error.usage.cost.total = billedCost;
 
         outer.push(event);
@@ -121,7 +133,7 @@ export namespace OpenRouter {
     return outer;
   }
 
-  function rewriteMedia(payload: z.infer<typeof payloadSchema>) {
+  function rewriteMedia(payload: Payload) {
     return {
       ...payload,
       messages: payload.messages.map((message) => {

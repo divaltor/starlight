@@ -1,4 +1,5 @@
 import { OpenTelemetry } from "@ai-sdk/otel";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type {
   SpanLink,
   SpanAttributes,
@@ -26,6 +27,7 @@ import { ATTR_ERROR_TYPE, ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conv
 import { heapSize, memoryUsage } from "bun:jsc";
 import { registerTelemetry } from "ai";
 import type { MiddlewareFn } from "grammy";
+import type { OpenRouter } from "@/ai/openrouter";
 import type { LangfuseConfig, OtlpConfig } from "@/env";
 
 let provider: NodeTracerProvider | undefined;
@@ -34,7 +36,15 @@ let logProvider: LoggerProvider | undefined;
 let shutdownPromise: Promise<void> | undefined;
 const INSTRUMENTATION_NAME = "starlight-bot";
 const PI_MODEL_REQUEST_SPAN = "pi.ai.request";
-const LANGFUSE_TRACE_ATTRIBUTES = new Set(["langfuse.session.id", "langfuse.user.id"]);
+
+// Set by Starlight on a phase span and copied onto the spans Pi starts under it.
+const INHERITED_ATTRIBUTES = new Set(["langfuse.session.id", "langfuse.user.id", "starlight.private"]);
+
+// Pi hands back its own span handles as parents, link targets and exemplar contexts.
+const otelContexts = new WeakMap<TelemetryContext, Context>();
+
+// The latest model request span under each parent context, kept only for chats that are explicitly not private.
+const contentRequests = new WeakMap<Context, Span>();
 
 export interface TelemetryConfig {
   readonly langfuse?: LangfuseConfig;
@@ -171,8 +181,6 @@ export function createUpdateTracer(): MiddlewareFn {
 export function createPiTelemetry(): TelemetryContext {
   const tracer = trace.getTracer(INSTRUMENTATION_NAME);
   const meter = metrics.getMeter(INSTRUMENTATION_NAME);
-  // Pi hands back its own span handles as parents, link targets and exemplar contexts.
-  const otelContexts = new WeakMap<TelemetryContext, Context>();
   // Pi starts model requests itself, so they inherit the Langfuse trace attributes Starlight sets on an ancestor.
   const traceAttributes = new WeakMap<Context, SpanAttributes>();
 
@@ -250,6 +258,8 @@ export function createPiTelemetry(): TelemetryContext {
       parent,
     );
 
+    if (isModelRequest && startAttributes["starlight.private"] === false) contentRequests.set(parent, otelSpan);
+
     const active = trace.setSpan(parent, otelSpan);
     traceAttributes.set(active, inherited);
     let explicitStatus = false;
@@ -267,7 +277,7 @@ export function createPiTelemetry(): TelemetryContext {
       setAttributes: (attributes) => {
         Object.assign(
           inherited,
-          Object.fromEntries(Object.entries(attributes).filter((entry) => LANGFUSE_TRACE_ATTRIBUTES.has(entry[0]))),
+          Object.fromEntries(Object.entries(attributes).filter((entry) => INHERITED_ATTRIBUTES.has(entry[0]))),
         );
         otelSpan.setAttributes(isModelRequest ? toLangfuseGeneration(attributes) : attributes);
       },
@@ -294,13 +304,30 @@ export function createPiTelemetry(): TelemetryContext {
       otelSpan.end();
     }
   }
+}
 
-  function toOtelLink(link: SpanLink): Link[] {
-    const otelContext = otelContexts.get(link.context);
-    const spanContext = otelContext && trace.getSpanContext(otelContext);
+function toOtelLink(link: SpanLink): Link[] {
+  const otelContext = otelContexts.get(link.context);
+  const spanContext = otelContext && trace.getSpanContext(otelContext);
 
-    return spanContext === undefined ? [] : [{ context: spanContext, attributes: link.attributes }];
-  }
+  return spanContext === undefined ? [] : [{ context: spanContext, attributes: link.attributes }];
+}
+
+/**
+ * pi-ai never puts prompts or responses on its request span, so the provider hands them over here. They land on the
+ * model request open under `parent` only when its chat is explicitly not private, as the AI SDK calls' `recordInputs`.
+ */
+export function recordModelContent(
+  parent: TelemetryContext | undefined,
+  field: "input" | "output",
+  value: OpenRouter.Payload | AssistantMessage["content"],
+): void {
+  const otelContext = parent && otelContexts.get(parent);
+
+  (otelContext && contentRequests.get(otelContext))?.setAttribute(
+    `langfuse.observation.${field}`,
+    JSON.stringify(value),
+  );
 }
 
 // LangfuseSpanProcessor drops spans without gen_ai.* attributes, and pi-ai reports usage and cost under its own names.

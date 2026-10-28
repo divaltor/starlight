@@ -326,6 +326,7 @@ export namespace Lane {
       run.chatTitle = chat.title;
       run.contextMemory = frozen.contextMemory;
       run.currentDate = frozen.currentDate;
+      run.isPrivate = chat.isPrivate;
       run.marker = rendered[0]!.text;
       run.media = state.batch.flatMap((item, part) =>
         [...item.payload.repliedMedia, ...item.payload.media].flatMap((reference) =>
