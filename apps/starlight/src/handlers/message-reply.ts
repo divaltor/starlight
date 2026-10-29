@@ -1,6 +1,7 @@
 import type { Message } from "grammy/types";
 
 const QUOTLY_COMMAND = /^\/q(?:@[a-z\d_]+)?(?:\s|$)/iu;
+const QUOTLY_BOT_USERNAME = "quotlybot";
 
 // \b is ASCII-only, so it never bounds Cyrillic words; use explicit letter lookarounds.
 const BOT_NAME_PATTERN = /(?<![\p{L}\p{N}_])(?:старка|зв[её]здочка)(?![\p{L}\p{N}_])/iu;
@@ -44,11 +45,14 @@ export namespace MessageReply {
     readonly isReply: boolean;
     readonly random: () => number;
     readonly randomResponseChance: number;
+    readonly senderUsername: string | undefined;
     readonly text: string;
   }
 
   export function trigger(options: Options): "addressed" | "random" | null {
     if (options.isReply && QUOTLY_COMMAND.test(options.text)) return null;
+
+    if (options.senderUsername?.toLowerCase() === QUOTLY_BOT_USERNAME) return null;
 
     if (options.explicitlyAddressed) return "addressed";
 

@@ -120,9 +120,26 @@ test.each([
       isReply: row.isReply,
       random: () => row.roll,
       randomResponseChance: 0.01,
+      senderUsername: "vlad",
       text: row.text,
     }),
   ).toBe(row.expected);
+});
+
+// Our product must not answer QuotLyBot's quote stickers replying to our bot,
+// otherwise every /q on the bot's message wakes the LLM for another bot's output.
+test.each(["QuotLyBot", "quotlybot"])("test_skips_response_when_sender_is_%s", (senderUsername) => {
+  expect(
+    MessageReply.trigger({
+      explicitlyAddressed: true,
+      hasSticker: true,
+      isReply: true,
+      random: () => 0,
+      randomResponseChance: 0.01,
+      senderUsername,
+      text: "",
+    }),
+  ).toBeNull();
 });
 
 test("test_bypasses_jev_unless_group_message_has_random_trigger", async () => {

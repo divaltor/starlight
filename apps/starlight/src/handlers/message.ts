@@ -33,6 +33,7 @@ groupChat
       isReply: MessageReply.actualReply(ctx.message) !== undefined,
       random: Math.random,
       randomResponseChance: env.RANDOM_RESPONSE_CHANCE,
+      senderUsername: ctx.message.from?.username,
       text: TelegramMessageText.withEntityLinks(ctx.message) ?? "",
     });
 
