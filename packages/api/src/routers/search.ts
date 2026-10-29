@@ -79,12 +79,7 @@ export const searchImages = maybeAuthProcedure
     const queryTime = cursorData?.queryTime ?? new Date().toISOString();
     const textQuery = `[${text.join(",")}]`;
     const ranking = SearchRanking.parseQuery(query);
-    const queryLower = ranking.lexicalQuery.toLowerCase();
-    const queryContains = `%${queryLower}%`;
-    const queryStartsWith = `${queryLower}%`;
-    const queryStartsWithSeries = `${queryLower} (%`;
     const candidateLimit = Math.max(limit * 8, 200);
-    const hasLexicalQuery = queryLower.length > 0;
 
     // Public user IDs are passed as a literal list: an `IN (SELECT ...)` semi-join makes the planner
     // expect ~2% of photos instead of nearly all, so it skips the HNSW indexes for an exact scan.
@@ -104,8 +99,6 @@ export const searchImages = maybeAuthProcedure
 			AND p.tag_vec IS NOT NULL
 			AND ${userFilter}
 		`;
-
-    const lexicalMatch = hasLexicalQuery ? SearchRanking.lexicalMatch(queryContains) : Prisma.sql`FALSE`;
 
     const paginationClause = cursorData
       ? Prisma.sql`WHERE (
@@ -137,7 +130,7 @@ export const searchImages = maybeAuthProcedure
 				FROM photos p
 				JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id
 				WHERE ${baseFilter}
-					AND ${lexicalMatch}
+					AND ${SearchRanking.lexicalMatch(ranking)}
 				ORDER BY t.created_at DESC, p.id DESC
 				LIMIT ${candidateLimit}
 			),
@@ -167,50 +160,7 @@ export const searchImages = maybeAuthProcedure
 					COALESCE(1.0 - (p.image_vec <=> ${textQuery}::vector), 0.0) AS s_image,
 					COALESCE(1.0 - (p.tag_vec <=> ${textQuery}::vector), 0.0) AS s_tag_semantic,
 					p.cosplay_score,
-					COALESCE(
-						(
-							SELECT MAX(
-								CASE
-									WHEN lower(character_tag.value) = ${queryLower} THEN CASE WHEN character_tag.ordinality <= 2 THEN 1.0 ELSE 0.96 END
-									WHEN lower(character_tag.value) LIKE ${queryStartsWithSeries} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.97 ELSE 0.92 END
-									WHEN lower(character_tag.value) LIKE ${queryStartsWith} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.92 ELSE 0.86 END
-									WHEN lower(character_tag.value) LIKE ${queryContains} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.82 ELSE 0.76 END
-									ELSE 0.0
-								END
-							)
-							FROM jsonb_array_elements_text(COALESCE(p.classification->'characters', '[]'::jsonb)) WITH ORDINALITY AS character_tag(value, ordinality)
-						),
-						0.0
-					) AS s_character,
-					COALESCE(
-						(
-							SELECT MAX(
-								CASE
-									WHEN lower(general_tag.value) = ${queryLower} THEN 0.88
-									WHEN lower(general_tag.value) LIKE ${queryStartsWith} THEN 0.74
-									WHEN lower(general_tag.value) LIKE ${queryContains} THEN 0.58
-									ELSE 0.0
-								END
-							)
-							FROM jsonb_array_elements_text(COALESCE(p.classification->'tags', '[]'::jsonb)) AS general_tag(value)
-						),
-						0.0
-					) AS s_tag_lexical,
-					COALESCE(
-						(
-							SELECT MAX(
-								CASE
-									WHEN lower(hashtag.value) = ${queryLower} THEN 0.76
-									WHEN lower(hashtag.value) LIKE ${queryStartsWith} THEN 0.62
-									WHEN lower(hashtag.value) LIKE ${queryContains} THEN 0.5
-									ELSE 0.0
-								END
-							)
-							FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
-						),
-						0.0
-					) AS s_hashtag,
-					CASE WHEN lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END AS s_tweet_text
+					${SearchRanking.lexicalScore(ranking)} AS s_lexical
 				FROM candidate_pool c
 				JOIN photos p ON p.id = c.id AND p.user_id = c.user_id
 				JOIN tweets t ON t.id = p.tweet_id AND t.user_id = p.user_id

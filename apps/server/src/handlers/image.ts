@@ -210,13 +210,6 @@ async function getInlineQueryEmbedding(query: string) {
   );
 }
 
-interface InlineLexicalFragmentInputs {
-  queryContains: string;
-  queryLower: string;
-  queryStartsWith: string;
-  queryStartsWithSeries: string;
-}
-
 function buildAuthorFilters(authors: string[]): { filter: Prisma.Sql; score: Prisma.Sql } {
   if (authors.length === 0) {
     return { filter: Prisma.empty, score: Prisma.sql`0.0` };
@@ -243,85 +236,16 @@ function buildAuthorFilters(authors: string[]): { filter: Prisma.Sql; score: Pri
   return { filter, score };
 }
 
-function buildCharacterScore(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
-  const { queryContains, queryLower, queryStartsWith, queryStartsWithSeries } = inputs;
-
-  return Prisma.sql`
-				COALESCE(
-					(
-						SELECT MAX(
-							CASE
-								WHEN lower(character_tag.value) = ${queryLower} THEN CASE WHEN character_tag.ordinality <= 2 THEN 1.0 ELSE 0.96 END
-								WHEN lower(character_tag.value) LIKE ${queryStartsWithSeries} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.97 ELSE 0.92 END
-								WHEN lower(character_tag.value) LIKE ${queryStartsWith} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.92 ELSE 0.86 END
-								WHEN lower(character_tag.value) LIKE ${queryContains} THEN CASE WHEN character_tag.ordinality <= 2 THEN 0.82 ELSE 0.76 END
-								ELSE 0.0
-							END
-						)
-						FROM jsonb_array_elements_text(COALESCE(p.classification->'characters', '[]'::jsonb)) WITH ORDINALITY AS character_tag(value, ordinality)
-					),
-					0.0
-				)
-			`;
-}
-
-function buildTagLexicalScore(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
-  const { queryContains, queryLower, queryStartsWith } = inputs;
-
-  return Prisma.sql`
-				COALESCE(
-					(
-						SELECT MAX(
-							CASE
-								WHEN lower(general_tag.value) = ${queryLower} THEN 0.88
-								WHEN lower(general_tag.value) LIKE ${queryStartsWith} THEN 0.74
-								WHEN lower(general_tag.value) LIKE ${queryContains} THEN 0.58
-								ELSE 0.0
-							END
-						)
-						FROM jsonb_array_elements_text(COALESCE(p.classification->'tags', '[]'::jsonb)) AS general_tag(value)
-					),
-					0.0
-				)
-			`;
-}
-
-function buildHashtagScore(inputs: InlineLexicalFragmentInputs): Prisma.Sql {
-  const { queryContains, queryLower, queryStartsWith } = inputs;
-
-  return Prisma.sql`
-				COALESCE(
-					(
-						SELECT MAX(
-							CASE
-								WHEN lower(hashtag.value) = ${queryLower} THEN 0.76
-								WHEN lower(hashtag.value) LIKE ${queryStartsWith} THEN 0.62
-								WHEN lower(hashtag.value) LIKE ${queryContains} THEN 0.5
-								ELSE 0.0
-							END
-						)
-						FROM jsonb_array_elements_text(COALESCE(t.tweet_data->'hashtags', '[]'::jsonb)) AS hashtag(value)
-					),
-					0.0
-				)
-			`;
-}
-
 interface SemanticInlineSearch {
   authorFilter: Prisma.Sql;
   authorScore: Prisma.Sql;
-  characterScore: Prisma.Sql;
-  cosplayWeight: number;
   cursor: InlineSearchCursor.Payload | null;
-  hashtagScore: Prisma.Sql;
-  lexicalMatch: Prisma.Sql;
   logger: Logger;
   pageQueryLimit: number;
   photoDedupeKey: Prisma.Sql;
   queryTime: string;
-  tagLexicalScore: Prisma.Sql;
+  ranking: SearchRanking.Query;
   textVector: string;
-  tweetTextScore: Prisma.Sql;
   userId: string;
 }
 
@@ -329,18 +253,13 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
   const {
     authorFilter,
     authorScore,
-    characterScore,
-    cosplayWeight,
     cursor,
-    hashtagScore,
-    lexicalMatch,
     logger,
     pageQueryLimit,
     photoDedupeKey,
     queryTime,
-    tagLexicalScore,
+    ranking,
     textVector,
-    tweetTextScore,
     userId,
   } = search;
 
@@ -388,7 +307,7 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
 						WHERE p.user_id = ${userId}
 							AND p.deleted_at IS NULL
 							AND p.s3_path IS NOT NULL
-							AND ${lexicalMatch}
+							AND ${SearchRanking.lexicalMatch(ranking)}
 							${authorFilter}
 						ORDER BY t.created_at DESC, p.id DESC
 						LIMIT ${INLINE_QUERY_CANDIDATE_LIMIT}
@@ -416,10 +335,7 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
 							COALESCE(1.0 - (p.image_vec <=> ${textVector}::vector), 0.0) AS s_image,
 							COALESCE(1.0 - (p.tag_vec <=> ${textVector}::vector), 0.0) AS s_tag_semantic,
 							p.cosplay_score,
-							${characterScore} AS s_character,
-							${tagLexicalScore} AS s_tag_lexical,
-							${hashtagScore} AS s_hashtag,
-							${tweetTextScore} AS s_tweet_text,
+							${SearchRanking.lexicalScore(ranking)} AS s_lexical,
 							${authorScore} AS s_author
 						FROM candidate_pool c
 						JOIN photos p ON p.id = c.id AND p.user_id = c.user_id
@@ -436,7 +352,7 @@ async function runSemanticInlineSearch(search: SemanticInlineSearch): Promise<In
 							height,
 							width,
 							-- Author match keeps its old 0.2 ratio to a character match.
-							${SearchRanking.finalScore({ cosplayWeight, queryTime })} + (s_author * 0.8) AS final_score
+							${SearchRanking.finalScore({ cosplayWeight: ranking.cosplayWeight, queryTime })} + (s_author * 0.8) AS final_score
 						FROM scored
 					),
 					deduped AS (
@@ -537,34 +453,13 @@ async function searchRankedInlinePhotos(
 ): Promise<{ photos: InlineImageSearchResult[]; nextOffset: string }> {
   const { authors, logger, offset, query, textQuery, userId } = search;
 
-  const ranking = SearchRanking.parseQuery(textQuery);
-  const queryLower = ranking.lexicalQuery.toLowerCase();
-  const hasLexicalQuery = queryLower.length > 0;
-  const queryContains = `%${queryLower}%`;
-  const queryStartsWith = `${queryLower}%`;
-  const queryStartsWithSeries = `${queryLower} (%`;
   const pageQueryLimit = INLINE_QUERY_PAGE_SIZE + 1;
   const photoOffset = Math.min(Math.max(Number(offset || "0") || 0, 0), MAX_INLINE_QUERY_PHOTO_OFFSET);
   const photoDedupeKey = Prisma.sql`COALESCE(NULLIF(p.perceptual_hash, ''), p.id)`;
 
-  const fragmentInputs = {
-    queryContains,
-    queryLower,
-    queryStartsWith,
-    queryStartsWithSeries,
-  };
-
   const authorFilters = buildAuthorFilters(authors);
   const authorFilter = authorFilters.filter;
   const authorScore = authorFilters.score;
-  const lexicalMatch = hasLexicalQuery ? SearchRanking.lexicalMatch(fragmentInputs.queryContains) : Prisma.sql`FALSE`;
-  const characterScore = hasLexicalQuery ? buildCharacterScore(fragmentInputs) : Prisma.sql`0.0`;
-  const tagLexicalScore = hasLexicalQuery ? buildTagLexicalScore(fragmentInputs) : Prisma.sql`0.0`;
-  const hashtagScore = hasLexicalQuery ? buildHashtagScore(fragmentInputs) : Prisma.sql`0.0`;
-
-  const tweetTextScore = hasLexicalQuery
-    ? Prisma.sql`CASE WHEN lower(COALESCE(t.tweet_text, '')) LIKE ${queryContains} THEN 0.34 ELSE 0.0 END`
-    : Prisma.sql`0.0`;
 
   if (userId === undefined || userId === "") {
     return { photos: [], nextOffset: "" };
@@ -610,18 +505,13 @@ async function searchRankedInlinePhotos(
   const photos = await runSemanticInlineSearch({
     authorFilter,
     authorScore,
-    characterScore,
-    cosplayWeight: ranking.cosplayWeight,
     cursor,
-    hashtagScore,
-    lexicalMatch,
     logger,
     pageQueryLimit,
     photoDedupeKey,
     queryTime: queryTime.toISOString(),
-    tagLexicalScore,
+    ranking: SearchRanking.parseQuery(textQuery),
     textVector: `[${textEmbedding.join(",")}]`,
-    tweetTextScore,
     userId,
   });
 
