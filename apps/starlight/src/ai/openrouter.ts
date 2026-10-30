@@ -42,6 +42,8 @@ export namespace OpenRouter {
       api: "openai-completions",
       baseUrl: BASE_URL,
       compat: {
+        // pi-ai only sends cache_control for anthropic/* on OpenRouter; Gemini otherwise falls back to weaker implicit caching.
+        cacheControlFormat: "anthropic",
         openRouterRouting: {
           allow_fallbacks: profile.route.allowFallbacks,
           only: [...profile.route.only],
