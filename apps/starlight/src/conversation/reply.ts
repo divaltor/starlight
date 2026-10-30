@@ -165,7 +165,7 @@ export namespace Reply {
 
             const metadata: UserMessage = {
               content: [
-                { text: `TRUSTED REQUEST METADATA\nCurrent date: ${run.currentDate}`, type: "text" },
+                { text: `${Prompt.requestMetadataHeader}\nCurrent date: ${run.currentDate}`, type: "text" },
                 ...(run.contextMemory === null ? [] : [{ text: run.contextMemory, type: "text" as const }]),
               ],
               role: "user",

@@ -10,6 +10,7 @@ import { stream, streamSimple } from "@earendil-works/pi-ai/api/openai-completio
 import { z } from "zod";
 import { ChatReply } from "@/ai/chat-reply";
 import type { ModelProfile } from "@/ai/model-profile";
+import { Prompt } from "@/context/prompt";
 import { recordModelContent } from "@/instrumentation";
 
 /**
@@ -42,8 +43,6 @@ export namespace OpenRouter {
       api: "openai-completions",
       baseUrl: BASE_URL,
       compat: {
-        // pi-ai only sends cache_control for anthropic/* on OpenRouter; Gemini otherwise falls back to weaker implicit caching.
-        cacheControlFormat: "anthropic",
         openRouterRouting: {
           allow_fallbacks: profile.route.allowFallbacks,
           only: [...profile.route.only],
@@ -80,9 +79,22 @@ export namespace OpenRouter {
   const usageChunkSchema = z.object({ usage: z.object({ cost: z.number() }) });
 
   const userMessageSchema = z.looseObject({
-    content: z.array(z.looseObject({ image_url: z.object({ url: z.string() }).optional(), type: z.string() })),
+    content: z.array(
+      z.looseObject({
+        image_url: z.object({ url: z.string() }).optional(),
+        text: z.string().optional(),
+        type: z.string(),
+      }),
+    ),
     role: z.literal("user"),
   });
+
+  const prefixMessageSchema = z.looseObject({
+    content: z.union([z.string().min(1), z.array(z.looseObject({ type: z.string() }))]),
+    role: z.string(),
+  });
+
+  const CACHE_CONTROL = { type: "ephemeral" };
 
   export function provider(apiKey: string, profile: ModelProfile.Profile): Provider<"openai-completions"> {
     // The provider serves exactly this model, so streams use it instead of narrowing the target.
@@ -118,7 +130,7 @@ export namespace OpenRouter {
     const inner = start({
       onPayload: (payload) => {
         // Before the media rewrite every attachment is still a data URI, which LangfuseSpanProcessor uploads as media.
-        const parsed = payloadSchema.parse(payload);
+        const parsed = withCacheBreakpoint(payloadSchema.parse(payload));
 
         recordModelContent(options?.telemetry, "input", {
           ...parsed,
@@ -174,6 +186,35 @@ export namespace OpenRouter {
       ...(reasoning !== "" && { reasoning }),
       role: "assistant",
       ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
+    };
+  }
+
+  // Gemini on OpenRouter caches the prompt up to its last breakpoint. A breakpoint on the final message makes OpenRouter
+  // bill the whole prompt twice, so it goes on the last transcript message before this request's metadata, as the AI
+  // SDK engine did: that prefix is sent unchanged next turn, and only the live batch is billed at the full input rate.
+  function withCacheBreakpoint(payload: Payload): Payload {
+    const metadata = payload.messages.findLastIndex(
+      (message) =>
+        userMessageSchema.safeParse(message).data?.content[0]?.text?.startsWith(Prompt.requestMetadataHeader) === true,
+    );
+
+    const prefix = prefixMessageSchema.safeParse(payload.messages[metadata - 1]);
+
+    if (!prefix.success) return payload;
+    const { content } = prefix.data;
+    const textIndex = typeof content === "string" ? -1 : content.findLastIndex((part) => part.type === "text");
+
+    if (typeof content !== "string" && textIndex === -1) return payload;
+
+    return {
+      ...payload,
+      messages: payload.messages.with(metadata - 1, {
+        ...prefix.data,
+        content:
+          typeof content === "string"
+            ? [{ cache_control: CACHE_CONTROL, text: content, type: "text" }]
+            : content.map((part, index) => (index === textIndex ? { ...part, cache_control: CACHE_CONTROL } : part)),
+      }),
     };
   }
 

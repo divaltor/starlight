@@ -4,6 +4,7 @@ import type { Media } from "@/media/media";
 
 export namespace Prompt {
   export const canonicalEncode = CanonicalJson.encode;
+  export const requestMetadataHeader = "TRUSTED REQUEST METADATA";
 
   const memoryScopeLabels = {
     chat: "Retrieved chat memory",
@@ -114,7 +115,7 @@ export namespace Prompt {
 
     if (repeated === undefined) return null;
 
-    return `TRUSTED REQUEST METADATA\nYour recent replies keep ending sentences with ${
+    return `${requestMetadataHeader}\nYour recent replies keep ending sentences with ${
       repeated === EMOJI_ENDING ? "an emoji" : `«${repeated}»`
     }. Do not tack it onto this reply; finish when the substantive content is complete.`;
   }
