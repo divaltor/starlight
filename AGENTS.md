@@ -78,6 +78,7 @@ Services follow the namespace-wrapped module anatomy in `.opencode/skills/effect
 - Never hand-edit `packages/utils/src/generated/prisma`; regenerate with `bun run db:generate`.
 - Follow conventional commits: `type(scope): summary` with types `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
 - Scopes are optional; use the affected app or package, for example `web`, `server`, `starlight`, `utils`.
+- Production runs on Dokploy, which auto-deploys every push to `main`; pushing to `main` is deploying.
 - Push only after the tests covering the change pass. If a check could not run, report that instead of implying it passed.
 
 <!-- BEGIN:turborepo-agent-rules -->
