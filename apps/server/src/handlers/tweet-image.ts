@@ -130,8 +130,8 @@ composer
       const results = [
         ...(videoResult === null ? [] : [videoResult]),
         ...(await Promise.all([
-          uploadInlinePhoto(tweetId, "light", lightResult),
-          uploadInlinePhoto(tweetId, "dark", darkResult),
+          uploadInlinePhoto(tweetId, "light", "Light theme", lightResult),
+          uploadInlinePhoto(tweetId, "dark", "Dark theme", darkResult),
         ])),
       ];
 
@@ -164,8 +164,8 @@ composer
 
         results.push(
           ...(await Promise.all([
-            uploadInlinePhoto(tweetId, "light-no-chain", lightNoChainResult),
-            uploadInlinePhoto(tweetId, "dark-no-chain", darkNoChainResult),
+            uploadInlinePhoto(tweetId, "light-no-chain", "Light theme, without replies", lightNoChainResult),
+            uploadInlinePhoto(tweetId, "dark-no-chain", "Dark theme, without replies", darkNoChainResult),
           ])),
         );
 
@@ -281,7 +281,7 @@ async function buildInlineVideoResult(tweet: FxEmbedTweet, video: FxEmbedVideo, 
 
 // Telegram Desktop caches inline images by URL; a thumbnail sharing the photo URL let a
 // partially downloaded preview show up as the sent photo (gray lower half).
-async function uploadInlinePhoto(tweetId: string, variant: string, result: RenderResult) {
+async function uploadInlinePhoto(tweetId: string, variant: string, title: string, result: RenderResult) {
   const s3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/${variant}.jpg`;
   const thumbnailS3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/${variant}-thumb.jpg`;
 
@@ -295,6 +295,7 @@ async function uploadInlinePhoto(tweetId: string, variant: string, result: Rende
   ]);
 
   return InlineQueryResultBuilder.photo(`tweet:${tweetId}:${variant}`, `${env.BASE_CDN_URL}/${s3Path}`, {
+    title,
     thumbnail_url: `${env.BASE_CDN_URL}/${thumbnailS3Path}`,
     caption: `https://x.com/i/status/${tweetId}`,
     photo_width: result.width,
