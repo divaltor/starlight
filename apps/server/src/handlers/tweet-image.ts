@@ -2,7 +2,9 @@ import { extractTweetId, isTwitterUrl } from "@starlight/utils";
 import { Schema } from "effect";
 import { Composer, GrammyError, InlineKeyboard, InlineQueryResultBuilder, InputFile } from "grammy";
 import env from "@/env";
+import sharp from "sharp";
 import { renderTweetImage } from "@/services/render";
+import type { RenderResult } from "@/services/render";
 import { generateTweetImage, prepareTweetData, TWEET_IMAGE_CACHE_PREFIX } from "@/services/tweet/tweet-image.service";
 import type { Theme } from "@/services/tweet/tweet-image.service";
 import { runtime } from "@/services/runtime";
@@ -15,6 +17,7 @@ const chats = composer.chatType(["private", "group", "supergroup"]);
 const TWEET_NOT_FOUND_MESSAGE = "Tweet not found";
 
 const IMAGE_JPEG_TYPE = "image/jpeg";
+const THUMBNAIL_WIDTH = 320;
 
 function createThemeKeyboard(tweetId: string, currentTheme: Theme, userId: number): InlineKeyboard {
   const nextTheme = currentTheme === "dark" ? "light" : "dark";
@@ -107,33 +110,10 @@ composer
         renderTweetImage(tweetData, "dark"),
       ]);
 
-      const lightS3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/light.jpg`;
-      const darkS3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/dark.jpg`;
-
-      await Promise.all([
-        s3.write(lightS3Path, lightResult.buffer, { type: IMAGE_JPEG_TYPE }),
-        s3.write(darkS3Path, darkResult.buffer, { type: IMAGE_JPEG_TYPE }),
+      const results = await Promise.all([
+        uploadInlinePhoto(tweetId, "light", lightResult),
+        uploadInlinePhoto(tweetId, "dark", darkResult),
       ]);
-
-      ctx.logger.debug({ tweetId, lightS3Path, darkS3Path }, "Uploaded tweet images to S3");
-
-      const lightUrl = `${env.BASE_CDN_URL}/${lightS3Path}`;
-      const darkUrl = `${env.BASE_CDN_URL}/${darkS3Path}`;
-
-      const results = [
-        InlineQueryResultBuilder.photo(`tweet:${tweetId}:light`, lightUrl, {
-          thumbnail_url: lightUrl,
-          caption: `https://x.com/i/status/${tweetId}`,
-          photo_width: lightResult.width,
-          photo_height: lightResult.height,
-        }),
-        InlineQueryResultBuilder.photo(`tweet:${tweetId}:dark`, darkUrl, {
-          thumbnail_url: darkUrl,
-          caption: `https://x.com/i/status/${tweetId}`,
-          photo_width: darkResult.width,
-          photo_height: darkResult.height,
-        }),
-      ];
 
       const generatedImages = [
         {
@@ -162,35 +142,11 @@ composer
           renderTweetImage(tweetDataWithoutChain, "dark"),
         ]);
 
-        const lightNoChainS3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/light-no-chain.jpg`;
-        const darkNoChainS3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/dark-no-chain.jpg`;
-
-        await Promise.all([
-          s3.write(lightNoChainS3Path, lightNoChainResult.buffer, { type: IMAGE_JPEG_TYPE }),
-          s3.write(darkNoChainS3Path, darkNoChainResult.buffer, { type: IMAGE_JPEG_TYPE }),
-        ]);
-
-        ctx.logger.debug(
-          { tweetId, lightNoChainS3Path, darkNoChainS3Path },
-          "Uploaded tweet images without chain to S3",
-        );
-
-        const lightNoChainUrl = `${env.BASE_CDN_URL}/${lightNoChainS3Path}`;
-        const darkNoChainUrl = `${env.BASE_CDN_URL}/${darkNoChainS3Path}`;
-
         results.push(
-          InlineQueryResultBuilder.photo(`tweet:${tweetId}:light:no-chain`, lightNoChainUrl, {
-            thumbnail_url: lightNoChainUrl,
-            caption: `https://x.com/i/status/${tweetId}`,
-            photo_width: lightNoChainResult.width,
-            photo_height: lightNoChainResult.height,
-          }),
-          InlineQueryResultBuilder.photo(`tweet:${tweetId}:dark:no-chain`, darkNoChainUrl, {
-            thumbnail_url: darkNoChainUrl,
-            caption: `https://x.com/i/status/${tweetId}`,
-            photo_width: darkNoChainResult.width,
-            photo_height: darkNoChainResult.height,
-          }),
+          ...(await Promise.all([
+            uploadInlinePhoto(tweetId, "light-no-chain", lightNoChainResult),
+            uploadInlinePhoto(tweetId, "dark-no-chain", darkNoChainResult),
+          ])),
         );
 
         generatedImages.push(
@@ -230,6 +186,29 @@ composer
       await ctx.answerInlineQuery([]);
     }
   });
+
+// Telegram Desktop caches inline images by URL; a thumbnail sharing the photo URL let a
+// partially downloaded preview show up as the sent photo (gray lower half).
+async function uploadInlinePhoto(tweetId: string, variant: string, result: RenderResult) {
+  const s3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/${variant}.jpg`;
+  const thumbnailS3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/${variant}-thumb.jpg`;
+
+  await Promise.all([
+    s3.write(s3Path, result.buffer, { type: IMAGE_JPEG_TYPE }),
+    s3.write(
+      thumbnailS3Path,
+      await sharp(result.buffer).resize({ width: THUMBNAIL_WIDTH }).jpeg({ quality: 80 }).toBuffer(),
+      { type: IMAGE_JPEG_TYPE },
+    ),
+  ]);
+
+  return InlineQueryResultBuilder.photo(`tweet:${tweetId}:${variant}`, `${env.BASE_CDN_URL}/${s3Path}`, {
+    thumbnail_url: `${env.BASE_CDN_URL}/${thumbnailS3Path}`,
+    caption: `https://x.com/i/status/${tweetId}`,
+    photo_width: result.width,
+    photo_height: result.height,
+  });
+}
 
 chats.callbackQuery(/^tweet_img:toggle:(?<tweetId>\d+):(?<theme>light|dark):(?<userId>\d+)$/u, async (ctx) => {
   // The regex callback query route guarantees all named match groups are present
