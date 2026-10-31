@@ -1,5 +1,6 @@
 import { EmbeddingsService } from "@starlight/api/services/embeddings";
 import { Layer, Logger, ManagedRuntime, pipe, References } from "effect";
+import { FetchHttpClient } from "effect/http";
 import type { LogLevel } from "effect/LogLevel";
 import env from "@/env";
 import { logger } from "@/logger";
@@ -87,6 +88,7 @@ const loggingLayer = Layer.mergeAll(
 export const runtime = ManagedRuntime.make(
   Layer.mergeAll(
     loggingLayer,
+    FetchHttpClient.layer,
     TwitterApi.defaultLayer,
     EmbeddingsService.defaultLayer({ apiToken: env.ML_API_TOKEN, baseUrl: env.ML_BASE_URL }),
   ),

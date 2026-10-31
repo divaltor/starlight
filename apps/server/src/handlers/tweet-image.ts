@@ -1,13 +1,17 @@
-import { extractTweetId, isTwitterUrl } from "@starlight/utils";
-import { Schema } from "effect";
+import { extractTweetId, isTwitterUrl, prisma } from "@starlight/utils";
+import { Duration, Effect, Option, Schema } from "effect";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { Composer, GrammyError, InlineKeyboard, InlineQueryResultBuilder, InputFile } from "grammy";
 import env from "@/env";
 import sharp from "sharp";
+import type { FxEmbedTweet, FxEmbedVideo } from "@/services/fxembed/types";
 import { renderTweetImage } from "@/services/render";
-import type { RenderResult } from "@/services/render";
+import type { RenderResult, TweetData } from "@/services/render";
 import { generateTweetImage, prepareTweetData, TWEET_IMAGE_CACHE_PREFIX } from "@/services/tweet/tweet-image.service";
 import type { Theme } from "@/services/tweet/tweet-image.service";
 import { runtime } from "@/services/runtime";
+import { TweetRichMessage } from "@/services/tweet/tweet-rich-message";
+import { TwitterApi } from "@/services/twitter-api";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
 
@@ -18,6 +22,16 @@ const TWEET_NOT_FOUND_MESSAGE = "Tweet not found";
 
 const IMAGE_JPEG_TYPE = "image/jpeg";
 const THUMBNAIL_WIDTH = 320;
+const TWEET_TRANSLATION_LANGUAGE = "en";
+
+// Telegram's limits for files it downloads from a URL; grammY documents 1 MB for mpeg4_gif results.
+const MPEG4_GIF_URL_LIMIT_BYTES = 1024 * 1024;
+const VIDEO_URL_LIMIT_BYTES = 20 * 1024 * 1024;
+const VIDEO_HEAD_TIMEOUT_MS = 3000;
+
+const ContentLengthResponse = Schema.Struct({
+  headers: Schema.Struct({ "content-length": Schema.FiniteFromString }),
+});
 
 function createThemeKeyboard(tweetId: string, currentTheme: Theme, userId: number): InlineKeyboard {
   const nextTheme = currentTheme === "dark" ? "light" : "dark";
@@ -103,17 +117,23 @@ composer
     }
 
     try {
-      const tweetData = await runtime.runPromise(prepareTweetData(tweetId));
+      const tweet = await runtime.runPromise(TwitterApi.getFxTweet(tweetId, TWEET_TRANSLATION_LANGUAGE));
+      const tweetData = await runtime.runPromise(prepareTweetData(tweetId, tweet ?? undefined));
+      const video = tweet?.media?.videos?.at(0);
 
-      const [lightResult, darkResult] = await Promise.all([
+      const [videoResult, lightResult, darkResult] = await Promise.all([
+        video === undefined ? null : buildInlineVideoResult(tweet!, video, tweetData.replyChain ?? []),
         renderTweetImage(tweetData, "light"),
         renderTweetImage(tweetData, "dark"),
       ]);
 
-      const results = await Promise.all([
-        uploadInlinePhoto(tweetId, "light", lightResult),
-        uploadInlinePhoto(tweetId, "dark", darkResult),
-      ]);
+      const results = [
+        ...(videoResult === null ? [] : [videoResult]),
+        ...(await Promise.all([
+          uploadInlinePhoto(tweetId, "light", lightResult),
+          uploadInlinePhoto(tweetId, "dark", darkResult),
+        ])),
+      ];
 
       const generatedImages = [
         {
@@ -165,7 +185,15 @@ composer
         );
       }
 
-      ctx.logger.info({ generatedImages, tweetId }, "Generated tweet images");
+      ctx.logger.info(
+        {
+          generatedImages,
+          tweetId,
+          videoResultType: videoResult?.type,
+          videoSkipped: video !== undefined && videoResult === null,
+        },
+        "Generated tweet inline results",
+      );
 
       await ctx.answerInlineQuery(results);
 
@@ -186,6 +214,70 @@ composer
       await ctx.answerInlineQuery([]);
     }
   });
+
+// A video already sent by the bot has a file_id, which rich messages require; otherwise
+// Telegram fetches the X video URL itself, and the post text goes into the caption.
+// GIFs over the mpeg4_gif limit go out as regular videos; anything over Telegram's URL limit,
+// or of unknown size, gets no video result, leaving the rendered cards.
+async function buildInlineVideoResult(tweet: FxEmbedTweet, video: FxEmbedVideo, replyChain: TweetData[]) {
+  const id = `tweet:${tweet.id}:video`;
+  const title = `${tweet.author.name} (@${tweet.author.screen_name})`;
+
+  const cachedVideo = await prisma.video.findFirst({
+    where: { tweetId: tweet.id },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (cachedVideo) {
+    return InlineQueryResultBuilder.article(id, title, {
+      description: tweet.getDisplayText(),
+      thumbnail_url: video.thumbnail_url,
+    }).rich(
+      TweetRichMessage.build({
+        tweet,
+        replyChain,
+        video: cachedVideo.telegramFileId,
+        width: cachedVideo.width ?? undefined,
+        height: cachedVideo.height ?? undefined,
+      }),
+    );
+  }
+
+  const sizeBytes = await runtime.runPromise(
+    HttpClient.head(video.url).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap(HttpClientResponse.schemaNoBody(ContentLengthResponse)),
+      Effect.map((response) => response.headers["content-length"]),
+      Effect.timeout(Duration.millis(VIDEO_HEAD_TIMEOUT_MS)),
+      Effect.option,
+    ),
+  );
+
+  if (!Option.exists(sizeBytes, (size) => size <= VIDEO_URL_LIMIT_BYTES)) {
+    return null;
+  }
+
+  const caption = TweetRichMessage.caption({ tweet, replyChain });
+
+  const captionOptions = {
+    caption: caption.caption,
+    caption_entities: caption.caption_entities,
+    show_caption_above_media: true,
+  };
+
+  return video.type === "gif" && Option.exists(sizeBytes, (size) => size <= MPEG4_GIF_URL_LIMIT_BYTES)
+    ? InlineQueryResultBuilder.mpeg4gif(id, video.url, video.thumbnail_url, {
+        ...captionOptions,
+        mpeg4_width: video.width,
+        mpeg4_height: video.height,
+      })
+    : InlineQueryResultBuilder.videoMp4(id, title, video.url, video.thumbnail_url, {
+        ...captionOptions,
+        description: tweet.getDisplayText(),
+        video_width: video.width,
+        video_height: video.height,
+      });
+}
 
 // Telegram Desktop caches inline images by URL; a thumbnail sharing the photo URL let a
 // partially downloaded preview show up as the sent photo (gray lower half).

@@ -123,3 +123,33 @@ test("test_preserves_x_reading_order_for_quoted_video_posts", () => {
     ],
   });
 });
+
+test.each([
+  { name: "replies", replyText: "r".repeat(600), postText: "Post text", start: "Reply 3\n", end: "Post text" },
+  { name: "post", replyText: "Reply", postText: "p".repeat(1500), start: "Author @author\n\np", end: "p…" },
+])("test_keeps_inline_video_caption_within_telegram_limit_when_overflowing_$name", (params) => {
+  const tweet = new FxEmbedTweet({
+    author: { avatar_url: "", id: "1", name: "Author", screen_name: "author" },
+    created_at: "2026-10-31",
+    created_timestamp: 1_793_440_181,
+    id: "42",
+    likes: 0,
+    replies: 0,
+    retweets: 0,
+    text: params.postText,
+    url: "https://x.com/author/status/42",
+  });
+
+  const { caption } = TweetRichMessage.caption({
+    tweet,
+    replyChain: [1, 2, 3].map((index) => ({
+      authorName: `Reply ${index}`,
+      authorUsername: `reply${index}`,
+      text: params.replyText,
+    })),
+  });
+
+  expect(caption.length).toBeLessThanOrEqual(1024);
+  expect(caption.startsWith(params.start)).toBe(true);
+  expect(caption.endsWith(`${params.end}\n\nhttps://x.com/i/status/42`)).toBe(true);
+});
