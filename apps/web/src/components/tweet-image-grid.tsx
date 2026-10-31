@@ -118,7 +118,7 @@ export function TweetImageGrid({
       >
         <Item alt={photo.alt} height={photo.height} original={photo.url} thumbnail={photo.url} width={photo.width}>
           {({ ref, open }) => (
-            <div className="group relative overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-300 will-change-auto hover:shadow-md">
+            <div className="group relative overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-200 ease-out hover:shadow-md">
               <button
                 aria-label="Open artwork"
                 className="absolute inset-0 cursor-pointer"
@@ -135,7 +135,7 @@ export function TweetImageGrid({
                 alt={photo.alt}
                 className={`pointer-events-none ${
                   photo.is_nsfw === true ? "blur-sm" : ""
-                } h-auto w-full transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
+                } h-auto w-full transition-[transform,filter] duration-200 ease-out group-hover:blur-none motion-safe:group-hover:scale-105 dark:brightness-80 dark:contrast-105`}
                 height={photo.height == null || photo.height === 0 ? 400 : photo.height}
                 onLoad={() => {
                   handleImageLoad(photo.id, false);
@@ -147,19 +147,19 @@ export function TweetImageGrid({
                 src={photo.url}
                 width={photo.width == null || photo.width === 0 ? 400 : photo.width}
               />
-              <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+              <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 ease-out group-hover:bg-black/20" />
               <div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
                 <div className="w-full p-3 text-white">
                   <div className="flex items-center justify-between">
                     <div
                       className={
                         showArtistOnHover
-                          ? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                          ? "pointer-events-none opacity-0 transition-opacity duration-200 ease-out group-hover:pointer-events-auto group-hover:opacity-100"
                           : "pointer-events-auto"
                       }
                     >
                       <button
-                        className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 hover:text-primary"
+                        className="cursor-pointer text-left font-medium text-sm text-white drop-shadow-lg transition-colors duration-200 ease-out relative before:absolute before:inset-x-0 before:-inset-y-3 hover:text-primary"
                         onClick={(e) => {
                           handleArtistClick(e);
                         }}
@@ -170,7 +170,7 @@ export function TweetImageGrid({
                     </div>
                     {showActions && onDeleteImage && (
                       <Button
-                        className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+                        className="pointer-events-auto relative flex size-6 shrink-0 items-center before:absolute before:-inset-2.5 justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
                         onClick={(e) => {
                           e.stopPropagation();
                           setDeleteConfirm(photo.id);
@@ -246,7 +246,7 @@ export function TweetImageGrid({
                   alt={item.alt}
                   className={`pointer-events-none ${
                     item.is_nsfw === true ? "blur-sm" : ""
-                  } block h-full w-full object-cover transition-all duration-300 group-hover:scale-105 group-hover:blur-none dark:brightness-80 dark:contrast-105`}
+                  } block h-full w-full object-cover transition-[transform,filter] duration-200 ease-out group-hover:blur-none motion-safe:group-hover:scale-105 dark:brightness-80 dark:contrast-105`}
                   height={item.height == null || item.height === 0 ? 400 : item.height}
                   onLoad={() => {
                     handleImageLoad(item.id ?? "", false);
@@ -258,19 +258,19 @@ export function TweetImageGrid({
                   src={item.src}
                   width={item.width == null || item.width === 0 ? 400 : item.width}
                 />
-                <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+                <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 ease-out group-hover:bg-black/20" />
                 <div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent">
                   <div className="w-full p-3 text-white">
                     <div className="flex items-center justify-between">
                       <div
                         className={
                           showArtistOnHover
-                            ? "pointer-events-none opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                            ? "pointer-events-none opacity-0 transition-opacity duration-200 ease-out group-hover:pointer-events-auto group-hover:opacity-100"
                             : "pointer-events-auto"
                         }
                       >
                         <button
-                          className="cursor-pointer text-left font-medium text-sm drop-shadow-lg transition-colors duration-200 hover:text-primary"
+                          className="cursor-pointer text-left font-medium text-sm drop-shadow-lg transition-colors duration-200 ease-out relative before:absolute before:inset-x-0 before:-inset-y-3 hover:text-primary"
                           onClick={(e) => {
                             handleArtistClick(e);
                           }}
@@ -281,7 +281,7 @@ export function TweetImageGrid({
                       </div>
                       {showActions && onDeleteImage && (
                         <Button
-                          className="pointer-events-auto flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+                          className="pointer-events-auto relative flex size-6 shrink-0 items-center before:absolute before:-inset-2.5 justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
                           onClick={(e) => {
                             e.stopPropagation();
                             setDeleteConfirm(item.id ?? "");
