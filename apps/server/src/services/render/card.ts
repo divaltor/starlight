@@ -403,22 +403,52 @@ function headerRow(colors: ThemeColors, failedUrls: Set<string>, tweet: TweetDat
 function nameRowNodes(colors: ThemeColors, fontSize: number, tweet: TweetData): Node[] {
   const language = getTranslationLanguage(tweet);
 
+  // Like X, name, handle, and date stay on one line: the handle truncates
+  // first, then the name, and the date never does.
   return [
-    text(tweet.authorName, { color: colors.text, fontSize, fontWeight: 700 }),
-    // Takumi trims leading spaces in text nodes, so separators need explicit margins.
-    text(`@${tweet.authorUsername}`, { color: colors.secondaryText, fontSize, marginLeft: 4 }),
-    ...(tweet.createdAt
-      ? [
-          text(`· ${formatShortDate(tweet.createdAt)}`, {
-            color: colors.secondaryText,
-            fontSize,
-            marginLeft: 4,
-          }),
-        ]
-      : []),
+    box({
+      children: [
+        box({
+          children: [
+            // Keeps its full width until it alone overflows the space before the date.
+            text(tweet.authorName, {
+              color: colors.text,
+              fontSize,
+              fontWeight: 700,
+              ...TRUNCATE,
+              flexShrink: 0,
+              maxWidth: "100%",
+            }),
+            // Takumi trims leading spaces in text nodes, so separators need explicit margins.
+            text(`@${tweet.authorUsername}`, { color: colors.secondaryText, fontSize, marginLeft: 4, ...TRUNCATE }),
+          ],
+          style: { alignItems: "baseline", flexDirection: "row", ...TRUNCATE },
+        }),
+        ...(tweet.createdAt
+          ? [
+              text(`· ${formatShortDate(tweet.createdAt)}`, {
+                color: colors.secondaryText,
+                flexShrink: 0,
+                fontSize,
+                marginLeft: 4,
+                whiteSpace: "nowrap",
+              }),
+            ]
+          : []),
+      ],
+      style: { alignItems: "baseline", flexDirection: "row", flexShrink: 1, minWidth: 0 },
+    }),
     ...(language !== null && language !== "" ? translationBadge(language, colors, fontSize) : []),
   ];
 }
+
+const TRUNCATE: Style = {
+  flexShrink: 1,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
 
 function translationBadge(language: string, colors: ThemeColors, fontSize: number): Node[] {
   return [

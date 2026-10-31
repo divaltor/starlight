@@ -88,7 +88,7 @@ const IMAGE_FETCH_ATTEMPTS = 2;
 const SCALE_FACTOR = 2;
 
 // Scaling unitless values made lineHeight 2.8 and expanded every text block.
-const UNITLESS_STYLE_PROPERTIES = new Set(["flexGrow", "fontWeight", "lineClamp", "lineHeight"]);
+const UNITLESS_STYLE_PROPERTIES = new Set(["flexGrow", "flexShrink", "fontWeight", "lineClamp", "lineHeight"]);
 
 function scaleNode(node: Node, factor: number): Node {
   if (node.style) {
