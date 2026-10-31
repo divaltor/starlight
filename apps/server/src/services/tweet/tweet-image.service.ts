@@ -8,7 +8,7 @@ import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";
 
-export const TWEET_IMAGE_CACHE_PREFIX = "tweets/v3";
+export const TWEET_IMAGE_CACHE_PREFIX = "tweets/v4";
 const TWEET_IMAGE_TRANSLATION_LANGUAGE = "en";
 const MOSAIC_METADATA_TIMEOUT_MS = 5000;
 

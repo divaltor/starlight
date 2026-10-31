@@ -31,9 +31,11 @@ const REPLY_LINE_WIDTH = 2;
 const ARTICLE_PADDING = 12;
 const ARTICLE_TITLE_FONT_SIZE = 15;
 const ARTICLE_PREVIEW_FONT_SIZE = 14;
+const ARTICLE_PREVIEW_MAX_LINES = 3;
 
 const LINK_CARD_TITLE_INSET = 12;
 const LINK_CARD_TITLE_FONT_SIZE = 14;
+const LINK_CARD_TITLE_MAX_LINES = 2;
 
 const DOTS_INDICATOR_HEIGHT = 32;
 const DOT_SIZE = 4;
@@ -314,8 +316,9 @@ export function buildTextParagraphs(rawText: string, style: Style, accent: strin
     const isLastParagraph = pIndex === paragraphs.length - 1;
     const marginBottom = isLastParagraph ? 0 : LAYOUT.PARAGRAPH_GAP;
     // Breaks over-long tokens (URLs) instead of overflowing the card,
-    // matching the old breakLongWord behavior.
-    const { width, ...textStyle } = style;
+    // matching the old breakLongWord behavior. Clamping belongs to the block
+    // that lays out the runs, not to the runs themselves.
+    const { width, lineClamp, ...textStyle } = style;
 
     const runs = lines.flatMap((line, lIndex) => [
       ...(lIndex === 0 ? [] : [{ kind: "plain", value: "\n" } satisfies TextRun]),
@@ -341,7 +344,7 @@ export function buildTextParagraphs(rawText: string, style: Style, accent: strin
 
               return text(run.value, runStyle);
             }),
-            style: { display: "block", width },
+            style: { display: "block", lineClamp, width },
           }),
         ],
         style: { marginBottom, width },
@@ -634,13 +637,16 @@ function articleBlock(colors: ThemeColors, contentWidth: number, article: Articl
             },
             colors.accent,
           ),
+          style: { textWrap: "balance" },
         }),
         box({
+          // One collapsed paragraph so the clamp bounds the whole preview, as X does.
           children: buildTextParagraphs(
-            article.previewText,
+            article.previewText.replaceAll(/\s+/gu, " "),
             {
               color: colors.secondaryText,
               fontSize: ARTICLE_PREVIEW_FONT_SIZE,
+              lineClamp: ARTICLE_PREVIEW_MAX_LINES,
               lineHeight: LAYOUT.LINE_HEIGHT,
               width: innerWidth,
             },
@@ -685,6 +691,7 @@ function linkCardBlock(colors: ThemeColors, contentWidth: number, card: LinkCard
         text(card.title, {
           color: colors.text,
           fontSize: LINK_CARD_TITLE_FONT_SIZE,
+          lineClamp: LINK_CARD_TITLE_MAX_LINES,
           lineHeight: LAYOUT.LINE_HEIGHT,
           marginTop: LAYOUT.TEXT_GAP,
         }),
@@ -710,7 +717,8 @@ function linkCardBlock(colors: ThemeColors, contentWidth: number, card: LinkCard
         children: [
           image({ src: cover.url, style: { height, objectFit: "cover", width: contentWidth } }),
           box({
-            children: [text(card.title, { color: "#ffffff", fontSize: LINK_CARD_TITLE_FONT_SIZE })],
+            // X keeps the overlay to one line so the title never hides the image.
+            children: [text(card.title, { color: "#ffffff", fontSize: LINK_CARD_TITLE_FONT_SIZE, lineClamp: 1 })],
             style: {
               backgroundColor: "rgba(0, 0, 0, 0.75)",
               borderRadius: 4,
