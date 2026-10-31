@@ -116,7 +116,6 @@ export function buildTweetCard(params: BuildCardParams): Node {
     style: {
       backgroundColor: params.colors.cardBackground,
       borderColor: params.colors.border,
-      borderRadius: LAYOUT.CARD_BORDER_RADIUS,
       borderStyle: "solid",
       borderWidth: 1,
       padding: LAYOUT.PADDING,

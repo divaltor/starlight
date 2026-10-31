@@ -15,7 +15,5 @@ export const LAYOUT = {
 
   MEDIA_BORDER_RADIUS: 12,
 
-  CARD_BORDER_RADIUS: 16,
-
   TEXT_GAP: 4,
 } as const;
