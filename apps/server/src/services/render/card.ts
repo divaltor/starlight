@@ -54,12 +54,14 @@ const CHAIN_CONTENT_WIDTH = CARD_WIDTH_INNER - LAYOUT.AVATAR_SIZE - LAYOUT.AVATA
 export function formatShortDate(createdAt: Date): string {
   return format(
     createdAt,
-    createdAt.getFullYear() === new Date().getFullYear() ? "h:mm a · MMM d" : "h:mm a · MMM d, yyyy",
+    createdAt.getFullYear() === new Date().getFullYear()
+      ? "h:mm\u00A0a · MMM\u00A0d"
+      : "h:mm\u00A0a · MMM\u00A0d, yyyy",
   );
 }
 
 export function formatTweetTimestamp(createdAt: Date): string {
-  return format(createdAt, "h:mm a · MMM d, yyyy");
+  return format(createdAt, "h:mm\u00A0a · MMM\u00A0d, yyyy");
 }
 
 export interface BuildCardParams {
@@ -100,9 +102,9 @@ export function buildTweetCard(params: BuildCardParams): Node {
         text(
           [
             params.tweet.createdAt ? formatTweetTimestamp(params.tweet.createdAt) : null,
-            `${formatNumber(params.tweet.replies)} replies`,
-            `${formatNumber(params.tweet.retweets)} reposts`,
-            `${formatNumber(params.tweet.likes)} likes`,
+            `${formatNumber(params.tweet.replies)}\u00A0replies`,
+            `${formatNumber(params.tweet.retweets)}\u00A0reposts`,
+            `${formatNumber(params.tweet.likes)}\u00A0likes`,
           ]
             .filter((part): part is string => part !== null)
             .join("  ·  "),
@@ -121,6 +123,8 @@ export function buildTweetCard(params: BuildCardParams): Node {
       borderStyle: "solid",
       borderWidth: 1,
       padding: LAYOUT.PADDING,
+      // Inherited by every text block: avoids a lone word on the last line.
+      textWrap: "pretty",
       width: LAYOUT.WIDTH,
     },
   });

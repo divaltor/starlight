@@ -22,7 +22,8 @@ export const themes: Record<Theme, ThemeColors> = {
     background: "#000000",
     cardBackground: "#16181c",
     text: "#e7e9ea",
-    secondaryText: "#71767b",
+    // X's #71767b only reaches 3.9:1 on the card background; this clears WCAG AA (4.5:1).
+    secondaryText: "#7c8186",
     accent: "#1d9bf0",
     border: "#3e4144",
   },

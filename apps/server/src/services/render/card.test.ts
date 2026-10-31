@@ -49,11 +49,11 @@ test("test_hides_badge_when_translation_is_missing", () => {
 // rows a short date; both formats are asserted here to lock the placement:
 // local components keep the expectations independent of the machine timezone.
 test("test_shows_time_before_date_in_footer_timestamp", () => {
-  expect(formatTweetTimestamp(new Date(2026, 8, 15, 21, 5))).toBe("9:05 PM · Sep 15, 2026");
+  expect(formatTweetTimestamp(new Date(2026, 8, 15, 21, 5))).toBe("9:05\u00A0PM · Sep\u00A015, 2026");
 });
 
 test("test_omits_year_in_short_date_when_current_year", () => {
-  expect(formatShortDate(new Date(new Date().getFullYear(), 4, 9, 21, 5))).toBe("9:05 PM · May 9");
+  expect(formatShortDate(new Date(new Date().getFullYear(), 4, 9, 21, 5))).toBe("9:05\u00A0PM · May\u00A09");
 });
 
 // Static cards cannot hover or click, so links, mentions, and hashtags must be
@@ -139,5 +139,5 @@ test("test_keeps_combining_mark_inside_hashtag_run", () => {
 });
 
 test("test_includes_year_in_short_date_when_other_year", () => {
-  expect(formatShortDate(new Date(2020, 0, 2, 8, 30))).toBe("8:30 AM · Jan 2, 2020");
+  expect(formatShortDate(new Date(2020, 0, 2, 8, 30))).toBe("8:30\u00A0AM · Jan\u00A02, 2020");
 });
