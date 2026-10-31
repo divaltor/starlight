@@ -102,9 +102,9 @@ export function buildTweetCard(params: BuildCardParams): Node {
         text(
           [
             params.tweet.createdAt ? formatTweetTimestamp(params.tweet.createdAt) : null,
-            `${formatNumber(params.tweet.replies)}\u00A0replies`,
-            `${formatNumber(params.tweet.retweets)}\u00A0reposts`,
-            `${formatNumber(params.tweet.likes)}\u00A0likes`,
+            `${formatNumber(params.tweet.replies)}\u00A0${params.tweet.replies === 1 ? "reply" : "replies"}`,
+            `${formatNumber(params.tweet.retweets)}\u00A0${params.tweet.retweets === 1 ? "repost" : "reposts"}`,
+            `${formatNumber(params.tweet.likes)}\u00A0${params.tweet.likes === 1 ? "like" : "likes"}`,
           ]
             .filter((part): part is string => part !== null)
             .join("  ·  "),
