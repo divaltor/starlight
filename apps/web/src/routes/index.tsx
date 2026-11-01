@@ -7,7 +7,9 @@ import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
 import { useEffect, useState, lazy, Suspense, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { useSearch } from "@/hooks/use-search";
 import { cn } from "@/lib/utils";
 import { LayoutManager } from "@/utils/layout";
@@ -87,7 +89,7 @@ export default function DiscoverPage() {
   const isHomeIdle = !isLoading && results.length === 0;
 
   return (
-    <div className="flex min-h-dvh flex-col bg-base-100">
+    <div className="flex min-h-dvh flex-col bg-background">
       {/* Main Content */}
       <div className="flex flex-1 flex-col items-center justify-center p-4">
         {results.length > 0 ? (
@@ -109,8 +111,8 @@ export default function DiscoverPage() {
           </div>
         ) : (
           // Hero Section with centered search and floating images on large screen
-          <section className="hero hero-center relative w-full max-w-7xl">
-            <div className="hero-content relative z-10 text-center">
+          <section className="relative flex w-full max-w-7xl items-center justify-center">
+            <div className="relative z-10 flex items-center justify-center p-4 text-center">
               <div className="max-w-2xl">
                 {isLoading && urlQuery ? (
                   <div className="flex justify-center py-6">
@@ -118,9 +120,9 @@ export default function DiscoverPage() {
                     <img alt="Searching for cute anime girls…" className="mx-auto h-auto w-64" src="/suisei-hq.webp" />
                   </div>
                 ) : (
-                  <p className="py-6 text-2xl text-base-content/80">Find cute anime girls using natural language</p>
+                  <p className="py-6 text-2xl text-foreground/80">Find cute anime girls using natural language</p>
                 )}
-                <form className="form-control" onSubmit={handleSearch}>
+                <form onSubmit={handleSearch}>
                   <div
                     className={cn(
                       "z-20 transition-all duration-500 ease-in-out",
@@ -128,9 +130,9 @@ export default function DiscoverPage() {
                     )}
                   >
                     <div className={cn(inputPosition === "bottom" ? "mx-auto max-w-lg" : "p-0")}>
-                      <div className="join flex w-full">
+                      <ButtonGroup className="w-full">
                         <Input
-                          className="input input-bordered join-item flex-1"
+                          className="bg-background"
                           onChange={(e) => {
                             setInputValue(e.target.value);
                           }}
@@ -139,7 +141,7 @@ export default function DiscoverPage() {
                           value={inputValue}
                         />
                         <SearchSubmitButton isLoading={isLoading} />
-                      </div>
+                      </ButtonGroup>
                     </div>
                   </div>
                 </form>
@@ -176,10 +178,10 @@ export default function DiscoverPage() {
       {results.length > 0 && (
         <div className="sticky bottom-0 z-10 p-4">
           <div className="mx-auto max-w-lg">
-            <form className="form-control" onSubmit={handleSearch}>
-              <div className="join w-full">
+            <form onSubmit={handleSearch}>
+              <ButtonGroup className="w-full">
                 <Input
-                  className="input input-bordered join-item flex-1"
+                  className="bg-background"
                   onChange={(e) => {
                     setInputValue(e.target.value);
                   }}
@@ -188,7 +190,7 @@ export default function DiscoverPage() {
                   value={inputValue}
                 />
                 <SearchSubmitButton isLoading={isLoading} />
-              </div>
+              </ButtonGroup>
             </form>
           </div>
         </div>
@@ -262,12 +264,8 @@ function HeroCollage({ isHomeIdle }: { isHomeIdle: boolean }) {
 
 function SearchSubmitButton({ isLoading }: { isLoading: boolean }) {
   return (
-    <Button className={cn("btn btn-primary join-item", isLoading && "btn-disabled")} disabled={isLoading} type="submit">
-      {isLoading ? (
-        <span className="loading loading-spinner size-4" />
-      ) : (
-        <HugeiconsIcon className="size-4" icon={Search01Icon} />
-      )}
+    <Button disabled={isLoading} type="submit">
+      {isLoading ? <Spinner /> : <HugeiconsIcon className="size-4" icon={Search01Icon} />}
       <span className="hidden sm:inline">Search</span>
     </Button>
   );

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Carousel } from "@/components/ui/skiper-ui/carousel";
+import { Spinner } from "@/components/ui/spinner";
 
 interface TweetImageGridProps {
   onDeleteImage?: (photoId: string) => void;
@@ -118,7 +119,7 @@ export function TweetImageGrid({
       >
         <Item alt={photo.alt} height={photo.height} original={photo.url} thumbnail={photo.url} width={photo.width}>
           {({ ref, open }) => (
-            <div className="group relative overflow-hidden rounded-box bg-base-100 shadow-sm transition-shadow duration-200 ease-out hover:shadow-md">
+            <div className="group relative overflow-hidden rounded-lg bg-card shadow-sm transition-shadow duration-200 ease-out hover:shadow-md">
               <button
                 aria-label="Open artwork"
                 className="absolute inset-0 cursor-pointer"
@@ -126,8 +127,8 @@ export function TweetImageGrid({
                 type="button"
               />
               {isImageLoading[photo.id] && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100">
-                  <div className="loading loading-spinner loading-sm" />
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
+                  <Spinner />
                 </div>
               )}
               {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
@@ -170,7 +171,7 @@ export function TweetImageGrid({
                     </div>
                     {showActions && onDeleteImage && (
                       <Button
-                        className="pointer-events-auto relative flex size-6 shrink-0 items-center before:absolute before:-inset-2.5 justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+                        className="pointer-events-auto relative flex size-6 shrink-0 items-center before:absolute before:-inset-2.5 justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-destructive"
                         onClick={(e) => {
                           e.stopPropagation();
                           setDeleteConfirm(photo.id);
@@ -229,7 +230,7 @@ export function TweetImageGrid({
             width={item.width == null || item.width === 0 ? 400 : item.width}
           >
             {({ ref, open }) => (
-              <div className="group relative h-full w-full overflow-hidden rounded-box hover:z-10">
+              <div className="group relative h-full w-full overflow-hidden rounded-lg hover:z-10">
                 <button
                   aria-label="Open artwork"
                   className="absolute inset-0 cursor-pointer"
@@ -237,8 +238,8 @@ export function TweetImageGrid({
                   type="button"
                 />
                 {isImageLoading[item.id ?? ""] && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-base-100/80">
-                    <div className="loading loading-spinner loading-sm" />
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
+                    <Spinner />
                   </div>
                 )}
                 {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad and onLoadStart are used only for image loading state */}
@@ -281,7 +282,7 @@ export function TweetImageGrid({
                       </div>
                       {showActions && onDeleteImage && (
                         <Button
-                          className="pointer-events-auto relative flex size-6 shrink-0 items-center before:absolute before:-inset-2.5 justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-error"
+                          className="pointer-events-auto relative flex size-6 shrink-0 items-center before:absolute before:-inset-2.5 justify-center rounded-md p-0 text-white hover:bg-white/20 hover:text-destructive"
                           onClick={(e) => {
                             e.stopPropagation();
                             setDeleteConfirm(item.id ?? "");

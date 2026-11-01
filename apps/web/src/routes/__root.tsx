@@ -79,7 +79,7 @@ function RootDocument() {
       <head>
         <HeadContent />
       </head>
-      <body className="min-h-dvh bg-base-100 antialiased">
+      <body className="min-h-dvh bg-background antialiased">
         <TelegramButtonsProvider>
           <StrictMode>
             <NuqsAdapter>

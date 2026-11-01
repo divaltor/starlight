@@ -8,9 +8,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TextField } from "@/components/ui/text-field";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { orpc } from "@/utils/orpc";
 
@@ -114,8 +116,8 @@ function RouteComponent() {
 
   return (
     <main className="container mx-auto max-w-2xl px-4 py-10">
-      <Card className="card-border">
-        <CardContent className="mt-4 space-y-6 pt-2 pb-2">
+      <Card>
+        <CardContent className="space-y-6">
           {/* Cookie Management Section */}
           <CookiesSection
             cookieError={cookieError}
@@ -152,7 +154,7 @@ function SettingsPageSkeleton() {
   return (
     <main className="container mx-auto max-w-2xl px-4 py-10">
       <div className="mb-8 flex items-center justify-between">
-        <h1 className="font-semibold text-2xl text-base-content">Settings</h1>
+        <h1 className="font-semibold text-2xl text-foreground">Settings</h1>
       </div>
       <Card>
         <CardHeader className="pb-1">
@@ -188,11 +190,11 @@ function SettingsLoadError({ onRetry }: { onRetry: () => void }) {
           <Alert variant="destructive">
             <HugeiconsIcon className="size-4" icon={AlertCircleIcon} />
             <AlertTitle>Failed to load settings</AlertTitle>
-            <div className="mt-2">
+            <AlertDescription className="mt-2">
               <Button onClick={onRetry} size="sm" variant="outline">
                 Retry
               </Button>
-            </div>
+            </AlertDescription>
           </Alert>
         </CardContent>
       </Card>
@@ -223,24 +225,24 @@ function CookiesSection({
 }) {
   return (
     <section className="space-y-4">
-      <h2 className="font-semibold text-base-content text-sm uppercase tracking-wide">Authentication Cookies</h2>
+      <h2 className="font-semibold text-foreground text-sm uppercase tracking-wide">Authentication Cookies</h2>
 
       {/* Cookie Success/Error Messages */}
       {cookieError && (
         <Alert variant="destructive">
           <HugeiconsIcon className="size-4" icon={AlertCircleIcon} />
-          <span>{cookieError.message}</span>
+          <AlertTitle>{cookieError.message}</AlertTitle>
         </Alert>
       )}
       {profile?.hasValidCookies === true ? (
-        <Alert className="alert-horizontal">
+        <Alert>
           <HugeiconsIcon className="size-4 shrink-0" icon={CookieIcon} />
-          <span>Authentication cookies are saved.</span>
-          <div>
-            <Button disabled={isSubmitting} isSoft={true} onClick={onDelete} size="sm" variant="destructive">
+          <AlertTitle>Authentication cookies are saved.</AlertTitle>
+          <AlertDescription className="mt-2">
+            <Button disabled={isSubmitting} onClick={onDelete} size="sm" variant="destructive">
               <HugeiconsIcon className="size-4" icon={Delete02Icon} /> Remove
             </Button>
-          </div>
+          </AlertDescription>
         </Alert>
       ) : (
         <div className="space-y-4">
@@ -257,18 +259,19 @@ function CookiesSection({
             }}
           >
             <div className="space-y-2">
-              <TextField
-                className={displayError !== null && displayError.length > 0 ? "textarea-error" : ""}
+              <Textarea
+                aria-invalid={displayError !== null && displayError.length > 0}
                 id="new-cookies"
-                multiline
-                onChange={(value) => {
-                  setNewCookies(value);
+                onChange={(e) => {
+                  setNewCookies(e.target.value);
                   setDisplayError(null);
                 }}
                 placeholder="Paste your authentication cookies here"
                 value={newCookies}
               />
-              {displayError !== null && displayError.length > 0 && <p className="text-error text-sm">{displayError}</p>}
+              {displayError !== null && displayError.length > 0 && (
+                <p className="text-destructive text-sm">{displayError}</p>
+              )}
             </div>
 
             <div className="flex gap-2">
@@ -291,18 +294,15 @@ function VisibilitySection({
   onToggle: (status: "public" | "private") => void;
 }) {
   return (
-    <section className="mb-2">
-      <label className="label cursor-pointer gap-2 text-wrap">
-        <input
-          checked={isPublic}
-          className="toggle toggle-sm data-[theme=light]:toggle-neutral data-[theme=dark]:toggle-accent"
-          onChange={(e) => {
-            onToggle(e.target.checked ? "public" : "private");
-          }}
-          type="checkbox"
-        />
-        <span className="label-text w-full text-left">Make your profile visible to other people</span>
-      </label>
+    <section className="flex items-center gap-2">
+      <Switch
+        checked={isPublic}
+        id="profile-visibility"
+        onCheckedChange={(checked) => {
+          onToggle(checked ? "public" : "private");
+        }}
+      />
+      <Label htmlFor="profile-visibility">Make your profile visible to other people</Label>
     </section>
   );
 }
@@ -325,15 +325,13 @@ function ProfileLinkBlock({ username }: { username: string }) {
   );
 
   return (
-    <div className="w-full bg-base-200 p-4">
-      <div className="flex items-center">
-        <p className="text-base-content/70 text-sm">
-          Link to your profile:{" "}
-          <Link className="link text-sm" params={{ slug: username }} to="/profile/$slug">
-            {`${origin}/profile/${username}`}
-          </Link>
-        </p>
-      </div>
-    </div>
+    <CardFooter className="border-t">
+      <p className="text-muted-foreground text-sm">
+        Link to your profile:{" "}
+        <Link className="underline underline-offset-4" params={{ slug: username }} to="/profile/$slug">
+          {`${origin}/profile/${username}`}
+        </Link>
+      </p>
+    </CardFooter>
   );
 }

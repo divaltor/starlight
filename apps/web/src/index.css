@@ -2,42 +2,64 @@
 @import "tw-animate-css";
 @import "photoswipe/style.css";
 @plugin "@tailwindcss/typography";
-@plugin "daisyui";
+@custom-variant dark (&:is(.dark *));
 
-@plugin "daisyui/theme" {
-	name: "starlight";
-	default: true;
-	prefersdark: false;
-	color-scheme: "dark";
-	--color-base-100: oklch(97.788% 0.004 56.375);
-	--color-base-200: oklch(93.982% 0.007 61.449);
-	--color-base-300: oklch(91.586% 0.006 53.44);
-	--color-base-content: oklch(23.574% 0.066 313.189);
-	--color-primary: oklch(90% 0.076 70.697);
-	--color-primary-content: oklch(47% 0.157 37.304);
-	--color-secondary: oklch(89% 0.061 343.231);
-	--color-secondary-content: oklch(45% 0.187 3.815);
-	--color-accent: oklch(90% 0.076 70.697);
-	--color-accent-content: oklch(47% 0.157 37.304);
-	--color-neutral: oklch(27% 0.006 286.033);
-	--color-neutral-content: oklch(92% 0.004 286.32);
-	--color-info: oklch(80.39% 0.1148 241.68);
-	--color-info-content: oklch(30.39% 0.1148 241.68);
-	--color-success: oklch(83.92% 0.0901 136.87);
-	--color-success-content: oklch(23.92% 0.0901 136.87);
-	--color-warning: oklch(83.92% 0.1085 80);
-	--color-warning-content: oklch(43.92% 0.1085 80);
-	--color-error: oklch(75.1% 0.1814 22.37);
-	--color-error-content: oklch(35.1% 0.1814 22.37);
-	--radius-selector: 1rem;
-	--radius-field: 0.5rem;
-	--radius-box: 0.5rem;
-	--size-selector: 0.25rem;
-	--size-field: 0.25rem;
-	--border: 2px;
-	--depth: 1;
-	--noise: 1;
-  }
+:root {
+	--radius: 0.5rem;
+	--background: oklch(97.788% 0.004 56.375);
+	--foreground: oklch(23.574% 0.066 313.189);
+	--card: oklch(97.788% 0.004 56.375);
+	--card-foreground: oklch(23.574% 0.066 313.189);
+	--popover: oklch(97.788% 0.004 56.375);
+	--popover-foreground: oklch(23.574% 0.066 313.189);
+	--primary: oklch(90% 0.076 70.697);
+	--primary-foreground: oklch(47% 0.157 37.304);
+	--secondary: oklch(89% 0.061 343.231);
+	--secondary-foreground: oklch(45% 0.187 3.815);
+	--muted: oklch(93.982% 0.007 61.449);
+	--muted-foreground: oklch(48% 0.035 313.189);
+	--accent: oklch(93.982% 0.007 61.449);
+	--accent-foreground: oklch(23.574% 0.066 313.189);
+	--destructive: oklch(60% 0.19 22.37);
+	--border: oklch(91.586% 0.006 53.44);
+	--input: oklch(91.586% 0.006 53.44);
+	--ring: oklch(75% 0.12 55);
+}
+
+@theme inline {
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+
+	body {
+		@apply bg-background text-foreground;
+	}
+}
 
 html {
 	scrollbar-gutter: stable;

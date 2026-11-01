@@ -31,11 +31,11 @@ export function NotFound({
   return (
     <div className={`flex h-full items-center justify-center p-4 ${className}`}>
       <div className="mx-auto max-w-lg text-center">
-        <div className="mb-6 inline-flex size-20 items-center justify-center rounded-full bg-base-200">
-          {icon ?? <HugeiconsIcon className="size-10 text-base-content/20" icon={GhostIcon} />}
+        <div className="mb-6 inline-flex size-20 items-center justify-center rounded-full bg-muted">
+          {icon ?? <HugeiconsIcon className="size-10 text-muted-foreground/40" icon={GhostIcon} />}
         </div>
-        <h1 className="font-semibold text-3xl text-base-content">{title}</h1>
-        {description.length > 0 && <p className="mt-3 text-base-content/60">{description}</p>}
+        <h1 className="font-semibold text-3xl text-foreground">{title}</h1>
+        {description.length > 0 && <p className="mt-3 text-muted-foreground">{description}</p>}
         {(primaryAction !== undefined || secondaryAction !== undefined) && (
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             {primaryAction && (

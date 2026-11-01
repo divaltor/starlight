@@ -10,10 +10,11 @@ import { parseAsString, useQueryState } from "nuqs";
 import { useEffect, useState, lazy, Suspense } from "react";
 import { NotFound } from "@/components/not-found";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { useSearch } from "@/hooks/use-search";
 import { useTweets } from "@/hooks/use-tweets";
-import { cn } from "@/lib/utils";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
 import { client, orpc } from "@/utils/orpc";
 
@@ -136,7 +137,7 @@ function TwitterArtViewer() {
       <div className="flex min-h-dvh items-center justify-center">
         <NotFound
           description="An error occurred while loading tweets. Please try again later."
-          icon={<HugeiconsIcon className="size-10 text-base-content/20" icon={TriangleAlertIcon} />}
+          icon={<HugeiconsIcon className="size-10 text-muted-foreground/40" icon={TriangleAlertIcon} />}
           title="Failed to load tweets (｡•́︿•̀｡)"
         />
       </div>
@@ -195,10 +196,10 @@ function TwitterArtViewer() {
       {/* Sticky Search Bar at Bottom */}
       <div className="sticky bottom-0 z-10 py-4">
         <div className="mx-auto max-w-lg">
-          <form className="form-control" onSubmit={handleSearch}>
-            <div className="join w-full">
+          <form onSubmit={handleSearch}>
+            <ButtonGroup className="w-full">
               <Input
-                className="input input-bordered join-item flex-1"
+                className="bg-background"
                 onChange={(e) => {
                   setInputValue(e.target.value);
                 }}
@@ -206,19 +207,11 @@ function TwitterArtViewer() {
                 type="text"
                 value={inputValue}
               />
-              <Button
-                className={cn("btn btn-primary join-item", displayLoading && "btn-disabled")}
-                disabled={displayLoading}
-                type="submit"
-              >
-                {displayLoading ? (
-                  <span className="loading loading-spinner size-4" />
-                ) : (
-                  <HugeiconsIcon className="size-4" icon={Search01Icon} />
-                )}
+              <Button disabled={displayLoading} type="submit">
+                {displayLoading ? <Spinner /> : <HugeiconsIcon className="size-4" icon={Search01Icon} />}
                 <span className="hidden sm:inline">Search</span>
               </Button>
-            </div>
+            </ButtonGroup>
           </form>
         </div>
       </div>

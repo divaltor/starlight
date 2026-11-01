@@ -41,7 +41,7 @@ function SharedProfileViewer() {
 
   if (error) {
     return (
-      <div className="h-dvh bg-base-100 p-4">
+      <div className="h-dvh bg-background p-4">
         <NotFound
           description="Profile is private or no longer exists."
           primaryAction={{
@@ -57,7 +57,7 @@ function SharedProfileViewer() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-base-100 p-4">
+    <div className="flex min-h-dvh flex-col bg-background p-4">
       {!isLoading && tweets.length === 0 && (
         <div className="flex flex-1 items-center justify-center">
           <NotFound description="This user hasn't shared any posts yet. Try again later." title="No posts found" />

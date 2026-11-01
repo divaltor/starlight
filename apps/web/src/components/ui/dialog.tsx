@@ -1,69 +1,128 @@
-import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
-import { HugeiconsIcon } from "@hugeicons/react";
-import type * as React from "react";
-import { Button as AriaButton } from "react-aria-components/Button";
-import type { DialogProps } from "react-aria-components/Dialog";
-import { Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger } from "react-aria-components/Dialog";
-import { Heading } from "react-aria-components/Heading";
-import { Modal as AriaModal } from "react-aria-components/Modal";
+"use client";
+
+import * as React from "react";
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "@/lib/utils";
 
-interface DialogContentProps extends Omit<React.ComponentProps<typeof AriaDialog>, "children"> {
-  children?: React.ReactNode | ((props: DialogProps) => React.ReactNode);
-  className?: string;
-  showCloseButton?: boolean;
+import { Button } from "@/components/ui/button";
+import { HugeiconsIcon } from "@hugeicons/react";
+import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
+
+function Dialog({ ...props }: DialogPrimitive.Root.Props) {
+  return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
-function DialogTrigger({ children, ...props }: React.ComponentProps<typeof AriaDialogTrigger>) {
-  return <AriaDialogTrigger {...props}>{children}</AriaDialogTrigger>;
+function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
+  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
 }
 
-function DialogContent({ className, children, showCloseButton = true, ...props }: DialogContentProps) {
+function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
+  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
+}
+
+function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
+  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
+}
+
+function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
   return (
-    <AriaModal
+    <DialogPrimitive.Backdrop
+      data-slot="dialog-overlay"
       className={cn(
-        "data-state-closed:fade-out-0 data-state-closed:slide-out-to-top-2 data-state-open:fade-in-0 data-state-open:slide-in-from-top-2 fixed inset-0 z-50 bg-black/30 backdrop-blur-sm data-state-closed:animate-out data-state-open:animate-in",
+        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className,
       )}
-    >
-      <AriaDialog
-        {...props}
+      {...props}
+    />
+  );
+}
+
+function DialogContent({
+  className,
+  children,
+  showCloseButton = true,
+  ...props
+}: DialogPrimitive.Popup.Props & {
+  showCloseButton?: boolean;
+}) {
+  return (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Popup
+        data-slot="dialog-content"
         className={cn(
-          "data-state-closed:fade-out-0 data-state-closed:slide-out-to-top-2 data-state-closed:zoom-out-95 data-state-open:fade-in-0 data-state-open:slide-in-from-top-2 data-state-open:zoom-in-95 fixed top-[50%] left-[50%] z-50 max-h-[90vh] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] overflow-auto rounded-lg border border-base-200 bg-base-100 p-6 shadow-lg duration-200 data-state-closed:animate-out data-state-open:animate-in",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-xl bg-popover p-6 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className,
         )}
+        {...props}
       >
-        {typeof children === "function" ? children(props) : children}
+        {children}
         {showCloseButton && (
-          <AriaButton
-            className={cn("btn btn-circle btn-ghost btn-sm absolute top-2 right-2 [&>svg]:h-4 [&>svg]:w-4")}
-            slot="close"
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            render={<Button variant="ghost" className="absolute top-4 right-4" size="icon-sm" />}
           >
-            <HugeiconsIcon icon={Cancel01Icon} />
+            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
             <span className="sr-only">Close</span>
-          </AriaButton>
+          </DialogPrimitive.Close>
         )}
-      </AriaDialog>
-    </AriaModal>
+      </DialogPrimitive.Popup>
+    </DialogPortal>
   );
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)} {...props} />;
+  return <div data-slot="dialog-header" className={cn("flex flex-col gap-2", className)} {...props} />;
 }
 
-function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("flex flex-col-reverse gap-2 sm:flex sm:flex-row sm:justify-end", className)} {...props} />;
-}
-
-function DialogTitle({ className, ...props }: React.ComponentProps<typeof Heading>) {
+function DialogFooter({
+  className,
+  showCloseButton = false,
+  children,
+  ...props
+}: React.ComponentProps<"div"> & {
+  showCloseButton?: boolean;
+}) {
   return (
-    <Heading className={cn("font-semibold text-lg leading-none tracking-tight", className)} slot="title" {...props} />
+    <div
+      data-slot="dialog-footer"
+      className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
+      {...props}
+    >
+      {children}
+      {showCloseButton && <DialogPrimitive.Close render={<Button variant="outline" />}>Close</DialogPrimitive.Close>}
+    </div>
   );
 }
 
-function DialogDescription({ className, ...props }: React.ComponentProps<"p">) {
-  return <p className={cn("text-base-content/60 text-sm", className)} slot="description" {...props} />;
+function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+  return (
+    <DialogPrimitive.Title data-slot="dialog-title" className={cn("leading-none font-medium", className)} {...props} />
+  );
 }
 
-export { DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription };
+function DialogDescription({ className, ...props }: DialogPrimitive.Description.Props) {
+  return (
+    <DialogPrimitive.Description
+      data-slot="dialog-description"
+      className={cn(
+        "text-sm text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+};
