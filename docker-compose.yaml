@@ -112,7 +112,7 @@ services:
     restart: unless-stopped
 
   hindsight:
-    image: ghcr.io/vectorize-io/hindsight:0.10.1
+    image: ghcr.io/vectorize-io/hindsight:1.1.0
     environment:
       HINDSIGHT_API_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       HINDSIGHT_API_DATABASE_SCHEMA: hindsight

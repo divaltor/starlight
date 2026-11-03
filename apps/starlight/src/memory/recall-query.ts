@@ -15,9 +15,10 @@ export namespace RecallQuery {
   }
 
   export function build(options: { readonly inputs: readonly Input[]; readonly maxTokens: number }) {
-    // Hindsight 0.10 counts o200k_base tokens and rejects REST queries above its
-    // configured cap. Keep normal batches byte-for-byte unchanged; only overflow
-    // invokes the relevance policy below.
+    // Hindsight counts o200k_base tokens against the same cap we configure, and
+    // since 0.10.3 truncates rather than rejecting. Spending the budget here keeps
+    // which segments survive under our control. Keep normal batches byte-for-byte
+    // unchanged; only overflow invokes the relevance policy below.
     const segments = options.inputs.flatMap((input, inputOrdinal): Segment[] => [
       {
         addressed: input.addressed,
