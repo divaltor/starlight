@@ -1,4 +1,3 @@
-import { Type } from "@earendil-works/pi-ai";
 import type { AssistantMessage, ImageContent, Message, TextContent, UserMessage } from "@earendil-works/pi-ai";
 import {
   AssistantEntry,
@@ -324,7 +323,7 @@ export namespace Reply {
     return defineTool({
       name,
       description: typeof definition.description === "string" ? definition.description : name,
-      parameters: Type.Unsafe(toolSchema.parse(schema.jsonSchema)),
+      parameters: toolSchema.parse(schema.jsonSchema),
       replay: "safe",
       execute: async (args, api, context) => {
         const slot = await api.commit(async (tx) => {
@@ -424,7 +423,7 @@ export namespace Reply {
   }
 
   function jsonSchema(schema: z.ZodType) {
-    return Type.Unsafe(toolSchema.parse(z.toJSONSchema(schema, { io: "input" })));
+    return toolSchema.parse(z.toJSONSchema(schema, { io: "input" }));
   }
 
   function isBatch(

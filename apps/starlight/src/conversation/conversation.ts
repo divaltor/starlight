@@ -217,8 +217,11 @@ export namespace Conversation {
             storage,
             {
               models,
-              onReport: (error, info) => {
-                log("error", "Conversation harness reported a failure", { error: String(error), type: info.type });
+              onReport: (report) => {
+                log("error", "Conversation harness reported a failure", {
+                  error: String(report.error),
+                  type: report.kind,
+                });
               },
               registry,
               settings: {
@@ -267,7 +270,7 @@ export namespace Conversation {
           const end = yield* Effect.promise(async () => await harness.closed);
 
           yield* Effect.logError("Conversation harness closed, reopening").pipe(
-            Effect.annotateLogs({ error: end.reason === "failed" ? String(end.error) : end.reason }),
+            Effect.annotateLogs({ error: end.kind === "failed" ? String(end.error) : end.kind }),
           );
 
           harness = yield* open.pipe(
