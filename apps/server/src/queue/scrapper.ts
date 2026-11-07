@@ -143,7 +143,9 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
       cookiesJson = cookieEncryption.safeDecrypt(userCookies, user.telegramId.toString());
     } catch (error) {
       logger.error({ err: error, userId }, "Failed to decrypt user cookies");
-      throw new Error("Failed to decrypt user cookies", { cause: error });
+      await scrapperQueue.removeJobScheduler(`scrapper-${userId}`);
+
+      return;
     }
 
     const cookies = Cookies.fromJSON(cookiesJson);
