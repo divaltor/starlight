@@ -129,30 +129,28 @@ export async function attachChatMember(ctx: Context, next: NextFunction) {
 
     if (existingMember) {
       ctx.userChatMember = existingMember;
-
-      await next();
-
-      return;
     }
 
-    const telegramMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from!.id);
+    if (!existingMember) {
+      const telegramMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from!.id);
 
-    ctx.userChatMember = await prisma.chatMember.upsert({
-      where: {
-        chatId_userId: {
+      ctx.userChatMember = await prisma.chatMember.upsert({
+        where: {
+          chatId_userId: {
+            chatId,
+            userId: ctx.user!.id,
+          },
+        },
+        create: {
           chatId,
           userId: ctx.user!.id,
+          status: telegramMember.status,
         },
-      },
-      create: {
-        chatId,
-        userId: ctx.user!.id,
-        status: telegramMember.status,
-      },
-      update: {
-        status: telegramMember.status,
-      },
-    });
+        update: {
+          status: telegramMember.status,
+        },
+      });
+    }
   } catch (error) {
     ctx.logger.warn(
       {
