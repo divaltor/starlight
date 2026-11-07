@@ -11,6 +11,7 @@ import { useEffect, useState, lazy, Suspense } from "react";
 import { NotFound } from "@/components/not-found";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useSearch } from "@/hooks/use-search";
@@ -33,7 +34,7 @@ function TwitterArtViewer() {
   const [urlQuery, setUrlQuery] = useQueryState("q", parseAsString.withDefault(""));
   const [inputValue, setInputValue] = useState(urlQuery);
 
-  const { data: profile } = useQuery<ProfileResult>(
+  const { data: profile, error: profileError } = useQuery<ProfileResult>(
     orpc.profiles.get.queryOptions({
       queryKey: ["profile"],
       enabled: (rawInitData?.length ?? 0) > 0,
@@ -74,13 +75,14 @@ function TwitterArtViewer() {
     isFetchingNextPage: isSearchFetchingNextPage,
     hasNextPage: hasSearchNextPage,
     fetchNextPage: fetchSearchNextPage,
+    error: searchError,
   } = useSearch({ query: urlQuery, ownOnly: true });
 
   const isSearchActive = urlQuery.trim().length > 0;
 
   const { tweets, isLoading, isFetchingNextPage, hasNextPage, error, fetchNextPage } = useTweets();
 
-  const { mutate: deletePhoto } = useMutation({
+  const { mutate: deletePhoto, error: deleteError } = useMutation({
     mutationFn: async (photoId: string) => await client.tweets.delete({ photoId }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["tweets"] });
@@ -131,41 +133,57 @@ function TwitterArtViewer() {
     </div>
   );
 
-  // Show error state
-  if (error) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center">
-        <NotFound
-          description="An error occurred while loading tweets. Please try again later."
-          icon={<HugeiconsIcon className="size-10 text-muted-foreground/40" icon={TriangleAlertIcon} />}
-          title="Failed to load tweets (｡•́︿•̀｡)"
-        />
-      </div>
-    );
-  }
+  const activeQuery = isSearchActive
+    ? { items: searchResults, isLoading: isSearchLoading, error: searchError, loadMore: searchInfiniteLoader }
+    : { items: tweets, isLoading, error, loadMore: infiniteLoader };
 
-  // Determine which data to display
-  const displayItems = isSearchActive ? searchResults : tweets;
-  const displayLoading = isSearchActive ? isSearchLoading : isLoading;
-  const currentInfiniteLoader = isSearchActive ? searchInfiniteLoader : infiniteLoader;
+  const viewState = (() => {
+    if (activeQuery.error) return "error";
+
+    if (activeQuery.isLoading) return "loading";
+
+    return activeQuery.items.length === 0 ? "empty" : "ready";
+  })();
+
+  const emptyFeedDescription =
+    profile?.hasValidCookies === false
+      ? "Set up your authentication cookies in Settings to start collecting photos."
+      : "Your feed is empty. New photos will appear here after your likes are synced.";
 
   return (
     <div className="flex min-h-dvh flex-col p-4">
+      {profileError && (
+        <Alert variant="destructive">
+          <AlertTitle>{profileError.message}</AlertTitle>
+        </Alert>
+      )}
+      {deleteError && (
+        <Alert variant="destructive">
+          <AlertTitle>{deleteError.message}</AlertTitle>
+        </Alert>
+      )}
+      {viewState === "error" && (
+        <div className="flex flex-1 items-center justify-center" role="alert">
+          <NotFound
+            description={activeQuery.error?.message}
+            icon={<HugeiconsIcon className="size-10 text-muted-foreground/40" icon={TriangleAlertIcon} />}
+            title={isSearchActive ? "Search failed" : "Failed to load tweets (｡•́︿•̀｡)"}
+          />
+        </div>
+      )}
       {/* Loading State */}
-      {displayLoading && (
+      {viewState === "loading" && (
         <div className="flex flex-1 items-center justify-center">
           {/** biome-ignore lint/correctness/useImageSize: animated loader uses CSS sizing intentionally */}
           <img alt="Searching for cute anime girls…" className="mx-auto h-auto w-64" src="/suisei-hq.webp" />
         </div>
       )}
 
-      {!displayLoading && displayItems.length === 0 && (
+      {viewState === "empty" && (
         <div className="flex flex-1 items-center justify-center">
           <NotFound
             description={
-              isSearchActive
-                ? "No results found for your search. Try different keywords."
-                : "Did you setup cookies? Try again later."
+              isSearchActive ? "No results found for your search. Try different keywords." : emptyFeedDescription
             }
             title={isSearchActive ? "No search results" : "No photos found"}
           />
@@ -173,7 +191,7 @@ function TwitterArtViewer() {
       )}
 
       {/* Masonry Grid */}
-      {displayItems.length > 0 && (
+      {viewState === "ready" && (
         <div className="flex-1">
           <div className="mx-auto max-w-7xl">
             <Suspense fallback={null}>
@@ -181,9 +199,9 @@ function TwitterArtViewer() {
                 columnGutter={16}
                 itemHeightEstimate={MASONRY_ITEM_HEIGHT_ESTIMATE}
                 itemKey={(tweet) => tweet.id}
-                items={displayItems}
+                items={activeQuery.items}
                 onRender={(...args) => {
-                  currentInfiniteLoader(...args);
+                  activeQuery.loadMore(...args);
                 }}
                 overscanBy={MASONRY_OVERSCAN_BY}
                 render={renderMasonryItem}
@@ -200,6 +218,7 @@ function TwitterArtViewer() {
             <ButtonGroup className="w-full">
               <Input
                 className="bg-background"
+                aria-label="Search for images"
                 onChange={(e) => {
                   setInputValue(e.target.value);
                 }}
@@ -207,8 +226,8 @@ function TwitterArtViewer() {
                 type="text"
                 value={inputValue}
               />
-              <Button disabled={displayLoading} type="submit">
-                {displayLoading ? <Spinner /> : <HugeiconsIcon className="size-4" icon={Search01Icon} />}
+              <Button aria-label="Search" disabled={viewState === "loading"} type="submit">
+                {viewState === "loading" ? <Spinner /> : <HugeiconsIcon className="size-4" icon={Search01Icon} />}
                 <span className="hidden sm:inline">Search</span>
               </Button>
             </ButtonGroup>
@@ -242,14 +261,16 @@ export const Route = createFileRoute("/app")({
             cursor: pageParam ?? undefined,
             limit: 30,
           }),
-          queryKey: ["tweets", { username: null }],
+          queryKey: ["tweets", {}],
           initialPageParam: null,
           getNextPageParam: (lastPage: TweetsPageResult) => lastPage.nextCursor ?? undefined,
           retry: false,
           gcTime: 10 * 60 * 1000,
         }),
       ),
-    ]);
+    ]).catch(() => {
+      // Query consumers render failures without replacing the route.
+    });
   },
   component: TwitterArtViewer,
 });
