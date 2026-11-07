@@ -1,7 +1,7 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { AssistantMessage, Message, ToolCall } from "@earendil-works/pi-ai";
-import { CompactionEntry } from "@earendil-works/pi-durable";
-import type { AgentChange, EntryDraft, EntryId, Harness } from "@earendil-works/pi-durable";
+import { CompactionEntry, defineDocFamily } from "@earendil-works/pi-durable";
+import type { AgentChange, ConversationId, EntryDraft, EntryId, Harness } from "@earendil-works/pi-durable";
 import type { Cause } from "effect";
 import { Effect, Schema } from "effect";
 import { ChatReply } from "@/ai/chat-reply";
@@ -20,11 +20,27 @@ import { Database } from "@/services/database";
  * entry plus, when it researched or answered, a reply entry shaped like a final_output round.
  * The old active context's frozen memory becomes a compaction summary heading the turns that
  * context still held, so each chat continues with what the bot last saw. A lane already in Pi
- * is skipped, so a restart resumes an interrupted import.
+ * is skipped; an interrupted import resumes its conversation at the last committed run.
  */
 export namespace LegacyImport {
   const RUNS_PER_COMMIT = 200;
   const REPLY_ENTRY = "starlight.legacy-reply";
+
+  const progress = defineDocFamily<
+    {
+      conversationId: ConversationId | null;
+      head: EntryId | "self";
+      runs: number;
+    },
+    null
+  >({
+    kind: "starlight.legacy-import",
+    version: 1,
+    family: true,
+    scope: "session",
+    initial: () => ({ conversationId: null, head: "self", runs: 0 }),
+    checkpointWhen: () => true,
+  });
 
   // Pi's own compaction wrapper (pi-durable harness/compaction.js), so later summaries chain the same way.
   const SUMMARY_PREFIX =
@@ -227,46 +243,45 @@ export namespace LegacyImport {
       return { entries, lastOrdinal: legacy.lastOrdinal };
     });
 
-    const conversationId = await harness.commit(
-      async (tx) => await Lane.createLane(tx, options.agent),
-      BACKGROUND_CONTEXT,
-    );
+    // The old context started at contextStart; without one it held only its frozen memory.
+    const kept = contextStart === null ? -1 : history.findIndex((item) => item.lastOrdinal >= contextStart);
 
-    const firstEntries: EntryId[] = [];
+    const imported = await harness.commit(async (tx) => {
+      const draft = await tx.doc(progress, ConversationKey.format(key), null);
+      draft.conversationId ??= await Lane.createLane(tx, options.agent);
 
-    for (let start = 0; start < history.length; start += RUNS_PER_COMMIT) {
+      return { conversationId: draft.conversationId, runs: draft.runs };
+    }, BACKGROUND_CONTEXT);
+
+    for (let start = imported.runs; start < history.length; start += RUNS_PER_COMMIT) {
       // oxlint-disable-next-line react-doctor/async-await-in-loop -- one lane's chunks append in order
-      const appended = await harness.commit(async (tx) => {
-        const ids: EntryId[] = [];
+      await harness.commit(async (tx) => {
+        const draft = await tx.doc(progress, ConversationKey.format(key), null);
 
         for (const item of history.slice(start, start + RUNS_PER_COMMIT)) {
           for (const [position, entry] of item.entries.entries()) {
             // oxlint-disable-next-line react-doctor/async-await-in-loop -- entries append in transcript order
-            const { id } = await tx.appendEntry(conversationId, entry);
+            const { id } = await tx.appendEntry(imported.conversationId, entry);
 
-            if (position === 0) ids.push(id);
+            if (position === 0 && draft.runs === kept) draft.head = id;
           }
+
+          draft.runs += 1;
         }
-
-        return ids;
       }, BACKGROUND_CONTEXT);
-
-      firstEntries.push(...appended);
     }
 
-    // The old context started at contextStart; without one it held only its frozen memory.
-    const kept = contextStart === null ? -1 : history.findIndex((item) => item.lastOrdinal >= contextStart);
-
     await harness.commit(async (tx) => {
-      const [index, draft] = await Promise.all([
+      const [index, draft, checkpoint] = await Promise.all([
         tx.doc(LaneDoc.index, ConversationKey.format(key), null),
-        tx.doc(LaneDoc.token, conversationId),
+        tx.doc(LaneDoc.token, imported.conversationId),
+        tx.doc(progress, ConversationKey.format(key), null),
       ]);
 
-      if (summary !== null)
-        await tx.appendEntry(conversationId, compactionEntry(summary, firstEntries[kept] ?? "self"));
+      if (summary !== null) await tx.appendEntry(imported.conversationId, compactionEntry(summary, checkpoint.head));
       Object.assign(draft, lane);
-      index.conversationId = conversationId;
+      index.conversationId = imported.conversationId;
+      await tx.retireDoc(progress, ConversationKey.format(key));
     }, BACKGROUND_CONTEXT);
   }
 
