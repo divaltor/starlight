@@ -171,6 +171,15 @@ model Photo {
   @@map("photos")
 }
 
+// Danbooru tag aliases that image search adds to a query ("nekomimi" → `cat ears`).
+// Seeded by apps/server/src/scripts/tag-aliases.ts.
+model TagAlias {
+  alias String @id
+  tag   String
+
+  @@map("tag_aliases")
+}
+
 model Video {
   id     String @id @default(uuid(7)) @db.Uuid
   userId String @map("user_id") @db.Uuid

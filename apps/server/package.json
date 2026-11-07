@@ -11,7 +11,8 @@
     "format": "bun fmt",
     "test": "bun test",
     "queue:classify": "bun run src/scripts/classification.ts",
-    "queue:embeddings": "bun run src/scripts/embeddings.ts"
+    "queue:embeddings": "bun run src/scripts/embeddings.ts",
+    "search:aliases": "bun run src/scripts/tag-aliases.ts"
   },
   "dependencies": {
     "@grammyjs/auto-retry": "2.0.2",

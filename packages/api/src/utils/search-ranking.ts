@@ -34,11 +34,19 @@ export namespace SearchRanking {
     const queryLower = lexicalQuery.toLowerCase();
     const compactQuery = queryLower.replaceAll(" ", "");
     const aliases = ALIASES.filter((names) => names.some((name) => compactQuery.includes(name.replaceAll(" ", ""))));
-    const corrections = queryLower === "" ? [] : await closestCharacterNames(queryLower);
+
+    // Danbooru aliases translate slang and alternate spellings to the tag the tagger emits ("nekomimi" → `cat ears`).
+    const [corrections, tagAliases] = await Promise.all([
+      queryLower === "" ? [] : closestCharacterNames(queryLower),
+      prisma.tagAlias.findMany({ where: { alias: queryLower }, select: { tag: true } }),
+    ]);
 
     return {
       cosplayWeight: Number(lexicalQuery !== query) * COSPLAY_WEIGHT,
-      patterns: queryLower === "" ? [] : [...new Set([queryLower, ...aliases.flat(), ...corrections])],
+      patterns:
+        queryLower === ""
+          ? []
+          : [...new Set([queryLower, ...aliases.flat(), ...corrections, ...tagAliases.map((row) => row.tag)])],
       tokens: queryLower.split(" ").filter((token) => token !== ""),
     };
   }
