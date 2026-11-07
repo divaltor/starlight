@@ -16,7 +16,6 @@ import { Dispatch } from "@/conversation/dispatch";
 import { ConversationKey } from "@/conversation/key";
 import { Lane } from "@/conversation/lane";
 import { LaneDoc } from "@/conversation/lane-doc";
-import { LegacyImport } from "@/conversation/legacy-import";
 import type { InputPayload } from "@/conversation/run-artifacts";
 import { Reply } from "@/conversation/reply";
 import { createPiTelemetry } from "@/instrumentation";
@@ -264,11 +263,6 @@ export namespace Conversation {
         Effect.promise(async () => {
           await harness.close(BACKGROUND_CONTEXT);
         }),
-      );
-
-      // Before admissions start, so no new message can open a lane its history has not reached.
-      yield* LegacyImport.run(harness, { agent, timing }).pipe(
-        Effect.mapError((cause) => new StartupError({ cause, message: "Failed to import legacy conversations" })),
       );
 
       // The first failed Storage call (e.g. a dropped connection) closes the harness for good; reopening resumes
