@@ -12,6 +12,9 @@ export const toUniqueId = (id: number) => sqids.encode([Math.abs(id)]);
 
 const adapter = new PrismaPg({
   connectionString: databaseEnv.DATABASE_URL,
+  // supabase/postgres sets extra_float_digits = 0, which rounds float8 output to 15 digits; search cursors
+  // built from a rounded final_score repeat the last post of each page on the next one.
+  options: "-c extra_float_digits=1",
 });
 
 const onlyNotDeletedMessages = <
