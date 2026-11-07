@@ -1,5 +1,6 @@
 import { run } from "@grammyjs/runner";
 import type { Update } from "@grammyjs/types";
+import { API_CONSTANTS } from "grammy";
 import { bot } from "@/bot";
 import "@/services/runtime";
 import chatMemberHandler from "@/handlers/chat-member";
@@ -54,6 +55,11 @@ function handleUpdateTimeout(update: Update, task: Promise<void>) {
 }
 
 const runner = run(bot, {
+  runner: {
+    fetch: {
+      allowed_updates: [...API_CONSTANTS.DEFAULT_UPDATE_TYPES, "chat_member"],
+    },
+  },
   sink: {
     timeout: {
       milliseconds: UPDATE_PROCESSING_TIMEOUT_MS,
