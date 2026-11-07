@@ -33,6 +33,7 @@ import { Database } from "@/services/database";
  */
 export namespace Conversation {
   const DURABLE_SCHEMA = "durable";
+  const HARNESS_RECOVERY_TIMEOUT = "5 minutes";
   // Room for compaction to start in the background before a request must wait for it.
   const BACKGROUND_COMPACTION_TOKENS = 8000;
 
@@ -203,6 +204,7 @@ export namespace Conversation {
         .pipe(Effect.mapError((cause) => new StartupError({ cause, message: "Failed to create the durable schema" })));
 
       const ready = yield* Latch.make(true);
+      const awaitReady = ready.await.pipe(Effect.timeout(HARNESS_RECOVERY_TIMEOUT));
 
       const open = Effect.tryPromise({
         try: async () => {
@@ -355,7 +357,7 @@ export namespace Conversation {
           })
           .pipe(Effect.mapError(admissionFailed));
 
-        yield* ready.await;
+        yield* awaitReady.pipe(Effect.mapError(admissionFailed));
 
         const admitted = yield* Effect.tryPromise({
           try: async () => {
@@ -394,8 +396,8 @@ export namespace Conversation {
 
       const recent = Effect.fn("Conversation.recent")(function* recent(key: ConversationKey.Value) {
         // The first read after a dropped connection fails and closes the harness; the retry reads the reopened one.
-        return yield* ready
-          .whenOpen(
+        return yield* awaitReady.pipe(
+          Effect.andThen(
             Effect.tryPromise({
               try: async () => {
                 const index = await harness.snapshot(LaneDoc.index, ConversationKey.format(key), BACKGROUND_CONTEXT);
@@ -408,8 +410,16 @@ export namespace Conversation {
               },
               catch: (cause) => new ReadError({ cause, message: "Failed to read recent conversation messages" }),
             }),
-          )
-          .pipe(Effect.retry({ schedule: Schedule.spaced("200 millis"), times: 2 }));
+          ),
+          Effect.retry({
+            schedule: Schedule.spaced("200 millis"),
+            times: 2,
+            while: (error) => error instanceof ReadError,
+          }),
+          Effect.catchTag("TimeoutError", (cause) =>
+            Effect.fail(new ReadError({ cause, message: "Timed out waiting for the conversation harness" })),
+          ),
+        );
       });
 
       return Service.of({ admit, recent });

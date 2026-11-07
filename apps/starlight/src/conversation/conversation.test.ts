@@ -16,9 +16,9 @@ import { Memory } from "@/memory/memory";
 import { Media } from "@/media/media";
 import { Database } from "@/services/database";
 
-// Our product must retain admissions and read history across harness recovery because
-// exhausting retries against a dead harness silently loses conversation processing.
-test("test_admission_and_history_wait_when_harness_recovery_exceeds_caller_retry_budgets", async () => {
+// Our product must wait through brief harness outages but fail after five minutes
+// because unbounded recovery waits retain pending Telegram updates in memory.
+test("test_admission_and_history_wait_for_recovery_but_fail_after_five_minutes", async () => {
   const postgres: { openNodePostgresStorage: () => Promise<Storage> } = await import("@netzlabor/pi-durable-postgres");
 
   const storage = new MemoryStorage();
@@ -191,6 +191,35 @@ test("test_admission_and_history_wait_when_harness_recovery_exceeds_caller_retry
         );
 
         expect(lane?.pending.map((item) => item.payload.text)).toEqual(["Keep this message", "After recovery"]);
+
+        available = false;
+        const failedAgain = spyOn(storage, "findDocument").mockRejectedValueOnce(new Error("connection dropped again"));
+        yield* Effect.tryPromise(
+          async () => await harness.snapshot(LaneDoc.index, "another-uncached-lane", BACKGROUND_CONTEXT),
+        ).pipe(Effect.exit);
+        failedAgain.mockRestore();
+
+        const timedAdmission = yield* Effect.forkChild(
+          conversation
+            .admit({ ...input, updateId: 12, payload: { ...input.payload, messageId: 102 } })
+            .pipe(Effect.flip),
+        );
+
+        const timedHistory = yield* Effect.forkChild(conversation.recent(key).pipe(Effect.flip));
+
+        yield* TestClock.adjust("299 seconds");
+        expect(timedAdmission.pollUnsafe()).toBeUndefined();
+        expect(timedHistory.pollUnsafe()).toBeUndefined();
+
+        yield* TestClock.adjust("1 second");
+        expect(timedAdmission.pollUnsafe()).toBeDefined();
+        expect(timedHistory.pollUnsafe()).toBeDefined();
+        const admissionError = yield* Fiber.join(timedAdmission);
+        expect(admissionError).toBeInstanceOf(Conversation.AdmissionError);
+        expect(admissionError).toMatchObject({ retryable: true, cause: { _tag: "TimeoutError" } });
+        const historyError = yield* Fiber.join(timedHistory);
+        expect(historyError).toBeInstanceOf(Conversation.ReadError);
+        expect(historyError.cause).toMatchObject({ _tag: "TimeoutError" });
       }).pipe(
         Effect.ensuring(
           Effect.sync(() => {
