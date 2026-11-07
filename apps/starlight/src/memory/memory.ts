@@ -131,7 +131,8 @@ export namespace Memory {
                   ownerKey: ownerKey(key),
                   threadKey: key.threadKey,
                 },
-                update: {},
+                // Hold the namespace row lock until commit so observation IDs follow commit order.
+                update: { ownerKey: ownerKey(key) },
               });
 
               const scopedVisibility = key.threadKey === 0 ? "sameChat" : "sameTopic";
