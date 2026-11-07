@@ -14,11 +14,6 @@ generator json {
   provider = "prisma-json-types-generator"
 }
 
-enum ChatMemoryScope {
-  topic
-  global
-}
-
 enum MemoryNamespaceKind {
   user
   chat
@@ -84,55 +79,9 @@ model Chat {
   // Relations
   messages      Message[]
   chatMembers   ChatMember[]
-  memoryCursors ChatMemoryCursor[]
-  memoryNotes   ChatMemoryNote[]
   memoryNamespaces MemoryNamespace[]
 
   @@map("chats")
-}
-
-model ChatMemoryCursor {
-  chatId BigInt          @map("chat_id")
-  scope  ChatMemoryScope
-
-  threadKey Int @default(0) @map("thread_key")
-
-  lastMessageId Int @default(0) @map("last_message_id")
-
-  failureCount Int @default(0) @map("failure_count")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-
-  @@id([chatId, scope, threadKey])
-  @@index([chatId, scope, updatedAt(sort: Desc)])
-  @@map("chat_memory_cursors")
-}
-
-model ChatMemoryNote {
-  id     String          @id @default(uuid(7)) @db.Uuid
-  chatId BigInt          @map("chat_id")
-  scope  ChatMemoryScope
-
-  threadKey Int @default(0) @map("thread_key")
-
-  startMessageId Int @map("start_message_id")
-  endMessageId   Int @map("end_message_id")
-  messageCount   Int @map("message_count")
-
-  summary String @db.Text
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-
-  @@unique([chatId, scope, threadKey, endMessageId])
-  @@index([chatId, scope, threadKey, createdAt(sort: Desc)])
-  @@index([chatId, scope, createdAt(sort: Desc)])
-  @@map("chat_memory_notes")
 }
 
 model ChatMember {
@@ -324,19 +273,6 @@ model MemoryNamespace {
   @@index([userId])
   @@index([chatId])
   @@map("memory_namespaces")
-}
-
-model MemoryProfileSnapshot {
-  bankId String @id @map("bank_id")
-  content String? @db.Text
-  invalidatedAt DateTime? @map("invalidated_at")
-  invalidationToken String? @map("invalidation_token") @db.Uuid
-  revision Int @default(0)
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("memory_profile_snapshots")
 }
 
 model MemoryObservation {
