@@ -76,14 +76,6 @@ function getTweetUrl(tweetId: string): string {
   return `https://x.com/i/status/${tweetId}`;
 }
 
-function getDescriptionAction(tweetText: string | null, showDescription: boolean): "add" | "remove" | null {
-  if (tweetText === null || tweetText === "") {
-    return null;
-  }
-
-  return showDescription ? "remove" : "add";
-}
-
 async function tryDeleteMessage(ctx: Context): Promise<void> {
   try {
     await ctx.deleteMessage();
@@ -479,8 +471,18 @@ whitelistedChats.callbackQuery(
     const showDescription = action === "add_desc";
 
     const tweet = showDescription
-      ? await runtime.runPromise(TwitterApi.getFxTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE))
+      ? await runtime
+          .runPromise(TwitterApi.getFxTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE))
+          .catch((cause: unknown) => {
+            ctx.logger.warn({ error: cause, tweetId: video.tweetId, videoId }, "Could not fetch video description");
+
+            return null;
+          })
       : undefined;
+
+    const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
+    const sourceUrl = isGroupChat ? getTweetUrl(video.tweetId) : undefined;
+    const keyboard = createVideoKeyboard(videoId, showDescription ? "remove" : "add", ownerId, sourceUrl);
 
     if (tweet) {
       const tweetText = [cleanupTweetText(tweet.getDisplayText()), cleanupTweetText(tweet.quote?.getDisplayText())]
@@ -493,45 +495,41 @@ whitelistedChats.callbackQuery(
           data: { tweetText },
         });
       }
+
+      await bot.api.sendRichMessage(
+        ctx.chatId,
+        TweetRichMessage.build({
+          tweet,
+          video: video.telegramFileId,
+          width: video.width ?? undefined,
+          height: video.height ?? undefined,
+        }),
+        {
+          reply_markup: keyboard,
+          message_thread_id: ctx.msg!.message_thread_id,
+        },
+      );
+
+      await ctx.deleteMessage();
     }
 
-    const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
-    const sourceUrl = isGroupChat ? getTweetUrl(video.tweetId) : undefined;
+    if (tweet === null) {
+      await sendTextMessage(ctx, "Can't load the description right now. Please try again.", {
+        message_thread_id: ctx.msg!.message_thread_id,
+      });
+    }
 
-    const keyboard = createVideoKeyboard(
-      videoId,
-      getDescriptionAction(video.tweetText, showDescription),
-      ownerId,
-      sourceUrl,
-    );
-
-    await (showDescription
-      ? bot.api.sendRichMessage(
-          ctx.chatId,
-          TweetRichMessage.build({
-            tweet: tweet!,
-            video: video.telegramFileId,
-            width: video.width ?? undefined,
-            height: video.height ?? undefined,
-          }),
-          {
-            reply_markup: keyboard,
-            message_thread_id: ctx.msg!.message_thread_id,
-          },
-        )
-      : ctx.editMessageMedia(
-          {
-            type: "video",
-            media: video.telegramFileId,
-            width: video.width ?? undefined,
-            height: video.height ?? undefined,
-            supports_streaming: true,
-          },
-          { reply_markup: keyboard },
-        ));
-
-    if (showDescription) {
-      await ctx.deleteMessage();
+    if (!showDescription) {
+      await ctx.editMessageMedia(
+        {
+          type: "video",
+          media: video.telegramFileId,
+          width: video.width ?? undefined,
+          height: video.height ?? undefined,
+          supports_streaming: true,
+        },
+        { reply_markup: keyboard },
+      );
     }
   },
 );

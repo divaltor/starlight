@@ -2,6 +2,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { prisma } from "@starlight/utils";
 import { Effect } from "effect";
 import { Bot } from "grammy";
+import { bot } from "@/bot";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
 import { FxEmbedTweet } from "@/services/fxembed/types";
@@ -12,11 +13,15 @@ const downloads = await import("@/services/video");
 const tweetImages = await import("@/services/tweet/tweet-image.service");
 const findVideo = prisma.video.findFirst;
 const createVideo = prisma.video.create;
+const findUniqueVideo = prisma.video.findUnique;
+const updateVideo = prisma.video.update;
 
 afterEach(() => {
   mock.restore();
   Reflect.set(prisma.video, "findFirst", findVideo);
   Reflect.set(prisma.video, "create", createVideo);
+  Reflect.set(prisma.video, "findUnique", findUniqueVideo);
+  Reflect.set(prisma.video, "update", updateVideo);
 });
 
 test.each<{
@@ -128,7 +133,189 @@ test.each<{
   });
 
   const sent: { method: string; payload: unknown }[] = [];
+  const testBot = createTestBot(sent);
 
+  await testBot.handleUpdate({
+    update_id: 1,
+    message: {
+      message_id: 1,
+      date: 0,
+      chat: { id: 1, type: "private", first_name: "User" },
+      from: { id: 1, is_bot: false, first_name: "User" },
+      text: tweetData.url,
+    },
+  });
+
+  expect(sent[0]?.payload).toMatchObject({ action: "upload_video" });
+  expect(sent.flatMap((message) => (message.method === "sendVideo" ? [message.payload] : []))).toMatchObject(
+    params.expectedFiles.map((filePath) => ({
+      width: 576,
+      height: 1024,
+      supports_streaming: true,
+      video: { fileData: filePath },
+    })),
+  );
+  expect(sent.flatMap((message) => (message.method === "sendMessage" ? [message.payload] : []))).toEqual(
+    params.expectedNotice === undefined ? [] : [expect.objectContaining({ text: params.expectedNotice })],
+  );
+  expect(sent.some((message) => message.method === "sendPhoto")).toBe(false);
+});
+
+test.each([
+  { failure: "missing tweet", result: Effect.succeed(null) },
+  {
+    failure: "fetch error",
+    result: Effect.fail(new TwitterApi.TwitterApiError({ message: "FxTwitter unavailable" })),
+  },
+])("test_preserves_video_and_offers_retry_when_%j", async (params) => {
+  spyOn(TwitterApi, "getFxTweet").mockReturnValue(params.result);
+  Reflect.set(
+    prisma.video,
+    "findUnique",
+    mock(
+      async () =>
+        await Promise.resolve({
+          id: "stored-video",
+          tweetId: "42",
+          tweetText: "Cached description",
+          telegramFileId: "video",
+        }),
+    ),
+  );
+  const sent: { method: string; payload: unknown }[] = [];
+  const testBot = createTestBot(sent);
+  spyOn(bot.api, "sendRichMessage").mockImplementation(testBot.api.sendRichMessage.bind(testBot.api));
+
+  await testBot.handleUpdate({
+    update_id: 1,
+    callback_query: {
+      id: "callback",
+      chat_instance: "chat",
+      from: { id: 1, is_bot: false, first_name: "User" },
+      data: "video:add_desc:stored-video:1",
+      message: {
+        message_id: 10,
+        date: 0,
+        chat: { id: 1, type: "private", first_name: "User" },
+        message_thread_id: 7,
+        video: { file_id: "video", file_unique_id: "unique", width: 576, height: 1024, duration: 33 },
+        reply_markup: {
+          inline_keyboard: [[{ text: "Add description", callback_data: "video:add_desc:stored-video:1" }]],
+        },
+      },
+    },
+  });
+
+  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "sendMessage"]);
+  expect(sent[1]?.payload).toMatchObject({
+    chat_id: 1,
+    message_thread_id: 7,
+    text: "Can't load the description right now. Please try again.",
+  });
+});
+
+test.each([
+  { storedText: null, fetchedText: "Fresh description" },
+  { storedText: "", fetchedText: "Fresh description" },
+  { storedText: "Cached description", fetchedText: "Fresh description" },
+  { storedText: null, fetchedText: "" },
+  { storedText: "", fetchedText: "" },
+  { storedText: "Cached description", fetchedText: "" },
+])("test_keeps_description_toggle_reversible_when_%j", async (params) => {
+  spyOn(TwitterApi, "getFxTweet").mockReturnValue(
+    Effect.succeed(
+      new FxEmbedTweet({
+        author: { avatar_url: "", id: "1", name: "Author", screen_name: "author" },
+        created_at: "2026-10-18",
+        created_timestamp: 1_792_310_400,
+        id: "42",
+        likes: 0,
+        replies: 0,
+        retweets: 0,
+        text: params.fetchedText,
+        url: "https://x.com/i/status/42",
+      }),
+    ),
+  );
+
+  const video = {
+    id: "stored-video",
+    tweetId: "42",
+    tweetText: params.storedText,
+    telegramFileId: "video",
+    width: 576,
+    height: 1024,
+  };
+
+  Reflect.set(
+    prisma.video,
+    "findUnique",
+    mock(async () => await Promise.resolve({ ...video })),
+  );
+  Reflect.set(
+    prisma.video,
+    "update",
+    mock(async (args: { data: { tweetText: string } }) => await Promise.resolve(Object.assign(video, args.data))),
+  );
+  const sent: { method: string; payload: unknown }[] = [];
+  const testBot = createTestBot(sent);
+  spyOn(bot.api, "sendRichMessage").mockImplementation(testBot.api.sendRichMessage.bind(testBot.api));
+
+  const callback = {
+    id: "callback",
+    chat_instance: "chat",
+    from: { id: 1, is_bot: false, first_name: "User" },
+    message: {
+      message_id: 10,
+      date: 0,
+      chat: { id: 1, type: "private", first_name: "User" },
+      message_thread_id: 7,
+    },
+  } as const;
+
+  await testBot.handleUpdate({ update_id: 1, callback_query: { ...callback, data: "video:add_desc:stored-video:1" } });
+
+  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "sendRichMessage", "deleteMessage"]);
+  expect(sent[1]?.payload).toMatchObject({
+    chat_id: 1,
+    message_thread_id: 7,
+    reply_markup: {
+      inline_keyboard: [[{ text: "Remove description", callback_data: "video:remove_desc:stored-video:1" }]],
+    },
+  });
+  expect(sent[1]?.payload).toHaveProperty(
+    "rich_message.blocks",
+    expect.arrayContaining([
+      {
+        type: "paragraph",
+        text: [{ type: "bold", text: "Author" }, " ", { type: "url", text: "@author", url: "https://x.com/author" }],
+      },
+      { type: "video", video: { type: "video", media: "video", width: 576, height: 1024, supports_streaming: true } },
+    ]),
+  );
+
+  sent.length = 0;
+  await testBot.handleUpdate({
+    update_id: 2,
+    callback_query: { ...callback, data: "video:remove_desc:stored-video:1" },
+  });
+
+  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "editMessageMedia"]);
+  expect(sent[1]?.payload).toMatchObject({
+    media: { type: "video", media: "video", width: 576, height: 1024, supports_streaming: true },
+    reply_markup: { inline_keyboard: [[{ text: "Add description", callback_data: "video:add_desc:stored-video:1" }]] },
+  });
+
+  sent.length = 0;
+  await testBot.handleUpdate({ update_id: 3, callback_query: { ...callback, data: "video:add_desc:stored-video:1" } });
+
+  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "sendRichMessage", "deleteMessage"]);
+  expect(sent[1]?.payload).toHaveProperty("reply_markup.inline_keyboard", [
+    [{ text: "Remove description", callback_data: "video:remove_desc:stored-video:1" }],
+  ]);
+});
+
+function createTestBot(sent: { method: string; payload: unknown }[]) {
   const testBot = new Bot<Context>("123:test", {
     botInfo: {
       id: 123,
@@ -184,28 +371,5 @@ test.each<{
   });
   testBot.use(videoHandler);
 
-  await testBot.handleUpdate({
-    update_id: 1,
-    message: {
-      message_id: 1,
-      date: 0,
-      chat: { id: 1, type: "private", first_name: "User" },
-      from: { id: 1, is_bot: false, first_name: "User" },
-      text: tweetData.url,
-    },
-  });
-
-  expect(sent[0]?.payload).toMatchObject({ action: "upload_video" });
-  expect(sent.flatMap((message) => (message.method === "sendVideo" ? [message.payload] : []))).toMatchObject(
-    params.expectedFiles.map((filePath) => ({
-      width: 576,
-      height: 1024,
-      supports_streaming: true,
-      video: { fileData: filePath },
-    })),
-  );
-  expect(sent.flatMap((message) => (message.method === "sendMessage" ? [message.payload] : []))).toEqual(
-    params.expectedNotice === undefined ? [] : [expect.objectContaining({ text: params.expectedNotice })],
-  );
-  expect(sent.some((message) => message.method === "sendPhoto")).toBe(false);
-});
+  return testBot;
+}
