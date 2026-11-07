@@ -144,34 +144,29 @@ export namespace Lane {
             runtime.conversation(runtime.conversationId, context),
           ]);
 
+          // Same requestId as the original submission, so a rerun finds it instead of asking twice.
+          const submission = await conversation!.submit(input(state.batch, lane!, state.requestId), context);
           const key = lane!.key!;
 
           const typing = setInterval(() => {
             void deps.typing(key);
           }, TYPING_INTERVAL_MS);
 
-          Reply.nudges.set(runtime.conversationId, { count: 0, marker: "" });
+          void deps.typing(key);
 
-          try {
-            // Same requestId as the original submission, so a rerun finds it instead of asking twice.
-            const submission = await conversation!.submit(input(state.batch, lane!, state.requestId), context);
-            void deps.typing(key);
-
-            const settled = await submission.wait(context);
-
-            if (settled.status !== "done") {
-              deps.log("warn", "Lane batch was not answered", {
-                conversationId: runtime.conversationId,
-                detail: "detail" in settled ? settled.detail : undefined,
-                reason: "reason" in settled ? settled.reason : undefined,
-              });
-            }
-
-            await runtime.commit(() => running({ batch: state.batch, phase: "settle" }), context);
-          } finally {
+          const settled = await submission.wait(context).finally(() => {
             clearInterval(typing);
-            Reply.nudges.delete(runtime.conversationId);
+          });
+
+          if (settled.status !== "done") {
+            deps.log("warn", "Lane batch was not answered", {
+              conversationId: runtime.conversationId,
+              detail: "detail" in settled ? settled.detail : undefined,
+              reason: "reason" in settled ? settled.reason : undefined,
+            });
           }
+
+          await runtime.commit(() => running({ batch: state.batch, phase: "settle" }), context);
         },
         settle: async (current, runtime, context) => {
           const lane = await runtime.snapshot(LaneDoc.token, runtime.conversationId, context);

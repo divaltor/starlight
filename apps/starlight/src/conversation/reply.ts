@@ -47,10 +47,6 @@ export namespace Reply {
 
   const NUDGE = "Use the final_output tool now to give your response. Do not answer as plain text.";
 
-  // The lane clears these when its reply wait ends, including failure and cancellation.
-  // In memory on purpose: a restart resets the bound without durable model-turn state.
-  export const nudges = new Map<number, { count: number; marker: string }>();
-
   // Frozen per run by the lane task, so retries and recovery render the same request.
   export interface RunValue {
     chatTitle: string | null;
@@ -108,6 +104,10 @@ export namespace Reply {
   }
 
   export function extension(deps: Deps) {
+    // Bounds plain-text answers per run. In memory on purpose: a restart resets it, which still
+    // bounds the loop, and no durable state is worth keeping for a misbehaving model turn.
+    const nudges = new Map<number, { count: number; marker: string }>();
+
     return defineExtension({
       name: "starlight",
       sections: [
@@ -194,7 +194,7 @@ export namespace Reply {
             const answered = answer.content.some((part) => part.type === "toolCall" && part.name === FINAL_OUTPUT);
 
             // oxlint-disable-next-line unicorn/no-useless-undefined -- Pi hooks signal "no change" with undefined
-            if (previous === undefined || answered || marker === null || count >= MAX_NUDGES) return undefined;
+            if (answered || marker === null || count >= MAX_NUDGES) return undefined;
             nudges.set(api.conversationId, { count: count + 1, marker });
 
             return { continue: NUDGE };
@@ -202,6 +202,8 @@ export namespace Reply {
         }),
         hook(ToolTask, {
           afterTool: async (call, result, api, context) => {
+            if (call.name === FINAL_OUTPUT && result.control?.terminate === true) nudges.delete(api.conversationId);
+
             const run = await api.snapshot(runDoc, api.conversationId, context);
 
             // Same opt-in as model request content: only chats known to be non-private.
