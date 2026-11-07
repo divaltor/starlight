@@ -19,11 +19,49 @@ afterEach(() => {
   Reflect.set(prisma.video, "create", createVideo);
 });
 
-test.each([
-  { emptyMainVideos: false, downloadFails: false },
-  { emptyMainVideos: true, downloadFails: false },
-  { emptyMainVideos: true, downloadFails: true },
-])("test_sends_quoted_video_when_%j", async (params) => {
+test.each<{
+  emptyMainVideos: boolean;
+  downloadFails: boolean;
+  emptyDownload?: boolean;
+  metadataUnavailable?: boolean;
+  fallbackFailureAt?: number;
+  videoCount?: number;
+  expectedFiles: string[];
+  expectedNotice?: string;
+}>([
+  { emptyMainVideos: false, downloadFails: false, expectedFiles: ["downloaded.mp4"] },
+  { emptyMainVideos: true, downloadFails: false, expectedFiles: ["downloaded.mp4"] },
+  { emptyMainVideos: true, downloadFails: true, expectedFiles: ["https://video.example/quoted.mp4"] },
+  {
+    emptyMainVideos: true,
+    downloadFails: true,
+    fallbackFailureAt: 2,
+    videoCount: 3,
+    expectedFiles: ["https://video.example/quoted.mp4"],
+    expectedNotice: "Some videos couldn't be downloaded. Sending the available ones.",
+  },
+  {
+    emptyMainVideos: true,
+    downloadFails: true,
+    fallbackFailureAt: 1,
+    expectedFiles: [],
+    expectedNotice: "Can't download video, sorry.",
+  },
+  {
+    emptyMainVideos: true,
+    downloadFails: false,
+    emptyDownload: true,
+    expectedFiles: [],
+    expectedNotice: "Can't download video, sorry.",
+  },
+  {
+    emptyMainVideos: true,
+    downloadFails: true,
+    metadataUnavailable: true,
+    expectedFiles: [],
+    expectedNotice: "Can't download video, sorry.",
+  },
+])("test_delivers_available_videos_and_reports_missing_downloads_when_%j", async (params) => {
   const tweetData = {
     author: { avatar_url: "", id: "1", name: "Author", screen_name: "author" },
     created_at: "2026-10-18",
@@ -41,14 +79,22 @@ test.each([
     id: "2111468041951383899",
     text: "Found a dude on Instagram recording his adventures smuggling diesel off east Africa",
     media: {
-      videos: [{ type: "video", url: "https://video.example/quoted.mp4", thumbnail_url: "", width: 576, height: 1024 }],
+      videos: Array.from({ length: params.videoCount ?? 1 }, (_, index) => ({
+        type: "video",
+        url: index === 0 ? "https://video.example/quoted.mp4" : `https://video.example/quoted-${index}.mp4`,
+        thumbnail_url: "",
+        width: 576,
+        height: 1024,
+      })),
     },
   });
 
   spyOn(TwitterApi, "getFxTweet").mockReturnValue(
-    Effect.succeed(
-      new FxEmbedTweet({ ...tweetData, quote, media: params.emptyMainVideos ? { videos: [] } : undefined }),
-    ),
+    params.metadataUnavailable === true
+      ? Effect.fail(new TwitterApi.TwitterApiError({ message: "FxTwitter unavailable" }))
+      : Effect.succeed(
+          new FxEmbedTweet({ ...tweetData, quote, media: params.emptyMainVideos ? { videos: [] } : undefined }),
+        ),
   );
   spyOn(tweetImages, "generateTweetImage").mockReturnValue(Effect.fail(new Error("Video must not become an image")));
   Reflect.set(
@@ -68,16 +114,18 @@ test.each([
   if (params.downloadFails) {
     download.mockRejectedValue(new Error("yt-dlp unavailable"));
   } else {
-    download.mockResolvedValue([{ filePath: "downloaded.mp4", metadata: { width: 576, height: 1024 } }]);
+    download.mockResolvedValue(
+      params.emptyDownload === true ? [] : [{ filePath: "downloaded.mp4", metadata: { width: 576, height: 1024 } }],
+    );
   }
 
-  spyOn(downloads, "downloadVideoFromUrl").mockImplementation(
-    async (url, _folder, metadata) =>
-      await Promise.resolve({
-        filePath: url,
-        metadata: metadata ?? {},
-      }),
-  );
+  const fallback = spyOn(downloads, "downloadVideoFromUrl").mockImplementation(async (url, _folder, metadata) => {
+    if (fallback.mock.calls.length === params.fallbackFailureAt) {
+      throw new Error("Media CDN unavailable");
+    }
+
+    return await Promise.resolve({ filePath: url, metadata: metadata ?? {} });
+  });
 
   const sent: { method: string; payload: unknown }[] = [];
 
@@ -147,15 +195,17 @@ test.each([
     },
   });
 
-  expect(sent.map((message) => message.method)).toEqual(["sendChatAction", "sendVideo"]);
   expect(sent[0]?.payload).toMatchObject({ action: "upload_video" });
-  expect(sent[1]?.payload).toMatchObject({
-    width: 576,
-    height: 1024,
-    supports_streaming: true,
-  });
-  expect(sent[1]?.payload).toHaveProperty(
-    "video.fileData",
-    params.downloadFails ? "https://video.example/quoted.mp4" : "downloaded.mp4",
+  expect(sent.flatMap((message) => (message.method === "sendVideo" ? [message.payload] : []))).toMatchObject(
+    params.expectedFiles.map((filePath) => ({
+      width: 576,
+      height: 1024,
+      supports_streaming: true,
+      video: { fileData: filePath },
+    })),
   );
+  expect(sent.flatMap((message) => (message.method === "sendMessage" ? [message.payload] : []))).toEqual(
+    params.expectedNotice === undefined ? [] : [expect.objectContaining({ text: params.expectedNotice })],
+  );
+  expect(sent.some((message) => message.method === "sendPhoto")).toBe(false);
 });

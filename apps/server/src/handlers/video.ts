@@ -146,26 +146,26 @@ interface FreshDownloadParams {
   tempDirName: string;
 }
 
-interface FreshDownloadSuccess {
-  status: "ok";
-  videoDownloadFailed: boolean;
-  videos: VideoInformation[];
-}
+type FreshDownloadOutcome =
+  | { status: "complete"; videos: VideoInformation[] }
+  | { status: "partial"; videos: VideoInformation[] }
+  | { status: "empty" }
+  | { status: "failed_notified" };
 
-async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDownloadSuccess | { status: "failed" }> {
+async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDownloadOutcome> {
   const { apiVideos, ctx, link, messageThreadId, tempDirName } = params;
 
   try {
     try {
       const videos = await downloadVideo(link, tempDirName);
 
-      return { status: "ok", videos, videoDownloadFailed: false };
+      return videos.length === 0 ? { status: "empty" } : { status: "complete", videos };
     } catch (error) {
       ctx.logger.warn({ error }, "yt-dlp download failed, trying fxtwitter API fallback");
     }
 
     if (apiVideos.length === 0) {
-      return { status: "ok", videos: [], videoDownloadFailed: true };
+      return { status: "empty" };
     }
 
     const videos: VideoInformation[] = [];
@@ -184,10 +184,10 @@ async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDo
     } catch (fallbackError) {
       ctx.logger.error({ error: fallbackError }, "Fallback video download also failed");
 
-      return { status: "ok", videos, videoDownloadFailed: true };
+      return videos.length === 0 ? { status: "empty" } : { status: "partial", videos };
     }
 
-    return { status: "ok", videos, videoDownloadFailed: false };
+    return { status: "complete", videos };
   } catch (error) {
     ctx.logger.error({ error, link }, "Failed to download video");
 
@@ -195,7 +195,7 @@ async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDo
       message_thread_id: messageThreadId,
     });
 
-    return { status: "failed" };
+    return { status: "failed_notified" };
   }
 }
 
@@ -370,14 +370,28 @@ async function handleVideoRequest(
       tempDirName: tempDir.name,
     });
 
-    if (outcome.status === "failed") {
-      return;
-    }
+    switch (outcome.status) {
+      case "failed_notified": {
+        return;
+      }
 
-    if (outcome.videoDownloadFailed && outcome.videos.length === 0) {
-      await sendTextMessage(ctx, CANT_DOWNLOAD_MESSAGE, { message_thread_id: messageThreadId });
+      case "empty": {
+        await sendTextMessage(ctx, CANT_DOWNLOAD_MESSAGE, { message_thread_id: messageThreadId });
 
-      return;
+        return;
+      }
+
+      case "partial": {
+        await sendTextMessage(ctx, "Some videos couldn't be downloaded. Sending the available ones.", {
+          message_thread_id: messageThreadId,
+        });
+        break;
+      }
+
+      case "complete": {
+        break;
+      }
+      // no default
     }
 
     const tweetText = tweet
