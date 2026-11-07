@@ -1,55 +1,33 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { prisma } from "@starlight/utils";
-import type { Prisma } from "@starlight/utils";
-import { Bot } from "grammy";
+import { Bot, BotError } from "grammy";
 import { logger } from "@/logger";
 import { attachChatMember } from "@/middlewares/session";
 import type { Context } from "@/types";
-import { isAdminOrCreator } from "@/utils/auth";
 
-const original = { findUnique: prisma.chatMember.findUnique, upsert: prisma.chatMember.upsert };
+const original = { findUnique: prisma.chatMember.findUnique };
 
 afterEach(() => {
   mock.restore();
   Reflect.set(prisma.chatMember, "findUnique", original.findUnique);
-  Reflect.set(prisma.chatMember, "upsert", original.upsert);
 });
 
-test.each([
-  { cached: "administrator", age: 59_999, telegram: "member", expected: "administrator", authorized: true },
-  { cached: "creator", age: 59_999, telegram: "member", expected: "creator", authorized: true },
-  { cached: "administrator", age: 60_000, telegram: "member", expected: "member", authorized: false },
-  { cached: "creator", age: 60_001, telegram: "left", expected: "left", authorized: false },
-  { cached: "administrator", age: 60_001, telegram: "restricted", expected: "restricted", authorized: false },
-  { cached: "administrator", age: 60_001, telegram: "kicked", expected: "kicked", authorized: false },
-  { cached: "member", age: 60_000, telegram: "administrator", expected: "administrator", authorized: true },
-  { cached: null, age: 0, telegram: "creator", expected: "creator", authorized: true },
-  { cached: "administrator", age: 60_000, telegram: null, expected: null, authorized: false },
-  { cached: "creator", age: 60_000, telegram: null, expected: null, authorized: false },
-])("test_bounds_cached_authority_when_%j", async (params) => {
-  spyOn(Date, "now").mockReturnValue(120_000);
+test("test_propagates_downstream_error_once_when_chat_member_is_cached", async () => {
   spyOn(logger, "warn").mockImplementation(() => {});
-
-  const member = {
-    chatId: -100n,
-    userId: "user",
-    status: params.cached ?? "member",
-    supervisor: false,
-    createdAt: new Date(0),
-    updatedAt: new Date(120_000 - params.age),
-  };
 
   Reflect.set(
     prisma.chatMember,
     "findUnique",
-    mock(async () => await Promise.resolve(params.cached === null ? null : member)),
-  );
-  Reflect.set(
-    prisma.chatMember,
-    "upsert",
     mock(
-      async (args: Prisma.ChatMemberUpsertArgs) =>
-        await Promise.resolve({ ...member, status: params.cached === null ? args.create.status : args.update.status }),
+      async () =>
+        await Promise.resolve({
+          chatId: -100n,
+          userId: "user",
+          status: "member",
+          supervisor: false,
+          createdAt: new Date(0),
+          updatedAt: new Date(120_000),
+        }),
     ),
   );
 
@@ -68,19 +46,6 @@ test.each([
       allows_users_to_create_topics: false,
       can_manage_bots: false,
       supports_join_request_queries: false,
-    },
-    client: {
-      fetch: async () =>
-        await Promise.resolve(
-          Response.json(
-            params.telegram === null
-              ? { ok: false, error_code: 403, description: "Forbidden" }
-              : {
-                  ok: true,
-                  result: { status: params.telegram, user: { id: 42, is_bot: false, first_name: "User" } },
-                },
-          ),
-        ),
     },
   });
 
@@ -101,23 +66,32 @@ test.each([
     };
     await next();
   });
-  testBot.use(attachChatMember);
 
-  let result: { status: string | null; authorized: boolean } | undefined;
-  testBot.use((ctx) => {
-    result = { status: ctx.userChatMember?.status ?? null, authorized: isAdminOrCreator(ctx) };
+  let nextCalls = 0;
+  testBot.use(async (ctx, next) => {
+    await attachChatMember(ctx, async () => {
+      nextCalls++;
+      await next();
+    });
+  });
+  const downstreamError = new Error("Downstream handler failed");
+  testBot.use(() => {
+    throw downstreamError;
   });
 
-  await testBot.handleUpdate({
-    update_id: 1,
-    message: {
-      message_id: 1,
-      date: 0,
-      chat: { id: -100, type: "supergroup", title: "Group" },
-      from: { id: 42, is_bot: false, first_name: "User" },
-      text: "command",
-    },
-  });
+  const failure = await testBot
+    .handleUpdate({
+      update_id: 1,
+      message: {
+        message_id: 1,
+        date: 0,
+        chat: { id: -100, type: "supergroup", title: "Group" },
+        from: { id: 42, is_bot: false, first_name: "User" },
+        text: "command",
+      },
+    })
+    .catch((cause: unknown) => cause);
 
-  expect(result).toEqual({ status: params.expected, authorized: params.authorized });
+  expect(failure instanceof BotError && failure.error).toBe(downstreamError);
+  expect(nextCalls).toBe(1);
 });

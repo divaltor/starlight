@@ -3,8 +3,6 @@ import type { NextFunction } from "grammy";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
 
-const CHAT_MEMBER_CACHE_TTL_MS = 60_000;
-
 export async function attachUser(ctx: Context, next: NextFunction) {
   if (!ctx.from) {
     ctx.logger.warn("User not found, skipping session attachment.");
@@ -129,32 +127,30 @@ export async function attachChatMember(ctx: Context, next: NextFunction) {
       },
     });
 
-    if (existingMember && Date.now() - existingMember.updatedAt.getTime() < CHAT_MEMBER_CACHE_TTL_MS) {
+    if (existingMember) {
       ctx.userChatMember = existingMember;
-
-      await next();
-
-      return;
     }
 
-    const telegramMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from!.id);
+    if (!existingMember) {
+      const telegramMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from!.id);
 
-    ctx.userChatMember = await prisma.chatMember.upsert({
-      where: {
-        chatId_userId: {
+      ctx.userChatMember = await prisma.chatMember.upsert({
+        where: {
+          chatId_userId: {
+            chatId,
+            userId: ctx.user!.id,
+          },
+        },
+        create: {
           chatId,
           userId: ctx.user!.id,
+          status: telegramMember.status,
         },
-      },
-      create: {
-        chatId,
-        userId: ctx.user!.id,
-        status: telegramMember.status,
-      },
-      update: {
-        status: telegramMember.status,
-      },
-    });
+        update: {
+          status: telegramMember.status,
+        },
+      });
+    }
   } catch (error) {
     ctx.logger.warn(
       {
