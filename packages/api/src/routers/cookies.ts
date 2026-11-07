@@ -63,23 +63,10 @@ export const verifyCookies = async ({ context }: { context: AuthContext & Contex
       return { hasValidCookies: false };
     }
 
-    try {
-      new CookieEncryption(context.config.cookieEncryptionKey, context.config.cookieEncryptionSalt).safeDecrypt(
-        storedCookies,
-        context.user.id.toString(),
-      );
-    } catch {
-      await prisma.user.update({
-        where: {
-          id: context.databaseUserId,
-        },
-        data: {
-          cookies: null,
-        },
-      });
-
-      return { hasValidCookies: false };
-    }
+    new CookieEncryption(context.config.cookieEncryptionKey, context.config.cookieEncryptionSalt).safeDecrypt(
+      storedCookies,
+      context.user.id.toString(),
+    );
 
     return { hasValidCookies: true };
   } catch {
