@@ -136,7 +136,7 @@ export function TweetImageGrid({
                 alt={photo.alt}
                 className={`pointer-events-none ${
                   photo.is_nsfw === true ? "blur-sm" : ""
-                } h-auto w-full transition-[transform,filter] duration-200 ease-out group-hover:blur-none motion-safe:group-hover:scale-105 dark:brightness-80 dark:contrast-105`}
+                } h-auto w-full transition-[scale,filter] duration-250 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:blur-none motion-safe:group-hover:scale-105 dark:brightness-80 dark:contrast-105`}
                 height={photo.height == null || photo.height === 0 ? 400 : photo.height}
                 onLoad={() => {
                   handleImageLoad(photo.id, false);
@@ -247,7 +247,7 @@ export function TweetImageGrid({
                   alt={item.alt}
                   className={`pointer-events-none ${
                     item.is_nsfw === true ? "blur-sm" : ""
-                  } block h-full w-full object-cover transition-[transform,filter] duration-200 ease-out group-hover:blur-none motion-safe:group-hover:scale-105 dark:brightness-80 dark:contrast-105`}
+                  } block h-full w-full object-cover transition-[scale,filter] duration-250 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:blur-none motion-safe:group-hover:scale-105 dark:brightness-80 dark:contrast-105`}
                   height={item.height == null || item.height === 0 ? 400 : item.height}
                   onLoad={() => {
                     handleImageLoad(item.id ?? "", false);
