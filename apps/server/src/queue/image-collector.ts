@@ -72,7 +72,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
     const refreshedPhotoIds = new Set<string>();
     const refreshTimestamp = new Date();
 
-    for (const photo of tweetRecord.photos) {
+    for (const photo of tweetRecord.photos.filter((item) => item.deletedAt === null)) {
       if ((photo.s3Path ?? "") !== "" && (photo.perceptualHash ?? "") !== "") {
         logger.debug(
           {
@@ -119,6 +119,11 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
           });
           refreshedPhotoIds.add(existingPhoto.id);
         }
+
+        await prisma.photo.update({
+          where: { photoId: { id: photo.id, userId } },
+          data: { deletedAt: refreshTimestamp },
+        });
 
         logger.info(
           {
