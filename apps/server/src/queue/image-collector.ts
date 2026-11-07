@@ -72,7 +72,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
     const refreshedPhotoIds = new Set<string>();
     const refreshTimestamp = new Date();
 
-    for (const photo of tweetRecord.photos) {
+    for (const photo of tweetRecord.photos.filter((item) => item.deletedAt === null)) {
       if ((photo.s3Path ?? "") !== "" && (photo.perceptualHash ?? "") !== "") {
         logger.debug(
           {
@@ -108,11 +108,10 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
       const imageBuffer = await response.arrayBuffer();
 
       const similarPhotos = await findDuplicatesByImageContent(imageBuffer);
+      const existingPhoto = similarPhotos.find((similarPhoto) => similarPhoto.userId === userId);
 
-      if (similarPhotos.length > 0) {
-        const existingPhoto = similarPhotos.find((similarPhoto) => similarPhoto.userId === userId);
-
-        if (existingPhoto && !refreshedPhotoIds.has(existingPhoto.id)) {
+      if (existingPhoto) {
+        if (!refreshedPhotoIds.has(existingPhoto.id)) {
           await prisma.photo.update({
             where: { photoId: { id: existingPhoto.id, userId } },
             data: { updatedAt: refreshTimestamp },
@@ -120,12 +119,17 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
           refreshedPhotoIds.add(existingPhoto.id);
         }
 
+        await prisma.photo.update({
+          where: { photoId: { id: photo.id, userId } },
+          data: { deletedAt: refreshTimestamp },
+        });
+
         logger.info(
           {
             tweetId: tweet.id,
             photoId: photo.id,
             userId,
-            refreshedPhotoId: existingPhoto?.id,
+            refreshedPhotoId: existingPhoto.id,
             similarPhotos,
           },
           "Found similar photos, skipping saving photo",

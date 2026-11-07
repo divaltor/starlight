@@ -192,7 +192,7 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
       where: {
         userId,
         id: { in: tweetIds },
-        photos: { every: { s3Path: { not: null } } },
+        photos: { every: { OR: [{ s3Path: { not: null } }, { deletedAt: { not: null } }] } },
       },
       select: { id: true, createdAt: true },
     });
