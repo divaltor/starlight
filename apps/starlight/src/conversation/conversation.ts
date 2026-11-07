@@ -4,7 +4,7 @@ import { createRegistry, defineExtension, Harness } from "@earendil-works/pi-dur
 import type { TelemetryCarrier } from "@earendil-works/pi-telemetry";
 import { openNodePostgresStorage } from "@netzlabor/pi-durable-postgres";
 import { context, propagation } from "@opentelemetry/api";
-import { Context, Effect, Layer, Predicate, Schedule, Schema } from "effect";
+import { Context, Effect, Latch, Layer, Predicate, Schedule, Schema } from "effect";
 import type { Chat as TelegramChat } from "grammy/types";
 import { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
@@ -202,6 +202,8 @@ export namespace Conversation {
         .query(async (client) => await client.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS ${DURABLE_SCHEMA}`))
         .pipe(Effect.mapError((cause) => new StartupError({ cause, message: "Failed to create the durable schema" })));
 
+      const ready = yield* Latch.make(true);
+
       const open = Effect.tryPromise({
         try: async () => {
           const storage = await openNodePostgresStorage({
@@ -243,7 +245,10 @@ export namespace Conversation {
             BACKGROUND_CONTEXT,
           );
 
-          opened.resume();
+          // Stop callers as soon as close begins, before storage cleanup and reopen retries.
+          opened.subscribeClose(() => {
+            ready.closeUnsafe();
+          });
 
           return opened;
         },
@@ -251,6 +256,7 @@ export namespace Conversation {
       });
 
       let harness = yield* open;
+      harness.resume();
 
       yield* Effect.addFinalizer(() =>
         Effect.promise(async () => {
@@ -281,6 +287,8 @@ export namespace Conversation {
             ),
             Effect.retry(Schedule.spaced("5 seconds")),
           );
+          ready.openUnsafe();
+          harness.resume();
 
           yield* Effect.logInfo("Conversation harness reopened");
         }).pipe(Effect.forever),
@@ -347,6 +355,8 @@ export namespace Conversation {
           })
           .pipe(Effect.mapError(admissionFailed));
 
+        yield* ready.await;
+
         const admitted = yield* Effect.tryPromise({
           try: async () => {
             // The lane links its phases to this admission, so a reply can be traced back to its updates.
@@ -384,18 +394,22 @@ export namespace Conversation {
 
       const recent = Effect.fn("Conversation.recent")(function* recent(key: ConversationKey.Value) {
         // The first read after a dropped connection fails and closes the harness; the retry reads the reopened one.
-        return yield* Effect.tryPromise({
-          try: async () => {
-            const index = await harness.snapshot(LaneDoc.index, ConversationKey.format(key), BACKGROUND_CONTEXT);
+        return yield* ready
+          .whenOpen(
+            Effect.tryPromise({
+              try: async () => {
+                const index = await harness.snapshot(LaneDoc.index, ConversationKey.format(key), BACKGROUND_CONTEXT);
 
-            if (index?.conversationId == null) return [];
+                if (index?.conversationId == null) return [];
 
-            const lane = await harness.snapshot(LaneDoc.token, index.conversationId, BACKGROUND_CONTEXT);
+                const lane = await harness.snapshot(LaneDoc.token, index.conversationId, BACKGROUND_CONTEXT);
 
-            return lane?.recent ?? [];
-          },
-          catch: (cause) => new ReadError({ cause, message: "Failed to read recent conversation messages" }),
-        }).pipe(Effect.retry({ schedule: Schedule.spaced("200 millis"), times: 2 }));
+                return lane?.recent ?? [];
+              },
+              catch: (cause) => new ReadError({ cause, message: "Failed to read recent conversation messages" }),
+            }),
+          )
+          .pipe(Effect.retry({ schedule: Schedule.spaced("200 millis"), times: 2 }));
       });
 
       return Service.of({ admit, recent });
