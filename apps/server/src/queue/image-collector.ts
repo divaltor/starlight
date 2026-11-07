@@ -108,11 +108,10 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
       const imageBuffer = await response.arrayBuffer();
 
       const similarPhotos = await findDuplicatesByImageContent(imageBuffer);
+      const existingPhoto = similarPhotos.find((similarPhoto) => similarPhoto.userId === userId);
 
-      if (similarPhotos.length > 0) {
-        const existingPhoto = similarPhotos.find((similarPhoto) => similarPhoto.userId === userId);
-
-        if (existingPhoto && !refreshedPhotoIds.has(existingPhoto.id)) {
+      if (existingPhoto) {
+        if (!refreshedPhotoIds.has(existingPhoto.id)) {
           await prisma.photo.update({
             where: { photoId: { id: existingPhoto.id, userId } },
             data: { updatedAt: refreshTimestamp },
@@ -130,7 +129,7 @@ export const imagesWorker = new Worker<ImageCollectorJobData>(
             tweetId: tweet.id,
             photoId: photo.id,
             userId,
-            refreshedPhotoId: existingPhoto?.id,
+            refreshedPhotoId: existingPhoto.id,
             similarPhotos,
           },
           "Found similar photos, skipping saving photo",
