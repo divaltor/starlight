@@ -38,10 +38,9 @@ function syncBottomButton(
   registerCleanup: CleanupRegistrar,
   api: BottomButtonApi,
 ) {
-  const { state, text, action, condition, isLoading, hasShineEffect } = config;
-  const shouldShow = condition ? condition() : state === "visible";
+  const { state, text, action, isLoading, hasShineEffect } = config;
 
-  if (!shouldShow || !api.isMounted()) {
+  if (state === "hidden" || !api.isMounted()) {
     if (api.isMounted()) {
       api.setParams({ isVisible: false });
     }
@@ -59,7 +58,7 @@ function syncBottomButton(
     ...(config.textColor !== undefined && config.textColor.length > 0 && { textColor: config.textColor }),
   });
 
-  if (action && api.canSubscribeClick()) {
+  if (state === "visible" && action && api.canSubscribeClick()) {
     const unsubscribe = api.subscribeClick(() => {
       executeAction(action, buttonType);
     });

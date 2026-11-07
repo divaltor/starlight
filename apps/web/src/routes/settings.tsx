@@ -31,23 +31,19 @@ export const Route = createFileRoute("/settings")({
       retry: 1,
     });
 
-    await queryClient.query(profileOptions);
+    await queryClient.query(profileOptions).catch(() => {
+      // The profile query renders its error in the settings view.
+    });
   },
 });
 
 function RouteComponent() {
   const [newCookies, setNewCookies] = useState("");
-  const [displayError, setDisplayError] = useState<string | null>(null);
 
   const { rawInitData } = useTelegramContext();
   const queryClient = useQueryClient();
 
-  const {
-    data: profile,
-    isLoading,
-    error: cookieError,
-    refetch: refetchProfile,
-  } = useQuery(
+  const profileQuery = useQuery(
     orpc.profiles.get.queryOptions({
       queryKey: ["profile"],
       enabled: (rawInitData?.length ?? 0) > 0,
@@ -65,10 +61,6 @@ function RouteComponent() {
           hasValidCookies: true,
         }));
         setNewCookies("");
-        setDisplayError(null);
-      },
-      onError: (error: Error) => {
-        setDisplayError(error.message || "Failed to save cookies");
       },
     }),
   );
@@ -98,20 +90,21 @@ function RouteComponent() {
     }),
   );
 
-  if (isLoading && profile === undefined) {
+  if (profileQuery.status === "pending") {
     return <SettingsPageSkeleton />;
   }
 
-  if (cookieError !== null && profile === undefined) {
+  if (profileQuery.status === "error") {
     return (
       <SettingsLoadError
         onRetry={() => {
-          void refetchProfile();
+          void profileQuery.refetch();
         }}
       />
     );
   }
 
+  const profile = profileQuery.data;
   const isSubmitting = saveCookiesMutation.isPending || deleteCookiesMutation.isPending || visibilityMutation.isPending;
 
   return (
@@ -120,8 +113,8 @@ function RouteComponent() {
         <CardContent className="space-y-6">
           {/* Cookie Management Section */}
           <CookiesSection
-            cookieError={cookieError}
-            displayError={displayError}
+            saveError={saveCookiesMutation.error}
+            deleteError={deleteCookiesMutation.error}
             isSubmitting={isSubmitting}
             newCookies={newCookies}
             onDelete={() => {
@@ -131,20 +124,24 @@ function RouteComponent() {
               saveCookiesMutation.mutate({ cookies });
             }}
             profile={profile}
-            setDisplayError={setDisplayError}
-            setNewCookies={setNewCookies}
+            setNewCookies={(cookies) => {
+              setNewCookies(cookies);
+              saveCookiesMutation.reset();
+            }}
           />
 
           {/* Profile Visibility Section */}
           <VisibilitySection
-            isPublic={profile?.user?.isPublic ?? false}
+            error={visibilityMutation.error}
+            disabled={isSubmitting}
+            isPublic={profile.user.isPublic}
             onToggle={(status) => {
               visibilityMutation.mutate({ status });
             }}
           />
         </CardContent>
         {/* Profile Block - Shown when public */}
-        {profile?.user?.isPublic === true && <ProfileLinkBlock username={profile.user.username} />}
+        {profile.user.isPublic && <ProfileLinkBlock username={profile.user.username} />}
       </Card>
     </main>
   );
@@ -203,24 +200,22 @@ function SettingsLoadError({ onRetry }: { onRetry: () => void }) {
 }
 
 function CookiesSection({
-  cookieError,
-  displayError,
+  saveError,
+  deleteError,
   isSubmitting,
   newCookies,
   onDelete,
   onSave,
   profile,
-  setDisplayError,
   setNewCookies,
 }: {
-  cookieError: { message: string } | null;
-  displayError: string | null;
+  saveError: Error | null;
+  deleteError: Error | null;
   isSubmitting: boolean;
   newCookies: string;
   onDelete: () => void;
   onSave: (cookies: string) => void;
-  profile: ProfileResult | undefined;
-  setDisplayError: (error: string | null) => void;
+  profile: ProfileResult;
   setNewCookies: (cookies: string) => void;
 }) {
   return (
@@ -228,13 +223,13 @@ function CookiesSection({
       <h2 className="font-semibold text-foreground text-sm uppercase tracking-wide">Authentication Cookies</h2>
 
       {/* Cookie Success/Error Messages */}
-      {cookieError && (
+      {deleteError && (
         <Alert variant="destructive">
           <HugeiconsIcon className="size-4" icon={AlertCircleIcon} />
-          <AlertTitle>{cookieError.message}</AlertTitle>
+          <AlertTitle>{deleteError.message}</AlertTitle>
         </Alert>
       )}
-      {profile?.hasValidCookies === true ? (
+      {profile.hasValidCookies ? (
         <Alert>
           <HugeiconsIcon className="size-4 shrink-0" icon={CookieIcon} />
           <AlertTitle>Authentication cookies are saved.</AlertTitle>
@@ -260,17 +255,19 @@ function CookiesSection({
           >
             <div className="space-y-2">
               <Textarea
-                aria-invalid={displayError !== null && displayError.length > 0}
+                aria-invalid={saveError !== null}
+                disabled={isSubmitting}
                 id="new-cookies"
                 onChange={(e) => {
                   setNewCookies(e.target.value);
-                  setDisplayError(null);
                 }}
                 placeholder="Paste your authentication cookies here"
                 value={newCookies}
               />
-              {displayError !== null && displayError.length > 0 && (
-                <p className="text-destructive text-sm">{displayError}</p>
+              {saveError && (
+                <p className="text-destructive text-sm" role="alert">
+                  {saveError.message}
+                </p>
               )}
             </div>
 
@@ -287,22 +284,35 @@ function CookiesSection({
 }
 
 function VisibilitySection({
+  error,
+  disabled,
   isPublic,
   onToggle,
 }: {
+  error: Error | null;
+  disabled: boolean;
   isPublic: boolean;
   onToggle: (status: "public" | "private") => void;
 }) {
   return (
-    <section className="flex items-center gap-2">
-      <Switch
-        checked={isPublic}
-        id="profile-visibility"
-        onCheckedChange={(checked) => {
-          onToggle(checked ? "public" : "private");
-        }}
-      />
-      <Label htmlFor="profile-visibility">Make your profile visible to other people</Label>
+    <section className="space-y-4">
+      {error && (
+        <Alert variant="destructive">
+          <HugeiconsIcon className="size-4" icon={AlertCircleIcon} />
+          <AlertTitle>{error.message}</AlertTitle>
+        </Alert>
+      )}
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={isPublic}
+          disabled={disabled}
+          id="profile-visibility"
+          onCheckedChange={(checked) => {
+            onToggle(checked ? "public" : "private");
+          }}
+        />
+        <Label htmlFor="profile-visibility">Make your profile visible to other people</Label>
+      </div>
     </section>
   );
 }

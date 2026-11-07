@@ -6,15 +6,12 @@ export type ButtonAction =
 
 export interface BaseButtonConfig {
   action?: ButtonAction;
-  // Dynamic visibility condition
-  condition?: () => boolean;
   state: ButtonState;
 }
 
 export interface MainButtonConfig extends BaseButtonConfig {
   color?: `#${string}`;
   hasShineEffect?: boolean;
-  isEnabled?: boolean;
   isLoading?: boolean;
   text?: string;
   textColor?: `#${string}`;
