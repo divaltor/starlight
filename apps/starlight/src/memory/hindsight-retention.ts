@@ -1,5 +1,5 @@
 import type { MemoryItemInput } from "@vectorize-io/hindsight-client";
-import { Context, Effect, Layer, Schedule, Schema, Semaphore } from "effect";
+import { Context, Effect, Layer, RcMap, Schedule, Schema, Semaphore } from "effect";
 import { Prompt } from "@/context/prompt";
 import type { ConversationKey } from "@/conversation/key";
 import { Hindsight } from "@/memory/hindsight";
@@ -74,7 +74,7 @@ export namespace HindsightRetention {
     Effect.gen(function* make() {
       const database = yield* Database.Service;
       const hindsight = yield* Hindsight.Service;
-      const locks = new Map<string, Semaphore.Semaphore>();
+      const locks = yield* RcMap.make({ lookup: (_namespaceId: string) => Semaphore.make(1) });
 
       const processPending = Effect.fn("HindsightRetention.processPending")(function* processPending(
         namespaceId: string,
@@ -161,13 +161,10 @@ export namespace HindsightRetention {
       });
 
       const retainPending = Effect.fn("HindsightRetention.retainPending")(function* retainPending(namespaceId: string) {
-        const existing = locks.get(namespaceId);
-        const lock = existing ?? Semaphore.makeUnsafe(1);
-
-        if (existing === undefined) locks.set(namespaceId, lock);
+        const lock = yield* RcMap.get(locks, namespaceId);
 
         return yield* lock.withPermit(processPending(namespaceId));
-      });
+      }, Effect.scoped);
 
       const flush = Effect.fn("HindsightRetention.flush")(function* flush(key: ConversationKey.Db) {
         const namespace = yield* database.query(
