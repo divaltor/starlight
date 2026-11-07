@@ -510,7 +510,7 @@ async function searchRankedInlinePhotos(
     pageQueryLimit,
     photoDedupeKey,
     queryTime: queryTime.toISOString(),
-    ranking: SearchRanking.parseQuery(textQuery),
+    ranking: await SearchRanking.parseQuery(textQuery),
     textVector: `[${textEmbedding.join(",")}]`,
     userId,
   });

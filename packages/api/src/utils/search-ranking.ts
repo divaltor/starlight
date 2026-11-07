@@ -1,4 +1,6 @@
-import { Prisma } from "@starlight/utils";
+import { Prisma, prisma } from "@starlight/utils";
+import { Schema } from "effect";
+import { redis } from "../services/redis";
 
 // Shared by the mini app search router and the bot inline search handler so both rank identically.
 export namespace SearchRanking {
@@ -16,20 +18,63 @@ export namespace SearchRanking {
   // reachable only through tweet text and hashtags, which artists often write in Japanese.
   const ALIASES = [["forever young", "フォーエバーヤング"]];
 
-  export type Query = ReturnType<typeof parseQuery>;
+  // Benchmarked on production queries: 0.4 rewrites short words ("mike" → `mika`), word_similarity
+  // rewrites them to longer tags ("maid" → `ouro kronii (maid)`).
+  const CHARACTER_NAME_SIMILARITY = 0.5;
+  const CHARACTER_NAMES_CACHE_KEY = "search:character-names";
+  const CHARACTER_NAMES_TTL_SECONDS = 3600;
+  const CHARACTER_TAG_QUALIFIER_REGEX = / \(.*\)$/u;
+  const CharacterNamesFromJson = Schema.fromJsonString(Schema.Array(Schema.String));
 
-  export function parseQuery(query: string) {
+  export type Query = Awaited<ReturnType<typeof parseQuery>>;
+
+  export async function parseQuery(query: string) {
     // "miku cosplay" must still match the `hatsune miku` character tag lexically.
     const lexicalQuery = query.replaceAll(COSPLAY_QUERY_REGEX, " ").replaceAll(/\s+/gu, " ").trim();
     const queryLower = lexicalQuery.toLowerCase();
     const compactQuery = queryLower.replaceAll(" ", "");
     const aliases = ALIASES.filter((names) => names.some((name) => compactQuery.includes(name.replaceAll(" ", ""))));
+    const corrections = queryLower === "" ? [] : await closestCharacterNames(queryLower);
 
     return {
       cosplayWeight: Number(lexicalQuery !== query) * COSPLAY_WEIGHT,
-      patterns: queryLower === "" ? [] : [...new Set([queryLower, ...aliases.flat()])],
+      patterns: queryLower === "" ? [] : [...new Set([queryLower, ...aliases.flat(), ...corrections])],
       tokens: queryLower.split(" ").filter((token) => token !== ""),
     };
+  }
+
+  // Misspelled or reordered names ("ryo amada", "hitori goto") match no character tag, and the semantic
+  // models do not know rare names, so the query is extended with the closest tagged character name.
+  async function closestCharacterNames(query: string) {
+    const names = await characterNames();
+
+    const matches = await prisma.$queryRaw<{ name: string }[]>`
+      SELECT name
+      FROM unnest(${names}::text[]) AS name
+      WHERE similarity(${query}, name) >= ${CHARACTER_NAME_SIMILARITY}
+      ORDER BY similarity(${query}, name) DESC, length(name)
+      LIMIT 1`;
+
+    return matches.map((match) => match.name);
+  }
+
+  async function characterNames() {
+    const cached = await redis.get(CHARACTER_NAMES_CACHE_KEY);
+
+    if (cached !== null && cached !== "") {
+      return Schema.decodeSync(CharacterNamesFromJson)(cached);
+    }
+
+    const rows = await prisma.$queryRaw<{ name: string }[]>`
+      SELECT DISTINCT lower(c) AS name
+      FROM photos p, jsonb_array_elements_text(p.classification->'characters') c
+      WHERE p.deleted_at IS NULL`;
+
+    const names = [...new Set(rows.map((row) => row.name.replace(CHARACTER_TAG_QUALIFIER_REGEX, "")))];
+
+    await redis.set(CHARACTER_NAMES_CACHE_KEY, JSON.stringify(names), "EX", CHARACTER_NAMES_TTL_SECONDS);
+
+    return names;
   }
 
   // Selects photos `p` whose characters, tags, tweet text or hashtags contain a query pattern, with or

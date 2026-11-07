@@ -78,7 +78,7 @@ export const searchImages = maybeAuthProcedure
 
     const queryTime = cursorData?.queryTime ?? new Date().toISOString();
     const textQuery = `[${text.join(",")}]`;
-    const ranking = SearchRanking.parseQuery(query);
+    const ranking = await SearchRanking.parseQuery(query);
     const candidateLimit = Math.max(limit * 8, 200);
 
     // Public user IDs are passed as a literal list: an `IN (SELECT ...)` semi-join makes the planner
