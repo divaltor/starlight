@@ -70,7 +70,6 @@ groupChat
                 username: ctx.chat.username,
               },
               update: {
-                isPrivate: false,
                 ...(photoBig !== undefined && { photoBig }),
                 ...(photoThumbnail !== undefined && { photoThumbnail }),
                 title: ctx.chat.title,
