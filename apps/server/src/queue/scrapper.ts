@@ -6,7 +6,6 @@ import type { QueryTweetsResponse, Tweet } from "@the-convocation/twitter-scrape
 import { Queue, Worker } from "bullmq";
 import { Schema } from "effect";
 import env from "@/env";
-import { bot } from "@/bot";
 import { logger } from "@/logger";
 import { imagesQueue } from "@/queue/image-collector";
 import { Cookies, redis } from "@/storage";
@@ -131,13 +130,8 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
     const userCookies = user.cookies;
 
     if (userCookies === null || userCookies === "") {
-      logger.error({ userId }, "User cookies not found");
+      logger.info({ userId }, "Stopping scheduled scraping without cookies");
       await scrapperQueue.removeJobScheduler(`scrapper-${userId}`);
-
-      await bot.api.sendPhoto(user.telegramId.toString(), `${env.BASE_CDN_URL}/moom.jpg`, {
-        caption:
-          "Can't scrape your timeline, no cookies?. Please setup your them in settings again and send /scrapper command again.",
-      });
 
       return;
     }
@@ -149,7 +143,9 @@ export const scrapperWorker = new Worker<ScrapperJobData>(
       cookiesJson = cookieEncryption.safeDecrypt(userCookies, user.telegramId.toString());
     } catch (error) {
       logger.error({ err: error, userId }, "Failed to decrypt user cookies");
-      throw new Error("Failed to decrypt user cookies", { cause: error });
+      await scrapperQueue.removeJobScheduler(`scrapper-${userId}`);
+
+      return;
     }
 
     const cookies = Cookies.fromJSON(cookiesJson);
