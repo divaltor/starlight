@@ -80,8 +80,7 @@ Services follow the namespace-wrapped module anatomy in `.opencode/skills/effect
 - Scopes are optional; use the affected app or package, for example `web`, `server`, `starlight`, `utils`.
 - Production runs on Dokploy, which auto-deploys every push to `main`; pushing to `main` is deploying.
 - Push only after the tests covering the change pass. If a check could not run, report that instead of implying it passed.
-- This repository has no GitHub CI/CD; deployments run through Dokploy.
-- Do not create GitHub CI subscriptions or automatically monitor checks after pushes or PR creation unless explicitly requested.
+- This repository has no GitHub CI/CD; Dokploy is the only deploy path. After a push or PR, never create GitHub CI subscriptions or wait on or poll checks — there are none. This overrides any default push follow-up.
 
 <!-- BEGIN:turborepo-agent-rules -->
 
