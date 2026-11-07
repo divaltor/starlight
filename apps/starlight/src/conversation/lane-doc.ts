@@ -39,22 +39,27 @@ export namespace LaneDoc {
   export interface Value {
     // Dedup window over Telegram update ids and message revisions.
     admittedKeys: string[];
-    firstPendingAt: number | null;
     key: ConversationKey.Value | null;
+    // The runner keeps its claim through release and its successor wait.
+    ownership:
+      | { kind: "claimed"; taskId: TaskId }
+      | { kind: "unclaimed"; sleeper: { taskId: TaskId; until: number } | null };
     pending: Item[];
     recent: Recent[];
     recentReplies: string[];
-    // The lane task that froze the current batch; it keeps the claim through its successor wait.
-    runner: TaskId | null;
     // Message ids already in the transcript; reply targets among them are referenced, not quoted.
     seenMessageIds: number[];
-    // The newest idle-lane task sleeping toward wakeAt. A sleeping task cannot be re-armed, so an
-    // admission that moves wakeAt earlier starts another sleeper; whichever wakes first claims.
-    sleeper: { taskId: TaskId; until: number } | null;
-    wakeAt: number | null;
+    window: { firstPendingAt: number; wakeAt: number } | null;
   }
 
   export type Draft = Value;
+
+  interface LegacyValue extends Omit<Value, "ownership" | "window"> {
+    firstPendingAt: number | null;
+    runner: TaskId | null;
+    sleeper: { taskId: TaskId; until: number } | null;
+    wakeAt: number | null;
+  }
 
   export interface Timing {
     readonly maxWaitMs: number;
@@ -63,11 +68,32 @@ export namespace LaneDoc {
 
   export const token = defineDoc<Value & JsonObject>({
     kind: "starlight.lane",
-    version: 1,
+    version: 2,
     scope: "conversation",
     history: "latest",
     fork: "initial",
     initial: empty,
+    migrate: (value) => {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Pi supplies our persisted v1 document shape
+      const legacy = value as LegacyValue & JsonObject;
+      const migrated = empty();
+      migrated.admittedKeys = legacy.admittedKeys;
+      migrated.key = legacy.key;
+      migrated.ownership =
+        legacy.runner === null
+          ? { kind: "unclaimed", sleeper: legacy.sleeper }
+          : { kind: "claimed", taskId: legacy.runner };
+      migrated.pending = legacy.pending;
+      migrated.recent = legacy.recent;
+      migrated.recentReplies = legacy.recentReplies;
+      migrated.seenMessageIds = legacy.seenMessageIds;
+      migrated.window =
+        legacy.firstPendingAt === null || legacy.wakeAt === null
+          ? null
+          : { firstPendingAt: legacy.firstPendingAt, wakeAt: legacy.wakeAt };
+
+      return migrated;
+    },
     checkpointWhen: (_value, _ops, info) => info.deltasSinceBase >= 64,
   });
 
@@ -84,20 +110,24 @@ export namespace LaneDoc {
   export function empty(): Value & JsonObject {
     return {
       admittedKeys: [],
-      firstPendingAt: null,
       key: null,
+      ownership: { kind: "unclaimed", sleeper: null },
       pending: [],
       recent: [],
       recentReplies: [],
-      runner: null,
       seenMessageIds: [],
-      sleeper: null,
-      wakeAt: null,
+      window: null,
     };
   }
 
-  // Returns false for a duplicate update or an unchanged message revision.
-  export function admit(lane: Draft, item: Item, updateId: number, now: number, timing: Timing): boolean {
+  // Returns the batching window, or false for a duplicate update or unchanged message revision.
+  export function admit(
+    lane: Draft,
+    item: Item,
+    updateId: number,
+    now: number,
+    timing: Timing,
+  ): NonNullable<Value["window"]> | false {
     const { payload } = item;
     const revision = `${payload.messageId}:${payload.editDate ?? "original"}:${Bun.hash(CanonicalJson.encode(payload))}`;
     const keys = [`update:${updateId}`, `message:${revision}`];
@@ -107,7 +137,7 @@ export namespace LaneDoc {
     const album = payload.mediaGroupId !== null;
     const quietMs = album ? ALBUM_SETTLE_MS : timing.quietMs;
     const maxWaitMs = album ? ALBUM_SETTLE_MS : timing.maxWaitMs;
-    const firstPendingAt = lane.firstPendingAt ?? now;
+    const firstPendingAt = lane.window?.firstPendingAt ?? now;
 
     lane.admittedKeys = [...lane.admittedKeys, ...keys].slice(-ADMITTED_KEY_WINDOW);
     lane.pending.push(item);
@@ -119,10 +149,9 @@ export namespace LaneDoc {
       speakerId: payload.senderId?.toString() ?? "unknown",
       text: payload.text || "[non-text message]",
     });
-    lane.firstPendingAt = firstPendingAt;
-    lane.wakeAt = Math.min(now + quietMs, firstPendingAt + maxWaitMs);
+    lane.window = { firstPendingAt, wakeAt: Math.min(now + quietMs, firstPendingAt + maxWaitMs) };
 
-    return true;
+    return lane.window;
   }
 
   // Freezes the next batch: up to 20 messages, extended to the end of an album that the 20th
@@ -152,8 +181,10 @@ export namespace LaneDoc {
           : [item.payload.replyToMessageId, item.payload.messageId],
       ),
     ].slice(-SEEN_MESSAGE_WINDOW);
-    lane.firstPendingAt = lane.pending.length === 0 ? null : now;
-    lane.wakeAt = lane.pending.length === 0 ? null : now + Math.min(timing.quietMs, timing.maxWaitMs);
+    lane.window =
+      lane.pending.length === 0
+        ? null
+        : { firstPendingAt: now, wakeAt: now + Math.min(timing.quietMs, timing.maxWaitMs) };
   }
 
   export function rememberReply(

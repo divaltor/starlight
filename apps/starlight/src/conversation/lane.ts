@@ -73,20 +73,19 @@ export namespace Lane {
           await runtime.commit(async (tx) => {
             const lane = await tx.doc(LaneDoc.token, runtime.conversationId);
 
-            if (lane.runner !== null && lane.runner !== current.id) return done();
+            if (lane.ownership.kind === "claimed" && lane.ownership.taskId !== current.id) return done();
 
             if (lane.pending.length === 0) {
-              lane.runner = null;
+              if (lane.ownership.kind === "claimed") lane.ownership = { kind: "unclaimed", sleeper: null };
 
               return done();
             }
 
-            if (lane.wakeAt !== null && lane.wakeAt > runtime.now()) {
-              return { checkpoint: current.state.checkpoint, status: "sleeping", until: lane.wakeAt } as const;
+            if (lane.window !== null && lane.window.wakeAt > runtime.now()) {
+              return { checkpoint: current.state.checkpoint, status: "sleeping", until: lane.window.wakeAt } as const;
             }
 
-            lane.runner = current.id;
-            lane.sleeper = null;
+            lane.ownership = { kind: "claimed", taskId: current.id };
 
             return running({ batch: LaneDoc.freeze(lane), failures: current.state.checkpoint.failures, phase: "run" });
           }, context);
@@ -178,7 +177,9 @@ export namespace Lane {
         await runtime.commit(async (tx) => {
           const lane = await tx.doc(LaneDoc.token, runtime.conversationId);
 
-          if (lane.runner === runtime.taskId) lane.runner = null;
+          if (lane.ownership.kind === "claimed" && lane.ownership.taskId === runtime.taskId) {
+            lane.ownership = { kind: "unclaimed", sleeper: null };
+          }
 
           return { outcome: { status: "aborted" }, status: "terminal" } as const;
         }, context);
@@ -203,32 +204,41 @@ export namespace Lane {
     const existing = index.conversationId;
     const lane = existing === null ? null : await tx.doc(LaneDoc.token, existing);
     // Table reads must precede the conversation and task writes in one commit.
-    const runner = lane?.runner == null ? undefined : await tx.task(lane.runner);
-    const sleeper = lane?.sleeper == null ? undefined : await tx.task(lane.sleeper.taskId);
+    const runner = lane?.ownership.kind === "claimed" ? await tx.task(lane.ownership.taskId) : undefined;
+
+    const sleeper =
+      lane?.ownership.kind === "unclaimed" && lane.ownership.sleeper !== null
+        ? await tx.task(lane.ownership.sleeper.taskId)
+        : undefined;
+
     const conversationId = existing ?? (await createLane(tx, admission.agent));
     index.conversationId = conversationId;
     const draft = lane ?? (await tx.doc(LaneDoc.token, conversationId));
     draft.key = { ...admission.key };
 
-    if (!LaneDoc.admit(draft, admission.item, admission.updateId, admission.now, admission.timing)) {
-      return { duplicate: true };
+    const window = LaneDoc.admit(draft, admission.item, admission.updateId, admission.now, admission.timing);
+
+    if (window === false) return { duplicate: true };
+
+    if (runner?.state.status === "terminal" || sleeper?.state.status === "terminal") {
+      draft.ownership = { kind: "unclaimed", sleeper: null };
     }
 
-    if (runner?.state.status === "terminal") draft.runner = null;
-
-    if (sleeper?.state.status === "terminal") draft.sleeper = null;
-
-    if (draft.runner !== null || (draft.sleeper !== null && draft.sleeper.until <= draft.wakeAt!)) {
+    if (
+      draft.ownership.kind === "claimed" ||
+      (draft.ownership.sleeper !== null && draft.ownership.sleeper.until <= window.wakeAt)
+    ) {
       return { duplicate: false };
     }
 
+    // A sleeping task cannot be re-armed; an earlier window needs another sleeper.
     const created = await tx.createTask(admission.task, null, {
       background: true,
       conversationId,
       ownership: { kind: "conversation" },
     });
 
-    draft.sleeper = { taskId: created, until: draft.wakeAt! };
+    draft.ownership = { kind: "unclaimed", sleeper: { taskId: created, until: window.wakeAt } };
 
     return { duplicate: false };
   }
