@@ -202,6 +202,8 @@ export namespace Reply {
         }),
         hook(ToolTask, {
           afterTool: async (call, result, api, context) => {
+            if (call.name === FINAL_OUTPUT && result.control?.terminate === true) nudges.delete(api.conversationId);
+
             const run = await api.snapshot(runDoc, api.conversationId, context);
 
             // Same opt-in as model request content: only chats known to be non-private.
@@ -330,13 +332,13 @@ export namespace Reply {
           const run = await tx.doc(runDoc, api.conversationId);
           const index = run.research.findIndex((item) => item.taskId === api.taskId);
 
-          if (index !== -1) return { index, remaining: remainingBytes(run, api.taskId) };
+          if (index !== -1) return index;
           run.research.push({ bytes: 0, taskId: api.taskId });
 
-          return { index: run.research.length - 1, remaining: remainingBytes(run, api.taskId) };
+          return run.research.length - 1;
         }, context);
 
-        if (slot.index >= ChatReply.maxToolCalls) {
+        if (slot >= ChatReply.maxToolCalls) {
           return failure("The research budget for this reply is spent. Answer now with final_output.");
         }
 
@@ -350,16 +352,13 @@ export namespace Reply {
           toolCallId: api.callId,
         });
 
-        const text = bound(JSON.stringify(output) ?? String(output), slot.remaining);
-
-        await api.commit(async (tx) => {
+        return await api.commit(async (tx) => {
           const run = await tx.doc(runDoc, api.conversationId);
-          const item = run.research.find((entry) => entry.taskId === api.taskId);
+          const text = bound(JSON.stringify(output) ?? String(output), remainingBytes(run, api.taskId));
+          run.research[slot]!.bytes = new TextEncoder().encode(text).byteLength;
 
-          if (item !== undefined) item.bytes = new TextEncoder().encode(text).byteLength;
+          return { output: [{ text, type: "text" }] } satisfies ToolExecutionResult;
         }, context);
-
-        return { output: [{ text, type: "text" }] } satisfies ToolExecutionResult;
       },
     });
   }
@@ -410,12 +409,9 @@ export namespace Reply {
     const encoded = new TextEncoder().encode(serialized);
 
     if (encoded.byteLength <= maximumBytes) return serialized;
+    const suffix = "\n[truncated]".slice(0, maximumBytes);
 
-    return JSON.stringify({
-      originalBytes: encoded.byteLength,
-      preview: new TextDecoder().decode(encoded.slice(0, Math.max(0, maximumBytes - 256))),
-      truncated: true,
-    });
+    return new TextDecoder().decode(encoded.slice(0, maximumBytes - suffix.length), { stream: true }) + suffix;
   }
 
   function failure(message: string): ToolExecutionResult {
