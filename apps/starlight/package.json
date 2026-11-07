@@ -35,7 +35,7 @@
     "@opentelemetry/sdk-metrics": "2.12.0",
     "@opentelemetry/sdk-trace-base": "2.12.0",
     "@opentelemetry/sdk-trace-node": "2.12.0",
-    "@opentelemetry/semantic-conventions": "1.44.0",
+    "@opentelemetry/semantic-conventions": "1.45.0",
     "@prisma/adapter-pg": "catalog:",
     "@starlight/utils": "workspace:*",
     "@t3-oss/env-core": "0.13.11",
