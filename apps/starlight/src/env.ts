@@ -15,7 +15,6 @@ export interface OtlpConfig {
   readonly axiomDatasets: {
     readonly traces: string;
     readonly logs: string;
-    readonly metrics: string;
   };
 }
 
@@ -68,11 +67,12 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
       OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
       OTEL_EXPORTER_OTLP_HEADERS: z.string().default(""),
 
-      // Axiom requires a dedicated dataset per signal, sent as a header; other
-      // OTLP backends (including the shared Alloy gateway) ignore them.
+      // Axiom routes traces and logs by dataset header. The Axiom plan caps this
+      // organization at three datasets, so logs reuse the existing events
+      // dataset instead of a dedicated `starlight-logs`. Metrics are not
+      // exported.
       AXIOM_TRACES_DATASET: z.string().default("starlight-traces"),
-      AXIOM_LOGS_DATASET: z.string().default("starlight-logs"),
-      AXIOM_METRICS_DATASET: z.string().default("starlight-metrics"),
+      AXIOM_LOGS_DATASET: z.string().default("starlight"),
     },
     runtimeEnv,
     emptyStringAsUndefined: true,
@@ -100,7 +100,6 @@ export function createBotEnv(runtimeEnv: NodeJS.ProcessEnv = process.env) {
             axiomDatasets: {
               traces: raw.AXIOM_TRACES_DATASET,
               logs: raw.AXIOM_LOGS_DATASET,
-              metrics: raw.AXIOM_METRICS_DATASET,
             },
           },
   };

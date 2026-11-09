@@ -14,23 +14,19 @@ import { context, metrics, propagation, ROOT_CONTEXT, SpanStatusCode, trace } fr
 import type { Context, Link, Span } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
-import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs";
-import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ATTR_ERROR_TYPE, ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
-import { heapSize, memoryUsage } from "bun:jsc";
 import { registerTelemetry } from "ai";
 import type { MiddlewareFn } from "grammy";
 import type { OpenRouter } from "@/ai/openrouter";
 import type { LangfuseConfig, OtlpConfig } from "@/env";
 
 let provider: NodeTracerProvider | undefined;
-let meterProvider: MeterProvider | undefined;
 let logProvider: LoggerProvider | undefined;
 let shutdownPromise: Promise<void> | undefined;
 const INSTRUMENTATION_NAME = "starlight-bot";
@@ -92,41 +88,6 @@ export function initTelemetry(backends: TelemetryConfig): void {
   provider.register();
 
   if (backends.otlp) {
-    meterProvider = new MeterProvider({
-      resource,
-      readers: [
-        new PeriodicExportingMetricReader({
-          exporter: new OTLPMetricExporter({
-            url: signalEndpoint(backends.otlp.endpoint, "metrics"),
-            headers: {
-              ...backends.otlp.headers,
-              "X-Axiom-Metrics-Dataset": backends.otlp.axiomDatasets.metrics,
-            },
-          }),
-        }),
-      ],
-    });
-    metrics.setGlobalMeterProvider(meterProvider);
-
-    const memoryGauge = meterProvider
-      .getMeter(INSTRUMENTATION_NAME)
-      .createObservableGauge("process.runtime.bun.memory.usage", {
-        description: "Bun process memory by category",
-        unit: "By",
-      });
-
-    memoryGauge.addCallback((result) => {
-      const processMemory = process.memoryUsage();
-      const bunMemory = memoryUsage();
-      result.observe(processMemory.rss, { type: "rss" });
-      result.observe(processMemory.heapUsed, { type: "heap_used" });
-      result.observe(processMemory.heapTotal, { type: "heap_total" });
-      result.observe(processMemory.external, { type: "external" });
-      result.observe(processMemory.arrayBuffers, { type: "array_buffers" });
-      result.observe(heapSize(), { type: "jsc_heap" });
-      result.observe(bunMemory.currentCommit, { type: "mimalloc_committed" });
-    });
-
     logProvider = new LoggerProvider({
       resource,
       processors: [
@@ -145,7 +106,7 @@ export function initTelemetry(backends: TelemetryConfig): void {
 
 // OTLP/HTTP exporters want the signal path appended; mirrors what SDKs do for
 // the OTEL_EXPORTER_OTLP_ENDPOINT variable.
-function signalEndpoint(endpoint: string, signal: "traces" | "metrics" | "logs"): string {
+function signalEndpoint(endpoint: string, signal: "traces" | "logs"): string {
   return `${endpoint.replace(/(?<!\/)\/+$/u, "")}/v1/${signal}`;
 }
 
@@ -384,5 +345,5 @@ export async function shutdownTelemetry(): Promise<void> {
 }
 
 async function shutdownProviders(): Promise<void> {
-  await Promise.all([provider?.shutdown(), meterProvider?.shutdown(), logProvider?.shutdown()]);
+  await Promise.all([provider?.shutdown(), logProvider?.shutdown()]);
 }
