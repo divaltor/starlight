@@ -18,7 +18,7 @@ export namespace MessageReply {
 
   export interface AddressedOptions {
     readonly botId: number;
-    readonly botUsername: string | undefined;
+    readonly botUsernames: readonly string[];
     readonly message: Message;
   }
 
@@ -32,9 +32,7 @@ export namespace MessageReply {
     const text = options.message.text ?? options.message.caption ?? "";
 
     return (
-      (options.botUsername !== undefined &&
-        options.botUsername !== "" &&
-        text.toLowerCase().includes(`@${options.botUsername.toLowerCase()}`)) ||
+      options.botUsernames.some((username) => text.toLowerCase().includes(`@${username.toLowerCase()}`)) ||
       BOT_NAME_PATTERN.test(text)
     );
   }

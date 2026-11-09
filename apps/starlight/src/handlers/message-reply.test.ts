@@ -56,7 +56,7 @@ test("test_ignores_bot_name_when_forwarded", () => {
     text: "Старка мнение?",
   };
 
-  expect(MessageReply.isAddressedToBot({ botId: 42, botUsername: "starka_bot", message })).toBe(false);
+  expect(MessageReply.isAddressedToBot({ botId: 42, botUsernames: ["starka_bot"], message })).toBe(false);
 });
 
 test("test_ignores_at_mention_when_forwarded", () => {
@@ -68,7 +68,7 @@ test("test_ignores_at_mention_when_forwarded", () => {
     text: "hey @starka_bot look",
   };
 
-  expect(MessageReply.isAddressedToBot({ botId: 42, botUsername: "starka_bot", message })).toBe(false);
+  expect(MessageReply.isAddressedToBot({ botId: 42, botUsernames: ["starka_bot"], message })).toBe(false);
 });
 
 test("test_detects_bot_name_when_not_forwarded", () => {
@@ -79,7 +79,21 @@ test("test_detects_bot_name_when_not_forwarded", () => {
     text: "Старка мнение?",
   };
 
-  expect(MessageReply.isAddressedToBot({ botId: 42, botUsername: "starka_bot", message })).toBe(true);
+  expect(MessageReply.isAddressedToBot({ botId: 42, botUsernames: ["starka_bot"], message })).toBe(true);
+});
+
+// Our product must treat a mention of any active bot username as an address
+// because Telegram lets owners add secondary usernames, otherwise mentioning
+// the bot by its secondary username is silently ignored.
+test("test_detects_secondary_username_mention_when_not_forwarded", () => {
+  const message: Message = {
+    date: 1,
+    chat: { id: -77, title: "Films", type: "supergroup" },
+    message_id: 107,
+    text: "@Starka_AI мнение?",
+  };
+
+  expect(MessageReply.isAddressedToBot({ botId: 42, botUsernames: ["starka_bot", "starka_ai"], message })).toBe(true);
 });
 
 test("test_forwarded_reply_to_bot_does_not_trigger", () => {
@@ -98,7 +112,7 @@ test("test_forwarded_reply_to_bot_does_not_trigger", () => {
     },
   };
 
-  expect(MessageReply.isAddressedToBot({ botId: 42, botUsername: "starka_bot", message })).toBe(false);
+  expect(MessageReply.isAddressedToBot({ botId: 42, botUsernames: ["starka_bot"], message })).toBe(false);
 });
 
 test.each([

@@ -52,7 +52,12 @@ boundary.use(guestMessageHandler);
 
 boundary.use(topicCreatedHandler);
 
-boundary.use(messageHandler);
+await bot.init();
+
+// getMe returns only the primary username; secondary usernames are listed only in getChat.
+const botChat = await bot.api.getChat(bot.botInfo.id);
+
+boundary.use(messageHandler(botChat.active_usernames ?? [bot.botInfo.username]));
 
 const runner = run(bot);
 

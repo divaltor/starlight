@@ -15,53 +15,55 @@ import { runtime } from "@/services/runtime";
 const ADMISSION_RETRIES = 5;
 const env = createBotEnv();
 
-const composer = new Composer<Context>();
-const groupChat = composer.chatType(["group", "supergroup"]);
-const privateChat = composer.chatType("private");
+export default function messageHandler(botUsernames: readonly string[]) {
+  const composer = new Composer<Context>();
+  const groupChat = composer.chatType(["group", "supergroup"]);
+  const privateChat = composer.chatType("private");
 
-groupChat
-  .on("message")
-  .filter(hasAdmittableContent)
-  .use(async (ctx) => {
-    const trigger = MessageReply.trigger({
-      explicitlyAddressed: MessageReply.isAddressedToBot({
-        botId: ctx.me.id,
-        botUsername: ctx.me.username,
-        message: ctx.message,
-      }),
-      hasSticker: ctx.message.sticker !== undefined,
-      isReply: MessageReply.actualReply(ctx.message) !== undefined,
-      random: Math.random,
-      randomResponseChance: env.RANDOM_RESPONSE_CHANCE,
-      senderUsername: ctx.message.from?.username,
-      text: TelegramMessageText.withEntityLinks(ctx.message) ?? "",
+  groupChat
+    .on("message")
+    .filter(hasAdmittableContent)
+    .use(async (ctx) => {
+      const trigger = MessageReply.trigger({
+        explicitlyAddressed: MessageReply.isAddressedToBot({
+          botId: ctx.me.id,
+          botUsernames,
+          message: ctx.message,
+        }),
+        hasSticker: ctx.message.sticker !== undefined,
+        isReply: MessageReply.actualReply(ctx.message) !== undefined,
+        random: Math.random,
+        randomResponseChance: env.RANDOM_RESPONSE_CHANCE,
+        senderUsername: ctx.message.from?.username,
+        text: TelegramMessageText.withEntityLinks(ctx.message) ?? "",
+      });
+
+      await admitMessage(ctx, ctx.message, { trigger });
     });
 
-    await admitMessage(ctx, ctx.message, { trigger });
-  });
+  groupChat
+    .on("edited_message")
+    .filter(hasAdmittableEditedContent)
+    .use(async (ctx) => {
+      await admitMessage(ctx, ctx.editedMessage, {});
+    });
 
-groupChat
-  .on("edited_message")
-  .filter(hasAdmittableEditedContent)
-  .use(async (ctx) => {
-    await admitMessage(ctx, ctx.editedMessage, {});
-  });
+  privateChat
+    .on("message")
+    .filter(hasAdmittableContent)
+    .use(async (ctx) => {
+      await admitMessage(ctx, ctx.message, { addressed: true });
+    });
 
-privateChat
-  .on("message")
-  .filter(hasAdmittableContent)
-  .use(async (ctx) => {
-    await admitMessage(ctx, ctx.message, { addressed: true });
-  });
+  privateChat
+    .on("edited_message")
+    .filter(hasAdmittableEditedContent)
+    .use(async (ctx) => {
+      await admitMessage(ctx, ctx.editedMessage, {});
+    });
 
-privateChat
-  .on("edited_message")
-  .filter(hasAdmittableEditedContent)
-  .use(async (ctx) => {
-    await admitMessage(ctx, ctx.editedMessage, {});
-  });
-
-export default composer;
+  return composer;
+}
 
 async function admitMessage(
   ctx: Context,
