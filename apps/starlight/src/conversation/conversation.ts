@@ -182,6 +182,8 @@ export namespace Conversation {
                 maxToolOutputBytes: 0,
                 messages: [{ role: "user", text: input }],
                 outputSchema: Checkpoint.Records,
+                // No chat is in scope here, so the summary is treated as private: usage only, no content.
+                private: true,
                 sessionId: "checkpoint",
                 telemetryFunctionId: "conversation-checkpoint",
                 tools: {},
