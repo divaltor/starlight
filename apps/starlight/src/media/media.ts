@@ -232,7 +232,7 @@ export namespace Media {
       if (Number.isFinite(contentLength) && contentLength > MAX_SOURCE_BYTES) {
         return yield* new MediaError({
           message: SOURCE_TOO_LARGE,
-          retryable: true,
+          retryable: false,
         });
       }
 
@@ -245,63 +245,73 @@ export namespace Media {
       if (bytes.byteLength > MAX_SOURCE_BYTES) {
         return yield* new MediaError({
           message: SOURCE_TOO_LARGE,
-          retryable: true,
+          retryable: false,
         });
       }
 
       return bytes;
     });
 
-    const ingest = Effect.fn("Media.ingest")(function* ingest(source: Source) {
-      if (source.declaredSize !== null && source.declaredSize > MAX_SOURCE_BYTES) {
-        return unavailable(source, "media exceeds the 20 MiB boundary");
-      }
-
-      if (!isSupported(source)) return unavailable(source, "media type is not supported by the model pipeline");
-
-      const downloaded = yield* download(source);
-
-      if (source.mimeType === "application/pdf") {
-        const classification = yield* Effect.tryPromise({
-          try: async () => await classifyPdfAsync(Buffer.from(downloaded)),
-          catch: (cause) => new MediaError({ cause, message: "Failed to inspect PDF", retryable: false }),
-        });
-
-        if (classification.pageCount > MAX_PDF_PAGES) {
-          return unavailable(source, `PDF exceeds the ${MAX_PDF_PAGES}-page boundary`);
+    const ingest = Effect.fn("Media.ingest")(
+      function* ingest(source: Source) {
+        if (source.declaredSize !== null && source.declaredSize > MAX_SOURCE_BYTES) {
+          return unavailable(source, "media exceeds the 20 MiB boundary");
         }
-      }
 
-      const bytes = isNormalizableImage(source) ? yield* normalizeImage(downloaded) : downloaded;
-      const sha256 = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
-      const s3Key = `telegram-media/${sha256}`;
-      yield* Effect.tryPromise({
-        try: async () => {
-          if (!(await s3.exists(s3Key))) await s3.write(s3Key, bytes, { type: normalizedMimeType(source) });
-        },
-        catch: (cause) => new MediaError({ cause, message: "Failed to persist media in S3", retryable: true }),
-      }).pipe(
-        Effect.withSpan("Media persist", {
-          attributes: {
-            "media.mime_type": normalizedMimeType(source),
-            "media.size_bytes": bytes.byteLength,
-            "media.type": source.type,
+        if (!isSupported(source)) return unavailable(source, "media type is not supported by the model pipeline");
+
+        const downloaded = yield* download(source);
+
+        if (source.mimeType === "application/pdf") {
+          const classification = yield* Effect.tryPromise({
+            try: async () => await classifyPdfAsync(Buffer.from(downloaded)),
+            catch: (cause) => new MediaError({ cause, message: "Failed to inspect PDF", retryable: false }),
+          });
+
+          if (classification.pageCount > MAX_PDF_PAGES) {
+            return unavailable(source, `PDF exceeds the ${MAX_PDF_PAGES}-page boundary`);
+          }
+        }
+
+        const bytes = isNormalizableImage(source) ? yield* normalizeImage(downloaded) : downloaded;
+        const sha256 = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+        const s3Key = `telegram-media/${sha256}`;
+        yield* Effect.tryPromise({
+          try: async () => {
+            if (!(await s3.exists(s3Key))) await s3.write(s3Key, bytes, { type: normalizedMimeType(source) });
           },
-        }),
-      );
+          catch: (cause) => new MediaError({ cause, message: "Failed to persist media in S3", retryable: true }),
+        }).pipe(
+          Effect.withSpan("Media persist", {
+            attributes: {
+              "media.mime_type": normalizedMimeType(source),
+              "media.size_bytes": bytes.byteLength,
+              "media.type": source.type,
+            },
+          }),
+        );
 
-      return {
-        availability: "stored" as const,
-        mimeType: normalizedMimeType(source),
-        s3Key,
-        sha256,
-        size: bytes.byteLength,
-        stableDescription: `${source.type} (${normalizedMimeType(source)}, ${bytes.byteLength} bytes, sha256:${sha256})`,
-        telegramFileId: source.telegramFileId,
-        telegramFileUniqueId: source.telegramFileUniqueId,
-        type: source.type,
-      };
-    });
+        return {
+          availability: "stored" as const,
+          mimeType: normalizedMimeType(source),
+          s3Key,
+          sha256,
+          size: bytes.byteLength,
+          stableDescription: `${source.type} (${normalizedMimeType(source)}, ${bytes.byteLength} bytes, sha256:${sha256})`,
+          telegramFileId: source.telegramFileId,
+          telegramFileUniqueId: source.telegramFileUniqueId,
+          type: source.type,
+        };
+      },
+      // An attachment that can never be processed must not drop the message text with it.
+      (effect, source) =>
+        effect.pipe(
+          Effect.catchIf(
+            (error) => !error.retryable,
+            (error) => Effect.succeed(unavailable(source, error.message)),
+          ),
+        ),
+    );
 
     const load = Effect.fn("Media.load")(function* load(reference: Reference) {
       if (reference.availability === "unavailable") return null;

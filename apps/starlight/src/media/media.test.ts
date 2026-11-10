@@ -77,6 +77,46 @@ test("marks PDFs unavailable when they exceed 25 pages", async () => {
   }
 });
 
+// Our product must admit a message's text when its attachment can never be processed, because one
+// oversized or corrupt file otherwise drops the whole message.
+test("test_media_is_marked_unavailable_when_download_exceeds_20_mib_without_declared_size", async () => {
+  const body = new Uint8Array(20 * 1024 * 1024 + 1);
+  using server = Bun.serve({ fetch: () => new Response(body) });
+
+  const runtime = ManagedRuntime.make(
+    Media.layer({
+      accessKeyId: "test",
+      endpoint: "https://s3.example.com",
+      secretAccessKey: "test",
+      telegramApi: {
+        // oxlint-disable-next-line typescript/promise-function-async -- settled fixture promise needs no async wrapper
+        getFile: () =>
+          Promise.resolve({ file_id: "file-id", file_unique_id: "unique-id", getUrl: () => server.url.toString() }),
+      },
+    }).pipe(Layer.provide(FetchHttpClient.layer)),
+  );
+
+  try {
+    const reference = await runtime.runPromise(
+      Effect.gen(function* verifyDownloadBoundary() {
+        const media = yield* Media.Service;
+
+        return yield* media.ingest({
+          declaredSize: null,
+          mimeType: "video/mp4",
+          telegramFileId: "file-id",
+          telegramFileUniqueId: "unique-id",
+          type: "video",
+        });
+      }),
+    );
+
+    expect(reference.availability).toBe("unavailable");
+  } finally {
+    await runtime.dispose();
+  }
+});
+
 function createBlankPdf(pageCount: number): Uint8Array<ArrayBuffer> {
   const pageReferences = Array.from({ length: pageCount }, (_, index) => `${index + 3} 0 R`).join(" ");
 

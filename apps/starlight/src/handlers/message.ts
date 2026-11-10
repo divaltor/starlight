@@ -189,7 +189,7 @@ async function admitMessage(
         Effect.tapError((error) =>
           error.retryable
             ? Effect.logWarning("Conversation admission attempt failed").pipe(
-                Effect.annotateLogs({ errorTag: error._tag, updateId: ctx.update.update_id }),
+                Effect.annotateLogs({ errorTag: error._tag, message: error.message, updateId: ctx.update.update_id }),
               )
             : Effect.void,
         ),
