@@ -29,6 +29,7 @@ A lane is `(assistantId, chatId, threadKey)`, one Pi conversation each. The sess
 - The lane task runs `wait → run → answer → settle`. `wait` sleeps durably until `wakeAt`, then claims the lane and freezes a batch. A sleeping task cannot be re-armed, so an admission that moves `wakeAt` earlier starts another sleeper; whichever wakes first claims and the rest exit.
 - `run` checks premium access, then: a silent batch is appended as a `starlight.batch` entry without a model call; a batch answered only by Jev reactions goes straight to a delivery task; anything else freezes recall and the date in a memo and writes `starlight.run`.
 - `answer` submits the batch with a stable `requestId`, so a rerun after a crash finds the same submission instead of asking twice.
+- `settle` tags the callback word in each of her last 10 delivered replies with `liquid/d1-ultra` (`ai/reply-motifs.ts`, doc `starlight.reply-motifs`); the next `run` names up to 3 of them that the new batch does not raise (`Prompt.renderMotifGuidance`). Tagging is best effort and runs after delivery.
 - Retryable failures back off exponentially (cap 300s) on the same frozen batch. Permanent ones (`Lane.BlockedError`, or errors with `retryable: false`) drop only that batch.
 
 ## Reply (`conversation/reply.ts`)
@@ -37,7 +38,7 @@ The `starlight` Pi extension supplies the system prompt sections, tools and hook
 
 - `final_output` validates against the chat's reply limit, merges precomputed Jev reactions (`mergePrecomputedReactions`), creates the delivery task once (linked through the task doc `starlight.delivery-ref`), waits for it, and terminates the run without another model request.
 - Research tools wrap the AI SDK toolset with a 3-call and 16 KiB output budget tracked in `starlight.run`.
-- `beforeRequest` rewrites only the outgoing request: date, recalled memory, media and sign-off guidance go next to the live batch, so the stored transcript stays stable for provider-side caching.
+- `beforeRequest` rewrites only the outgoing request: date, recalled memory, media, sign-off guidance and the motif note go next to the live batch, so the stored transcript stays stable for provider-side caching.
 - `onYield` nudges a model that answered in plain text, at most twice per batch.
 
 ## Checkpoints (`CompactionTask.beforeCompact` in `conversation/reply.ts`)

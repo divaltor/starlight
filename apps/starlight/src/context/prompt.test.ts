@@ -83,3 +83,27 @@ test.each([
       ?.ending ?? null,
   ).toBe(input.expected);
 });
+
+// Our product must name the details Starlight's recent replies keep teasing people with, but not
+// one the live message raises itself, because forbidding it would block the answer they asked for.
+// Russian inflects nouns, so «гранте» and «гранту» are the same detail.
+test.each([
+  {
+    expected: "«гранту», «свитер», «паштет»",
+    live: "привет",
+    motifs: ["свитер", "гранту", "гранты", "паштет"],
+    name: "inflected forms of one detail repeat",
+  },
+  {
+    expected: "«свитер»",
+    live: "продал гранту вчера",
+    motifs: ["свитер", "гранте"],
+    name: "the live message raises one",
+  },
+  { expected: null, live: "в свитером что не так", motifs: ["свитер"], name: "the live message raises every one" },
+])("test_motif_guidance_names_recent_callbacks_when_$name", (input) => {
+  expect(
+    Prompt.renderMotifGuidance(input.motifs, input.live)?.match(/keep bringing up (?<named>.+)\. Leave/u)?.groups
+      ?.named ?? null,
+  ).toBe(input.expected);
+});

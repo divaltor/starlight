@@ -8,6 +8,7 @@ import { Effect, Fiber, Layer, Schedule } from "effect";
 import { TestClock } from "effect/testing";
 import { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
+import { ReplyMotifs } from "@/ai/reply-motifs";
 import { Conversation } from "@/conversation/conversation";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { ConversationKey } from "@/conversation/key";
@@ -116,6 +117,7 @@ test("test_admission_and_history_wait_for_recovery_but_fail_after_five_minutes",
           record: () => Effect.void,
         }),
         Layer.succeed(Model.Service)({ generate: () => Effect.die(new Error("unexpected generation")) }),
+        Layer.succeed(ReplyMotifs.Service)({ tag: (tagged) => Effect.succeed(tagged.replies.map(() => [])) }),
         Conversation.optionsLayer({
           contextCompactionTriggerTokens: 100_000,
           contextRetainedTokenTarget: 8000,

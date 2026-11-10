@@ -10,6 +10,7 @@ import { ChatTools } from "@/ai/chat-tools";
 import { Model } from "@/ai/model";
 import { ModelProfile } from "@/ai/model-profile";
 import { OpenRouter } from "@/ai/openrouter";
+import { ReplyMotifs } from "@/ai/reply-motifs";
 import { Checkpoint } from "@/context/checkpoint";
 import { TelegramDelivery } from "@/conversation/delivery";
 import { Dispatch } from "@/conversation/dispatch";
@@ -97,6 +98,7 @@ export namespace Conversation {
       const memory = yield* Memory.Service;
       const model = yield* Model.Service;
       const options = yield* OptionsService;
+      const replyMotifs = yield* ReplyMotifs.Service;
       const run = Effect.runPromiseWith(yield* Effect.context());
       const profile = ModelProfile.selected;
       const timing = { maxWaitMs: options.maxWaitMs, quietMs: options.quietMs };
@@ -161,6 +163,18 @@ export namespace Conversation {
         record: async (key, batch) => {
           await run(memory.record(ConversationKey.toDb(key), batch));
         },
+        tagMotifs: async (input) =>
+          await run(
+            replyMotifs.tag(input).pipe(
+              // The note is an optional nudge; a missed tag only leaves that reply unnamed.
+              Effect.catch((error) =>
+                Effect.logWarning("Reply motif tagging failed").pipe(
+                  Effect.annotateLogs({ errorTag: error._tag }),
+                  Effect.as(null),
+                ),
+              ),
+            ),
+          ),
         timing,
         typing: async (key) => {
           await run(delivery.indicateTyping({ chatId: key.chatId, threadKey: key.threadKey }).pipe(Effect.ignore));

@@ -53,6 +53,11 @@ export namespace Lane {
     readonly record: (key: ConversationKey.Value, batch: readonly LaneDoc.Item[]) => Promise<void>;
     // Best effort: never rejects; null when memory is unavailable.
     readonly recall: (key: ConversationKey.Value, batch: readonly LaneDoc.Item[]) => Promise<string | null>;
+    // Best effort: never rejects; one callback list per reply, or null when tagging is unavailable.
+    readonly tagMotifs: (input: {
+      readonly answered: string;
+      readonly replies: readonly string[];
+    }) => Promise<readonly string[][] | null>;
     readonly timing: LaneDoc.Timing;
     // Best effort: never rejects.
     readonly typing: (key: ConversationKey.Value) => Promise<void>;
@@ -169,9 +174,47 @@ export namespace Lane {
           await runtime.commit(() => running({ batch: state.batch, phase: "settle" }), context);
         },
         settle: async (current, runtime, context) => {
-          const lane = await runtime.snapshot(LaneDoc.token, runtime.conversationId, context);
-          await deps.record(lane!.key!, current.state.checkpoint.batch);
-          await release(deps, runtime, current.state.checkpoint.batch, context);
+          const { batch } = current.state.checkpoint;
+
+          const [lane, tagged] = await Promise.all([
+            runtime.snapshot(LaneDoc.token, runtime.conversationId, context),
+            runtime.snapshot(LaneDoc.replyMotifs, runtime.conversationId, context),
+          ]);
+
+          await deps.record(lane!.key!, batch);
+
+          // Tagging after delivery keeps the model call off the reply path; the next batch reads it.
+          const lines = lane!.recent
+            .filter((item) => item.speakerId === lane!.key!.assistantId.toString())
+            .slice(-LaneDoc.MOTIF_WINDOW);
+
+          const untagged = lines.filter(
+            (line) => tagged?.tags.some((tag) => tag.messageId === line.messageId) !== true,
+          );
+
+          const motifs =
+            untagged.length === 0
+              ? null
+              : await deps.tagMotifs({
+                  answered: batch.map((item) => `${item.payload.senderFirstName}: ${item.payload.text}`).join("\n"),
+                  replies: untagged.map((line) => line.text),
+                });
+
+          await runtime.commit(async (tx) => {
+            if (motifs !== null) {
+              const draft = await tx.doc(LaneDoc.replyMotifs, runtime.conversationId);
+              const kept = new Set(lines.map((line) => line.messageId));
+
+              draft.tags = [
+                ...draft.tags,
+                ...untagged.map((line, index) => ({ messageId: line.messageId, motifs: [...motifs[index]!] })),
+              ].filter((tag) => kept.has(tag.messageId));
+            }
+
+            LaneDoc.release(await tx.doc(LaneDoc.token, runtime.conversationId), batch, runtime.now(), deps.timing);
+
+            return running({ failures: 0, phase: "wait" });
+          }, context);
         },
       },
       abort: async (_task, runtime, context) => {
@@ -331,6 +374,7 @@ export namespace Lane {
       ));
 
     const rendered = renderBatch(state.batch, lane);
+    const tagged = await runtime.snapshot(LaneDoc.replyMotifs, runtime.conversationId, context);
 
     await runtime.commit(async (tx) => {
       const run = await tx.doc(Reply.runDoc, runtime.conversationId);
@@ -349,6 +393,13 @@ export namespace Lane {
       run.research = [];
       run.senderId = state.batch.at(-1)!.payload.senderId;
       run.signOff = Prompt.renderSignOffGuidance(lane.recentReplies);
+      run.motifs = Prompt.renderMotifGuidance(
+        lane.recent
+          .filter((item) => item.speakerId === key.assistantId.toString())
+          .slice(-LaneDoc.MOTIF_WINDOW)
+          .flatMap((line) => tagged?.tags.find((tag) => tag.messageId === line.messageId)?.motifs ?? []),
+        state.batch.flatMap((item) => [item.payload.text, item.payload.repliedText ?? ""]).join("\n"),
+      );
 
       return running({ batch: state.batch, phase: "answer", requestId });
     }, context);

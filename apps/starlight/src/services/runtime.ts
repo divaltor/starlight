@@ -10,6 +10,7 @@ import { ChatTools } from "@/ai/chat-tools";
 import { DialogueContinuation } from "@/ai/dialogue-continuation";
 import { GuestReply } from "@/ai/guest-reply";
 import { Model } from "@/ai/model";
+import { ReplyMotifs } from "@/ai/reply-motifs";
 import { TopicMetadata } from "@/ai/topic-metadata";
 import { fileApi } from "@/bot";
 import { Conversation } from "@/conversation/conversation";
@@ -105,13 +106,13 @@ const topicMetadata = TopicMetadata.layer.pipe(
   ),
 );
 
-const dialogueContinuation = DialogueContinuation.layer(
-  createOpenRouter({
-    apiKey: env.OPENROUTER_API_KEY,
-    appName: "Starlight",
-    compatibility: "strict",
-  }).evaluationModel("typesafe/jev-1.14"),
-);
+const decisions = createOpenRouter({
+  apiKey: env.OPENROUTER_API_KEY,
+  appName: "Starlight",
+  compatibility: "strict",
+});
+
+const dialogueContinuation = DialogueContinuation.layer(decisions.evaluationModel("typesafe/jev-1.14"));
 
 const database = Database.layer(env.DATABASE_URL);
 
@@ -128,6 +129,7 @@ const infrastructure = Layer.provide(
     replies,
     topicMetadata,
     dialogueContinuation,
+    ReplyMotifs.layer(decisions.evaluationModel(ReplyMotifs.model)),
     TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
     Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),
     Media.layer({

@@ -80,6 +80,43 @@ export namespace Prompt {
     }: ${payload.text}${mediaBlock}`;
   }
 
+  const MAX_NAMED_MOTIFS = 3;
+  const russianWord = /[\p{L}\d]+/gu;
+
+  // Longest first, so a word loses its whole case ending.
+  const inflections = [
+    "иями",
+    ..."ями ами ого его ому ему ыми ими".split(" "),
+    ..."ах ях ом ем ой ей ий ый ая яя ое ее ую юю ов ев ам ям".split(" "),
+    ..."а я о е ы и у ю ь".split(" "),
+  ];
+
+  // Her own replies re-enter context verbatim, so a detail she once teased someone with
+  // (their car, a sweater, a loss) becomes the next reply's go-to jab. Naming the recent ones
+  // on the live tail stops that without touching the cached prefix. Inflected forms of one
+  // word count once, and anything the live batch itself raises stays allowed.
+  export function renderMotifGuidance(motifs: readonly string[], liveText: string): string | null {
+    const live = new Set(liveText.toLowerCase().replaceAll("ё", "е").match(russianWord)?.map(stem));
+
+    const named = [...Map.groupBy(motifs, (motif) => motif.split(" ").map(stem).join(" "))]
+      .filter((entry) => !entry[0].split(" ").some((part) => live.has(part)))
+      .toSorted((left, right) => right[1].length - left[1].length)
+      .slice(0, MAX_NAMED_MOTIFS)
+      .map((entry) => `«${entry[1][0]}»`);
+
+    if (named.length === 0) return null;
+
+    return `${requestMetadataHeader}\nYour recent replies keep bringing up ${named.join(
+      ", ",
+    )}. Leave them out unless the LIVE MESSAGE raises them.`;
+  }
+
+  function stem(word: string): string {
+    const cut = word.slice(0, word.length - (inflections.find((ending) => word.endsWith(ending))?.length ?? 0));
+
+    return cut.length >= 4 ? cut : word;
+  }
+
   const SIGN_OFF_REPEATS = 3;
   const EMOJI_ENDING = "emoji";
   const sentenceBreak = /(?<=[.!?…])\s+|\n+/u;

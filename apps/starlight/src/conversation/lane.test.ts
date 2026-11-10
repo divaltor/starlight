@@ -58,6 +58,7 @@ test("test_edited_message_gets_its_own_answer_when_edit_arrives_during_running_b
     delivery,
     log: () => {},
     recall: async () => await Promise.resolve(null),
+    tagMotifs: async (input) => await Promise.resolve(input.replies.map(() => [])),
     record: async (_key, batch) => {
       recorded.push(...batch.map((item) => item.payload.text));
 
@@ -254,6 +255,7 @@ test("test_lane_preserves_batch_windows_and_single_runner_when_deadlines_move", 
     delivery,
     log: () => {},
     recall: async () => await Promise.resolve(null),
+    tagMotifs: async (input) => await Promise.resolve(input.replies.map(() => [])),
     record: async (_key, batch) => {
       batches.push(batch.map((input) => input.payload.text));
 

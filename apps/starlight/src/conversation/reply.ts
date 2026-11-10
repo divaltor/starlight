@@ -58,6 +58,8 @@ export namespace Reply {
     media: { part: number; reference: Media.Reference }[];
     precomputed: TelegramDelivery.ReactionAction[];
     replyLimit: number;
+    // Callbacks her recent replies keep using that this batch does not raise.
+    motifs: string | null;
     research: { bytes: number; taskId: number }[];
     // Telegram sender of the batch's last message.
     senderId: number | null;
@@ -77,6 +79,7 @@ export namespace Reply {
       isPrivate: true,
       marker: null,
       media: [],
+      motifs: null,
       precomputed: [],
       replyLimit: 3,
       research: [],
@@ -179,7 +182,10 @@ export namespace Reply {
                   ...batch,
                   content: [
                     ...content,
-                    ...(run.signOff === null ? [] : [{ text: run.signOff, type: "text" as const }]),
+                    // A run frozen before `motifs` existed has no value for it.
+                    ...[run.signOff, run.motifs].flatMap((text) =>
+                      text == null ? [] : [{ text, type: "text" as const }],
+                    ),
                   ],
                 },
                 ...request.messages.slice(index + 1),

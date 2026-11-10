@@ -18,6 +18,8 @@ export namespace LaneDoc {
   const SEEN_MESSAGE_WINDOW = 500;
   const RECENT_WINDOW = 32;
   export const SIGN_OFF_WINDOW = 8;
+  // Starlight's own replies whose tagged callbacks the next request names.
+  export const MOTIF_WINDOW = 10;
 
   export interface Item {
     readonly payload: InputPayload;
@@ -94,6 +96,18 @@ export namespace LaneDoc {
 
       return migrated;
     },
+    checkpointWhen: (_value, _ops, info) => info.deltasSinceBase >= 64,
+  });
+
+  // Callback words tagged in Starlight's delivered replies, by Telegram message id. Kept apart
+  // from `recent`, which the participation gate reads as its exchange.
+  export const replyMotifs = defineDoc<{ tags: { messageId: number; motifs: string[] }[] }>({
+    kind: "starlight.reply-motifs",
+    version: 1,
+    scope: "conversation",
+    history: "latest",
+    fork: "initial",
+    initial: () => ({ tags: [] }),
     checkpointWhen: (_value, _ops, info) => info.deltasSinceBase >= 64,
   });
 
