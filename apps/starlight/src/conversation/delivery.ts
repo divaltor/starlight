@@ -100,7 +100,9 @@ export namespace TelegramDelivery {
             const sent = await api.sendMessage(input.chatId, action.text, {
               message_thread_id: input.threadKey === 0 ? undefined : input.threadKey,
               reply_parameters:
-                action.replyTo != null && action.replyTo !== 0 ? { message_id: action.replyTo } : undefined,
+                action.replyTo != null && action.replyTo !== 0
+                  ? { allow_sending_without_reply: true, message_id: action.replyTo }
+                  : undefined,
             });
 
             return { telegramMessageId: sent.message_id };
