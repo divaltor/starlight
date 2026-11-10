@@ -140,7 +140,7 @@ export namespace LaneDoc {
     const firstPendingAt = lane.window?.firstPendingAt ?? now;
 
     lane.admittedKeys = [...lane.admittedKeys, ...keys].slice(-ADMITTED_KEY_WINDOW);
-    lane.pending.push(item);
+    lane.pending = [...lane.pending, item].toSorted((left, right) => left.payload.messageId - right.payload.messageId);
     remember(lane, {
       messageId: payload.messageId,
       repliedText: payload.repliedText,

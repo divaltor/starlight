@@ -366,11 +366,23 @@ test("test_lane_preserves_batch_windows_and_single_runner_when_deadlines_move", 
     clock.now = 36_000;
     harness.resume();
     await harness.waitForTask(oldSleeper, BACKGROUND_CONTEXT);
-    expect(batches).toEqual([["album", "earlier", "same deadline", "later"], ["during run"]]);
+    expect(batches).toEqual([["album", "earlier", "later", "same deadline"], ["during run"]]);
   } finally {
     releaseFirst.resolve(null);
     await harness.close(BACKGROUND_CONTEXT);
   }
+});
+
+// Our product must give the model a batch in Telegram message order, because media ingestion delays
+// admission and an out-of-order batch makes the reply answer the wrong message.
+test("test_batch_is_frozen_in_message_order_when_a_later_message_is_admitted_first", () => {
+  const lane = LaneDoc.empty();
+  const timing = { maxWaitMs: 10_000, quietMs: 3000 };
+
+  LaneDoc.admit(lane, laneItem(11, "second"), 1, 0, timing);
+  LaneDoc.admit(lane, laneItem(10, "first"), 2, 0, timing);
+
+  expect(LaneDoc.freeze(lane).map((item) => item.payload.text)).toEqual(["first", "second"]);
 });
 
 function laneItem(messageId: number, text: string, mediaGroupId: string | null = null): LaneDoc.Item & JsonObject {
