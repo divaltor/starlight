@@ -51,6 +51,7 @@ export namespace Lane {
     ) => void;
     // Long-term memory observations for a finalized batch; idempotent per message revision.
     readonly record: (key: ConversationKey.Value, batch: readonly LaneDoc.Item[]) => Promise<void>;
+    // Best effort: never rejects; null when memory is unavailable.
     readonly recall: (key: ConversationKey.Value, batch: readonly LaneDoc.Item[]) => Promise<string | null>;
     readonly timing: LaneDoc.Timing;
     // Best effort: never rejects.

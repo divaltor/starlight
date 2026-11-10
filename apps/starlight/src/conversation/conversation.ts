@@ -137,19 +137,27 @@ export namespace Conversation {
           ),
         delivery: deliveryTask,
         log,
-        recall: async (key, batch) => {
-          const recalled = await run(
-            memory.recall({
-              key: ConversationKey.toDb(key),
-              query: RecallQuery.build({
-                inputs: batch.map((item) => item.payload),
-                maxTokens: options.recallMaxQueryTokens,
-              }),
-            }),
-          );
-
-          return recalled.contextMemory;
-        },
+        recall: async (key, batch) =>
+          await run(
+            memory
+              .recall({
+                key: ConversationKey.toDb(key),
+                query: RecallQuery.build({
+                  inputs: batch.map((item) => item.payload),
+                  maxTokens: options.recallMaxQueryTokens,
+                }),
+              })
+              .pipe(
+                Effect.map((recalled) => recalled.contextMemory),
+                // Memory is context, not a precondition: the checkpoint summary is still in the prompt.
+                Effect.catch((error) =>
+                  Effect.logWarning("Memory recall failed, answering without it").pipe(
+                    Effect.annotateLogs({ chatId: key.chatId, errorTag: error._tag, threadKey: key.threadKey }),
+                    Effect.as(null),
+                  ),
+                ),
+              ),
+          ),
         record: async (key, batch) => {
           await run(memory.record(ConversationKey.toDb(key), batch));
         },
