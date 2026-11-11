@@ -1,6 +1,7 @@
 import { experimental_decide } from "ai";
 import type { Experimental_DecisionModel } from "ai";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
+import { Morph, Tokens } from "@/morphology";
 
 /**
  * Tags the callback in each delivered reply: the word Starlight used to tease a chat member
@@ -11,28 +12,10 @@ import { Context, Duration, Effect, Layer, Schema } from "effect";
 export namespace ReplyMotifs {
   const MIN_PROBABILITY = 0.5;
   const MAX_CANDIDATES = 40;
-  const MIN_WORD_LENGTH = 4;
   const NONE = "none";
 
-  const amount = /(?<!\d)\d+\s?(?:к|k|тыс|евро|рубл|баксов|долларов|см|\$|€|%)/gu;
-  const word = /\p{L}+/gu;
-  const adjective = /(?:ого|его|ому|ему|ыми|ими|ая|яя|ую|юю|ые|ие|ый|ий)$/u;
-
-  // Function words and pronouns that the model would otherwise have to rule out one by one.
-  const stopwords = new Set(
-    `просто сейчас только конечно вообще реально потому который которая которое которые которых которым когда тогда
-    теперь всегда никогда иногда здесь чтобы чтоб будто словно если хотя даже уже еще очень слишком совсем почти может
-    можно нужно надо будет будешь будут было были была быть есть этим такой такая такое такие таких такого таким также тоже
-    потом после перед между через более менее самый самая самое самые самого всего всему всеми другой другая другие
-    других себя себе собой тебя тебе тобой меня мне мной ничего никто ничем нибудь лучше хуже больше меньше много мало
-    сразу снова опять почему зачем сколько какой какая какое какие каких какого каким кажется значит главное вместо
-    вокруг кроме ради около против давай давайте хочешь хочет хочу знаешь знаю знает думаешь думаю говорит говоришь
-    сказал сказала делать сделать делаешь прямо точно вроде типа ладно правда понятно наверное похоже сегодня завтра
-    вчера человек людей время времени жизнь жизни раньше дальше выглядит звучит видимо явно скоро пока нормально
-    твой твоя твое твои твою твоем твоим твоих моем моим моих свой своя свое свои свою своем своим своих наша наше наши
-    нашем нашим наших ваша ваше ваши вашем вашим ваших этот этого этому этом этой этих этими тому того теми всем всех
-    весь кого кому чего чему нему него ними нами вами`.split(/\s+/u),
-  );
+  // Az tokenizes these as OTHER, like emoji halves, so only these count as a unit after a number.
+  const unitSymbols = new Set(["$", "€", "₽", "%"]);
 
   const question = {
     question:
@@ -114,13 +97,39 @@ export namespace ReplyMotifs {
     );
   }
 
+  // Callbacks are things and names, so candidates are nouns, Latin words (brands such as «bmw»)
+  // and amounts; the dictionary rules out verbs, adjectives, pronouns and other function words.
   function candidatesOf(reply: string): string[] {
-    const lower = reply.toLowerCase().replaceAll("ё", "е");
+    const tokens = Tokens(reply.toLowerCase().replaceAll("ё", "е")).done([Tokens.WORD, Tokens.NUMBER, Tokens.OTHER]);
 
-    const words = [...lower.matchAll(word)].flatMap((match) =>
-      match[0].length < MIN_WORD_LENGTH || stopwords.has(match[0]) || adjective.test(match[0]) ? [] : [match[0]],
-    );
+    const amounts = tokens.flatMap((token, index) => {
+      const unit = tokens[index + 1];
 
-    return [...new Set([...[...lower.matchAll(amount)].map((match) => match[0]), ...words])].slice(0, MAX_CANDIDATES);
+      if (token.type !== Tokens.NUMBER) return [];
+
+      // «300к» and «300баксов» arrive as one token.
+      if (token.subType) return [token.toString()];
+
+      if (unit?.type === Tokens.OTHER && unitSymbols.has(unit.toString())) {
+        return [`${token.toString()}${unit.toString()}`];
+      }
+
+      // After a number the noun reading wins even when it is not the likeliest one, as in «30 см».
+      if (unit?.type === Tokens.WORD && Morph(unit.toString()).some((parse) => parse.tag.POS === "NOUN")) {
+        return [`${token.toString()} ${unit.toString()}`];
+      }
+
+      return [];
+    });
+
+    const words = tokens.flatMap((token) => {
+      if (token.type !== Tokens.WORD) return [];
+
+      const tag = Morph(token.toString())[0]?.tag;
+
+      return tag?.POS === "NOUN" || tag?.LATN ? [token.toString()] : [];
+    });
+
+    return [...new Set([...amounts, ...words])].slice(0, MAX_CANDIDATES);
   }
 }

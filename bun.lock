@@ -92,6 +92,7 @@
         "@t3-oss/env-core": "0.13.11",
         "@vectorize-io/hindsight-client": "1.2.0",
         "ai": "7.0.132",
+        "az": "0.2.3",
         "effect": "4.1.2",
         "gpt-tokenizer": "4.1.0",
         "grammy": "catalog:",
@@ -1506,6 +1507,8 @@
     "axe-core": ["axe-core@4.14.0", "", {}, "sha512-9WTZxEjsZ7b13TH8JPmbV2z8CHbl80/2hm3XPEG4JgNdQLK81IBRXmSxHfMAOkSqQeRxT/0dwNDz2GOm3zzpcQ=="],
 
     "axobject-query": ["axobject-query@4.1.0", "", {}, "sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ=="],
+
+    "az": ["az@0.2.3", "", {}, "sha512-U8d6Tw8ohZ8dcEp8aKjFYo+DU3BT8JPmYqmW0A0BsWW8ocP+F6gLZvrtglHq7pYa84dCEp3NHAoZoC4W3Lth2w=="],
 
     "b4a": ["b4a@1.9.0", "", { "peerDependencies": { "react-native-b4a": "*" }, "optionalPeers": ["react-native-b4a"] }, "sha512-dpfcF9fDNR6++cthXR67iyhgqWy9CBouAvIWhIntzBG6cvK/cnIPiZQjBwi/ZqjjBEDGfoNDtmB0kTjroOJ3pQ=="],
 

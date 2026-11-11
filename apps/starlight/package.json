@@ -41,6 +41,7 @@
     "@t3-oss/env-core": "0.13.11",
     "@vectorize-io/hindsight-client": "1.2.0",
     "ai": "7.0.132",
+    "az": "0.2.3",
     "effect": "4.1.2",
     "gpt-tokenizer": "4.1.0",
     "grammy": "catalog:",
