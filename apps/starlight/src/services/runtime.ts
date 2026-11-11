@@ -112,7 +112,9 @@ const decisions = createOpenRouter({
   compatibility: "strict",
 });
 
-const dialogueContinuation = DialogueContinuation.layer(decisions.evaluationModel("typesafe/jev-1.14"));
+const decisionModel = decisions.evaluationModel("liquid/d1-ultra");
+
+const dialogueContinuation = DialogueContinuation.layer(decisionModel);
 
 const database = Database.layer(env.DATABASE_URL);
 
@@ -129,7 +131,7 @@ const infrastructure = Layer.provide(
     replies,
     topicMetadata,
     dialogueContinuation,
-    ReplyMotifs.layer(decisions.evaluationModel(ReplyMotifs.model)),
+    ReplyMotifs.layer(decisionModel),
     TelegramDelivery.layer(env.STARLIGHT_BOT_TOKEN),
     Hindsight.layer({ apiKey: env.HINDSIGHT_API_KEY, baseUrl: env.HINDSIGHT_BASE_URL }),
     Media.layer({

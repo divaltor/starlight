@@ -369,11 +369,11 @@ export namespace Reply {
     });
   }
 
-  // Mixed batches must not silently drop Jev reactions when the model also replies.
+  // Mixed batches must not silently drop precomputed reactions when the model also replies.
   // Precomputed reactions come first so delivery attempts them before model text.
   // A model duplicate for the same message loses: Telegram reactions overwrite, so a
   // second reaction to the same message would only waste a delivery attempt. A model
-  // ignore loses too: Jev already decided the message deserves a reaction.
+  // ignore loses too: the decision model already decided the message deserves a reaction.
   export function mergePrecomputedReactions(
     precomputed: readonly TelegramDelivery.ReactionAction[],
     generated: readonly ChatReply.Response["replies"][number][],

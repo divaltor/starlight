@@ -9,7 +9,6 @@ import { Context, Duration, Effect, Layer, Schema } from "effect";
  * Code lists candidate words and the decision model picks one or none.
  */
 export namespace ReplyMotifs {
-  export const model = "liquid/d1-ultra";
   const MIN_PROBABILITY = 0.5;
   const MAX_CANDIDATES = 40;
   const MIN_WORD_LENGTH = 4;

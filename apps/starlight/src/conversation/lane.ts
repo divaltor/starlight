@@ -16,7 +16,7 @@ import { Reply } from "@/conversation/reply";
 /**
  * One Telegram lane (assistant, chat, topic) as a Pi conversation. A lane task waits out the
  * batching window, freezes a batch, and drives it to completion: a silent batch becomes
- * context, a batch answered only by Jev reactions goes straight to delivery, and anything else
+ * context, a batch answered only by precomputed reactions goes straight to delivery, and anything else
  * becomes one input that Pi answers through final_output. Retryable failures back off and
  * retry the same frozen batch; permanent ones block only that batch.
  */
@@ -438,12 +438,12 @@ export namespace Lane {
     };
   }
 
-  // Jev reactions answer without a model call; the transcript still records them as ours.
+  // Decision-model reactions answer without a model call; the transcript still records them as ours.
   function reactionsEntry(reactions: readonly TelegramDelivery.ReactionAction[]): EntryDraft {
     const message: AssistantMessage = {
       api: "starlight",
       content: reactions.map((action) => ({ text: Prompt.canonicalEncode({ action }), type: "text" })),
-      model: "jev",
+      model: "d1-ultra",
       provider: "starlight",
       role: "assistant",
       stopReason: "stop",
