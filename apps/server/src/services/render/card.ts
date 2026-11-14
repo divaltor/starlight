@@ -50,6 +50,9 @@ const BLOCK_GAP_BOTTOM = LAYOUT.MEDIA_GAP_BOTTOM;
 const CARD_WIDTH_INNER = LAYOUT.WIDTH - LAYOUT.PADDING * 2;
 const CHAIN_CONTENT_WIDTH = CARD_WIDTH_INNER - LAYOUT.AVATAR_SIZE - LAYOUT.AVATAR_GAP;
 
+// One body line: wider than PARAGRAPH_GAP, so the footer reads as its own group, not another paragraph.
+const FOOTER_GAP_TOP = Math.round(LAYOUT.FONT_SIZE_TEXT * LAYOUT.LINE_HEIGHT);
+
 // X-style short timestamp: time before date, year only when it differs from the current one.
 export function formatShortDate(createdAt: Date): string {
   return format(
@@ -96,22 +99,33 @@ export function buildTweetCard(params: BuildCardParams): Node {
     ...(params.tweet.quote
       ? [quoteBox(params.colors, params.failedUrls, CARD_WIDTH_INNER, params.tweet.quote, hasTweetExtras(params.tweet))]
       : []),
-    // Timestamp and engagement counters footer.
+    // Timestamp on the left, engagement counters on the right.
     box({
       children: [
-        text(
-          [
-            params.tweet.createdAt ? formatTweetTimestamp(params.tweet.createdAt) : null,
-            `${formatNumber(params.tweet.replies)}\u00A0${params.tweet.replies === 1 ? "reply" : "replies"}`,
-            `${formatNumber(params.tweet.retweets)}\u00A0${params.tweet.retweets === 1 ? "repost" : "reposts"}`,
-            `${formatNumber(params.tweet.likes)}\u00A0${params.tweet.likes === 1 ? "like" : "likes"}`,
-          ]
-            .filter((part): part is string => part !== null)
-            .join("  ·  "),
-          { color: params.colors.secondaryText, fontSize: LAYOUT.FONT_SIZE_STATS },
-        ),
+        ...(params.tweet.createdAt
+          ? [
+              text(formatTweetTimestamp(params.tweet.createdAt), {
+                color: params.colors.secondaryText,
+                fontSize: LAYOUT.FONT_SIZE_STATS,
+              }),
+            ]
+          : []),
+        box({
+          children: [
+            statItem(STAT_ICONS.reply, params.tweet.replies, params.colors.secondaryText),
+            statItem(STAT_ICONS.repost, params.tweet.retweets, params.colors.secondaryText),
+            statItem(STAT_ICONS.like, params.tweet.likes, params.colors.secondaryText),
+          ],
+          style: { flexDirection: "row", gap: 16, marginLeft: "auto" },
+        }),
       ],
-      style: { marginTop: LAYOUT.AVATAR_GAP, width: CARD_WIDTH_INNER },
+      style: {
+        alignItems: "center",
+        flexDirection: "row",
+        // Media, article, and link blocks already end with their own bottom gap.
+        marginTop: FOOTER_GAP_TOP - (params.tweet.quote == null && hasTweetExtras(params.tweet) ? BLOCK_GAP_BOTTOM : 0),
+        width: CARD_WIDTH_INNER,
+      },
     }),
   ];
 
@@ -811,6 +825,30 @@ function mediaBlock(colors: ThemeColors, contentWidth: number, media: MediaItem,
           ]),
       ...(isVideo && !unavailable ? [playButtonOverlay(contentWidth, height)] : []),
     ],
+  });
+}
+
+// Lucide icons (ISC): message-circle, repeat-2, heart.
+const STAT_ICONS = {
+  reply:
+    '<path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092a10 10 0 1 0-4.777-4.719"/>',
+  repost:
+    '<path d="m2 9l3-3l3 3"/><path d="M13 18H7a2 2 0 0 1-2-2V6m17 9l-3 3l-3-3"/><path d="M11 6h6a2 2 0 0 1 2 2v10"/>',
+  like: '<path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676a.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"/>',
+};
+
+const STAT_ICON_SIZE = 16;
+
+function statItem(iconPaths: string, count: number | null | undefined, color: string): Node {
+  return box({
+    children: [
+      image({
+        src: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${iconPaths}</svg>`,
+        style: { height: STAT_ICON_SIZE, width: STAT_ICON_SIZE },
+      }),
+      text(formatNumber(count), { color, fontSize: LAYOUT.FONT_SIZE_STATS }),
+    ],
+    style: { alignItems: "center", flexDirection: "row", gap: 6 },
   });
 }
 
