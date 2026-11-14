@@ -21,9 +21,13 @@ test.each([
 test.each([
   ["language_zh", "Chinese"],
   ["language-ZH", "Chinese"],
-  ["language_zh-CN", "Chinese (China)"],
 ] as [string, string][])("test_recovers_language_when_upstream_leaks_i18n_key_%s", (leaked, expected) => {
   expect(getTranslationLanguage(language(leaked))).toBe(expected);
+});
+
+// ICU words regions differently across runtimes ("China" vs "China mainland"), so assert the shape.
+test("test_recovers_language_with_region_when_upstream_leaks_i18n_key_language_zh-CN", () => {
+  expect(getTranslationLanguage(language("language_zh-CN"))).toMatch(/^Chinese \(China.*\)$/u);
 });
 
 test.each([["Chinese"], ["chinese"], ["Russian"]] as [string][])(
