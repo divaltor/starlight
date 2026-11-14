@@ -1,8 +1,8 @@
 import { ORPCError } from "@orpc/client";
-import { prisma } from "@starlight/utils";
-import type { Prisma, User } from "@starlight/utils";
+import { Prisma, prisma } from "@starlight/utils";
+import type { Tweet, User } from "@starlight/utils";
 import { z } from "zod";
-import { no } from "..";
+import { no, publicProcedure } from "..";
 import { maybeAuthProcedure, protectedProcedure } from "../middlewares/auth";
 import { Cursor, CursorPayloadSchema } from "../utils/cursor";
 import type { CursorPayload } from "../utils/cursor";
@@ -150,6 +150,61 @@ export const retrieveUserTweets = no
     }
   })
   .callable();
+
+export const listArtistTweets = publicProcedure
+  .input(TweetsQuery.omit({ username: true }).extend({ username: z.string().min(1) }))
+  .handler(async ({ input }) => {
+    const cursorData =
+      input.cursor !== undefined && input.cursor !== "" ? Cursor.parse(input.cursor, CursorPayloadSchema) : undefined;
+
+    if (cursorData === null) {
+      return { tweets: [], nextCursor: null };
+    }
+
+    // The same tweet can be saved by several public users; keep one copy per tweet id.
+    const page = await prisma.$queryRaw<Pick<Tweet, "id" | "userId" | "createdAt">[]>`
+      SELECT id, "userId", "createdAt"
+      FROM (
+        SELECT DISTINCT ON (t.id) t.id, t.user_id AS "userId", t.created_at AS "createdAt"
+        FROM tweets t
+        JOIN users u ON u.id = t.user_id AND u.is_public
+        WHERE t.username = ${input.username}
+          AND EXISTS (
+            SELECT 1 FROM photos p
+            WHERE p.tweet_id = t.id AND p.user_id = t.user_id AND p.deleted_at IS NULL AND p.s3_path IS NOT NULL
+          )
+        ORDER BY t.id, t.user_id
+      ) artist_tweets
+      ${
+        cursorData
+          ? Prisma.sql`WHERE ("createdAt", id) < (${new Date(cursorData.createdAt)}, ${cursorData.lastTweetId})`
+          : Prisma.empty
+      }
+      ORDER BY "createdAt" DESC, id DESC
+      LIMIT ${input.limit}
+    `;
+
+    const tweets = await prisma.tweet.findMany({
+      where: { OR: page.map((tweet) => ({ id: tweet.id, userId: tweet.userId })) },
+      include: {
+        photos: {
+          where: prisma.photo.available(),
+          orderBy: { createdAt: "desc" },
+        },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+
+    const lastTweet = page.at(-1);
+
+    return {
+      tweets: transformTweets(tweets),
+      nextCursor:
+        lastTweet && page.length === input.limit
+          ? Cursor.create({ lastTweetId: lastTweet.id, createdAt: lastTweet.createdAt.toISOString() })
+          : null,
+    };
+  });
 
 export const deletePhoto = protectedProcedure
   .input(z.object({ photoId: z.string() }))

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ArtistAtChar123usernameChar125RouteImport } from './routes/artist/@{$username}'
 import { Route as ProfileSlugRouteImport } from './routes/profile/$slug'
 import { Route as ApiRpcSplatRouteImport } from './routes/api/rpc.$'
 
@@ -30,6 +31,12 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ArtistAtChar123usernameChar125Route =
+  ArtistAtChar123usernameChar125RouteImport.update({
+    id: '/artist/@{$username}',
+    path: '/artist/@{$username}',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ProfileSlugRoute = ProfileSlugRouteImport.update({
   id: '/profile/$slug',
   path: '/profile/$slug',
@@ -45,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
   '/settings': typeof SettingsRoute
+  '/artist/@{$username}': typeof ArtistAtChar123usernameChar125Route
   '/profile/$slug': typeof ProfileSlugRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
 }
@@ -52,6 +60,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
   '/settings': typeof SettingsRoute
+  '/artist/@{$username}': typeof ArtistAtChar123usernameChar125Route
   '/profile/$slug': typeof ProfileSlugRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
 }
@@ -60,21 +69,42 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRoute
   '/settings': typeof SettingsRoute
+  '/artist/@{$username}': typeof ArtistAtChar123usernameChar125Route
   '/profile/$slug': typeof ProfileSlugRoute
   '/api/rpc/$': typeof ApiRpcSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/settings' | '/profile/$slug' | '/api/rpc/$'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/settings'
+    | '/artist/@{$username}'
+    | '/profile/$slug'
+    | '/api/rpc/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/app' | '/settings' | '/profile/$slug' | '/api/rpc/$'
-  id: '__root__' | '/' | '/app' | '/settings' | '/profile/$slug' | '/api/rpc/$'
+  to:
+    | '/'
+    | '/app'
+    | '/settings'
+    | '/artist/@{$username}'
+    | '/profile/$slug'
+    | '/api/rpc/$'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/settings'
+    | '/artist/@{$username}'
+    | '/profile/$slug'
+    | '/api/rpc/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRoute
   SettingsRoute: typeof SettingsRoute
+  ArtistAtChar123usernameChar125Route: typeof ArtistAtChar123usernameChar125Route
   ProfileSlugRoute: typeof ProfileSlugRoute
   ApiRpcSplatRoute: typeof ApiRpcSplatRoute
 }
@@ -102,6 +132,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/artist/@{$username}': {
+      id: '/artist/@{$username}'
+      path: '/artist/@{$username}'
+      fullPath: '/artist/@{$username}'
+      preLoaderRoute: typeof ArtistAtChar123usernameChar125RouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile/$slug': {
       id: '/profile/$slug'
       path: '/profile/$slug'
@@ -123,6 +160,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRoute,
   SettingsRoute: SettingsRoute,
+  ArtistAtChar123usernameChar125Route: ArtistAtChar123usernameChar125Route,
   ProfileSlugRoute: ProfileSlugRoute,
   ApiRpcSplatRoute: ApiRpcSplatRoute,
 }
