@@ -975,7 +975,8 @@ export function getTranslationLanguage(tweet: Pick<TweetData, "translation">): s
       return language.charAt(0).toUpperCase() + language.slice(1);
     }
 
-    return display;
+    // ICU 78.1 (Bun 1.4.4) names region CN "China mainland"; cards say "China".
+    return display.replace("China mainland", "China");
   } catch {
     return language.charAt(0).toUpperCase() + language.slice(1);
   }
