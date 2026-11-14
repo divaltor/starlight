@@ -1,6 +1,5 @@
 import type { ProfileResult } from "@starlight/api/routers/index";
 import type { TweetData, TweetsPageResult } from "@starlight/api/types/tweets";
-import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import TriangleAlertIcon from "@hugeicons/core-free-icons/TriangleAlertIcon";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,11 +8,8 @@ import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
 import { useEffect, useState, lazy, Suspense } from "react";
 import { NotFound } from "@/components/not-found";
-import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { SearchBar } from "@/components/search-bar";
 import { Alert, AlertTitle } from "@/components/ui/alert";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { useSearch } from "@/hooks/use-search";
 import { useTweets } from "@/hooks/use-tweets";
 import { useTelegramContext } from "@/providers/telegram-buttons-provider";
@@ -93,10 +89,8 @@ function TwitterArtViewer() {
     deletePhoto(photoId);
   };
 
-  const handleSearch = (e: React.SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const trimmedQuery = inputValue.trim();
-    void setUrlQuery(trimmedQuery || null, { history: "push" });
+  const handleSearch = (query: string) => {
+    void setUrlQuery(query || null, { history: "push" });
   };
 
   // Infinite loader for regular tweets
@@ -214,24 +208,12 @@ function TwitterArtViewer() {
       {/* Sticky Search Bar at Bottom */}
       <div className="sticky bottom-0 z-10 py-4">
         <div className="mx-auto max-w-lg">
-          <form onSubmit={handleSearch}>
-            <ButtonGroup className="w-full">
-              <Input
-                className="bg-background"
-                aria-label="Search for images"
-                onChange={(e) => {
-                  setInputValue(e.target.value);
-                }}
-                placeholder="Search for images…"
-                type="text"
-                value={inputValue}
-              />
-              <Button aria-label="Search" disabled={viewState === "loading"} type="submit">
-                {viewState === "loading" ? <Spinner /> : <HugeiconsIcon className="size-4" icon={Search01Icon} />}
-                <span className="hidden sm:inline">Search</span>
-              </Button>
-            </ButtonGroup>
-          </form>
+          <SearchBar
+            isLoading={viewState === "loading"}
+            onChange={setInputValue}
+            onSearch={handleSearch}
+            value={inputValue}
+          />
         </div>
       </div>
     </div>

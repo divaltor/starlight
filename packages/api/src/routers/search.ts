@@ -262,6 +262,23 @@ export const searchImages = maybeAuthProcedure
     };
   });
 
+export const searchArtists = publicProcedure.input(z.object({ query: z.string().trim().min(1).max(32) })).handler(
+  async ({ input }) =>
+    await prisma.$queryRaw<{ username: string; artCount: number }[]>`
+        SELECT t.username, COUNT(DISTINCT t.id)::int AS "artCount"
+        FROM tweets t
+        JOIN users u ON u.id = t.user_id AND u.is_public
+        WHERE starts_with(lower(t.username), lower(${input.query}))
+          AND EXISTS (
+            SELECT 1 FROM photos p
+            WHERE p.tweet_id = t.id AND p.user_id = t.user_id AND p.deleted_at IS NULL AND p.s3_path IS NOT NULL
+          )
+        GROUP BY t.username
+        ORDER BY lower(t.username) = lower(${input.query}) DESC, "artCount" DESC, t.username
+        LIMIT 8
+      `,
+);
+
 export const randomImages = publicProcedure.handler(async ({ context }) => {
   // Rank on narrow tuples so window sorts stay in memory; display columns are
   // joined back only for the surviving top500. Decay math must stay float8 —

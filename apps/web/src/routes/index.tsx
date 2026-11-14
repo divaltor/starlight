@@ -1,15 +1,11 @@
 import type { TweetData } from "@starlight/api/types/tweets";
-import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Masonry, useInfiniteLoader } from "masonic";
 import { parseAsString, useQueryState } from "nuqs";
 import { useEffect, useState, lazy, Suspense, useMemo } from "react";
+import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { useSearch } from "@/hooks/use-search";
 import { cn } from "@/lib/utils";
 import { LayoutManager } from "@/utils/layout";
@@ -59,12 +55,9 @@ export default function DiscoverPage() {
     query: urlQuery,
   });
 
-  const handleSearch = (e: React.SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const trimmedQuery = inputValue.trim();
-
-    if (trimmedQuery) {
-      void setUrlQuery(trimmedQuery, { history: "push" });
+  const handleSearch = (query: string) => {
+    if (query) {
+      void setUrlQuery(query, { history: "push" });
     }
   };
 
@@ -122,29 +115,21 @@ export default function DiscoverPage() {
                 ) : (
                   <p className="py-6 text-2xl text-foreground/80">Find cute anime girls using natural language</p>
                 )}
-                <form onSubmit={handleSearch}>
-                  <div
-                    className={cn(
-                      "z-20 transition-all duration-500 ease-in-out",
-                      inputPosition === "initial" ? "relative mx-auto w-full max-w-lg" : "fixed inset-x-0 bottom-0 p-4",
-                    )}
-                  >
-                    <div className={cn(inputPosition === "bottom" ? "mx-auto max-w-lg" : "p-0")}>
-                      <ButtonGroup className="w-full">
-                        <Input
-                          className="bg-background"
-                          onChange={(e) => {
-                            setInputValue(e.target.value);
-                          }}
-                          placeholder="Search for images…"
-                          type="text"
-                          value={inputValue}
-                        />
-                        <SearchSubmitButton isLoading={isLoading} />
-                      </ButtonGroup>
-                    </div>
+                <div
+                  className={cn(
+                    "z-20 transition-all duration-500 ease-in-out",
+                    inputPosition === "initial" ? "relative mx-auto w-full max-w-lg" : "fixed inset-x-0 bottom-0 p-4",
+                  )}
+                >
+                  <div className={cn(inputPosition === "bottom" ? "mx-auto max-w-lg" : "p-0")}>
+                    <SearchBar
+                      isLoading={isLoading}
+                      onChange={setInputValue}
+                      onSearch={handleSearch}
+                      value={inputValue}
+                    />
                   </div>
-                </form>
+                </div>
                 {/* Examples */}
                 <div
                   className={cn(
@@ -178,20 +163,7 @@ export default function DiscoverPage() {
       {results.length > 0 && (
         <div className="sticky bottom-0 z-10 p-4">
           <div className="mx-auto max-w-lg">
-            <form onSubmit={handleSearch}>
-              <ButtonGroup className="w-full">
-                <Input
-                  className="bg-background"
-                  onChange={(e) => {
-                    setInputValue(e.target.value);
-                  }}
-                  placeholder="Search for images…"
-                  type="text"
-                  value={inputValue}
-                />
-                <SearchSubmitButton isLoading={isLoading} />
-              </ButtonGroup>
-            </form>
+            <SearchBar isLoading={isLoading} onChange={setInputValue} onSearch={handleSearch} value={inputValue} />
           </div>
         </div>
       )}
@@ -259,15 +231,6 @@ function HeroCollage({ isHomeIdle }: { isHomeIdle: boolean }) {
         })}
       </div>
     </Suspense>
-  );
-}
-
-function SearchSubmitButton({ isLoading }: { isLoading: boolean }) {
-  return (
-    <Button disabled={isLoading} type="submit">
-      {isLoading ? <Spinner /> : <HugeiconsIcon className="size-4" icon={Search01Icon} />}
-      <span className="hidden sm:inline">Search</span>
-    </Button>
   );
 }
 
