@@ -2,11 +2,13 @@ pre-commit:
   commands:
     oxlint:
       glob: "*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"
-      run: bunx oxlint --fix "{staged_files}"
+      run: bunx oxlint --fix {staged_files}
       stage_fixed: true
     fmt:
-      run: bun fmt --no-error-on-unmatched-pattern "{staged_files}"
+      run: bun fmt --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
     ast-grep:
       glob: "*.{ts,tsx}"
-      run: bunx ast-grep scan -c script/ast-grep/sgconfig.yml "{staged_files}"
+      exclude:
+        - apps/web/src/routeTree.gen.ts
+      run: bunx ast-grep scan -c script/ast-grep/sgconfig.yml {staged_files}
