@@ -112,7 +112,7 @@ services:
     restart: unless-stopped
 
   hindsight:
-    image: ghcr.io/vectorize-io/hindsight:1.1.0
+    image: ghcr.io/vectorize-io/hindsight-api:1.2.1-slim
     environment:
       HINDSIGHT_API_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgresql:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       HINDSIGHT_API_DATABASE_SCHEMA: hindsight
@@ -121,24 +121,43 @@ services:
       HINDSIGHT_API_STORE_DOCUMENT_TEXT: "false"
       HINDSIGHT_API_ENABLE_AUTO_CONSOLIDATION: "false"
       HINDSIGHT_API_RECALL_MAX_QUERY_TOKENS: ${HINDSIGHT_RECALL_MAX_QUERY_TOKENS:-800}
-      HINDSIGHT_API_RETAIN_CHUNK_SIZE: "12000"
-      HINDSIGHT_API_RETAIN_STRUCTURED_CHUNK_SIZE: "12000"
+      HINDSIGHT_API_RETAIN_CHUNK_SIZE: "3000"
+      HINDSIGHT_API_RETAIN_STRUCTURED_CHUNK_SIZE: "3000"
+      HINDSIGHT_API_RETAIN_MAX_COMPLETION_TOKENS: "16384"
+      HINDSIGHT_API_RETAIN_LLM_REASONING_EFFORT: medium
+      HINDSIGHT_API_CONSOLIDATION_MAX_COMPLETION_TOKENS: "8192"
+      HINDSIGHT_API_MENTAL_MODEL_REFRESH_CONCURRENCY: "3"
       HINDSIGHT_API_TENANT_EXTENSION: hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension
       HINDSIGHT_API_TENANT_API_KEY: ${HINDSIGHT_API_KEY:?HINDSIGHT_API_KEY is required}
-      HINDSIGHT_API_LLM_PROVIDER: openrouter
+      HINDSIGHT_API_LLM_PROVIDER: litellm
       HINDSIGHT_API_LLM_BASE_URL: https://openrouter.ai/api/v1
       HINDSIGHT_API_LLM_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required}
-      HINDSIGHT_API_LLM_MODEL: google/gemini-3-flash-preview
-      HINDSIGHT_API_LLM_EXTRA_BODY: '{"provider":{"allow_fallbacks":false,"data_collection":"deny","only":["google-vertex/global"],"order":["google-vertex/global"],"require_parameters":true}}'
+      HINDSIGHT_API_LLM_MODEL: openai/gpt-oss-120b
+      HINDSIGHT_API_LLM_EXTRA_BODY: '{"provider":{"only":["groq","cerebras/fp16"],"order":["groq","cerebras/fp16"],"sort":"price","allow_fallbacks":true,"data_collection":"deny","zdr":true,"require_parameters":false}}'
+      HINDSIGHT_API_LLM_MAX_CONCURRENT: "8"
+      HINDSIGHT_API_LLM_MAX_RETRIES: "1"
+      HINDSIGHT_API_LLM_INITIAL_BACKOFF: "1"
+      HINDSIGHT_API_LLM_MAX_BACKOFF: "4"
+      HINDSIGHT_API_LLM_TIMEOUT: "90"
+      HINDSIGHT_API_LLM_STRICT_SCHEMA_RETAIN: "true"
+      HINDSIGHT_API_LLM_STRUCTURED_OUTPUT_FORCED_TOOL: "false"
+      HINDSIGHT_API_LLM_TEMPERATURE_RETAIN: "0.6"
+      HINDSIGHT_API_LLM_TEMPERATURE_REFLECT: "0.1"
+      HINDSIGHT_API_LLM_TEMPERATURE_CONSOLIDATION: "0"
       HINDSIGHT_API_EMBEDDINGS_PROVIDER: openai
       HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL: ${CLASSIFICATION_URL:-http://classification:8000}/v1/openai
       HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
       HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL: BAAI/bge-m3
       HINDSIGHT_API_EMBEDDINGS_OPENAI_BATCH_SIZE: "64"
-      HINDSIGHT_API_RERANKER_PROVIDER: cohere
-      HINDSIGHT_API_COHERE_API_KEY: ${CLASSIFICATION_API_TOKEN:?CLASSIFICATION_API_TOKEN is required}
-      HINDSIGHT_API_RERANKER_COHERE_BASE_URL: ${CLASSIFICATION_URL:-http://classification:8000}/v1/rerank
-      HINDSIGHT_API_RERANKER_COHERE_MODEL: BAAI/bge-reranker-v2-m3
+      # Recall ranks with the decision model, so the reranker is never built; rrf keeps
+      # the slim image from warning about the default local reranker.
+      HINDSIGHT_API_RERANKER_PROVIDER: rrf
+      HINDSIGHT_API_RECALL_DECISION_MODEL_PROVIDER: typesafe
+      HINDSIGHT_API_RECALL_DECISION_MODEL_BASE_URL: https://openrouter.ai/api
+      HINDSIGHT_API_RECALL_DECISION_MODEL_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY is required}
+      HINDSIGHT_API_RECALL_DECISION_MODEL_MODEL: liquid/d1-ultra
+      HINDSIGHT_API_RERANKER_MAX_CANDIDATES: "100"
+      HINDSIGHT_API_RERANKER_MAX_TOKENS_PER_CANDIDATE: "1024"
     depends_on:
       postgresql:
         condition: service_healthy
