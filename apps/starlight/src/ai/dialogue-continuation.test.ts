@@ -26,12 +26,12 @@ test.each([
   expect(result.decision).toEqual({ type: row.expected });
 });
 
-test("test_stays_silent_for_random_opportunity_when_jev_selects_silence", async () => {
+test("test_stays_silent_for_random_opportunity_when_decision_model_selects_silence", async () => {
   const result = await runDecision({ action: "silence" });
   expect(result.decision).toEqual({ type: "silence" });
 });
 
-test("test_preserves_reaction_without_generating_text_when_jev_selects_acknowledgement", async () => {
+test("test_preserves_reaction_without_generating_text_when_decision_model_selects_acknowledgement", async () => {
   const result = await runDecision({ action: "reaction" });
   expect(result.decision).toEqual({ type: "reaction", emoji: "👍" });
 });

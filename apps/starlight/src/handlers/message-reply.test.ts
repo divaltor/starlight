@@ -4,7 +4,7 @@ import { MessageReply } from "@/handlers/message-reply";
 
 // Our product must treat a plain forum-topic message as a non-reply because
 // Telegram attaches the topic-created service message as its reply target,
-// otherwise Jev never runs in topics and quoted context shows topic metadata.
+// otherwise the decision model never runs in topics and quoted context shows topic metadata.
 test("forum_topic_placeholder_reply_counts_as_no_reply", () => {
   const message: Message = {
     date: 1,
@@ -156,7 +156,7 @@ test.each(["QuotLyBot", "quotlybot"])("test_skips_response_when_sender_is_%s", (
   ).toBeNull();
 });
 
-test("test_bypasses_jev_unless_group_message_has_random_trigger", async () => {
+test("test_bypasses_decision_model_unless_group_message_has_random_trigger", async () => {
   const handler = await Bun.file(new URL("message.ts", import.meta.url)).text();
   const lines = handler.split("\n");
   expect(lines[lines.findIndex((line) => line.includes("dialogueContinuation.evaluate(")) - 3]).toContain(
