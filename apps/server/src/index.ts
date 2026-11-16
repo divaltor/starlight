@@ -53,13 +53,23 @@ function handleUpdateTimeout(update: Update, task: Promise<void>) {
   });
 }
 
+const POLLING_MAX_RETRY_MS = 1000 * 60 * 5;
+
 const runner = run(bot, {
+  // Linear backoff keeps retries within seconds of a Telegram outage ending; the default exponential one grows to hours.
+  runner: { retryInterval: "quadratic", maxRetryTime: POLLING_MAX_RETRY_MS },
   sink: {
     timeout: {
       milliseconds: UPDATE_PROCESSING_TIMEOUT_MS,
       handler: handleUpdateTimeout,
     },
   },
+});
+
+// Polling gives up after maxRetryTime or on 401/409; exit so Dokploy starts a fresh process.
+runner.task()?.catch((cause: unknown) => {
+  logger.fatal({ err: cause }, "Update polling stopped");
+  process.exit(1);
 });
 
 for (const worker of workers) {

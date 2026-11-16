@@ -59,7 +59,21 @@ const botChat = await bot.api.getChat(bot.botInfo.id);
 
 boundary.use(messageHandler(botChat.active_usernames ?? [bot.botInfo.username]));
 
-const runner = run(bot);
+const POLLING_MAX_RETRY_MS = 1000 * 60 * 5;
+
+// Linear backoff keeps retries within seconds of a Telegram outage ending; the default exponential one grows to hours.
+const runner = run(bot, { runner: { retryInterval: "quadratic", maxRetryTime: POLLING_MAX_RETRY_MS } });
+
+// Polling gives up after maxRetryTime or on 401/409; exit so Dokploy starts a fresh process.
+runner.task()?.catch(async (cause: unknown) => {
+  await runtime.runPromise(
+    pipe(
+      Effect.logError("Update polling stopped"),
+      Effect.annotateLogs({ error: cause instanceof Error ? (cause.stack ?? cause.message) : String(cause) }),
+    ),
+  );
+  process.exit(1);
+});
 
 await runtime.runPromise(Effect.logInfo("Starlight bot is running"));
 
