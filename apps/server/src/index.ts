@@ -40,6 +40,7 @@ const workers = [imagesWorker, classificationWorker, embeddingsWorker, scrapperW
 const queues = [imagesQueue, classificationQueue, embeddingsQueue, scrapperQueue];
 
 const UPDATE_PROCESSING_TIMEOUT_MS = 1000 * 60 * 10;
+const SHUTDOWN_FAILED = "Shutdown failed";
 
 function handleUpdateTimeout(update: Update, task: Promise<void>) {
   // The runner evicts the drift so the update stops pinning a slot and its
@@ -64,12 +65,6 @@ const runner = run(bot, {
       handler: handleUpdateTimeout,
     },
   },
-});
-
-// Polling gives up after maxRetryTime or on 401/409; exit so Dokploy starts a fresh process.
-runner.task()?.catch((cause: unknown) => {
-  logger.fatal({ err: cause }, "Update polling stopped");
-  process.exit(1);
 });
 
 for (const worker of workers) {
@@ -100,14 +95,27 @@ async function shutdown() {
   await redis.quit();
 }
 
+// Polling gives up after maxRetryTime or on 401/409; exit with a failure code so the process gets restarted.
+runner
+  .task()
+  ?.catch(async (cause: unknown) => {
+    logger.fatal({ err: cause }, "Update polling stopped");
+    await shutdown();
+    process.exit(1);
+  })
+  .catch((cause: unknown) => {
+    logger.error({ err: cause }, SHUTDOWN_FAILED);
+    process.exit(1);
+  });
+
 process.once("SIGINT", () => {
   void shutdown().catch((cause: unknown) => {
-    logger.error({ err: cause }, "Shutdown failed");
+    logger.error({ err: cause }, SHUTDOWN_FAILED);
   });
 });
 
 process.once("SIGTERM", () => {
   void shutdown().catch((cause: unknown) => {
-    logger.error({ err: cause }, "Shutdown failed");
+    logger.error({ err: cause }, SHUTDOWN_FAILED);
   });
 });

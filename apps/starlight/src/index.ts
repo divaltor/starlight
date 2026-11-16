@@ -64,17 +64,6 @@ const POLLING_MAX_RETRY_MS = 1000 * 60 * 5;
 // Linear backoff keeps retries within seconds of a Telegram outage ending; the default exponential one grows to hours.
 const runner = run(bot, { runner: { retryInterval: "quadratic", maxRetryTime: POLLING_MAX_RETRY_MS } });
 
-// Polling gives up after maxRetryTime or on 401/409; exit so Dokploy starts a fresh process.
-runner.task()?.catch(async (cause: unknown) => {
-  await runtime.runPromise(
-    pipe(
-      Effect.logError("Update polling stopped"),
-      Effect.annotateLogs({ error: cause instanceof Error ? (cause.stack ?? cause.message) : String(cause) }),
-    ),
-  );
-  process.exit(1);
-});
-
 await runtime.runPromise(Effect.logInfo("Starlight bot is running"));
 
 const shutdown = async () => {
@@ -84,6 +73,24 @@ const shutdown = async () => {
   await runtime.dispose();
   await shutdownTelemetry();
 };
+
+// Polling gives up after maxRetryTime or on 401/409; exit with a failure code so the process gets restarted.
+runner
+  .task()
+  ?.catch(async (cause: unknown) => {
+    await runtime.runPromise(
+      pipe(
+        Effect.logError("Update polling stopped"),
+        Effect.annotateLogs({ error: cause instanceof Error ? (cause.stack ?? cause.message) : String(cause) }),
+      ),
+    );
+    await shutdown();
+    process.exit(1);
+  })
+  .catch((cause: unknown) => {
+    console.error(cause);
+    process.exit(1);
+  });
 
 process.once("SIGINT", () => {
   shutdown().catch((cause: unknown) => {
