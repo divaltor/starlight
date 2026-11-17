@@ -112,7 +112,7 @@ const decisions = createOpenRouter({
   compatibility: "strict",
 });
 
-const decisionModel = decisions.evaluationModel("liquid/d1-ultra");
+const decisionModel = decisions.evaluationModel("liquid/d1.2-ultra");
 
 const dialogueContinuation = DialogueContinuation.layer(decisionModel);
 

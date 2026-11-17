@@ -443,7 +443,7 @@ export namespace Lane {
     const message: AssistantMessage = {
       api: "starlight",
       content: reactions.map((action) => ({ text: Prompt.canonicalEncode({ action }), type: "text" })),
-      model: "d1-ultra",
+      model: "d1.2-ultra",
       provider: "starlight",
       role: "assistant",
       stopReason: "stop",

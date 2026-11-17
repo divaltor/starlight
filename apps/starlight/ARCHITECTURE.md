@@ -29,7 +29,7 @@ A lane is `(assistantId, chatId, threadKey)`, one Pi conversation each. The sess
 - The lane task runs `wait → run → answer → settle`. `wait` sleeps durably until `wakeAt`, then claims the lane and freezes a batch. A sleeping task cannot be re-armed, so an admission that moves `wakeAt` earlier starts another sleeper; whichever wakes first claims and the rest exit.
 - `run` checks premium access, then: a silent batch is appended as a `starlight.batch` entry without a model call; a batch answered only by precomputed reactions goes straight to a delivery task; anything else freezes recall and the date in a memo and writes `starlight.run`.
 - `answer` submits the batch with a stable `requestId`, so a rerun after a crash finds the same submission instead of asking twice.
-- `settle` tags the callback word in each of her last 10 delivered replies with `liquid/d1-ultra` (`ai/reply-motifs.ts`, doc `starlight.reply-motifs`); the next `run` names up to 3 of them that the new batch does not raise (`Prompt.renderMotifGuidance`). Tagging is best effort and runs after delivery.
+- `settle` tags the callback word in each of her last 10 delivered replies with `liquid/d1.2-ultra` (`ai/reply-motifs.ts`, doc `starlight.reply-motifs`); the next `run` names up to 3 of them that the new batch does not raise (`Prompt.renderMotifGuidance`). Tagging is best effort and runs after delivery.
 - Retryable failures back off exponentially (cap 300s) on the same frozen batch. Permanent ones (`Lane.BlockedError`, or errors with `retryable: false`) drop only that batch.
 
 ## Reply (`conversation/reply.ts`)
