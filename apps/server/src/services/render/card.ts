@@ -99,25 +99,26 @@ export function buildTweetCard(params: BuildCardParams): Node {
     ...(params.tweet.quote
       ? [quoteBox(params.colors, params.failedUrls, CARD_WIDTH_INNER, params.tweet.quote, hasTweetExtras(params.tweet))]
       : []),
-    // Timestamp on the left, engagement counters on the right.
+    // Engagement counters on the left, timestamp on the right.
     box({
       children: [
-        ...(params.tweet.createdAt
-          ? [
-              text(formatTweetTimestamp(params.tweet.createdAt), {
-                color: params.colors.secondaryText,
-                fontSize: LAYOUT.FONT_SIZE_STATS,
-              }),
-            ]
-          : []),
         box({
           children: [
             statItem(STAT_ICONS.reply, params.tweet.replies, params.colors.secondaryText),
             statItem(STAT_ICONS.repost, params.tweet.retweets, params.colors.secondaryText),
             statItem(STAT_ICONS.like, params.tweet.likes, params.colors.secondaryText),
           ],
-          style: { flexDirection: "row", gap: 16, marginLeft: "auto" },
+          style: { flexDirection: "row", gap: 16 },
         }),
+        ...(params.tweet.createdAt
+          ? [
+              text(formatTweetTimestamp(params.tweet.createdAt), {
+                color: params.colors.secondaryText,
+                fontSize: LAYOUT.FONT_SIZE_STATS,
+                marginLeft: "auto",
+              }),
+            ]
+          : []),
       ],
       style: {
         alignItems: "center",
