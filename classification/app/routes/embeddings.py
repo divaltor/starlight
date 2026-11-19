@@ -5,13 +5,12 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 import torch
 from fastapi import APIRouter, Body, Request
-from fastapi.concurrency import run_in_threadpool
 from sentence_transformers import SentenceTransformer
 from torch import nn
 from torch.nn import functional
 from torch.nn.utils import parametrize
 
-from app.device import gpu_lock, resolve_model_device
+from app.device import resolve_model_device, run_on_gpu
 from app.models import EmbeddingPayload, EmbeddingResponse
 from app.otel import pipeline_span
 from app.utils import preprocess_image
@@ -189,7 +188,7 @@ def _encode_sync(
     encoding_mode: Any,
     img: Image | None,
 ) -> EmbeddingResponse:
-    with gpu_lock, torch.inference_mode():
+    with torch.inference_mode():
         with pipeline_span('text_embedding', 'jinaai/jina-clip-v2', encoding_mode):
             emb_text_vec: ndarray = embedding_model.encode(
                 [text],
@@ -233,4 +232,4 @@ async def embeddings(
         if payload.image
         else None
     )
-    return await run_in_threadpool(_encode_sync, payload.text, payload.encoding_mode, img)
+    return await run_on_gpu(_encode_sync, payload.text, payload.encoding_mode, img)

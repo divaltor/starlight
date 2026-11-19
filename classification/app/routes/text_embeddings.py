@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from sentence_transformers import SentenceTransformer
 
 from app.config import config
-from app.device import gpu_lock, resolve_model_device
+from app.device import resolve_model_device, run_on_gpu, run_on_gpu_sync
 from app.models import (
     OpenAIEmbeddingData,
     OpenAIEmbeddingRequest,
@@ -30,19 +30,33 @@ text_embedding_model = SentenceTransformer(
 if model_device == 'cuda':
     _transformer: Any = text_embedding_model[0]
     _transformer.auto_model = torch.compile(_transformer.auto_model, dynamic=True)
-    with torch.inference_mode():
-        text_embedding_model.encode(
-            ['warmup', 'warmup text embedding'],
+
+    def _warmup_text_embeddings() -> None:
+        with torch.inference_mode():
+            text_embedding_model.encode(
+                ['warmup', 'warmup text embedding'],
+                normalize_embeddings=True,
+                convert_to_numpy=True,
+                show_progress_bar=False,
+            )
+
+    run_on_gpu_sync(_warmup_text_embeddings)
+
+router = APIRouter(prefix='/openai')
+
+
+def _encode_texts(inputs: list[str]) -> Any:
+    with pipeline_span('text_embedding', config.TEXT_EMBEDDING_MODEL), torch.inference_mode():
+        return text_embedding_model.encode(
+            inputs,
             normalize_embeddings=True,
             convert_to_numpy=True,
             show_progress_bar=False,
         )
 
-router = APIRouter(prefix='/openai')
-
 
 @router.post('/embeddings')
-def create_text_embeddings(payload: OpenAIEmbeddingRequest) -> OpenAIEmbeddingResponse:
+async def create_text_embeddings(payload: OpenAIEmbeddingRequest) -> OpenAIEmbeddingResponse:
     inputs = [payload.input] if isinstance(payload.input, str) else payload.input
 
     expected_dimensions = text_embedding_model.get_sentence_embedding_dimension()
@@ -52,13 +66,7 @@ def create_text_embeddings(payload: OpenAIEmbeddingRequest) -> OpenAIEmbeddingRe
             detail=f'unsupported dimensions {payload.dimensions}, model serves {expected_dimensions}',
         )
 
-    with pipeline_span('text_embedding', config.TEXT_EMBEDDING_MODEL), gpu_lock, torch.inference_mode():
-        vectors = text_embedding_model.encode(
-            inputs,
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-            show_progress_bar=False,
-        )
+    vectors = await run_on_gpu(_encode_texts, inputs)
 
     data = [
         OpenAIEmbeddingData(

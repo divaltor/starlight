@@ -5,12 +5,11 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 import torch
 from fastapi import APIRouter, Body, Request
-from fastapi.concurrency import run_in_threadpool
 from torch.nn import functional
 from torchvision.transforms.functional import pil_to_tensor
 from transformers import AutoModelForImageClassification
 
-from app.device import gpu_lock, resolve_model_device
+from app.device import resolve_model_device, run_on_gpu, run_on_gpu_sync
 from app.imgutils.pixai import PIXAI_MODEL_ID, TAGGER_VERSION, PixAITagger
 from app.models import ClassificationResult, ImageRequest
 from app.otel import pipeline_span
@@ -73,11 +72,15 @@ def _load_classifier(
     id2label = {int(k): str(v) for k, v in model.config.id2label.items()}
     if model_device == 'cuda':
         compiled = torch.compile(model, mode='reduce-overhead')
-        sample = torch.zeros(1, 3, input_size, input_size, device=model_device, dtype=dtype)
-        with torch.inference_mode():
-            for _ in range(3):
-                torch.compiler.cudagraph_mark_step_begin()
-                compiled(sample)
+
+        def _warmup() -> None:
+            sample = torch.zeros(1, 3, input_size, input_size, device=model_device, dtype=dtype)
+            with torch.inference_mode():
+                for _ in range(3):
+                    torch.compiler.cudagraph_mark_step_begin()
+                    compiled(sample)
+
+        run_on_gpu_sync(_warmup)
         return compiled, id2label
 
     return model, id2label
@@ -103,13 +106,15 @@ _nsfw_labels: dict[int, str] = {int(k): str(v) for k, v in _nsfw_raw.config.id2l
 _nsfw_raw = _nsfw_raw.eval().to(model_device)
 if model_device == 'cuda':
     nsfw_model: Any = torch.compile(_nsfw_raw, mode='reduce-overhead')
-    with torch.inference_mode():
-        _nsfw_sample = torch.zeros(
-            1, 3, _NSFW_SIZE, _NSFW_SIZE, device=model_device, dtype=nsfw_dtype,
-        )
-        for _ in range(3):
-            torch.compiler.cudagraph_mark_step_begin()
-            nsfw_model(_nsfw_sample)
+
+    def _warmup_nsfw() -> None:
+        sample = torch.zeros(1, 3, _NSFW_SIZE, _NSFW_SIZE, device=model_device, dtype=nsfw_dtype)
+        with torch.inference_mode():
+            for _ in range(3):
+                torch.compiler.cudagraph_mark_step_begin()
+                nsfw_model(sample)
+
+    run_on_gpu_sync(_warmup_nsfw)
 else:
     nsfw_model = _nsfw_raw
 
@@ -125,7 +130,7 @@ style_model, _style_labels = _load_classifier(
     _BEIT_SIZE,
     is_beit=True,
 )
-tagger = PixAITagger(model_device)
+tagger = run_on_gpu_sync(PixAITagger, model_device)
 
 router = APIRouter()
 
@@ -170,20 +175,19 @@ def _prepare_inputs(img: Image) -> tuple[torch.Tensor, torch.Tensor, torch.Tenso
 
 
 def _classify_sync(img: Image) -> ClassificationResult:
-    with gpu_lock:
-        nsfw_in, beit_in, pixai_in = _prepare_inputs(img)
+    nsfw_in, beit_in, pixai_in = _prepare_inputs(img)
 
-        with pipeline_span('nsfw_classification', NSFW_MODEL_ID):
-            nsfw_outputs = _run_classifier(nsfw_model, nsfw_in, _nsfw_labels)
+    with pipeline_span('nsfw_classification', NSFW_MODEL_ID):
+        nsfw_outputs = _run_classifier(nsfw_model, nsfw_in, _nsfw_labels)
 
-        with pipeline_span('aesthetic_classification', AESTHETIC_MODEL_ID):
-            aesthetic_outputs = _run_classifier(aesthetic_model, beit_in, _aesthetic_labels)
+    with pipeline_span('aesthetic_classification', AESTHETIC_MODEL_ID):
+        aesthetic_outputs = _run_classifier(aesthetic_model, beit_in, _aesthetic_labels)
 
-        with pipeline_span('style_classification', STYLE_MODEL_ID):
-            style_outputs = _run_classifier(style_model, beit_in, _style_labels)
+    with pipeline_span('style_classification', STYLE_MODEL_ID):
+        style_outputs = _run_classifier(style_model, beit_in, _style_labels)
 
-        with pipeline_span('tag_generation', PIXAI_MODEL_ID):
-            tags = tagger.predict_pixel_values(pixai_in)
+    with pipeline_span('tag_generation', PIXAI_MODEL_ID):
+        tags = tagger.predict_pixel_values(pixai_in)
 
     return ClassificationResult.from_response(
         model_response={
@@ -210,4 +214,4 @@ async def classify(
     ],
 ) -> ClassificationResult:
     img = await preprocess_image(image.image, request.app.state.http_session)
-    return await run_in_threadpool(_classify_sync, img)
+    return await run_on_gpu(_classify_sync, img)
