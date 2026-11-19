@@ -127,7 +127,7 @@ export const classificationWorker = new Worker<PhotoJobData>(
   },
   {
     connection: redis,
-    concurrency: 1,
+    concurrency: 2,
     autorun: false,
     lockDuration: 1000 * 60 * 5,
   },

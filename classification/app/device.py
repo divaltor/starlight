@@ -1,3 +1,4 @@
+import threading
 from functools import cache
 from typing import Literal
 
@@ -7,6 +8,10 @@ import torch
 from app.config import config
 
 logger = structlog.get_logger()
+
+# Serializes GPU work across all routes so HIP graphs, reusable scratch buffers,
+# and tight APU GTT memory never race when requests overlap.
+gpu_lock = threading.Lock()
 
 
 @cache

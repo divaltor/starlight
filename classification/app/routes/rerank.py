@@ -1,4 +1,4 @@
-import threading
+from typing import Any
 
 import structlog
 import torch
@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from sentence_transformers import CrossEncoder
 
 from app.config import config
-from app.device import resolve_model_device
+from app.device import gpu_lock, resolve_model_device
 from app.models import CohereRerankRequest, CohereRerankResponse, CohereRerankResult
 from app.otel import pipeline_span
 
@@ -21,18 +21,29 @@ reranker_model = CrossEncoder(
     max_length=1024,
     model_kwargs={'torch_dtype': model_dtype},
 )
-reranker_lock = threading.Lock()
+if model_device == 'cuda':
+    _reranker_inner: Any = reranker_model.model
+    reranker_model.model = torch.compile(_reranker_inner, dynamic=True)
+    with torch.inference_mode():
+        reranker_model.rank(
+            'warmup',
+            ['warmup document one', 'warmup document two'],
+            top_k=2,
+            return_documents=False,
+            batch_size=2,
+            show_progress_bar=False,
+        )
 
 router = APIRouter(prefix='/rerank')
 
-RANK_BATCH_SIZE = 16
+RANK_BATCH_SIZE = 32
 
 
 @router.post('')
 def rerank(payload: CohereRerankRequest) -> CohereRerankResponse:
     top_n = payload.top_n if payload.top_n is not None else len(payload.documents)
 
-    with pipeline_span('rerank', config.RERANKER_MODEL), reranker_lock:
+    with pipeline_span('rerank', config.RERANKER_MODEL), gpu_lock, torch.inference_mode():
         ranked = reranker_model.rank(
             payload.query,
             payload.documents,

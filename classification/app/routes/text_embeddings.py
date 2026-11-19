@@ -1,6 +1,6 @@
 import base64
 import struct
-import threading
+from typing import Any
 
 import structlog
 import torch
@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from sentence_transformers import SentenceTransformer
 
 from app.config import config
-from app.device import resolve_model_device
+from app.device import gpu_lock, resolve_model_device
 from app.models import (
     OpenAIEmbeddingData,
     OpenAIEmbeddingRequest,
@@ -27,7 +27,16 @@ text_embedding_model = SentenceTransformer(
     device=model_device,
     model_kwargs={'torch_dtype': model_dtype},
 )
-text_embedding_lock = threading.Lock()
+if model_device == 'cuda':
+    _transformer: Any = text_embedding_model[0]
+    _transformer.auto_model = torch.compile(_transformer.auto_model, dynamic=True)
+    with torch.inference_mode():
+        text_embedding_model.encode(
+            ['warmup', 'warmup text embedding'],
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )
 
 router = APIRouter(prefix='/openai')
 
@@ -43,7 +52,7 @@ def create_text_embeddings(payload: OpenAIEmbeddingRequest) -> OpenAIEmbeddingRe
             detail=f'unsupported dimensions {payload.dimensions}, model serves {expected_dimensions}',
         )
 
-    with pipeline_span('text_embedding', config.TEXT_EMBEDDING_MODEL), text_embedding_lock:
+    with pipeline_span('text_embedding', config.TEXT_EMBEDDING_MODEL), gpu_lock, torch.inference_mode():
         vectors = text_embedding_model.encode(
             inputs,
             normalize_embeddings=True,
