@@ -9,6 +9,7 @@ from torch.nn import functional
 from torchvision.transforms.functional import pil_to_tensor
 from transformers import AutoModelForImageClassification
 
+from app.config import config
 from app.device import resolve_model_device, run_on_gpu, run_on_gpu_sync
 from app.imgutils.pixai import PIXAI_MODEL_ID, TAGGER_VERSION, PixAITagger
 from app.models import ClassificationResult, ImageRequest
@@ -147,8 +148,10 @@ def _run_classifier(
     return [{'label': id2label[idx], 'score': float(score)} for idx, score in enumerate(probs)]
 
 
-def _prepare_inputs(img: Image) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    # Single host->device upload shared across all four classification models.
+def _prepare_inputs(
+    img: Image,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    # Single host->device upload shared across all classification (and optional embedding) models.
     with torch.inference_mode():
         raw = pil_to_tensor(img).to(model_device)[None].float().div_(255.0)
         nsfw_resized = functional.interpolate(
@@ -171,11 +174,11 @@ def _prepare_inputs(img: Image) -> tuple[torch.Tensor, torch.Tensor, torch.Tenso
             - 1.0
         ).to(classification_dtype)
         pixai_in = tagger.preprocess_tensor(raw)
-    return nsfw_in, beit_in, pixai_in
+    return raw, nsfw_in, beit_in, pixai_in
 
 
-def _classify_sync(img: Image) -> ClassificationResult:
-    nsfw_in, beit_in, pixai_in = _prepare_inputs(img)
+def _classify_sync(img: Image, *, include_embeddings: bool = False) -> ClassificationResult:
+    raw, nsfw_in, beit_in, pixai_in = _prepare_inputs(img)
 
     with pipeline_span('nsfw_classification', NSFW_MODEL_ID):
         nsfw_outputs = _run_classifier(nsfw_model, nsfw_in, _nsfw_labels)
@@ -189,7 +192,7 @@ def _classify_sync(img: Image) -> ClassificationResult:
     with pipeline_span('tag_generation', PIXAI_MODEL_ID):
         tags = tagger.predict_pixel_values(pixai_in)
 
-    return ClassificationResult.from_response(
+    result = ClassificationResult.from_response(
         model_response={
             'cafe': {'aesthetic': aesthetic_outputs, 'style': style_outputs},
             'nsfw': nsfw_outputs,
@@ -198,8 +201,16 @@ def _classify_sync(img: Image) -> ClassificationResult:
         },
     )
 
+    if include_embeddings and config.ENABLE_EMBEDDINGS:
+        from app.routes.embeddings import encode_from_gpu_tensor
 
-@router.post('/classify')
+        tags_text = ', '.join([*result.characters, *result.tags])
+        result.embeddings = encode_from_gpu_tensor(tags_text, raw)
+
+    return result
+
+
+@router.post('/classify', response_model_exclude_none=True)
 async def classify(
     request: Request,
     image: Annotated[
@@ -214,4 +225,4 @@ async def classify(
     ],
 ) -> ClassificationResult:
     img = await preprocess_image(image.image, request.app.state.http_session)
-    return await run_on_gpu(_classify_sync, img)
+    return await run_on_gpu(_classify_sync, img, include_embeddings=image.include_embeddings)

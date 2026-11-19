@@ -9,9 +9,10 @@ from sentence_transformers import SentenceTransformer
 from torch import nn
 from torch.nn import functional
 from torch.nn.utils import parametrize
+from torchvision.transforms.functional import pil_to_tensor
 
 from app.device import resolve_model_device, run_on_gpu
-from app.models import EmbeddingPayload, EmbeddingResponse
+from app.models import EmbeddingPayload, EmbeddingResponse, EncodingMode
 from app.otel import pipeline_span
 from app.utils import preprocess_image
 
@@ -23,6 +24,17 @@ model_device = resolve_model_device()
 model_dtype = torch.bfloat16 if model_device == 'cuda' else torch.float32
 
 _EMBEDDING_MERGE_CHUNK = 16_384
+_JINA_IMAGE_SIZE = 512
+_JINA_MEAN = torch.tensor(
+    [0.48145466, 0.4578275, 0.40821073],
+    device=model_device,
+    dtype=torch.float32,
+).view(1, 3, 1, 1)
+_JINA_STD = torch.tensor(
+    [0.26862954, 0.26130258, 0.27577711],
+    device=model_device,
+    dtype=torch.float32,
+).view(1, 3, 1, 1)
 
 
 def _merge_static_lora(text_model: Any) -> None:
@@ -183,9 +195,50 @@ _patch_jina_sdpa(_clip_module)
 router = APIRouter()
 
 
+def _encode_image_tensor(raw_image: torch.Tensor) -> list[float]:
+    """Encode a [1, 3, H, W] float tensor in [0, 1] on `model_device` into a normalized 1024-d vector."""
+    height, width = raw_image.shape[-2:]
+    if height < width:
+        new_h, new_w = _JINA_IMAGE_SIZE, round(width * _JINA_IMAGE_SIZE / height)
+    else:
+        new_h, new_w = round(height * _JINA_IMAGE_SIZE / width), _JINA_IMAGE_SIZE
+    resized = functional.interpolate(
+        raw_image,
+        size=(new_h, new_w),
+        mode='bicubic',
+        antialias=True,
+        align_corners=False,
+    ).clamp(0.0, 1.0)
+    top = (new_h - _JINA_IMAGE_SIZE) // 2
+    left = (new_w - _JINA_IMAGE_SIZE) // 2
+    cropped = resized[:, :, top : top + _JINA_IMAGE_SIZE, left : left + _JINA_IMAGE_SIZE]
+    pixel_values = ((cropped - _JINA_MEAN) / _JINA_STD).to(model_dtype)
+    features = _clip_module.get_image_features(pixel_values)
+    return functional.normalize(features.float(), p=2, dim=-1)[0].cpu().tolist()
+
+
+def encode_from_gpu_tensor(
+    text: str,
+    raw_image: torch.Tensor,
+    encoding_mode: EncodingMode = EncodingMode.DOCUMENT,
+) -> EmbeddingResponse:
+    """Compute text + image embeddings on the GPU worker thread reusing an already-uploaded tensor."""
+    with torch.inference_mode():
+        with pipeline_span('text_embedding', 'jinaai/jina-clip-v2', encoding_mode):
+            emb_text_vec: ndarray = embedding_model.encode(
+                [text],
+                prompt_name=encoding_mode.value,
+                normalize_embeddings=True,
+            )
+        with pipeline_span('image_embedding', 'jinaai/jina-clip-v2', encoding_mode):
+            emb_image = _encode_image_tensor(raw_image)
+
+    return EmbeddingResponse(image=emb_image, text=emb_text_vec[0].tolist())
+
+
 def _encode_sync(
     text: str,
-    encoding_mode: Any,
+    encoding_mode: EncodingMode,
     img: Image | None,
 ) -> EmbeddingResponse:
     with torch.inference_mode():
@@ -196,19 +249,13 @@ def _encode_sync(
                 normalize_embeddings=True,
             )
 
-        emb_image: ndarray | None = None
+        emb_image: list[float] | None = None
         if img is not None:
             with pipeline_span('image_embedding', 'jinaai/jina-clip-v2', encoding_mode):
-                emb_image = embedding_model.encode(  # ty: ignore[no-matching-overload]
-                    [img],
-                    prompt_name=encoding_mode.value,
-                    normalize_embeddings=True,
-                )
+                raw = pil_to_tensor(img).to(model_device)[None].float().div_(255.0)
+                emb_image = _encode_image_tensor(raw)
 
-    return EmbeddingResponse(
-        image=emb_image[0].tolist() if emb_image is not None else None,
-        text=emb_text_vec[0].tolist(),
-    )
+    return EmbeddingResponse(image=emb_image, text=emb_text_vec[0].tolist())
 
 
 @router.post('/embeddings')

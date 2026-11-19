@@ -26,6 +26,7 @@ class ResponseModel(BaseModel, ABC):
 
 class ImageRequest(BaseModel):
     image: str
+    include_embeddings: bool = False
 
 
 # NSFW scores -> {"normal": <score>, "nsfw": <score>}
@@ -166,6 +167,11 @@ class ImageTags(ResponseModel):
         return cls.model_validate({'characters': character, 'tags': general})
 
 
+class EmbeddingResponse(BaseModel):
+    image: list[float] | None = None
+    text: list[float]
+
+
 class ClassificationResult(ResponseModel):
     aesthetic: float
     style: StyleScore
@@ -173,6 +179,7 @@ class ClassificationResult(ResponseModel):
     characters: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     tagger: str
+    embeddings: EmbeddingResponse | None = None
 
     @override
     @classmethod
@@ -188,6 +195,7 @@ class ClassificationResult(ResponseModel):
                 'characters': tag_groups.characters,
                 'tags': tag_groups.tags,
                 'tagger': model_response['tagger'],
+                'embeddings': model_response.get('embeddings'),
             },
         )
 
@@ -294,8 +302,3 @@ class EmbeddingPayload(BaseModel):
             return self.tags
 
         return ', '.join(self.tags)
-
-
-class EmbeddingResponse(BaseModel):
-    image: list[float] | None = None
-    text: list[float]

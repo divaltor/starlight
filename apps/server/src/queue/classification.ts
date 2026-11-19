@@ -1,4 +1,4 @@
-import { prisma } from "@starlight/utils";
+import { Prisma, prisma } from "@starlight/utils";
 import { http } from "@starlight/utils/http";
 import { Queue, Worker } from "bullmq";
 import { Schema } from "effect";
@@ -12,7 +12,17 @@ import { Classification } from "@/types";
 // Bounds the classification request including the response body (ky's
 // `timeout` only covers time-to-headers), so a stalled ML service fails the
 // job for retry instead of hanging the worker.
-const CLASSIFICATION_TIMEOUT_MS = 10_000;
+const CLASSIFICATION_TIMEOUT_MS = 15_000;
+
+const ClassifyResponse = Schema.Struct({
+  ...Classification.fields,
+  embeddings: Schema.optional(
+    Schema.Struct({
+      image: Schema.NullOr(Schema.Array(Schema.Number)),
+      text: Schema.Array(Schema.Number),
+    }),
+  ),
+});
 
 export const classificationQueue = new Queue<PhotoJobData>("classification", {
   connection: redis,
@@ -86,7 +96,7 @@ export const classificationWorker = new Worker<PhotoJobData>(
       response = await http(new URL("/v1/classify", env.ML_BASE_URL).toString(), {
         method: "post",
         headers,
-        json: { image: photo.s3Url },
+        json: { image: photo.s3Url, include_embeddings: env.ENABLE_EMBEDDINGS },
         signal: AbortSignal.timeout(CLASSIFICATION_TIMEOUT_MS),
       });
     } catch (error) {
@@ -100,19 +110,40 @@ export const classificationWorker = new Worker<PhotoJobData>(
       throw new Error(`Classification service error: ${response.status}`);
     }
 
-    let data: Classification;
+    let parsed: typeof ClassifyResponse.Type;
 
     try {
-      data = Schema.decodeUnknownSync(Classification)(await response.json());
+      parsed = Schema.decodeUnknownSync(ClassifyResponse)(await response.json());
     } catch (error) {
       logger.error({ err: error, photoId, userId, requestId }, "Failed to parse classification response");
       throw error;
     }
 
+    const classification: Classification = {
+      aesthetic: parsed.aesthetic,
+      characters: parsed.characters,
+      nsfw: parsed.nsfw,
+      style: parsed.style,
+      tags: parsed.tags,
+      tagger: parsed.tagger,
+    };
+
     await prisma.photo.update({
       where: { photoId: { id: photoId, userId } },
-      data: { classification: data },
+      data: { classification },
     });
+
+    if (parsed.embeddings?.image !== undefined && parsed.embeddings.image !== null) {
+      const textVecStr = `[${parsed.embeddings.text.join(",")}]`;
+      const imageVecStr = `[${parsed.embeddings.image.join(",")}]`;
+
+      await prisma.$executeRaw(
+        Prisma.sql`UPDATE photos SET tag_vec = ${textVecStr}::vector, image_vec = ${imageVecStr}::vector WHERE id = ${photoId} AND user_id = ${userId}`,
+      );
+      logger.info({ photoId, userId, requestId }, "Photo classified and embedded");
+
+      return;
+    }
 
     await embeddingsQueue.add(
       `embed-${photoId}`,

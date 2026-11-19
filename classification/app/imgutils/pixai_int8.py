@@ -1,7 +1,8 @@
-"""Fused Triton W8A8 INT8 WMMA execution for PixAI Tagger v1.0 on ROCm/CUDA."""
+"""Fused Triton W8A8 INT8 WMMA + SmoothQuant execution for PixAI Tagger v1.0 on ROCm/CUDA."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -16,16 +17,21 @@ _EXPECTED_PATCH_SIZE = 14
 _EXPECTED_WINDOW_SIZE = 24
 _EXPECTED_EMBED_DIM = 1024
 _EXPECTED_NUM_HEADS = 16
+_EXPECTED_DEPTH = 32
+_EXPECTED_MLP_DIM = 4736
 _NUM_TOKENS = (_EXPECTED_IMG_SIZE // _EXPECTED_PATCH_SIZE) ** 2  # 5184
 _HEAD_DIM = _EXPECTED_EMBED_DIM // _EXPECTED_NUM_HEADS  # 64
 _WINDOW_GRID = (_EXPECTED_IMG_SIZE // _EXPECTED_PATCH_SIZE) // _EXPECTED_WINDOW_SIZE  # 3
 _NUM_WINDOWS = _WINDOW_GRID * _WINDOW_GRID  # 9
 _WINDOW_TOKENS = _EXPECTED_WINDOW_SIZE * _EXPECTED_WINDOW_SIZE  # 576
 
+_SMOOTHQUANT_ALPHA = 0.85
+_SMOOTHQUANT_MARGIN = 1.15
+_CALIBRATION_PATH = Path(__file__).resolve().parents[2] / 'tunableop' / 'pixai_fc1_amax.fp16.bin'
 
 # Triton's AST parser evaluates non-constexpr type annotations in its kernel scope and fails
 # on standard Python typing symbols (`Any`, `None`), so kernel parameters only annotate `tl.constexpr`.
-# ruff: file-ignore[missing-type-function-argument, missing-return-type-private-function]
+# ruff: disable[missing-type-function-argument, missing-return-type-private-function]
 
 
 @triton.jit
@@ -56,34 +62,6 @@ def _ln_quant_kernel(
     q = tl.minimum(tl.maximum(q, -127.0), 127.0).to(tl.int8)
     tl.store(q_ptr + row * k_dim + offs, q, mask=mask)
     tl.store(s_ptr + row, scale)
-
-
-@triton.jit
-def _quant_rowwise_kernel(
-    x_ptr,
-    q_ptr,
-    s_ptr,
-    k_dim,
-    BLOCK_K: tl.constexpr,  # ruff: ignore[invalid-argument-name]
-):
-    row = tl.program_id(0)
-    offs = tl.arange(0, BLOCK_K)
-    amax = 0.0
-    for k0 in range(0, k_dim, BLOCK_K):
-        idx = k0 + offs
-        mask = idx < k_dim
-        val = tl.load(x_ptr + row * k_dim + idx, mask=mask, other=0.0).to(tl.float32)
-        amax = tl.maximum(amax, tl.max(tl.abs(val), axis=0))
-    scale = tl.maximum(amax / 127.0, 1e-8)
-    inv_scale = 1.0 / scale
-    tl.store(s_ptr + row, scale)
-    for k0 in range(0, k_dim, BLOCK_K):
-        idx = k0 + offs
-        mask = idx < k_dim
-        val = tl.load(x_ptr + row * k_dim + idx, mask=mask, other=0.0).to(tl.float32)
-        q = tl.extra.hip.libdevice.rint(val * inv_scale)
-        q = tl.minimum(tl.maximum(q, -127.0), 127.0).to(tl.int8)
-        tl.store(q_ptr + row * k_dim + idx, q, mask=mask)
 
 
 @triton.jit
@@ -167,6 +145,7 @@ def _int8_gemm_epilogue_kernel(
     sb_ptr,
     bias_ptr,
     res_ptr,
+    out_inv_scale_ptr,
     m_dim,
     n_dim,
     k_dim,
@@ -182,6 +161,8 @@ def _int8_gemm_epilogue_kernel(
     GM: tl.constexpr,  # ruff: ignore[invalid-argument-name]
     GELU: tl.constexpr,  # ruff: ignore[invalid-argument-name]
     ADD_RES: tl.constexpr,  # ruff: ignore[invalid-argument-name]
+    OUT_INT8_PER_CH: tl.constexpr,  # ruff: ignore[invalid-argument-name]
+    HAS_SA: tl.constexpr,  # ruff: ignore[invalid-argument-name]
 ):
     pid = tl.program_id(0)
     num_pid_m = tl.cdiv(m_dim, BM)
@@ -208,10 +189,13 @@ def _int8_gemm_epilogue_kernel(
         a_ptrs += BK * stride_ak
         b_ptrs += BK * stride_bk
 
-    sa = tl.load(sa_ptr + offs_m, mask=offs_m < m_dim, other=1.0)
     sb = tl.load(sb_ptr + offs_n, mask=offs_n < n_dim, other=1.0)
     bias = tl.load(bias_ptr + offs_n, mask=offs_n < n_dim, other=0.0)
-    val = acc.to(tl.float32) * (sa[:, None] * sb[None, :]) + bias[None, :]
+    if HAS_SA:
+        sa = tl.load(sa_ptr + offs_m, mask=offs_m < m_dim, other=1.0)
+        val = acc.to(tl.float32) * (sa[:, None] * sb[None, :]) + bias[None, :]
+    else:
+        val = acc.to(tl.float32) * sb[None, :] + bias[None, :]
     if GELU:
         val = val * 0.5 * (1.0 + tl.math.erf(val * 0.7071067811865476))
     c_ptrs = c_ptr + offs_m[:, None] * stride_cm + offs_n[None, :] * stride_cn
@@ -223,23 +207,34 @@ def _int8_gemm_epilogue_kernel(
             other=0.0,
         ).to(tl.float32)
         val += res
-    tl.store(c_ptrs, val.to(tl.bfloat16), mask=mask_c)
+    if OUT_INT8_PER_CH:
+        inv_sc = tl.load(out_inv_scale_ptr + offs_n, mask=offs_n < n_dim, other=1.0)
+        q = tl.extra.hip.libdevice.rint(val * inv_sc[None, :])
+        q = tl.minimum(tl.maximum(q, -127.0), 127.0).to(tl.int8)
+        tl.store(c_ptrs, q, mask=mask_c)
+    else:
+        tl.store(c_ptrs, val.to(tl.bfloat16), mask=mask_c)
 
 
-def _quantize_weight(linear: nn.Linear) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    weight = linear.weight.detach().float()
+# ruff: enable[missing-type-function-argument, missing-return-type-private-function]
+
+
+def _quantize_weight(
+    weight: torch.Tensor,
+    bias: torch.Tensor | None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     scale = (weight.abs().amax(dim=1) / 127.0).clamp(min=1e-8).contiguous()
     quant = torch.round(weight / scale[:, None]).clamp(-127, 127).to(torch.int8).contiguous()
-    bias = (
-        linear.bias.detach().float().contiguous()
-        if linear.bias is not None
+    bias_fp32 = (
+        bias.detach().float().contiguous()
+        if bias is not None
         else torch.zeros(weight.shape[0], dtype=torch.float32)
     )
-    return quant, scale, bias
+    return quant, scale, bias_fp32
 
 
 class _FusedW8A8Block(nn.Module):
-    def __init__(self, block: Any) -> None:
+    def __init__(self, block: Any, fc1_act_amax: torch.Tensor) -> None:
         super().__init__()
         self.window_size: int = block.window_size
         self.mlp_hidden: int = block.mlp.fc1.out_features
@@ -251,17 +246,32 @@ class _FusedW8A8Block(nn.Module):
             ('qkv', block.attn.qkv),
             ('proj', block.attn.proj),
             ('fc1', block.mlp.fc1),
-            ('fc2', block.mlp.fc2),
         ):
-            quant, scale, bias = _quantize_weight(linear)
+            quant, scale, bias = _quantize_weight(linear.weight.detach().float(), linear.bias)
             self.register_buffer(f'{name}_w', quant)
             self.register_buffer(f'{name}_s', scale)
             self.register_buffer(f'{name}_b', bias)
+
+        # SmoothQuant migrates post-GELU activation outliers into fc2 weights so fc1's
+        # epilogue writes int8 directly with zero intermediate BF16 write/quantize pass.
+        w2 = block.mlp.fc2.weight.detach().float()
+        w2_col_amax = w2.abs().amax(dim=0).clamp(min=1e-5)
+        a_ch = (fc1_act_amax.float() * _SMOOTHQUANT_MARGIN).clamp(min=1e-5)
+        migration = (a_ch.pow(_SMOOTHQUANT_ALPHA) / w2_col_amax.pow(1.0 - _SMOOTHQUANT_ALPHA)).clamp(
+            min=1e-5,
+        )
+        act_scale = migration * ((a_ch / migration).max() / 127.0)
+        wq2, ws2, b2 = _quantize_weight(w2 * act_scale[None, :], block.mlp.fc2.bias)
+        self.register_buffer('fc2_w', wq2)
+        self.register_buffer('fc2_s', ws2)
+        self.register_buffer('fc2_b', b2)
+        self.register_buffer('fc1_out_inv_scale', (1.0 / act_scale).contiguous())
+
         self.register_buffer('rope_cos', block.attn.freqs_cis.real.float().contiguous())
         self.register_buffer('rope_sin', block.attn.freqs_cis.imag.float().contiguous())
 
     def forward(self, x: torch.Tensor, scratch: tuple[torch.Tensor, ...]) -> torch.Tensor:
-        q1024, s1024, qkv_buf, q_buf, k_buf, v_buf, mlp_bf16, mlp_i8, s_mlp, dummy = scratch
+        q1024, s1024, qkv_buf, q_buf, k_buf, v_buf, mlp_i8, dummy = scratch
         batch = _NUM_WINDOWS if self.window_size > 0 else 1
         seq_len = _WINDOW_TOKENS if self.window_size > 0 else _NUM_TOKENS
         mlp_dim = self.mlp_hidden
@@ -285,6 +295,7 @@ class _FusedW8A8Block(nn.Module):
             self.qkv_s,
             self.qkv_b,
             dummy,
+            dummy,
             _NUM_TOKENS,
             3072,
             _EXPECTED_EMBED_DIM,
@@ -300,6 +311,8 @@ class _FusedW8A8Block(nn.Module):
             GM=4,
             GELU=False,
             ADD_RES=False,
+            OUT_INT8_PER_CH=False,
+            HAS_SA=True,
             num_warps=4,
             num_stages=2,
             waves_per_eu=2,
@@ -354,6 +367,7 @@ class _FusedW8A8Block(nn.Module):
             self.proj_s,
             self.proj_b,
             x,
+            dummy,
             _NUM_TOKENS,
             _EXPECTED_EMBED_DIM,
             _EXPECTED_EMBED_DIM,
@@ -369,6 +383,8 @@ class _FusedW8A8Block(nn.Module):
             GM=8,
             GELU=False,
             ADD_RES=True,
+            OUT_INT8_PER_CH=False,
+            HAS_SA=True,
             num_warps=4,
             num_stages=2,
             waves_per_eu=2,
@@ -390,11 +406,12 @@ class _FusedW8A8Block(nn.Module):
         _int8_gemm_epilogue_kernel[triton.cdiv(_NUM_TOKENS, 64) * triton.cdiv(mlp_dim, 64),](
             q1024,
             self.fc1_w,
-            mlp_bf16,
+            mlp_i8,
             s1024,
             self.fc1_s,
             self.fc1_b,
             dummy,
+            self.fc1_out_inv_scale,
             _NUM_TOKENS,
             mlp_dim,
             _EXPECTED_EMBED_DIM,
@@ -410,19 +427,13 @@ class _FusedW8A8Block(nn.Module):
             GM=8,
             GELU=True,
             ADD_RES=False,
+            OUT_INT8_PER_CH=True,
+            HAS_SA=True,
             num_warps=4,
             num_stages=2,
             waves_per_eu=0,
             matrix_instr_nonkdim=16,
             kpack=2,
-        )
-        _quant_rowwise_kernel[_NUM_TOKENS,](
-            mlp_bf16,
-            mlp_i8,
-            s_mlp,
-            mlp_dim,
-            BLOCK_K=1024,
-            num_warps=4,
         )
         _int8_gemm_epilogue_kernel[
             triton.cdiv(_NUM_TOKENS, 64) * triton.cdiv(_EXPECTED_EMBED_DIM, 128),
@@ -430,10 +441,11 @@ class _FusedW8A8Block(nn.Module):
             mlp_i8,
             self.fc2_w,
             x,
-            s_mlp,
+            dummy,
             self.fc2_s,
             self.fc2_b,
             x,
+            dummy,
             _NUM_TOKENS,
             _EXPECTED_EMBED_DIM,
             mlp_dim,
@@ -449,6 +461,8 @@ class _FusedW8A8Block(nn.Module):
             GM=8,
             GELU=False,
             ADD_RES=True,
+            OUT_INT8_PER_CH=False,
+            HAS_SA=False,
             num_warps=4,
             num_stages=2,
             waves_per_eu=0,
@@ -459,7 +473,7 @@ class _FusedW8A8Block(nn.Module):
 
 
 class FusedW8A8PixAI(nn.Module):
-    """W8A8 INT8 PixAI forward pass with persistent window layout and HIP graph replay."""
+    """W8A8 INT8 + SmoothQuant PixAI forward pass with persistent window layout and HIP graph."""
 
     _q1024: torch.Tensor
     _s1024: torch.Tensor
@@ -467,9 +481,7 @@ class FusedW8A8PixAI(nn.Module):
     _q: torch.Tensor
     _k: torch.Tensor
     _v: torch.Tensor
-    _mlp_bf16: torch.Tensor
     _mlp_i8: torch.Tensor
-    _s_mlp: torch.Tensor
     _dummy: torch.Tensor
 
     def __init__(self, base_model: Any, num_output_tags: int) -> None:
@@ -481,12 +493,20 @@ class FusedW8A8PixAI(nn.Module):
             or cfg.window_size != _EXPECTED_WINDOW_SIZE
             or cfg.embed_dim != _EXPECTED_EMBED_DIM
             or cfg.num_heads != _EXPECTED_NUM_HEADS
+            or len(base_model.blocks) != _EXPECTED_DEPTH
+            or base_model.blocks[0].mlp.fc1.out_features != _EXPECTED_MLP_DIM
         ):
             raise ValueError(
-                'Unexpected PixAI config for W8A8 kernels: '
+                'Unexpected PixAI config for W8A8 SmoothQuant kernels: '
                 f'img={cfg.img_size} patch={cfg.patch_size} win={cfg.window_size} '
-                f'dim={cfg.embed_dim} heads={cfg.num_heads}',
+                f'dim={cfg.embed_dim} heads={cfg.num_heads} depth={len(base_model.blocks)}',
             )
+
+        raw_cal = bytearray(_CALIBRATION_PATH.read_bytes())
+        fc1_amax = torch.frombuffer(raw_cal, dtype=torch.float16).reshape(
+            _EXPECTED_DEPTH,
+            _EXPECTED_MLP_DIM,
+        )
 
         self.patch_embed = base_model.patch_embed
         # Pre-tile absolute positional embeddings once instead of every forward pass.
@@ -501,7 +521,9 @@ class FusedW8A8PixAI(nn.Module):
         )
         self.register_buffer('tiled_pos', abs_pos)
         self.ln_pre = base_model.ln_pre
-        self.blocks = nn.ModuleList([_FusedW8A8Block(blk) for blk in base_model.blocks])
+        self.blocks = nn.ModuleList(
+            [_FusedW8A8Block(blk, fc1_amax[idx]) for idx, blk in enumerate(base_model.blocks)],
+        )
         self.head_pool = base_model.head_pool
 
         # Slice the classifier head to the contiguous prefix of categories we actually serve.
@@ -516,13 +538,16 @@ class FusedW8A8PixAI(nn.Module):
             sliced_head.bias.copy_(base_model.head.bias[:num_output_tags])
         self.head = sliced_head
 
-        mlp_dim: int = base_model.blocks[0].mlp.fc1.out_features
         self.register_buffer(
             '_q1024',
             torch.empty(_NUM_TOKENS, _EXPECTED_EMBED_DIM, dtype=torch.int8),
             persistent=False,
         )
-        self.register_buffer('_s1024', torch.empty(_NUM_TOKENS, dtype=torch.float32), persistent=False)
+        self.register_buffer(
+            '_s1024',
+            torch.empty(_NUM_TOKENS, dtype=torch.float32),
+            persistent=False,
+        )
         self.register_buffer(
             '_qkv',
             torch.empty(_NUM_TOKENS, _EXPECTED_EMBED_DIM * 3, dtype=torch.bfloat16),
@@ -544,17 +569,11 @@ class FusedW8A8PixAI(nn.Module):
             persistent=False,
         )
         self.register_buffer(
-            '_mlp_bf16',
-            torch.empty(_NUM_TOKENS, mlp_dim, dtype=torch.bfloat16),
-            persistent=False,
-        )
-        self.register_buffer(
             '_mlp_i8',
-            torch.empty(_NUM_TOKENS, mlp_dim, dtype=torch.int8),
+            torch.empty(_NUM_TOKENS, _EXPECTED_MLP_DIM, dtype=torch.int8),
             persistent=False,
         )
-        self.register_buffer('_s_mlp', torch.empty(_NUM_TOKENS, dtype=torch.float32), persistent=False)
-        self.register_buffer('_dummy', torch.empty(1, dtype=torch.bfloat16), persistent=False)
+        self.register_buffer('_dummy', torch.empty(1, dtype=torch.float32), persistent=False)
 
         self._graph: torch.cuda.CUDAGraph | None = None
         self._static_in: torch.Tensor | None = None
@@ -569,9 +588,7 @@ class FusedW8A8PixAI(nn.Module):
             self._q,
             self._k,
             self._v,
-            self._mlp_bf16,
             self._mlp_i8,
-            self._s_mlp,
             self._dummy,
         )
         in_windows = False
