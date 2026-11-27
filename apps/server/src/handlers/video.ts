@@ -55,6 +55,18 @@ async function sendVideoMessage(ctx: Context, video: string | InputFile, options
   return await bot.api.sendVideo(ctx.chatId!, video, options);
 }
 
+const VIDEO_RENDERING_CALLBACK_DATA = "video:rendering";
+
+function createRenderingKeyboard(sourceUrl?: string): InlineKeyboard {
+  const keyboard = new InlineKeyboard().text("Rendering...⏳", VIDEO_RENDERING_CALLBACK_DATA);
+
+  if (sourceUrl !== undefined && sourceUrl !== "") {
+    keyboard.row().url("Source", sourceUrl);
+  }
+
+  return keyboard;
+}
+
 function createVideoKeyboard(
   videoId: string,
   descriptionAction: "add" | "remove" | null,
@@ -71,7 +83,8 @@ function createVideoKeyboard(
     const currentTheme = theme ?? "light";
     const nextTheme: Theme = currentTheme === "dark" ? "light" : "dark";
     const themeLabel = currentTheme === "dark" ? "☀️ Change theme" : "🌙 Change theme";
-    keyboard.text(themeLabel, `video:theme:${videoId}:${nextTheme}:${ownerId}`);
+    // Keep buttons on separate rows so narrow tall video cards never truncate their labels.
+    keyboard.text(themeLabel, `video:theme:${videoId}:${nextTheme}:${ownerId}`).row();
     keyboard.text("Remove description", `video:remove_desc:${videoId}:${ownerId}`);
   }
 
@@ -565,6 +578,14 @@ async function editToRenderedTweetCard(params: {
   }
 }
 
+async function tryEditReplyMarkup(ctx: Context, replyMarkup: InlineKeyboard, videoId: string): Promise<void> {
+  try {
+    await ctx.editMessageReplyMarkup({ reply_markup: replyMarkup });
+  } catch (error) {
+    ctx.logger.debug({ error, videoId }, "Could not update video reply markup");
+  }
+}
+
 whitelistedChats.callbackQuery(
   /^video:(?<action>add_desc|remove_desc):(?<videoId>[^:]+):(?<ownerId>\d+)$/u,
   async (ctx) => {
@@ -602,21 +623,33 @@ whitelistedChats.callbackQuery(
       return;
     }
 
-    const showDescription = action === "add_desc";
-
-    const tweet = showDescription
-      ? await runtime
-          .runPromise(TwitterApi.getFxTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE))
-          .catch((cause: unknown) => {
-            ctx.logger.warn({ error: cause, tweetId: video.tweetId, videoId }, "Could not fetch video description");
-
-            return null;
-          })
-      : undefined;
-
     const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
     const sourceUrl = isGroupChat ? getTweetUrl(video.tweetId) : undefined;
-    const keyboard = createVideoKeyboard(videoId, showDescription ? "remove" : "add", ownerId, sourceUrl, "light");
+
+    if (action === "remove_desc") {
+      await ctx.editMessageMedia(
+        {
+          height: video.height ?? undefined,
+          media: video.telegramFileId,
+          supports_streaming: true,
+          type: "video",
+          width: video.width ?? undefined,
+        },
+        { reply_markup: createVideoKeyboard(videoId, "add", ownerId, sourceUrl) },
+      );
+
+      return;
+    }
+
+    await tryEditReplyMarkup(ctx, createRenderingKeyboard(sourceUrl), videoId);
+
+    const tweet = await runtime
+      .runPromise(TwitterApi.getFxTweet(video.tweetId, TWEET_TRANSLATION_LANGUAGE))
+      .catch((cause: unknown) => {
+        ctx.logger.warn({ error: cause, tweetId: video.tweetId, videoId }, "Could not fetch video description");
+
+        return null;
+      });
 
     if (tweet) {
       const tweetText = [cleanupTweetText(tweet.getDisplayText()), cleanupTweetText(tweet.quote?.getDisplayText())]
@@ -632,40 +665,28 @@ whitelistedChats.callbackQuery(
 
       const updated = await editToRenderedTweetCard({
         ctx,
-        keyboard,
+        keyboard: createVideoKeyboard(videoId, "remove", ownerId, sourceUrl, "light"),
         theme: "light",
         tweet,
         tweetId: video.tweetId,
         videoId,
       });
 
-      if (!updated) {
-        await sendTextMessage(ctx, "Can't load the description right now. Please try again.", {
-          message_thread_id: ctx.msg!.message_thread_id,
-        });
+      if (updated) {
+        return;
       }
     }
 
-    if (tweet === null) {
-      await sendTextMessage(ctx, "Can't load the description right now. Please try again.", {
-        message_thread_id: ctx.msg!.message_thread_id,
-      });
-    }
-
-    if (!showDescription) {
-      await ctx.editMessageMedia(
-        {
-          type: "video",
-          media: video.telegramFileId,
-          width: video.width ?? undefined,
-          height: video.height ?? undefined,
-          supports_streaming: true,
-        },
-        { reply_markup: keyboard },
-      );
-    }
+    await tryEditReplyMarkup(ctx, createVideoKeyboard(videoId, "add", ownerId, sourceUrl), videoId);
+    await sendTextMessage(ctx, "Can't load the description right now. Please try again.", {
+      message_thread_id: ctx.msg!.message_thread_id,
+    });
   },
 );
+
+whitelistedChats.callbackQuery(VIDEO_RENDERING_CALLBACK_DATA, async (ctx) => {
+  await ctx.answerCallbackQuery({ text: "Rendering...⏳" });
+});
 
 whitelistedChats.callbackQuery(/^video:theme:(?<videoId>[^:]+):(?<theme>light|dark):(?<ownerId>\d+)$/u, async (ctx) => {
   // The regex callback query route guarantees all named match groups are present

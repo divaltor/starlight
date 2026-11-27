@@ -383,8 +383,19 @@ test.each([
     },
   });
 
-  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "sendMessage"]);
+  expect(sent.map((message) => message.method)).toEqual([
+    "answerCallbackQuery",
+    "editMessageReplyMarkup",
+    "editMessageReplyMarkup",
+    "sendMessage",
+  ]);
   expect(sent[1]?.payload).toMatchObject({
+    reply_markup: { inline_keyboard: [[{ callback_data: "video:rendering", text: "Rendering...⏳" }]] },
+  });
+  expect(sent[2]?.payload).toMatchObject({
+    reply_markup: { inline_keyboard: [[{ callback_data: "video:add_desc:stored-video:1", text: "Add description" }]] },
+  });
+  expect(sent[3]?.payload).toMatchObject({
     chat_id: 1,
     message_thread_id: 7,
     text: "Can't load the description right now. Please try again.",
@@ -452,15 +463,17 @@ test("test_falls_back_to_tweet_image_when_video_card_render_fails", async () => 
     update_id: 1,
   });
 
-  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "editMessageMedia"]);
-  expect(sent[1]?.payload).toMatchObject({
+  expect(sent.map((message) => message.method)).toEqual([
+    "answerCallbackQuery",
+    "editMessageReplyMarkup",
+    "editMessageMedia",
+  ]);
+  expect(sent[2]?.payload).toMatchObject({
     media: { type: "photo" },
     reply_markup: {
       inline_keyboard: [
-        [
-          { callback_data: "video:theme:stored-video:dark:1", text: "🌙 Change theme" },
-          { callback_data: "video:remove_desc:stored-video:1", text: "Remove description" },
-        ],
+        [{ callback_data: "video:theme:stored-video:dark:1", text: "🌙 Change theme" }],
+        [{ callback_data: "video:remove_desc:stored-video:1", text: "Remove description" }],
       ],
     },
   });
@@ -537,8 +550,15 @@ test.each([
 
   await testBot.handleUpdate({ update_id: 1, callback_query: { ...callback, data: "video:add_desc:stored-video:1" } });
 
-  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "editMessageMedia"]);
+  expect(sent.map((message) => message.method)).toEqual([
+    "answerCallbackQuery",
+    "editMessageReplyMarkup",
+    "editMessageMedia",
+  ]);
   expect(sent[1]?.payload).toMatchObject({
+    reply_markup: { inline_keyboard: [[{ callback_data: "video:rendering", text: "Rendering...⏳" }]] },
+  });
+  expect(sent[2]?.payload).toMatchObject({
     media: {
       duration: 33,
       height: 1400,
@@ -548,10 +568,8 @@ test.each([
     },
     reply_markup: {
       inline_keyboard: [
-        [
-          { text: "🌙 Change theme", callback_data: "video:theme:stored-video:dark:1" },
-          { text: "Remove description", callback_data: "video:remove_desc:stored-video:1" },
-        ],
+        [{ text: "🌙 Change theme", callback_data: "video:theme:stored-video:dark:1" }],
+        [{ text: "Remove description", callback_data: "video:remove_desc:stored-video:1" }],
       ],
     },
   });
@@ -565,10 +583,8 @@ test.each([
   expect(renderSpy.mock.lastCall?.slice(0, 2)).toEqual(["42", "dark"]);
   expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "editMessageMedia"]);
   expect(sent[1]?.payload).toHaveProperty("reply_markup.inline_keyboard", [
-    [
-      { text: "☀️ Change theme", callback_data: "video:theme:stored-video:light:1" },
-      { text: "Remove description", callback_data: "video:remove_desc:stored-video:1" },
-    ],
+    [{ text: "☀️ Change theme", callback_data: "video:theme:stored-video:light:1" }],
+    [{ text: "Remove description", callback_data: "video:remove_desc:stored-video:1" }],
   ]);
 
   sent.length = 0;
@@ -580,10 +596,8 @@ test.each([
   expect(renderSpy.mock.lastCall?.slice(0, 2)).toEqual(["42", "light"]);
   expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "editMessageMedia"]);
   expect(sent[1]?.payload).toHaveProperty("reply_markup.inline_keyboard", [
-    [
-      { text: "🌙 Change theme", callback_data: "video:theme:stored-video:dark:1" },
-      { text: "Remove description", callback_data: "video:remove_desc:stored-video:1" },
-    ],
+    [{ text: "🌙 Change theme", callback_data: "video:theme:stored-video:dark:1" }],
+    [{ text: "Remove description", callback_data: "video:remove_desc:stored-video:1" }],
   ]);
 
   sent.length = 0;
@@ -601,12 +615,14 @@ test.each([
   sent.length = 0;
   await testBot.handleUpdate({ update_id: 5, callback_query: { ...callback, data: "video:add_desc:stored-video:1" } });
 
-  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "editMessageMedia"]);
-  expect(sent[1]?.payload).toHaveProperty("reply_markup.inline_keyboard", [
-    [
-      { text: "🌙 Change theme", callback_data: "video:theme:stored-video:dark:1" },
-      { text: "Remove description", callback_data: "video:remove_desc:stored-video:1" },
-    ],
+  expect(sent.map((message) => message.method)).toEqual([
+    "answerCallbackQuery",
+    "editMessageReplyMarkup",
+    "editMessageMedia",
+  ]);
+  expect(sent[2]?.payload).toHaveProperty("reply_markup.inline_keyboard", [
+    [{ text: "🌙 Change theme", callback_data: "video:theme:stored-video:dark:1" }],
+    [{ text: "Remove description", callback_data: "video:remove_desc:stored-video:1" }],
   ]);
 });
 
