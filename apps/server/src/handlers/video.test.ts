@@ -1,7 +1,10 @@
+import { truncate } from "node:fs/promises";
+import path from "node:path";
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { prisma } from "@starlight/utils";
 import { Effect } from "effect";
-import { Bot } from "grammy";
+import { Bot, HttpError } from "grammy";
+import tmp from "tmp";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
 import { FxEmbedTweet } from "@/services/fxembed/types";
@@ -158,6 +161,153 @@ test.each<{
     params.expectedNotice === undefined ? [] : [expect.objectContaining({ text: params.expectedNotice })],
   );
   expect(sent.some((message) => message.method === "sendPhoto")).toBe(false);
+});
+
+// Product rule: when yt-dlp downloads a file over Telegram's 50 MB upload cap, fall back to the highest-quality
+// FxTwitter MP4 variant under 50 MB instead of failing silently.
+test("test_selects_smaller_fxtwitter_variant_when_ytdlp_video_exceeds_telegram_limit", async () => {
+  const server = Bun.serve({
+    fetch(request) {
+      const { pathname } = new URL(request.url);
+
+      if (pathname.includes("2520x1724")) {
+        return new Response(null, { headers: { "content-length": String(66_929_206) }, status: 200 });
+      }
+
+      if (pathname.includes("1578x1080")) {
+        return new Response(null, { headers: { "content-length": String(20_893_564) }, status: 200 });
+      }
+
+      return new Response(null, { status: 404 });
+    },
+    port: 0,
+  });
+
+  const tempDir = tmp.dirSync({ unsafeCleanup: true });
+
+  try {
+    const oversizedPath = path.join(tempDir.name, "oversized.mp4");
+    // Sparse 51 MB file so Bun.file(oversizedPath).size > 50 MB without allocating 51 MB of RAM.
+    await Bun.write(oversizedPath, "");
+    await truncate(oversizedPath, 51 * 1024 * 1024);
+
+    const base = server.url.toString();
+    const hdUrl = `${base}vid/avc1/1578x1080/hd.mp4`;
+    const uhdUrl = `${base}vid/avc1/2520x1724/uhd.mp4`;
+
+    spyOn(TwitterApi, "getFxTweet").mockReturnValue(
+      Effect.succeed(
+        new FxEmbedTweet({
+          author: { avatar_url: "", id: "1", name: "Author", screen_name: "author" },
+          created_at: "2026-11-26",
+          created_timestamp: 1_795_651_800,
+          id: "2125713695233970521",
+          likes: 0,
+          media: {
+            videos: [
+              {
+                formats: [
+                  { bitrate: 10_368_000, container: "mp4", url: hdUrl },
+                  { bitrate: 25_128_000, container: "mp4", url: uhdUrl },
+                ],
+                height: 1724,
+                thumbnail_url: "",
+                type: "video",
+                url: uhdUrl,
+                width: 2520,
+              },
+            ],
+          },
+          replies: 0,
+          retweets: 0,
+          text: "Long demo",
+          url: "https://x.com/mitchellh/status/2125713695233970521",
+        }),
+      ),
+    );
+    Reflect.set(
+      prisma.video,
+      "findFirst",
+      mock(async () => await Promise.resolve(null)),
+    );
+    Reflect.set(
+      prisma.video,
+      "create",
+      mock(async () => {
+        await Promise.resolve();
+      }),
+    );
+    spyOn(downloads, "downloadVideo").mockResolvedValue([
+      { filePath: oversizedPath, metadata: { height: 1724, width: 2520 } },
+    ]);
+    spyOn(downloads, "downloadVideoFromUrl").mockImplementation(
+      async (url, _folder, metadata) => await Promise.resolve({ filePath: url, metadata: metadata ?? {} }),
+    );
+
+    const sent: { method: string; payload: unknown }[] = [];
+    const testBot = createTestBot(sent);
+
+    await testBot.handleUpdate({
+      message: {
+        chat: { first_name: "User", id: 1, type: "private" },
+        date: 0,
+        from: { first_name: "User", id: 1, is_bot: false },
+        message_id: 1,
+        text: "https://x.com/mitchellh/status/2125713695233970521",
+      },
+      update_id: 1,
+    });
+
+    expect(sent.flatMap((message) => (message.method === "sendVideo" ? [message.payload] : []))).toMatchObject([
+      {
+        height: 1080,
+        supports_streaming: true,
+        video: { fileData: hdUrl },
+        width: 1578,
+      },
+    ]);
+  } finally {
+    tempDir.removeCallback();
+    await server.stop(true);
+  }
+});
+
+// Product rule: transport-level Telegram failures (HttpError) must notify the user instead of being swallowed silently.
+test("test_notifies_user_when_send_video_fails_with_http_error", async () => {
+  spyOn(TwitterApi, "getFxTweet").mockReturnValue(Effect.succeed(null));
+  Reflect.set(
+    prisma.video,
+    "findFirst",
+    mock(async () => await Promise.resolve(null)),
+  );
+  spyOn(downloads, "downloadVideo").mockResolvedValue([
+    { filePath: "downloaded.mp4", metadata: { height: 720, width: 1280 } },
+  ]);
+
+  const sent: { method: string; payload: unknown }[] = [];
+  const testBot = createTestBot(sent);
+  testBot.api.config.use(async (previous, method, payload, signal) => {
+    if (method === "sendVideo") {
+      throw new HttpError("Network request for 'sendVideo' failed!", new Error("ECONNRESET"));
+    }
+
+    return await previous(method, payload, signal);
+  });
+
+  await testBot.handleUpdate({
+    message: {
+      chat: { first_name: "User", id: 1, type: "private" },
+      date: 0,
+      from: { first_name: "User", id: 1, is_bot: false },
+      message_id: 1,
+      text: "https://example.com/video",
+    },
+    update_id: 1,
+  });
+
+  expect(sent.flatMap((message) => (message.method === "sendMessage" ? [message.payload] : []))).toEqual([
+    expect.objectContaining({ text: "Can't download video, sorry." }),
+  ]);
 });
 
 test.each([

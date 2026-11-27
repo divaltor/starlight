@@ -1,5 +1,6 @@
 import { cleanupTweetText, extractTweetId, prisma } from "@starlight/utils";
-import { Schema } from "effect";
+import { Duration, Effect, Option, Schema } from "effect";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { Composer, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import tmp from "tmp";
 import env from "@/env";
@@ -17,6 +18,14 @@ const composer = new Composer<Context>();
 const TWEET_TRANSLATION_LANGUAGE = "en";
 
 const CANT_DOWNLOAD_MESSAGE = "Can't download video, sorry.";
+const VIDEO_TOO_LARGE_MESSAGE = "Video is too large, can't be sent.";
+const TELEGRAM_VIDEO_UPLOAD_LIMIT_BYTES = 50 * 1024 * 1024;
+const VIDEO_HEAD_TIMEOUT_MS = 3000;
+const VIDEO_DIMENSIONS_RE = /\/(?<width>\d+)x(?<height>\d+)\//u;
+
+const ContentLengthResponse = Schema.Struct({
+  headers: Schema.Struct({ "content-length": Schema.FiniteFromString }),
+});
 
 const WHITELISTED_CHAT_IDS = new Set(env.WHITELIST_CHAT_IDS);
 
@@ -149,14 +158,67 @@ type FreshDownloadOutcome =
   | { status: "empty" }
   | { status: "failed_notified" };
 
+async function fetchContentLength(url: string): Promise<number | null> {
+  const size = await runtime.runPromise(
+    HttpClient.head(url).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap(HttpClientResponse.schemaNoBody(ContentLengthResponse)),
+      Effect.map((response) => response.headers["content-length"]),
+      Effect.timeout(Duration.millis(VIDEO_HEAD_TIMEOUT_MS)),
+      Effect.option,
+    ),
+  );
+
+  return Option.getOrNull(size);
+}
+
+async function selectUploadableApiVideo(
+  apiVideo: FxEmbedVideo,
+): Promise<{ height: number; url: string; width: number }> {
+  const mp4Formats = (apiVideo.formats ?? [])
+    .filter((format) => format.container === "mp4" || /\.mp4(?:\?|$)/iu.test(format.url))
+    .toSorted((left, right) => (right.bitrate ?? 0) - (left.bitrate ?? 0));
+
+  if (mp4Formats.length === 0) {
+    return { height: apiVideo.height, url: apiVideo.url, width: apiVideo.width };
+  }
+
+  for (const format of mp4Formats) {
+    // Sequential HEAD from highest bitrate down stops at the first variant that fits Telegram's 50 MB upload cap.
+    // oxlint-disable-next-line react-doctor/async-await-in-loop
+    const sizeBytes = await fetchContentLength(format.url);
+
+    if (sizeBytes !== null && sizeBytes <= TELEGRAM_VIDEO_UPLOAD_LIMIT_BYTES) {
+      const dims = VIDEO_DIMENSIONS_RE.exec(format.url)?.groups;
+      const width = Number(dims?.width);
+      const height = Number(dims?.height);
+
+      return {
+        height: Number.isFinite(height) && height > 0 ? height : apiVideo.height,
+        url: format.url,
+        width: Number.isFinite(width) && width > 0 ? width : apiVideo.width,
+      };
+    }
+  }
+
+  const smallest = mp4Formats.at(-1)!;
+
+  return { height: apiVideo.height, url: smallest.url, width: apiVideo.width };
+}
+
 async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDownloadOutcome> {
   const { apiVideos, ctx, link, messageThreadId, tempDirName } = params;
 
   try {
     try {
       const videos = await downloadVideo(link, tempDirName);
+      const hasOversized = videos.some((video) => Bun.file(video.filePath).size > TELEGRAM_VIDEO_UPLOAD_LIMIT_BYTES);
 
-      return videos.length === 0 ? { status: "empty" } : { status: "complete", videos };
+      if (!hasOversized || apiVideos.length === 0) {
+        return videos.length === 0 ? { status: "empty" } : { status: "complete", videos };
+      }
+
+      ctx.logger.warn({ link }, "yt-dlp video exceeds Telegram 50 MB limit, trying smaller FxTwitter variant");
     } catch (error) {
       ctx.logger.warn({ error }, "yt-dlp download failed, trying fxtwitter API fallback");
     }
@@ -171,9 +233,12 @@ async function downloadFreshVideos(params: FreshDownloadParams): Promise<FreshDo
       for (const apiVideo of apiVideos) {
         // Sequential by design: upstream rate limits (yt-dlp / media CDN)
         // oxlint-disable-next-line react-doctor/async-await-in-loop
-        const info = await downloadVideoFromUrl(apiVideo.url, tempDirName, {
-          width: apiVideo.width,
-          height: apiVideo.height,
+        const selected = await selectUploadableApiVideo(apiVideo);
+
+        // oxlint-disable-next-line react-doctor/async-await-in-loop
+        const info = await downloadVideoFromUrl(selected.url, tempDirName, {
+          height: selected.height,
+          width: selected.width,
         });
 
         videos.push(info);
@@ -236,6 +301,17 @@ async function sendDownloadedVideos(params: {
   const { ctx, messageThreadId, ownerId, sourceUrl, tweetId, tweetText, videos } = params;
 
   for (const video of videos) {
+    const fileSize = Bun.file(video.filePath).size;
+
+    if (fileSize > TELEGRAM_VIDEO_UPLOAD_LIMIT_BYTES) {
+      ctx.logger.warn({ filePath: video.filePath, fileSize }, "Video exceeds Telegram 50 MB upload limit");
+      // oxlint-disable-next-line react-doctor/async-await-in-loop
+      await sendTextMessage(ctx, VIDEO_TOO_LARGE_MESSAGE, {
+        message_thread_id: messageThreadId,
+      });
+      continue;
+    }
+
     try {
       ctx.logger.debug({ chatId: ctx.chatId, filePath: video.filePath }, "Sending video");
 
@@ -256,19 +332,18 @@ async function sendDownloadedVideos(params: {
 
       ctx.logger.info({ chatId: ctx.chatId, filePath: video.filePath, videoId }, "Sent video");
     } catch (error) {
-      if (error instanceof GrammyError) {
-        ctx.logger.error({ error, filePath: video.filePath }, "Failed to send video");
+      ctx.logger.error({ error, filePath: video.filePath }, "Failed to send video");
 
-        if (error.error_code === 413) {
-          await sendTextMessage(ctx, "Video is too large, can't be sent.", {
-            message_thread_id: messageThreadId,
-          });
-        } else {
-          await sendTextMessage(ctx, CANT_DOWNLOAD_MESSAGE, {
-            message_thread_id: messageThreadId,
-          });
-          throw error;
-        }
+      const message =
+        error instanceof GrammyError && error.error_code === 413 ? VIDEO_TOO_LARGE_MESSAGE : CANT_DOWNLOAD_MESSAGE;
+
+      // oxlint-disable-next-line react-doctor/async-await-in-loop
+      await sendTextMessage(ctx, message, {
+        message_thread_id: messageThreadId,
+      });
+
+      if (error instanceof GrammyError && error.error_code !== 413) {
+        throw error;
       }
     }
   }
