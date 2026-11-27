@@ -6,8 +6,8 @@ import env from "@/env";
 import { bot } from "@/bot";
 import type { FxEmbedTweet, FxEmbedVideo } from "@/services/fxembed/types";
 import { runtime } from "@/services/runtime";
-import { generateTweetImage } from "@/services/tweet/tweet-image.service";
-import { TweetRichMessage } from "@/services/tweet/tweet-rich-message";
+import { generateTweetImage, generateTweetVideo } from "@/services/tweet/tweet-image.service";
+import type { Theme } from "@/services/tweet/tweet-image.service";
 import { TwitterApi } from "@/services/twitter-api";
 import { downloadVideo, downloadVideoFromUrl } from "@/services/video";
 import type { VideoInformation } from "@/services/video";
@@ -51,6 +51,7 @@ function createVideoKeyboard(
   descriptionAction: "add" | "remove" | null,
   ownerId: number,
   sourceUrl?: string,
+  theme?: Theme,
 ): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   const hasDescriptionAction = descriptionAction !== null;
@@ -58,6 +59,10 @@ function createVideoKeyboard(
   if (descriptionAction === "add") {
     keyboard.text("Add description", `video:add_desc:${videoId}:${ownerId}`);
   } else if (descriptionAction === "remove") {
+    const currentTheme = theme ?? "light";
+    const nextTheme: Theme = currentTheme === "dark" ? "light" : "dark";
+    const themeLabel = currentTheme === "dark" ? "☀️ Change theme" : "🌙 Change theme";
+    keyboard.text(themeLabel, `video:theme:${videoId}:${nextTheme}:${ownerId}`);
     keyboard.text("Remove description", `video:remove_desc:${videoId}:${ownerId}`);
   }
 
@@ -431,6 +436,60 @@ whitelistedGroupChat
     await handleVideoRequest(ctx, ctx.match.trim(), ctx.from.id, ctx.msg.message_thread_id);
   });
 
+async function editToRenderedTweetCard(params: {
+  ctx: Context;
+  keyboard: InlineKeyboard;
+  theme: Theme;
+  tweet?: FxEmbedTweet;
+  tweetId: string;
+  videoId: string;
+}): Promise<boolean> {
+  try {
+    const rendered = await runtime.runPromise(generateTweetVideo(params.tweetId, params.theme, params.tweet));
+
+    await params.ctx.editMessageMedia(
+      {
+        duration: rendered.duration,
+        height: rendered.height,
+        media: new InputFile(rendered.buffer, `tweet-${params.tweetId}.mp4`),
+        supports_streaming: true,
+        thumbnail: new InputFile(rendered.thumbnail, `tweet-${params.tweetId}-thumb.jpg`),
+        type: "video",
+        width: rendered.width,
+      },
+      { reply_markup: params.keyboard },
+    );
+
+    return true;
+  } catch (videoError) {
+    params.ctx.logger.warn(
+      { error: videoError, theme: params.theme, tweetId: params.tweetId, videoId: params.videoId },
+      "Could not render tweet video card, falling back to image",
+    );
+  }
+
+  try {
+    const image = await runtime.runPromise(generateTweetImage(params.tweetId, params.theme, params.tweet));
+
+    await params.ctx.editMessageMedia(
+      {
+        media: new InputFile(image.buffer, `tweet-${params.tweetId}.jpg`),
+        type: "photo",
+      },
+      { reply_markup: params.keyboard },
+    );
+
+    return true;
+  } catch (imageError) {
+    params.ctx.logger.warn(
+      { error: imageError, theme: params.theme, tweetId: params.tweetId, videoId: params.videoId },
+      "Could not render fallback tweet image",
+    );
+
+    return false;
+  }
+}
+
 whitelistedChats.callbackQuery(
   /^video:(?<action>add_desc|remove_desc):(?<videoId>[^:]+):(?<ownerId>\d+)$/u,
   async (ctx) => {
@@ -482,7 +541,7 @@ whitelistedChats.callbackQuery(
 
     const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
     const sourceUrl = isGroupChat ? getTweetUrl(video.tweetId) : undefined;
-    const keyboard = createVideoKeyboard(videoId, showDescription ? "remove" : "add", ownerId, sourceUrl);
+    const keyboard = createVideoKeyboard(videoId, showDescription ? "remove" : "add", ownerId, sourceUrl, "light");
 
     if (tweet) {
       const tweetText = [cleanupTweetText(tweet.getDisplayText()), cleanupTweetText(tweet.quote?.getDisplayText())]
@@ -496,21 +555,20 @@ whitelistedChats.callbackQuery(
         });
       }
 
-      await bot.api.sendRichMessage(
-        ctx.chatId,
-        TweetRichMessage.build({
-          tweet,
-          video: video.telegramFileId,
-          width: video.width ?? undefined,
-          height: video.height ?? undefined,
-        }),
-        {
-          reply_markup: keyboard,
-          message_thread_id: ctx.msg!.message_thread_id,
-        },
-      );
+      const updated = await editToRenderedTweetCard({
+        ctx,
+        keyboard,
+        theme: "light",
+        tweet,
+        tweetId: video.tweetId,
+        videoId,
+      });
 
-      await ctx.deleteMessage();
+      if (!updated) {
+        await sendTextMessage(ctx, "Can't load the description right now. Please try again.", {
+          message_thread_id: ctx.msg!.message_thread_id,
+        });
+      }
     }
 
     if (tweet === null) {
@@ -533,6 +591,60 @@ whitelistedChats.callbackQuery(
     }
   },
 );
+
+whitelistedChats.callbackQuery(/^video:theme:(?<videoId>[^:]+):(?<theme>light|dark):(?<ownerId>\d+)$/u, async (ctx) => {
+  // The regex callback query route guarantees all named match groups are present
+  const {
+    ownerId: ownerIdRaw,
+    theme,
+    videoId,
+  } = Schema.decodeUnknownSync(
+    Schema.Struct({
+      ownerId: Schema.String,
+      theme: Schema.Literals(["light", "dark"]),
+      videoId: Schema.String,
+    }),
+  )(typeof ctx.match === "string" ? undefined : ctx.match.groups);
+
+  const ownerId = Number(ownerIdRaw);
+
+  if (ctx.from.id !== ownerId) {
+    await ctx.answerCallbackQuery({
+      text: "Может по голове себе постучишь?",
+      show_alert: true,
+    });
+
+    return;
+  }
+
+  await ctx.answerCallbackQuery({ text: `Switching to ${theme} theme...` });
+
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+  });
+
+  if (!video) {
+    return;
+  }
+
+  const isGroupChat = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
+  const sourceUrl = isGroupChat ? getTweetUrl(video.tweetId) : undefined;
+  const keyboard = createVideoKeyboard(videoId, "remove", ownerId, sourceUrl, theme);
+
+  const updated = await editToRenderedTweetCard({
+    ctx,
+    keyboard,
+    theme,
+    tweetId: video.tweetId,
+    videoId,
+  });
+
+  if (!updated) {
+    await sendTextMessage(ctx, "Can't switch theme right now. Please try again.", {
+      message_thread_id: ctx.msg!.message_thread_id,
+    });
+  }
+});
 
 privateChat.on(":video", async (ctx) => {
   const fileUniqueId = ctx.msg.video.file_unique_id;

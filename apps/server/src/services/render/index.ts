@@ -4,16 +4,21 @@ import path from "node:path";
 import sharp from "sharp";
 import type { Node } from "takumi-js";
 import { Renderer } from "takumi-js/node";
+import type { MeasuredNode } from "takumi-js/node";
 import { extractEmojis } from "takumi-js/helpers/emoji";
 import {
   buildTweetCard,
   collectRemoteImageSrcs,
   collectTweetImageUrls,
+  findEmbeddableVideo,
+  findNodePath,
   stripUnavailableImages,
 } from "@/services/render/card";
 import { LAYOUT } from "@/services/render/layout";
 import { themes } from "@/services/render/themes";
 import type { Theme } from "@/services/render/themes";
+import { compositeTweetVideos } from "@/services/render/video";
+import type { RenderVideoResult } from "@/services/render/video";
 
 export interface ArticleCoverMedia {
   height: number;
@@ -54,10 +59,11 @@ export interface TweetData {
     };
     photos?: { url: string; width: number; height: number }[];
     videos?: {
-      thumbnailUrl: string;
-      width: number;
       height: number;
+      thumbnailUrl: string;
       type: "video" | "gif";
+      url?: string;
+      width: number;
     }[];
   } | null;
   quote?: TweetData | null;
@@ -77,7 +83,28 @@ export interface RenderResult {
   width: number;
 }
 
+export interface VideoSlotBox {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+export interface RenderedCardSurface {
+  failedUrls: string[];
+  height: number;
+  png: Buffer;
+  videoSlot: VideoSlotBox | null;
+  width: number;
+}
+
+export { findEmbeddableVideo } from "@/services/render/card";
+
+export type { EmbeddableVideo } from "@/services/render/card";
+
 export type { Theme } from "@/services/render/themes";
+
+export type { RenderVideoResult } from "@/services/render/video";
 
 const FONT_FAMILIES = ["Inter", "Noto Sans", "Noto Sans CJK", "Noto Sans Math"];
 const IMAGE_FETCH_TIMEOUT_MS = 5000;
@@ -85,7 +112,7 @@ const IMAGE_FETCH_ATTEMPTS = 2;
 
 // The napi build ignores `devicePixelRatio` when both width and height are
 // given, so the 2x output scale is applied to the tree itself instead.
-const SCALE_FACTOR = 2;
+export const SCALE_FACTOR = 2;
 
 // Scaling unitless values made lineHeight 2.8 and expanded every text block.
 const UNITLESS_STYLE_PROPERTIES = new Set(["flexGrow", "flexShrink", "fontWeight", "lineClamp", "lineHeight"]);
@@ -174,15 +201,58 @@ async function prefetchImage(url: string, attempt = 1): Promise<readonly [string
   }
 }
 
-export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<RenderResult> {
-  const renderer = await getRenderer();
-  const colors = themes[theme];
+function resolveMeasuredSlot(measured: MeasuredNode, slotPath: number[]): VideoSlotBox | null {
+  let current: MeasuredNode | undefined = measured;
 
+  for (const childIndex of slotPath) {
+    current = current?.children[childIndex];
+  }
+
+  if (!current) {
+    return null;
+  }
+
+  return {
+    x: Math.round(current.transform[4]),
+    y: Math.round(current.transform[5]),
+    width: Math.round(current.width),
+    height: Math.round(current.height),
+  };
+}
+
+async function prefetchTweetMedia(tweet: TweetData) {
   const mediaUrls = collectTweetImageUrls(tweet);
   const mediaBytes = await prefetchImages(mediaUrls);
   const failedUrls = new Set([...mediaUrls].filter((url) => !mediaBytes.has(url)));
 
-  let node: Node = buildTweetCard({ colors, failedUrls, tweet });
+  return { failedUrls, mediaBytes };
+}
+
+export async function renderCardSurface(params: {
+  evenHeight?: boolean;
+  prefetchedMedia?: { failedUrls: Set<string>; mediaBytes: Map<string, Uint8Array> };
+  theme: Theme;
+  tweet: TweetData;
+  videoTarget?: TweetData;
+}): Promise<RenderedCardSurface> {
+  const renderer = await getRenderer();
+  const colors = themes[params.theme];
+  const { failedUrls, mediaBytes } = params.prefetchedMedia ?? (await prefetchTweetMedia(params.tweet));
+
+  let videoSlotNode: Node | null = null;
+
+  let node: Node = buildTweetCard({
+    colors,
+    failedUrls,
+    onVideoSlot: (slot) => {
+      videoSlotNode = slot;
+    },
+    tweet: params.tweet,
+    videoTarget: params.videoTarget,
+  });
+
+  const videoSlotPath = videoSlotNode === null ? null : findNodePath(node, videoSlotNode);
+
   node = extractEmojis(node, "twemoji");
 
   const emojiUrls = [...collectRemoteImageSrcs(node)].filter((url) => !mediaBytes.has(url));
@@ -192,34 +262,112 @@ export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<
   stripUnavailableImages(node, bytesBySrc);
   node = scaleNode(node, SCALE_FACTOR);
 
+  const width = LAYOUT.WIDTH * SCALE_FACTOR;
+
   // Without explicit families, measure() falls back to whichever font registered
   // first (parallel, so random); a taller fallback left blank space under the card.
-  const measured = await renderer.measure(node, { fontFamilies: FONT_FAMILIES, width: LAYOUT.WIDTH * SCALE_FACTOR });
-  const height = Math.ceil(measured.height);
+  const measured = await renderer.measure(node, { fontFamilies: FONT_FAMILIES, width });
+  const rawHeight = Math.ceil(measured.height);
+  const height = params.evenHeight === true ? rawHeight + (rawHeight % 2) : rawHeight;
+  const videoSlot = videoSlotPath === null ? null : resolveMeasuredSlot(measured, videoSlotPath);
 
-  const rendered = await renderer.render(node, {
+  const png = await renderer.render(node, {
     fontFamilies: FONT_FAMILIES,
     format: "png",
     height,
     images: [...bytesBySrc.entries()].map(([src, data]) => ({ data, src })),
-    width: LAYOUT.WIDTH * SCALE_FACTOR,
+    width,
   });
 
-  const buffer = await sharp(rendered).flatten({ background: colors.background }).jpeg({ quality: 100 }).toBuffer();
+  return {
+    failedUrls: [...failedUrls],
+    height,
+    png,
+    videoSlot,
+    width,
+  };
+}
+
+export async function renderTweetImage(tweet: TweetData, theme: Theme): Promise<RenderResult> {
+  const colors = themes[theme];
+  const surface = await renderCardSurface({ theme, tweet });
+  const buffer = await sharp(surface.png).flatten({ background: colors.background }).jpeg({ quality: 100 }).toBuffer();
 
   logger.debug(
     {
-      height,
+      height: surface.height,
       size: buffer.length,
-      width: LAYOUT.WIDTH * SCALE_FACTOR,
+      width: surface.width,
     },
     "Rendered tweet image",
   );
 
   return {
     buffer,
-    failedUrls: [...failedUrls],
-    height,
-    width: LAYOUT.WIDTH * SCALE_FACTOR,
+    failedUrls: surface.failedUrls,
+    height: surface.height,
+    width: surface.width,
   };
+}
+
+export async function renderTweetVideoThemes(
+  tweet: TweetData,
+  videoPath: string,
+  requestedThemes: readonly Theme[] = ["light", "dark"],
+): Promise<Map<Theme, RenderVideoResult>> {
+  const embeddable = findEmbeddableVideo(tweet);
+
+  if (!embeddable) {
+    throw new Error("Tweet has no embeddable video");
+  }
+
+  const mediaUrls = collectTweetImageUrls(tweet);
+  const mediaBytes = await prefetchImages(mediaUrls);
+  const failedUrls = new Set([...mediaUrls].filter((url) => !mediaBytes.has(url)));
+
+  const surfaces = await Promise.all(
+    requestedThemes.map(async (theme) => ({
+      surface: await renderCardSurface({
+        evenHeight: true,
+        prefetchedMedia: { failedUrls, mediaBytes },
+        theme,
+        tweet,
+        videoTarget: embeddable.target,
+      }),
+      theme,
+    })),
+  );
+
+  const first = surfaces[0]?.surface;
+
+  if (!first?.videoSlot) {
+    throw new Error("Could not locate video slot in tweet card layout");
+  }
+
+  return await compositeTweetVideos({
+    borderRadius: LAYOUT.MEDIA_BORDER_RADIUS * SCALE_FACTOR,
+    height: first.height,
+    slot: first.videoSlot,
+    variants: surfaces.map((entry) => ({
+      background: themes[entry.theme].background,
+      // The live video replaces its own thumbnail, so a failed thumbnail fetch does not degrade the rendered video card.
+      failedUrls: entry.surface.failedUrls.filter((url) => url !== embeddable.video.thumbnailUrl),
+      key: entry.theme,
+      png: entry.surface.png,
+      thumbnailFailed: entry.surface.failedUrls.includes(embeddable.video.thumbnailUrl),
+    })),
+    videoPath,
+    width: first.width,
+  });
+}
+
+export async function renderTweetVideo(tweet: TweetData, theme: Theme, videoPath: string): Promise<RenderVideoResult> {
+  const results = await renderTweetVideoThemes(tweet, videoPath, [theme]);
+  const rendered = results.get(theme);
+
+  if (!rendered) {
+    throw new Error(`Missing rendered video for theme ${theme}`);
+  }
+
+  return rendered;
 }

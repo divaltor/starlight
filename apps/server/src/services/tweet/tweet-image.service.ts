@@ -1,9 +1,12 @@
 import { http } from "@starlight/utils/http";
-import { Effect } from "effect";
-import { renderTweetImage } from "@/services/render";
-import type { TweetData, RenderResult } from "@/services/render";
-import type { FxEmbedTweet, FxEmbedMosaicPhoto } from "@/services/fxembed/types";
+import { Effect, Option, Schema } from "effect";
+import tmp from "tmp";
+import { findEmbeddableVideo, renderTweetImage, renderTweetVideoThemes, SCALE_FACTOR } from "@/services/render";
+import type { RenderResult, RenderVideoResult, TweetData } from "@/services/render";
+import { LAYOUT } from "@/services/render/layout";
+import type { FxEmbedMosaicPhoto, FxEmbedTweet, FxEmbedVideo } from "@/services/fxembed/types";
 import { TwitterApi } from "@/services/twitter-api";
+import { downloadVideoFromUrl } from "@/services/video";
 import { s3 } from "@/storage";
 
 export type Theme = "light" | "dark";
@@ -11,6 +14,55 @@ export type Theme = "light" | "dark";
 export const TWEET_IMAGE_CACHE_PREFIX = "tweets/v4";
 const TWEET_IMAGE_TRANSLATION_LANGUAGE = "en";
 const MOSAIC_METADATA_TIMEOUT_MS = 5000;
+const VIDEO_SLOT_WIDTH = (LAYOUT.WIDTH - LAYOUT.PADDING * 2) * SCALE_FACTOR;
+const VIDEO_DIMENSION_RE = /\/(?<width>\d+)x\d+\//u;
+
+const TweetVideoMetaSchema = Schema.fromJsonString(
+  Schema.Struct({
+    duration: Schema.Number,
+    height: Schema.Number,
+    sizeBytes: Schema.Number,
+    width: Schema.Number,
+  }),
+);
+
+export interface CachedTweetVideoMeta {
+  duration: number;
+  height: number;
+  mp4Path: string;
+  sizeBytes: number;
+  thumbnailPath: string;
+  width: number;
+}
+
+export function selectBestVideoUrl(video: FxEmbedVideo, targetWidth = VIDEO_SLOT_WIDTH): string {
+  const mp4Formats = (video.formats ?? []).filter(
+    (format) => format.container === "mp4" || /\.mp4(?:\?|$)/iu.test(format.url),
+  );
+
+  if (mp4Formats.length === 0) {
+    return video.url;
+  }
+
+  const sized = mp4Formats
+    .map((format) => {
+      const width = Number(VIDEO_DIMENSION_RE.exec(format.url)?.groups?.width);
+
+      return Number.isFinite(width) && width > 0 ? { format, width } : null;
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .toSorted((left, right) => left.width - right.width);
+
+  if (sized.length > 0) {
+    const fitting = sized.find((entry) => entry.width >= targetWidth);
+
+    return (fitting ?? sized.at(-1))!.format.url;
+  }
+
+  const byBitrate = mp4Formats.toSorted((left, right) => (right.bitrate ?? 0) - (left.bitrate ?? 0));
+
+  return byBitrate[0]?.url ?? video.url;
+}
 
 const getMosaicDimensions = Effect.fn("getMosaicDimensions")(
   (mosaic: FxEmbedMosaicPhoto): Effect.Effect<{ width: number; height: number }> =>
@@ -78,10 +130,11 @@ const mapMediaData = Effect.fn("mapMediaData")((media: FxEmbedTweet["media"]): E
       mosaic,
       photos: media.photos?.map((p) => ({ url: p.url, width: p.width, height: p.height })),
       videos: media.videos?.map((v) => ({
-        thumbnailUrl: v.thumbnail_url,
-        width: v.width,
         height: v.height,
+        thumbnailUrl: v.thumbnail_url,
         type: v.type,
+        url: selectBestVideoUrl(v),
+        width: v.width,
       })),
     };
   }),
@@ -253,7 +306,7 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
       });
 
       // A card that lost an image to a transient fetch must not become the
-      // cached result: every later /q or theme toggle would serve the hole.
+      // cached result: every later theme toggle or lookup would serve the hole.
       if (result.failedUrls.length > 0) {
         yield* Effect.logWarning("Skipping S3 write for tweet image with failed image fetches", {
           failedUrls: result.failedUrls,
@@ -286,6 +339,253 @@ export const generateTweetImage = Effect.fn("generateTweetImage")(
 
       if (uploaded) {
         yield* Effect.logDebug("Uploaded rendered tweet image to S3", { tweetId, theme, s3Path });
+      }
+
+      return result;
+    }),
+);
+
+export type TweetVideoResult = RenderVideoResult;
+
+function tweetVideoS3Paths(tweetId: string, theme: Theme) {
+  return {
+    metaPath: `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/${theme}-video.json`,
+    mp4Path: `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/${theme}.mp4`,
+    thumbnailPath: `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/${theme}-video-thumb.jpg`,
+  };
+}
+
+export const readCachedTweetVideoMeta = Effect.fn("readCachedTweetVideoMeta")(
+  (tweetId: string, theme: Theme): Effect.Effect<CachedTweetVideoMeta | null> =>
+    Effect.gen(function* () {
+      const paths = tweetVideoS3Paths(tweetId, theme);
+      const metaFile = s3.file(paths.metaPath);
+
+      return yield* Effect.tryPromise({
+        try: async () => {
+          if (!(await metaFile.exists())) {
+            return null;
+          }
+
+          const decoded = Schema.decodeUnknownOption(TweetVideoMetaSchema)(await metaFile.text());
+
+          if (Option.isNone(decoded)) {
+            return null;
+          }
+
+          return {
+            duration: decoded.value.duration,
+            height: decoded.value.height,
+            mp4Path: paths.mp4Path,
+            sizeBytes: decoded.value.sizeBytes,
+            thumbnailPath: paths.thumbnailPath,
+            width: decoded.value.width,
+          } satisfies CachedTweetVideoMeta;
+        },
+        catch: (error) => error,
+      }).pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("Failed to read cached tweet video metadata from S3", {
+            error,
+            metaPath: paths.metaPath,
+            theme,
+            tweetId,
+          }),
+        ),
+        Effect.orElseSucceed(() => null),
+      );
+    }),
+);
+
+async function readCachedTweetVideoFromS3(tweetId: string, theme: Theme): Promise<RenderVideoResult | null> {
+  const paths = tweetVideoS3Paths(tweetId, theme);
+  const metaFile = s3.file(paths.metaPath);
+
+  if (!(await metaFile.exists())) {
+    return null;
+  }
+
+  const decoded = Schema.decodeUnknownOption(TweetVideoMetaSchema)(await metaFile.text());
+
+  if (Option.isNone(decoded)) {
+    return null;
+  }
+
+  const mp4File = s3.file(paths.mp4Path);
+  const thumbnailFile = s3.file(paths.thumbnailPath);
+
+  if (!(await mp4File.exists()) || !(await thumbnailFile.exists())) {
+    return null;
+  }
+
+  const [mp4Bytes, thumbnailBytes] = await Promise.all([mp4File.arrayBuffer(), thumbnailFile.arrayBuffer()]);
+
+  return {
+    buffer: Buffer.from(mp4Bytes),
+    duration: decoded.value.duration,
+    failedUrls: [],
+    height: decoded.value.height,
+    thumbnail: Buffer.from(thumbnailBytes),
+    width: decoded.value.width,
+  };
+}
+
+async function writeTweetVideoToS3(tweetId: string, theme: Theme, result: RenderVideoResult): Promise<void> {
+  const paths = tweetVideoS3Paths(tweetId, theme);
+
+  await Promise.all([
+    s3.write(paths.mp4Path, result.buffer, { type: "video/mp4" }),
+    s3.write(paths.thumbnailPath, result.thumbnail, { type: "image/jpeg" }),
+  ]);
+
+  // Write metadata after the media objects so readers never see a metadata entry for an unuploaded video.
+  await s3.write(
+    paths.metaPath,
+    JSON.stringify({
+      duration: result.duration,
+      height: result.height,
+      sizeBytes: result.buffer.length,
+      width: result.width,
+    }),
+    { type: "application/json" },
+  );
+}
+
+async function downloadSourceVideo(
+  primaryUrl: string,
+  fallbackUrl: string | undefined,
+  folder: string,
+): Promise<string> {
+  try {
+    const downloaded = await downloadVideoFromUrl(primaryUrl, folder);
+
+    return downloaded.filePath;
+  } catch (error) {
+    if (fallbackUrl === undefined || fallbackUrl === primaryUrl) {
+      throw error;
+    }
+
+    const fallback = await downloadVideoFromUrl(fallbackUrl, folder);
+
+    return fallback.filePath;
+  }
+}
+
+const ALL_THEMES: readonly Theme[] = ["light", "dark"];
+const inFlightTweetVideoRenders = new Map<string, Promise<Map<Theme, RenderVideoResult>>>();
+
+function startRenderBothThemes(
+  tweetId: string,
+  tweetData: TweetData,
+  fetchedTweet: FxEmbedTweet | undefined,
+): Effect.Effect<Map<Theme, RenderVideoResult>, Error> {
+  return Effect.gen(function* () {
+    const existing = inFlightTweetVideoRenders.get(tweetId);
+
+    if (existing) {
+      return yield* Effect.tryPromise({
+        try: async () => await existing,
+        catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      });
+    }
+
+    const embeddable = findEmbeddableVideo(tweetData);
+    const videoUrl = embeddable?.video.url;
+
+    if (!embeddable || videoUrl === undefined || videoUrl === "") {
+      return yield* Effect.fail(new Error("Tweet has no video"));
+    }
+
+    const fallbackUrl =
+      embeddable.target === tweetData
+        ? fetchedTweet?.media?.videos?.at(0)?.url
+        : fetchedTweet?.quote?.media?.videos?.at(0)?.url;
+
+    const renderPromise = (async (): Promise<Map<Theme, RenderVideoResult>> => {
+      const tempDir = tmp.dirSync({ unsafeCleanup: true });
+
+      try {
+        const sourcePath = await downloadSourceVideo(videoUrl, fallbackUrl, tempDir.name);
+        const videos = await renderTweetVideoThemes(tweetData, sourcePath, ALL_THEMES);
+
+        await Promise.all(
+          ALL_THEMES.map(async (theme) => {
+            const rendered = videos.get(theme);
+
+            if (!rendered || rendered.failedUrls.length > 0) {
+              return;
+            }
+
+            try {
+              await writeTweetVideoToS3(tweetId, theme, rendered);
+            } catch {
+              // S3 caching is best-effort; callers still receive the in-memory rendered buffer.
+            }
+          }),
+        );
+
+        return videos;
+      } finally {
+        tempDir.removeCallback();
+      }
+    })();
+
+    inFlightTweetVideoRenders.set(tweetId, renderPromise);
+
+    return yield* Effect.tryPromise({
+      try: async () => await renderPromise,
+      catch: (error) => new Error(`Failed to render tweet video: ${String(error)}`),
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          inFlightTweetVideoRenders.delete(tweetId);
+        }),
+      ),
+    );
+  });
+}
+
+export const generateTweetVideo = Effect.fn("generateTweetVideo")(
+  (
+    tweetId: string,
+    theme: Theme = "light",
+    fetchedTweet?: FxEmbedTweet,
+  ): Effect.Effect<RenderVideoResult, TwitterApi.TwitterApiError | Error, TwitterApi.Service> =>
+    Effect.gen(function* () {
+      const cachedResult = yield* Effect.tryPromise({
+        try: async () => await readCachedTweetVideoFromS3(tweetId, theme),
+        catch: (error) => error,
+      }).pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("Failed to read cached tweet video from S3, falling back to render", {
+            error,
+            theme,
+            tweetId,
+          }),
+        ),
+        Effect.orElseSucceed(() => null),
+      );
+
+      if (cachedResult) {
+        yield* Effect.logDebug("Found cached tweet video in S3", { theme, tweetId });
+
+        return cachedResult;
+      }
+
+      const tweetData = yield* prepareTweetData(tweetId, fetchedTweet);
+      const videos = yield* startRenderBothThemes(tweetId, tweetData, fetchedTweet);
+      const result = videos.get(theme);
+
+      if (!result) {
+        return yield* Effect.fail(new Error(`Failed to render tweet video for theme ${theme}`));
+      }
+
+      if (result.failedUrls.length > 0) {
+        yield* Effect.logWarning("Skipped S3 write for tweet video with failed image fetches", {
+          failedUrls: result.failedUrls,
+          theme,
+          tweetId,
+        });
       }
 
       return result;

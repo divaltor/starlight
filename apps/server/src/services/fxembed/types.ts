@@ -32,7 +32,18 @@ export const FxEmbedMosaicPhotoSchema = Schema.Struct({
 
 export type FxEmbedMosaicPhoto = typeof FxEmbedMosaicPhotoSchema.Type;
 
+export const FxEmbedVideoFormatSchema = Schema.Struct({
+  bitrate: Schema.optional(Schema.Number),
+  codec: Schema.optional(Schema.String),
+  container: Schema.optional(Schema.String),
+  url: Schema.String,
+});
+
+export type FxEmbedVideoFormat = typeof FxEmbedVideoFormatSchema.Type;
+
 export const FxEmbedVideoSchema = Schema.Struct({
+  duration: Schema.optional(Schema.Number),
+  formats: Schema.optional(Schema.Array(FxEmbedVideoFormatSchema)),
   height: Schema.Number,
   thumbnail_url: Schema.String,
   type: Schema.Literals(["video", "gif"]),

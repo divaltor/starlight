@@ -2,7 +2,6 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { prisma } from "@starlight/utils";
 import { Effect } from "effect";
 import { Bot } from "grammy";
-import { bot } from "@/bot";
 import videoHandler from "@/handlers/video";
 import { logger } from "@/logger";
 import { FxEmbedTweet } from "@/services/fxembed/types";
@@ -162,13 +161,37 @@ test.each<{
 });
 
 test.each([
-  { failure: "missing tweet", result: Effect.succeed(null) },
+  { failure: "missing tweet", renderFails: false, result: Effect.succeed(null) },
   {
     failure: "fetch error",
+    renderFails: false,
     result: Effect.fail(new TwitterApi.TwitterApiError({ message: "FxTwitter unavailable" })),
+  },
+  {
+    failure: "render error",
+    renderFails: true,
+    result: Effect.succeed(
+      new FxEmbedTweet({
+        author: { avatar_url: "", id: "1", name: "Author", screen_name: "author" },
+        created_at: "2026-10-18",
+        created_timestamp: 1_792_310_400,
+        id: "42",
+        likes: 0,
+        replies: 0,
+        retweets: 0,
+        text: "Video text",
+        url: "https://x.com/i/status/42",
+      }),
+    ),
   },
 ])("test_preserves_video_and_offers_retry_when_%j", async (params) => {
   spyOn(TwitterApi, "getFxTweet").mockReturnValue(params.result);
+
+  if (params.renderFails) {
+    spyOn(tweetImages, "generateTweetVideo").mockReturnValue(Effect.fail(new Error("ffmpeg failed")));
+    spyOn(tweetImages, "generateTweetImage").mockReturnValue(Effect.fail(new Error("image render failed")));
+  }
+
   Reflect.set(
     prisma.video,
     "findUnique",
@@ -182,9 +205,13 @@ test.each([
         }),
     ),
   );
+  Reflect.set(
+    prisma.video,
+    "update",
+    mock(async () => await Promise.resolve({})),
+  );
   const sent: { method: string; payload: unknown }[] = [];
   const testBot = createTestBot(sent);
-  spyOn(bot.api, "sendRichMessage").mockImplementation(testBot.api.sendRichMessage.bind(testBot.api));
 
   await testBot.handleUpdate({
     update_id: 1,
@@ -214,6 +241,81 @@ test.each([
   });
 });
 
+// Product rule: when video-card rendering fails on Add description or Change theme, fall back to a static tweet image.
+test("test_falls_back_to_tweet_image_when_video_card_render_fails", async () => {
+  spyOn(TwitterApi, "getFxTweet").mockReturnValue(
+    Effect.succeed(
+      new FxEmbedTweet({
+        author: { avatar_url: "", id: "1", name: "Author", screen_name: "author" },
+        created_at: "2026-10-18",
+        created_timestamp: 1_792_310_400,
+        id: "42",
+        likes: 0,
+        replies: 0,
+        retweets: 0,
+        text: "Video text",
+        url: "https://x.com/i/status/42",
+      }),
+    ),
+  );
+  spyOn(tweetImages, "generateTweetVideo").mockReturnValue(Effect.fail(new Error("ffmpeg failed")));
+  spyOn(tweetImages, "generateTweetImage").mockReturnValue(
+    Effect.succeed({
+      buffer: Buffer.from("fallback-jpg"),
+      failedUrls: [],
+      height: 1200,
+      width: 1100,
+    }),
+  );
+  Reflect.set(
+    prisma.video,
+    "findUnique",
+    mock(
+      async () =>
+        await Promise.resolve({
+          height: 1024,
+          id: "stored-video",
+          telegramFileId: "video",
+          tweetId: "42",
+          tweetText: "Video text",
+          width: 576,
+        }),
+    ),
+  );
+
+  const sent: { method: string; payload: unknown }[] = [];
+  const testBot = createTestBot(sent);
+
+  await testBot.handleUpdate({
+    callback_query: {
+      chat_instance: "chat",
+      data: "video:add_desc:stored-video:1",
+      from: { first_name: "User", id: 1, is_bot: false },
+      id: "callback",
+      message: {
+        chat: { first_name: "User", id: 1, type: "private" },
+        date: 0,
+        message_id: 10,
+        message_thread_id: 7,
+      },
+    },
+    update_id: 1,
+  });
+
+  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "editMessageMedia"]);
+  expect(sent[1]?.payload).toMatchObject({
+    media: { type: "photo" },
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { callback_data: "video:theme:stored-video:dark:1", text: "🌙 Change theme" },
+          { callback_data: "video:remove_desc:stored-video:1", text: "Remove description" },
+        ],
+      ],
+    },
+  });
+});
+
 test.each([
   { storedText: null, fetchedText: "Fresh description" },
   { storedText: "", fetchedText: "Fresh description" },
@@ -238,6 +340,17 @@ test.each([
     ),
   );
 
+  const renderSpy = spyOn(tweetImages, "generateTweetVideo").mockImplementation((_tweetId, theme = "light") =>
+    Effect.succeed({
+      buffer: Buffer.from(`rendered-${theme}-mp4`),
+      duration: 33,
+      failedUrls: [],
+      height: 1400,
+      thumbnail: Buffer.from(`thumb-${theme}-jpg`),
+      width: 1100,
+    }),
+  );
+
   const video = {
     id: "stored-video",
     tweetId: "42",
@@ -259,7 +372,6 @@ test.each([
   );
   const sent: { method: string; payload: unknown }[] = [];
   const testBot = createTestBot(sent);
-  spyOn(bot.api, "sendRichMessage").mockImplementation(testBot.api.sendRichMessage.bind(testBot.api));
 
   const callback = {
     id: "callback",
@@ -275,28 +387,58 @@ test.each([
 
   await testBot.handleUpdate({ update_id: 1, callback_query: { ...callback, data: "video:add_desc:stored-video:1" } });
 
-  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "sendRichMessage", "deleteMessage"]);
+  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "editMessageMedia"]);
   expect(sent[1]?.payload).toMatchObject({
-    chat_id: 1,
-    message_thread_id: 7,
+    media: {
+      duration: 33,
+      height: 1400,
+      supports_streaming: true,
+      type: "video",
+      width: 1100,
+    },
     reply_markup: {
-      inline_keyboard: [[{ text: "Remove description", callback_data: "video:remove_desc:stored-video:1" }]],
+      inline_keyboard: [
+        [
+          { text: "🌙 Change theme", callback_data: "video:theme:stored-video:dark:1" },
+          { text: "Remove description", callback_data: "video:remove_desc:stored-video:1" },
+        ],
+      ],
     },
   });
-  expect(sent[1]?.payload).toHaveProperty(
-    "rich_message.blocks",
-    expect.arrayContaining([
-      {
-        type: "paragraph",
-        text: [{ type: "bold", text: "Author" }, " ", { type: "url", text: "@author", url: "https://x.com/author" }],
-      },
-      { type: "video", video: { type: "video", media: "video", width: 576, height: 1024, supports_streaming: true } },
-    ]),
-  );
 
   sent.length = 0;
   await testBot.handleUpdate({
     update_id: 2,
+    callback_query: { ...callback, data: "video:theme:stored-video:dark:1" },
+  });
+
+  expect(renderSpy.mock.lastCall?.slice(0, 2)).toEqual(["42", "dark"]);
+  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "editMessageMedia"]);
+  expect(sent[1]?.payload).toHaveProperty("reply_markup.inline_keyboard", [
+    [
+      { text: "☀️ Change theme", callback_data: "video:theme:stored-video:light:1" },
+      { text: "Remove description", callback_data: "video:remove_desc:stored-video:1" },
+    ],
+  ]);
+
+  sent.length = 0;
+  await testBot.handleUpdate({
+    update_id: 3,
+    callback_query: { ...callback, data: "video:theme:stored-video:light:1" },
+  });
+
+  expect(renderSpy.mock.lastCall?.slice(0, 2)).toEqual(["42", "light"]);
+  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "editMessageMedia"]);
+  expect(sent[1]?.payload).toHaveProperty("reply_markup.inline_keyboard", [
+    [
+      { text: "🌙 Change theme", callback_data: "video:theme:stored-video:dark:1" },
+      { text: "Remove description", callback_data: "video:remove_desc:stored-video:1" },
+    ],
+  ]);
+
+  sent.length = 0;
+  await testBot.handleUpdate({
+    update_id: 4,
     callback_query: { ...callback, data: "video:remove_desc:stored-video:1" },
   });
 
@@ -307,11 +449,14 @@ test.each([
   });
 
   sent.length = 0;
-  await testBot.handleUpdate({ update_id: 3, callback_query: { ...callback, data: "video:add_desc:stored-video:1" } });
+  await testBot.handleUpdate({ update_id: 5, callback_query: { ...callback, data: "video:add_desc:stored-video:1" } });
 
-  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "sendRichMessage", "deleteMessage"]);
+  expect(sent.map((message) => message.method)).toEqual(["answerCallbackQuery", "editMessageMedia"]);
   expect(sent[1]?.payload).toHaveProperty("reply_markup.inline_keyboard", [
-    [{ text: "Remove description", callback_data: "video:remove_desc:stored-video:1" }],
+    [
+      { text: "🌙 Change theme", callback_data: "video:theme:stored-video:dark:1" },
+      { text: "Remove description", callback_data: "video:remove_desc:stored-video:1" },
+    ],
   ]);
 });
 

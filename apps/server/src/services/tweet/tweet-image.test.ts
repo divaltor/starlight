@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { FxEmbedCard, FxEmbedTranslation, FxEmbedTweet } from "@/services/fxembed/types";
-import { prepareTweetData } from "@/services/tweet/tweet-image.service";
+import { prepareTweetData, selectBestVideoUrl } from "@/services/tweet/tweet-image.service";
 import { TwitterApi } from "@/services/twitter-api";
 
 test("test_preserves_russian_text_in_main_quotes_and_replies_while_translating_other_languages", async () => {
@@ -130,4 +130,44 @@ test.each([
 
   expect(result.text).toBe(expectedText);
   expect(result.card?.title).toBe(expectedTitle);
+});
+
+// Picking the smallest MP4 >= card slot width avoids downloading 60+ MB 4K variants for a 1004 px slot.
+test.each([
+  {
+    name: "smallest_variant_meeting_slot_width",
+    formats: [
+      { container: "m3u8", url: "https://video.twimg.com/pl/playlist.m3u8" },
+      { bitrate: 832_000, container: "mp4", url: "https://video.twimg.com/vid/avc1/526x360/low.mp4" },
+      { bitrate: 2_176_000, container: "mp4", url: "https://video.twimg.com/vid/avc1/1052x720/med.mp4" },
+      { bitrate: 25_128_000, container: "mp4", url: "https://video.twimg.com/vid/avc1/2520x1724/high.mp4" },
+    ],
+    expected: "https://video.twimg.com/vid/avc1/1052x720/med.mp4",
+  },
+  {
+    name: "widest_variant_when_all_below_slot_width",
+    formats: [
+      { bitrate: 256_000, container: "mp4", url: "https://video.twimg.com/vid/avc1/394x270/tiny.mp4" },
+      { bitrate: 832_000, container: "mp4", url: "https://video.twimg.com/vid/avc1/526x360/small.mp4" },
+    ],
+    expected: "https://video.twimg.com/vid/avc1/526x360/small.mp4",
+  },
+  {
+    name: "fallback_url_when_formats_absent",
+    expected: "https://video.twimg.com/fallback.mp4",
+  },
+])("test_selects_$name", (params) => {
+  expect(
+    selectBestVideoUrl(
+      {
+        formats: params.formats,
+        height: 1724,
+        thumbnail_url: "https://pbs.twimg.com/thumb.jpg",
+        type: "video",
+        url: "https://video.twimg.com/fallback.mp4",
+        width: 2520,
+      },
+      1004,
+    ),
+  ).toBe(params.expected);
 });

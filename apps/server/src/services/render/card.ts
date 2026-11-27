@@ -70,7 +70,54 @@ export function formatTweetTimestamp(createdAt: Date): string {
 export interface BuildCardParams {
   colors: ThemeColors;
   failedUrls: Set<string>;
+  onVideoSlot?: (node: Node) => void;
   tweet: TweetData;
+  videoTarget?: TweetData;
+}
+
+export interface EmbeddableVideo {
+  target: TweetData;
+  video: NonNullable<NonNullable<TweetData["media"]>["videos"]>[number];
+}
+
+export function findEmbeddableVideo(tweet: TweetData): EmbeddableVideo | null {
+  const mainMedia = getFirstMedia(tweet.media);
+
+  if (mainMedia?.type === "video" || mainMedia?.type === "gif") {
+    return { target: tweet, video: mainMedia };
+  }
+
+  if (tweet.quote) {
+    const quoteMedia = getFirstMedia(tweet.quote.media);
+
+    if (quoteMedia?.type === "video" || quoteMedia?.type === "gif") {
+      return { target: tweet.quote, video: quoteMedia };
+    }
+  }
+
+  return null;
+}
+
+export function findNodePath(root: Node, target: Node): number[] | null {
+  if (root === target) {
+    return [];
+  }
+
+  if (root.type !== "container") {
+    return null;
+  }
+
+  const children = root.children ?? [];
+
+  for (let index = 0; index < children.length; index += 1) {
+    const childPath = findNodePath(children[index]!, target);
+
+    if (childPath !== null) {
+      return [index, ...childPath];
+    }
+  }
+
+  return null;
 }
 
 // Percent and aspect-ratio sizing resolves unreliably during measure(), so every
@@ -95,9 +142,26 @@ export function buildTweetCard(params: BuildCardParams): Node {
       ),
       style: { marginTop: LAYOUT.AVATAR_GAP },
     }),
-    ...tweetExtrasNodes(params.colors, CARD_WIDTH_INNER, params.failedUrls, params.tweet),
+    ...tweetExtrasNodes(
+      params.colors,
+      CARD_WIDTH_INNER,
+      params.failedUrls,
+      params.tweet,
+      params.videoTarget,
+      params.onVideoSlot,
+    ),
     ...(params.tweet.quote
-      ? [quoteBox(params.colors, params.failedUrls, CARD_WIDTH_INNER, params.tweet.quote, hasTweetExtras(params.tweet))]
+      ? [
+          quoteBox(
+            params.colors,
+            params.failedUrls,
+            CARD_WIDTH_INNER,
+            params.tweet.quote,
+            hasTweetExtras(params.tweet),
+            params.videoTarget,
+            params.onVideoSlot,
+          ),
+        ]
       : []),
     // Engagement counters on the left, timestamp on the right.
     box({
@@ -569,11 +633,14 @@ function tweetExtrasNodes(
   contentWidth: number,
   failedUrls: Set<string>,
   tweet: TweetData,
+  videoTarget?: TweetData,
+  onVideoSlot?: (node: Node) => void,
 ): Node[] {
   const media = getFirstMedia(tweet.media);
+  const embedVideo = tweet === videoTarget && (media?.type === "video" || media?.type === "gif");
 
   return [
-    ...(media ? [mediaBlock(colors, contentWidth, media, failedUrls)] : []),
+    ...(media ? [mediaBlock(colors, contentWidth, media, failedUrls, embedVideo, onVideoSlot)] : []),
     ...(tweet.article ? [articleBlock(colors, contentWidth, tweet.article)] : []),
     ...(tweet.card ? [linkCardBlock(colors, contentWidth, tweet.card, failedUrls)] : []),
   ];
@@ -591,6 +658,8 @@ function quoteBox(
   outerWidth: number,
   quote: TweetData,
   hasPrecedingExtra: boolean,
+  videoTarget?: TweetData,
+  onVideoSlot?: (node: Node) => void,
 ): Node {
   const innerWidth = outerWidth - QUOTE_PADDING * 2;
   const textWidth = innerWidth - QUOTE_AVATAR_SIZE - LAYOUT.AVATAR_GAP;
@@ -637,7 +706,7 @@ function quoteBox(
     }),
   ];
 
-  children.push(...tweetExtrasNodes(colors, innerWidth, failedUrls, quote));
+  children.push(...tweetExtrasNodes(colors, innerWidth, failedUrls, quote, videoTarget, onVideoSlot));
 
   return box({
     style: {
@@ -799,12 +868,19 @@ function linkCardBlock(colors: ThemeColors, contentWidth: number, card: LinkCard
   });
 }
 
-function mediaBlock(colors: ThemeColors, contentWidth: number, media: MediaItem, failedUrls: Set<string>): Node {
+function mediaBlock(
+  colors: ThemeColors,
+  contentWidth: number,
+  media: MediaItem,
+  failedUrls: Set<string>,
+  embedVideo = false,
+  onVideoSlot?: (node: Node) => void,
+): Node {
   const unavailable = failedUrls.has(getMediaImageUrl(media));
   const height = scaledHeight(media.width, media.height, contentWidth);
   const isVideo = media.type === "video" || media.type === "gif";
 
-  return box({
+  const node = box({
     style: {
       backgroundColor: colors.background,
       borderRadius: LAYOUT.MEDIA_BORDER_RADIUS,
@@ -824,9 +900,15 @@ function mediaBlock(colors: ThemeColors, contentWidth: number, media: MediaItem,
               style: { height, objectFit: "cover", width: contentWidth },
             }),
           ]),
-      ...(isVideo && !unavailable ? [playButtonOverlay(contentWidth, height)] : []),
+      ...(isVideo && !embedVideo && !unavailable ? [playButtonOverlay(contentWidth, height)] : []),
     ],
   });
+
+  if (embedVideo) {
+    onVideoSlot?.(node);
+  }
+
+  return node;
 }
 
 // Lucide icons (ISC): message-circle, repeat-2, heart.
@@ -908,10 +990,11 @@ type MediaItem =
     }
   | { type: "photo"; url: string; width: number; height: number }
   | {
-      type: "video" | "gif";
-      thumbnailUrl: string;
-      width: number;
       height: number;
+      thumbnailUrl: string;
+      type: "video" | "gif";
+      url?: string;
+      width: number;
     };
 
 function scaledHeight(sourceWidth: number, sourceHeight: number, boxWidth: number): number {

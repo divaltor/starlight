@@ -1,16 +1,19 @@
-import { extractTweetId, isTwitterUrl, prisma } from "@starlight/utils";
-import { Duration, Effect, Option, Schema } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/http";
+import { extractTweetId, isTwitterUrl } from "@starlight/utils";
+import { Schema } from "effect";
 import { Composer, GrammyError, InlineKeyboard, InlineQueryResultBuilder, InputFile } from "grammy";
-import env from "@/env";
 import sharp from "sharp";
-import type { FxEmbedTweet, FxEmbedVideo } from "@/services/fxembed/types";
-import { renderTweetImage } from "@/services/render";
-import type { RenderResult, TweetData } from "@/services/render";
-import { generateTweetImage, prepareTweetData, TWEET_IMAGE_CACHE_PREFIX } from "@/services/tweet/tweet-image.service";
-import type { Theme } from "@/services/tweet/tweet-image.service";
+import env from "@/env";
+import { findEmbeddableVideo, renderTweetImage } from "@/services/render";
+import type { RenderResult } from "@/services/render";
 import { runtime } from "@/services/runtime";
-import { TweetRichMessage } from "@/services/tweet/tweet-rich-message";
+import {
+  generateTweetImage,
+  generateTweetVideo,
+  prepareTweetData,
+  readCachedTweetVideoMeta,
+  TWEET_IMAGE_CACHE_PREFIX,
+} from "@/services/tweet/tweet-image.service";
+import type { CachedTweetVideoMeta, Theme } from "@/services/tweet/tweet-image.service";
 import { TwitterApi } from "@/services/twitter-api";
 import { s3 } from "@/storage";
 import type { Context } from "@/types";
@@ -19,19 +22,12 @@ const composer = new Composer<Context>();
 const chats = composer.chatType(["private", "group", "supergroup"]);
 
 const TWEET_NOT_FOUND_MESSAGE = "Tweet not found";
-
 const IMAGE_JPEG_TYPE = "image/jpeg";
 const THUMBNAIL_WIDTH = 320;
 const TWEET_TRANSLATION_LANGUAGE = "en";
-
-// Telegram's limits for files it downloads from a URL; grammY documents 1 MB for mpeg4_gif results.
-const MPEG4_GIF_URL_LIMIT_BYTES = 1024 * 1024;
 const VIDEO_URL_LIMIT_BYTES = 20 * 1024 * 1024;
-const VIDEO_HEAD_TIMEOUT_MS = 3000;
-
-const ContentLengthResponse = Schema.Struct({
-  headers: Schema.Struct({ "content-length": Schema.FiniteFromString }),
-});
+const RENDERING_CALLBACK_DATA = "tweet_vid:rendering";
+const CHOSEN_INLINE_VIDEO_RE = /^tweet_vid:(?<tweetId>\d+):(?<theme>light|dark)$/u;
 
 function createThemeKeyboard(tweetId: string, currentTheme: Theme, userId: number): InlineKeyboard {
   const nextTheme = currentTheme === "dark" ? "light" : "dark";
@@ -40,65 +36,27 @@ function createThemeKeyboard(tweetId: string, currentTheme: Theme, userId: numbe
   return new InlineKeyboard().text(buttonText, `tweet_img:toggle:${tweetId}:${nextTheme}:${userId}`);
 }
 
-chats
-  .command("quote")
-  .filter((ctx) => ctx.match.trim() !== "" && extractTweetId(ctx.match.trim()) === null)
-  .use(async (ctx) => {
-    ctx.logger.debug({ userId: ctx.from.id, input: ctx.match.trim() }, "Invalid tweet URL provided");
-    await ctx.reply("Please provide a valid tweet link");
-  });
-
-chats
-  .command("quote")
-  .filter((ctx) => extractTweetId(ctx.match.trim()) !== null)
-  .use(async (ctx) => {
-    const tweetId = extractTweetId(ctx.match.trim())!;
-
-    ctx.logger.info({ userId: ctx.from.id, tweetId }, "Processing /q command");
-
-    await ctx.replyWithChatAction("upload_photo");
-
-    try {
-      const result = await runtime.runPromise(generateTweetImage(tweetId, "light"));
-
-      ctx.logger.debug({ tweetId }, "Tweet image generated successfully");
-
-      await ctx.replyWithPhoto(new InputFile(result.buffer, `tweet-${tweetId}.jpg`), {
-        caption: `https://x.com/i/status/${tweetId}`,
-        reply_markup: createThemeKeyboard(tweetId, "light", ctx.from.id),
-        message_thread_id: ctx.msg.message_thread_id,
-      });
-
-      try {
-        await ctx.deleteMessage();
-      } catch (error) {
-        if (error instanceof GrammyError) {
-          ctx.logger.debug({ error: error.message }, "Could not delete user message (missing permissions)");
-        } else {
-          throw error;
-        }
-      }
-    } catch (error) {
-      ctx.logger.error({ error, tweetId }, "Failed to generate tweet image");
-
-      if (error instanceof Error && error.message === TWEET_NOT_FOUND_MESSAGE) {
-        await ctx.reply(
-          "Could not fetch this tweet. It may be:\n" +
-            "• Private or from a protected account\n" +
-            "• Deleted\n" +
-            "• Invalid URL",
-        );
-
-        return;
-      }
-
-      await ctx.reply(
-        error instanceof GrammyError
-          ? "Failed to send image. Please try again."
-          : "Something went wrong. Please try again later.",
-      );
-    }
-  });
+function buildCachedInlineVideoCard(
+  tweetId: string,
+  theme: Theme,
+  title: string,
+  meta: CachedTweetVideoMeta,
+  description: string,
+) {
+  return InlineQueryResultBuilder.videoMp4(
+    `tweet_vid:${tweetId}:${theme}:cached`,
+    title,
+    `${env.BASE_CDN_URL}/${meta.mp4Path}`,
+    `${env.BASE_CDN_URL}/${meta.thumbnailPath}`,
+    {
+      caption: `https://x.com/i/status/${tweetId}`,
+      description,
+      video_duration: meta.duration,
+      video_height: meta.height,
+      video_width: meta.width,
+    },
+  );
+}
 
 composer
   .on("inline_query")
@@ -119,21 +77,52 @@ composer
     try {
       const tweet = await runtime.runPromise(TwitterApi.getFxTweet(tweetId, TWEET_TRANSLATION_LANGUAGE));
       const tweetData = await runtime.runPromise(prepareTweetData(tweetId, tweet ?? undefined));
-      const video = tweet?.media?.videos?.at(0);
+      const hasVideo = findEmbeddableVideo(tweetData) !== null;
 
-      const [videoResult, lightResult, darkResult] = await Promise.all([
-        video === undefined ? null : buildInlineVideoResult(tweet!, video, tweetData.replyChain ?? []),
+      if (hasVideo) {
+        const [cachedLight, cachedDark] = await Promise.all([
+          runtime.runPromise(readCachedTweetVideoMeta(tweetId, "light")),
+          runtime.runPromise(readCachedTweetVideoMeta(tweetId, "dark")),
+        ]);
+
+        const lightCachedOk = cachedLight !== null && cachedLight.sizeBytes <= VIDEO_URL_LIMIT_BYTES;
+        const darkCachedOk = cachedDark !== null && cachedDark.sizeBytes <= VIDEO_URL_LIMIT_BYTES;
+
+        // Telegram can only swap an inline message into a video when it starts as media with a reply_markup,
+        // so uncached video tweets send the static card photo with an "In progress..." state and edit in-place on selection.
+        const [lightPlaceholder, darkPlaceholder] = await Promise.all([
+          lightCachedOk ? null : renderTweetImage(tweetData, "light"),
+          darkCachedOk ? null : renderTweetImage(tweetData, "dark"),
+        ]);
+
+        const results = await Promise.all([
+          lightCachedOk
+            ? buildCachedInlineVideoCard(tweetId, "light", "Light theme (video)", cachedLight, tweetData.text)
+            : uploadPendingInlineVideoPhoto(tweetId, "light", "Light theme (video)", lightPlaceholder!),
+          darkCachedOk
+            ? buildCachedInlineVideoCard(tweetId, "dark", "Dark theme (video)", cachedDark, tweetData.text)
+            : uploadPendingInlineVideoPhoto(tweetId, "dark", "Dark theme (video)", darkPlaceholder!),
+        ]);
+
+        ctx.logger.info(
+          { darkCached: darkCachedOk, lightCached: lightCachedOk, tweetId },
+          "Generated inline tweet video results",
+        );
+
+        await ctx.answerInlineQuery(results);
+
+        return;
+      }
+
+      const [lightResult, darkResult] = await Promise.all([
         renderTweetImage(tweetData, "light"),
         renderTweetImage(tweetData, "dark"),
       ]);
 
-      const results = [
-        ...(videoResult === null ? [] : [videoResult]),
-        ...(await Promise.all([
-          uploadInlinePhoto(tweetId, "light", "Light theme", lightResult),
-          uploadInlinePhoto(tweetId, "dark", "Dark theme", darkResult),
-        ])),
-      ];
+      const results = await Promise.all([
+        uploadInlinePhoto(tweetId, "light", "Light theme", lightResult),
+        uploadInlinePhoto(tweetId, "dark", "Dark theme", darkResult),
+      ]);
 
       const generatedImages = [
         {
@@ -185,15 +174,7 @@ composer
         );
       }
 
-      ctx.logger.info(
-        {
-          generatedImages,
-          tweetId,
-          videoResultType: videoResult?.type,
-          videoSkipped: video !== undefined && videoResult === null,
-        },
-        "Generated tweet inline results",
-      );
+      ctx.logger.info({ generatedImages, tweetId }, "Generated tweet inline results");
 
       await ctx.answerInlineQuery(results);
 
@@ -215,68 +196,98 @@ composer
     }
   });
 
-// A video already sent by the bot has a file_id, which rich messages require; otherwise
-// Telegram fetches the X video URL itself, and the post text goes into the caption.
-// GIFs over the mpeg4_gif limit go out as regular videos; anything over Telegram's URL limit,
-// or of unknown size, gets no video result, leaving the rendered cards.
-async function buildInlineVideoResult(tweet: FxEmbedTweet, video: FxEmbedVideo, replyChain: TweetData[]) {
-  const id = `tweet:${tweet.id}:video`;
-  const title = `${tweet.author.name} (@${tweet.author.screen_name})`;
+composer.on("chosen_inline_result", async (ctx) => {
+  const match = CHOSEN_INLINE_VIDEO_RE.exec(ctx.chosenInlineResult.result_id);
 
-  const cachedVideo = await prisma.video.findFirst({
-    where: { tweetId: tweet.id },
-    orderBy: { createdAt: "desc" },
-  });
-
-  if (cachedVideo) {
-    return InlineQueryResultBuilder.article(id, title, {
-      description: tweet.getDisplayText(),
-      thumbnail_url: video.thumbnail_url,
-    }).rich(
-      TweetRichMessage.build({
-        tweet,
-        replyChain,
-        video: cachedVideo.telegramFileId,
-        width: cachedVideo.width ?? undefined,
-        height: cachedVideo.height ?? undefined,
-      }),
-    );
+  if (!match?.groups) {
+    return;
   }
 
-  const sizeBytes = await runtime.runPromise(
-    HttpClient.head(video.url).pipe(
-      Effect.flatMap(HttpClientResponse.filterStatusOk),
-      Effect.flatMap(HttpClientResponse.schemaNoBody(ContentLengthResponse)),
-      Effect.map((response) => response.headers["content-length"]),
-      Effect.timeout(Duration.millis(VIDEO_HEAD_TIMEOUT_MS)),
-      Effect.option,
-    ),
-  );
+  const { theme, tweetId } = Schema.decodeUnknownSync(
+    Schema.Struct({
+      theme: Schema.Literals(["light", "dark"]),
+      tweetId: Schema.String,
+    }),
+  )(match.groups);
 
-  if (!Option.exists(sizeBytes, (size) => size <= VIDEO_URL_LIMIT_BYTES)) {
-    return null;
+  const inlineMessageId = ctx.chosenInlineResult.inline_message_id;
+
+  if (inlineMessageId === undefined || inlineMessageId === "") {
+    ctx.logger.warn({ theme, tweetId }, "Missing inline_message_id for chosen inline video result");
+
+    return;
   }
 
-  const caption = TweetRichMessage.caption({ tweet, replyChain });
+  const caption = `https://x.com/i/status/${tweetId}`;
 
-  const captionOptions = {
-    caption: caption.caption,
-    caption_entities: caption.caption_entities,
-    show_caption_above_media: true,
-  };
+  try {
+    await runtime.runPromise(generateTweetVideo(tweetId, theme));
+    const meta = await runtime.runPromise(readCachedTweetVideoMeta(tweetId, theme));
 
-  return video.type === "gif" && Option.exists(sizeBytes, (size) => size <= MPEG4_GIF_URL_LIMIT_BYTES)
-    ? InlineQueryResultBuilder.mpeg4gif(id, video.url, video.thumbnail_url, {
-        ...captionOptions,
-        mpeg4_width: video.width,
-        mpeg4_height: video.height,
-      })
-    : InlineQueryResultBuilder.videoMp4(id, title, video.url, video.thumbnail_url, {
-        ...captionOptions,
-        description: tweet.getDisplayText(),
-        video_width: video.width,
-        video_height: video.height,
+    if (!meta || meta.sizeBytes > VIDEO_URL_LIMIT_BYTES) {
+      ctx.logger.warn(
+        { sizeBytes: meta?.sizeBytes, theme, tweetId },
+        "Rendered inline tweet video unavailable on CDN or over Telegram URL limit",
+      );
+      await ctx.api.editMessageCaptionInline(inlineMessageId, {
+        caption,
+        reply_markup: { inline_keyboard: [] },
       });
+
+      return;
+    }
+
+    await ctx.api.editMessageMediaInline(inlineMessageId, {
+      caption,
+      cover: `${env.BASE_CDN_URL}/${meta.thumbnailPath}`,
+      duration: meta.duration,
+      height: meta.height,
+      media: `${env.BASE_CDN_URL}/${meta.mp4Path}`,
+      supports_streaming: true,
+      type: "video",
+      width: meta.width,
+    });
+
+    ctx.logger.info({ sizeBytes: meta.sizeBytes, theme, tweetId }, "Updated inline message with rendered tweet video");
+  } catch (error) {
+    ctx.logger.warn({ error, theme, tweetId }, "Failed to update inline message with rendered tweet video");
+
+    try {
+      await ctx.api.editMessageCaptionInline(inlineMessageId, {
+        caption,
+        reply_markup: { inline_keyboard: [] },
+      });
+    } catch (cleanupError) {
+      ctx.logger.debug({ error: cleanupError, tweetId }, "Failed to clear rendering state on inline message");
+    }
+  }
+});
+
+composer.callbackQuery(RENDERING_CALLBACK_DATA, async (ctx) => {
+  await ctx.answerCallbackQuery({ text: "Rendering video, please wait..." });
+});
+
+async function uploadPendingInlineVideoPhoto(tweetId: string, theme: Theme, title: string, result: RenderResult) {
+  const s3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/${theme}.jpg`;
+  const thumbnailS3Path = `${TWEET_IMAGE_CACHE_PREFIX}/${tweetId}/${theme}-thumb.jpg`;
+
+  await Promise.all([
+    s3.write(s3Path, result.buffer, { type: IMAGE_JPEG_TYPE }),
+    s3.write(
+      thumbnailS3Path,
+      await sharp(result.buffer).resize({ width: THUMBNAIL_WIDTH }).jpeg({ quality: 80 }).toBuffer(),
+      { type: IMAGE_JPEG_TYPE },
+    ),
+  ]);
+
+  return InlineQueryResultBuilder.photo(`tweet_vid:${tweetId}:${theme}`, `${env.BASE_CDN_URL}/${s3Path}`, {
+    caption: `⏳ Rendering video...\n\nhttps://x.com/i/status/${tweetId}`,
+    photo_height: result.height,
+    photo_width: result.width,
+    reply_markup: new InlineKeyboard().text("⏳ Rendering video...", RENDERING_CALLBACK_DATA),
+    thumbnail_url: `${env.BASE_CDN_URL}/${thumbnailS3Path}`,
+    title,
+  });
 }
 
 // Telegram Desktop caches inline images by URL; a thumbnail sharing the photo URL let a
@@ -295,11 +306,11 @@ async function uploadInlinePhoto(tweetId: string, variant: string, title: string
   ]);
 
   return InlineQueryResultBuilder.photo(`tweet:${tweetId}:${variant}`, `${env.BASE_CDN_URL}/${s3Path}`, {
-    title,
-    thumbnail_url: `${env.BASE_CDN_URL}/${thumbnailS3Path}`,
     caption: `https://x.com/i/status/${tweetId}`,
-    photo_width: result.width,
     photo_height: result.height,
+    photo_width: result.width,
+    thumbnail_url: `${env.BASE_CDN_URL}/${thumbnailS3Path}`,
+    title,
   });
 }
 
